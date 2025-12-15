@@ -122,10 +122,6 @@ app.get('/api/sales/report', generateSalesReport);
 // Settings Route (User Settings)
 app.put('/api/settings', updateSettings);
 
-// 🟢 NEW: Public Global Settings Route (For Landing Page)
-// Placing this BEFORE the admin router ensures it is accessible publicly
-app.get('/api/admin/settings', getGlobalSettings);
-
 // Staff Management Routes
 app.get('/api/staff', getStaff);
 app.post('/api/staff', addStaff);
