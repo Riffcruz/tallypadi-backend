@@ -92,7 +92,7 @@ export default function SettingsTab({ settings, onUpdate, headers }: any) {
                                 placeholder="https://wa.me/234..."
                                 value={localSettings.whatsappUrl || ''}
                                 onChange={(e) => handleUrlChange(e.target.value)}
-                                className="bg-transparent border-none text-white text-sm w-full focus:outline-none placeholder:text-slate-600"
+                                className="bg-transparent border-none text-white text-sm w-full focus:outline-none placeholder:text-slate-400"
                             />
                         </div>
                     </div>
