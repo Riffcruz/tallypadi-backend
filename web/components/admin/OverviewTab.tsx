@@ -50,8 +50,19 @@ export default function OverviewTab({ stats }: any) {
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#374151" />
                         <XAxis dataKey="date" stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={false} />
-                        <YAxis stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(val: number) => `₦${val/1000}k`} />
-                        <Tooltip contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#fff', borderRadius: '8px' }} formatter={(val: number) => [`₦${val.toLocaleString()}`, 'Revenue']} />
+                        {/* Fixed YAxis formatter type */}
+                        <YAxis 
+                            stroke="#9ca3af" 
+                            fontSize={12} 
+                            tickLine={false} 
+                            axisLine={false} 
+                            tickFormatter={(val: any) => `₦${(Number(val) || 0)/1000}k`} 
+                        />
+                        {/* Fixed Tooltip formatter type */}
+                        <Tooltip 
+                            contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#fff', borderRadius: '8px' }} 
+                            formatter={(val: any) => [`₦${(Number(val) || 0).toLocaleString()}`, 'Revenue']} 
+                        />
                         <Area type="monotone" dataKey="sales" stroke="#10b981" fillOpacity={1} fill="url(#colorSales)" />
                     </AreaChart>
                 </ResponsiveContainer>
