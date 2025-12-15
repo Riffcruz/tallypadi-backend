@@ -16,15 +16,15 @@ import { startScheduler } from './services/scheduler'; // Your Cron Job
 import { env } from './config/env';
 import { getDashboardData } from './controllers/dashboard.controller';
 import { getInventory, addInventoryItem, updateInventoryItem } from './controllers/inventory.controller';
-// 🟢 UPDATE: Imported getGlobalSettings
 import { updateSettings } from './controllers/settings.controller';
+// 🟢 CORRECTED IMPORT: Imported from admin.controller as requested
 import { getGlobalSettings } from './controllers/admin.controller';
 import { recordSale, getSalesHistory, generateSalesReport } from './controllers/sales.controller';
 import { getStaff, addStaff, removeStaff } from './controllers/staff.controller';
 import adminRouter from './routes/admin.routes'; 
 import webhookRoutes from './routes/webhook.routes';
 
-// 🟢 NEW: Import the Worker so it starts processing the queue
+// 🟢 Import the Worker so it starts processing the queue
 import './worker'; 
 
 dotenv.config();
@@ -122,6 +122,10 @@ app.get('/api/sales/report', generateSalesReport);
 // Settings Route (User Settings)
 app.put('/api/settings', updateSettings);
 
+// 🟢 NEW: Public Global Settings Route (For Landing Page)
+// Placing this BEFORE the admin router ensures it is accessible publicly without login
+app.get('/api/admin/settings', getGlobalSettings);
+
 // Staff Management Routes
 app.get('/api/staff', getStaff);
 app.post('/api/staff', addStaff);
@@ -138,9 +142,6 @@ app.use('/api/whatsapp', whatsappRouter);
 
 // Paystack Webhook
 app.use('/api/webhook', webhookRoutes);
-
-app.get('/api/admin/settings', getGlobalSettings);
-
 
 // Static Files
 app.use('/reports', express.static(path.join(__dirname, '..', 'public', 'reports')));
