@@ -16,7 +16,9 @@ import { startScheduler } from './services/scheduler'; // Your Cron Job
 import { env } from './config/env';
 import { getDashboardData } from './controllers/dashboard.controller';
 import { getInventory, addInventoryItem, updateInventoryItem } from './controllers/inventory.controller';
+// 🟢 UPDATE: Imported getGlobalSettings
 import { updateSettings } from './controllers/settings.controller';
+import { getGlobalSettings } from './controllers/admin.controller';
 import { recordSale, getSalesHistory, generateSalesReport } from './controllers/sales.controller';
 import { getStaff, addStaff, removeStaff } from './controllers/staff.controller';
 import adminRouter from './routes/admin.routes'; 
@@ -117,8 +119,12 @@ app.post('/api/sales', recordSale);
 app.get('/api/sales', getSalesHistory);
 app.get('/api/sales/report', generateSalesReport);
 
-// Settings Route
+// Settings Route (User Settings)
 app.put('/api/settings', updateSettings);
+
+// 🟢 NEW: Public Global Settings Route (For Landing Page)
+// Placing this BEFORE the admin router ensures it is accessible publicly
+app.get('/api/admin/settings', getGlobalSettings);
 
 // Staff Management Routes
 app.get('/api/staff', getStaff);
@@ -136,6 +142,9 @@ app.use('/api/whatsapp', whatsappRouter);
 
 // Paystack Webhook
 app.use('/api/webhook', webhookRoutes);
+
+app.get('/api/admin/settings', getGlobalSettings);
+
 
 // Static Files
 app.use('/reports', express.static(path.join(__dirname, '..', 'public', 'reports')));
