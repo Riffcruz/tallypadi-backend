@@ -183,11 +183,16 @@ export const getGlobalSettings = async (req: Request, res: Response) => {
 
 export const updateGlobalSettings = async (req: Request, res: Response) => {
     try {
-        // 🟢 Extract new dynamic limits
-        const { autoSuspendOnJailbreak, maxMessageHistory, maxStaffAccounts } = req.body;
+        // 🟢 Extract new dynamic limits AND whatsappUrl
+        const { autoSuspendOnJailbreak, maxMessageHistory, maxStaffAccounts, whatsappUrl } = req.body;
         
         const updatePayload: any = {};
         
+        // Fix: Explicitly check for whatsappUrl
+        if (whatsappUrl !== undefined) {
+             updatePayload["whatsappUrl"] = typeof whatsappUrl === 'string' ? whatsappUrl.trim() : whatsappUrl;
+        }
+
         if (autoSuspendOnJailbreak !== undefined) {
             updatePayload["security.autoSuspendOnJailbreak"] = autoSuspendOnJailbreak;
         }
