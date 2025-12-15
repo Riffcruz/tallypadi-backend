@@ -27,7 +27,8 @@ const StatCard = ({ title, value, sub, color, icon: Icon }: any) => {
 export default function OverviewTab({ stats }: any) {
     if (!stats) return null;
     return (
-        <div className="space-y-8 animate-in fade-in duration-500">
+        // Added pt-16 md:pt-0 to ensure the mobile menu button doesn't overlap the title
+        <div className="space-y-8 animate-in fade-in duration-500 pt-16 md:pt-0">
             <h2 className="text-2xl font-bold text-slate-100">System Health</h2>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                 <StatCard title="Platform GMV" value={`₦${stats.financials.gmv.toLocaleString()}`} sub={`${stats.financials.txCount} txns`} color="green" icon={Activity} />
@@ -50,7 +51,6 @@ export default function OverviewTab({ stats }: any) {
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#374151" />
                         <XAxis dataKey="date" stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={false} />
-                        {/* Fixed YAxis formatter type */}
                         <YAxis 
                             stroke="#9ca3af" 
                             fontSize={12} 
@@ -58,7 +58,6 @@ export default function OverviewTab({ stats }: any) {
                             axisLine={false} 
                             tickFormatter={(val: any) => `₦${(Number(val) || 0)/1000}k`} 
                         />
-                        {/* Fixed Tooltip formatter type */}
                         <Tooltip 
                             contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#fff', borderRadius: '8px' }} 
                             formatter={(val: any) => [`₦${(Number(val) || 0).toLocaleString()}`, 'Revenue']} 

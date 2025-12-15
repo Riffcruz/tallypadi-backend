@@ -14,26 +14,26 @@ export default function Sidebar({ tab, setTab }: { tab: string, setTab: (t: any)
 
     return (
         <>
-            {/* Mobile Toggle Button - Visible only on mobile */}
+            {/* Mobile Toggle Button - High Z-index (100) ensures it sits above charts/tables */}
             <button 
                 onClick={() => setIsOpen(!isOpen)}
-                className="md:hidden fixed top-4 left-4 z-50 p-2 bg-slate-800 text-green-400 rounded-lg shadow-lg border border-slate-700 hover:bg-slate-700 transition-colors"
+                className="md:hidden fixed top-4 left-4 z-[100] p-2 bg-slate-800 text-green-400 rounded-lg shadow-xl border border-slate-700 hover:bg-slate-700 transition-colors"
                 aria-label="Toggle Menu"
             >
                 {isOpen ? <X size={24} /> : <Menu size={24} />}
             </button>
 
-            {/* Mobile Backdrop - Closes menu when clicking outside */}
+            {/* Mobile Backdrop - Z-index 90 */}
             {isOpen && (
                 <div 
-                    className="fixed inset-0 bg-black/60 z-40 md:hidden backdrop-blur-sm"
+                    className="fixed inset-0 bg-black/60 z-[90] md:hidden backdrop-blur-sm"
                     onClick={() => setIsOpen(false)}
                 />
             )}
 
-            {/* Sidebar Container */}
+            {/* Sidebar Container - Z-index 99 */}
             <aside className={`
-                fixed inset-y-0 left-0 z-50 w-64 bg-slate-800 border-r border-slate-700 p-6 flex flex-col gap-6
+                fixed inset-y-0 left-0 z-[99] w-64 bg-slate-800 border-r border-slate-700 p-6 flex flex-col gap-6
                 transition-transform duration-300 ease-in-out shadow-2xl md:shadow-none
                 md:translate-x-0 md:static md:flex
                 ${isOpen ? 'translate-x-0' : '-translate-x-full'}
