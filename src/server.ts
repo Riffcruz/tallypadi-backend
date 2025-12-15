@@ -15,13 +15,11 @@ import { loginUser } from './controllers/auth.controller';
 import { startScheduler } from './services/scheduler'; // Your Cron Job
 import { env } from './config/env';
 import { getDashboardData } from './controllers/dashboard.controller';
-// 🔴 REMOVED OLD IMPORT: import { handlePaystackWebhook } from './controllers/payment.controller';
 import { getInventory, addInventoryItem, updateInventoryItem } from './controllers/inventory.controller';
 import { updateSettings } from './controllers/settings.controller';
 import { recordSale, getSalesHistory, generateSalesReport } from './controllers/sales.controller';
 import { getStaff, addStaff, removeStaff } from './controllers/staff.controller';
 import adminRouter from './routes/admin.routes'; 
-// 🟢 NEW IMPORT
 import webhookRoutes from './routes/webhook.routes';
 
 dotenv.config();
@@ -34,7 +32,7 @@ const app = express();
 
 app.use(helmet());
 
-// 🟢 UPDATE CORS TO ALLOW ADMIN SECRET HEADER
+// Update CORS to allow requests from your domain
 const corsOptions = {
   origin: process.env.NODE_ENV === 'production' ? 'https://tallypadi.com' : true, 
   credentials: true,
@@ -54,8 +52,10 @@ app.use('/api', limiter);
 
 const verifySignature = (req: any, res: any, buf: any) => {
   const signature = req.headers['x-hub-signature-256'];
-  // Only verify signature for WhatsApp webhook. Paystack has its own verification logic in controller.
-  if (req.path === '/webhook' && req.method === 'POST') {
+  
+  // 🟢 FIXED: Check for the new path '/api/whatsapp'
+  // using req.originalUrl is safer as it captures the full path
+  if (req.originalUrl.includes('/api/whatsapp') && req.method === 'POST') {
     if (!signature) throw new Error('No signature found');
     
     const appSecret = process.env.WHATSAPP_APP_SECRET;
@@ -114,12 +114,10 @@ app.use('/api/admin', (req, res, next) => {
   next();
 }, adminRouter);
 
-// Webhooks
-app.use('/webhook', whatsappRouter);
+// 🟢 FIXED: Moved WhatsApp to /api/whatsapp so Nginx routes it correctly
+// New Meta Webhook URL: https://tallypadi.com/api/whatsapp
+app.use('/api/webhook', whatsappRouter);
 
-// 🟢 NEW: Paystack Webhook (Mounted at /api/webhook/paystack)
-// This matches the test script URL
-app.use('/api/webhook', webhookRoutes);
 
 // Static Files
 app.use('/reports', express.static(path.join(__dirname, '..', 'public', 'reports')));
