@@ -59,7 +59,7 @@ const verifySignature = (req: any, res: any, buf: any) => {
   
   // 🟢 FIXED: Check for the new path '/api/whatsapp'
   // using req.originalUrl is safer as it captures the full path
-  if (req.originalUrl.includes('/api/whatsapp') && req.method === 'POST') {
+  if (req.originalUrl.includes('/api/webhook') && req.method === 'POST') {
     if (!signature) throw new Error('No signature found');
     
     const appSecret = process.env.WHATSAPP_APP_SECRET;
@@ -120,10 +120,10 @@ app.use('/api/admin', (req, res, next) => {
 
 // 🟢 FIXED: Moved WhatsApp to /api/whatsapp so Nginx routes it correctly
 // New Meta Webhook URL: https://tallypadi.com/api/whatsapp
-app.use('/api/whatsapp', whatsappRouter);
+app.use('/api/webhook', whatsappRouter);
 
 // Paystack Webhook (Mounted at /api/webhook/paystack)
-app.use('/api/webhook', webhookRoutes);
+app.use('/api/paystack', webhookRoutes);
 
 // Static Files
 app.use('/reports', express.static(path.join(__dirname, '..', 'public', 'reports')));
