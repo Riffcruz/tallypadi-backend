@@ -7,7 +7,7 @@ import Swal from 'sweetalert2';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 
 // 🌍 Dynamic Currency Mapping (Acts as your JSON file source)
 const COUNTRY_CURRENCIES: { [key: string]: string } = {

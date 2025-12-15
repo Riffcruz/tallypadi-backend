@@ -4,7 +4,7 @@ import { Shield, AlertTriangle, MessageSquare, Users, Save, Loader2 } from 'luci
 import axios from 'axios';
 import Swal from 'sweetalert2';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 
 export default function SettingsTab({ settings, onUpdate, headers }: any) {
     const [localSettings, setLocalSettings] = useState(settings);

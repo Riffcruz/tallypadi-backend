@@ -4,7 +4,7 @@ import axios from 'axios';
 import { MessageSquare, Send } from 'lucide-react';
 import Swal from 'sweetalert2';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 
 export default function BroadcastTab({ headers }: any) {
     const [msg, setMsg] = useState('');

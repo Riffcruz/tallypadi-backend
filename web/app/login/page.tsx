@@ -15,7 +15,7 @@ import {
   ArrowLeft
 } from 'lucide-react';
 
-const API_URL = 'http://localhost:3000/api';
+const API_URL = 'https://tallypadi.com/api';
 
 // Common African & Major Business Hub Codes
 const COUNTRY_CODES = [

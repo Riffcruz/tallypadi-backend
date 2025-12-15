@@ -13,7 +13,7 @@ import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell 
 } from 'recharts';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 
 // --- TYPES ---
 interface InventoryItem {
@@ -305,7 +305,8 @@ export default function DashboardPage() {
                                                     boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
                                                     padding: '12px'
                                                 }}
-                                                formatter={(value: number) => [formatNaira(value), 'Sales']}
+                                                // FIX: Allow any value type to prevent "undefined not assignable to number" error
+                                                formatter={(value: any) => [formatNaira(Number(value) || 0), 'Sales']}
                                             />
                                             <Bar dataKey="sales" radius={[6, 6, 6, 6]}>
                                                 {chartData.map((entry, index) => (
@@ -426,10 +427,26 @@ export default function DashboardPage() {
             {showInstallBtn && (
                 <div className="fixed bottom-6 right-6 z-50 animate-in fade-in slide-in-from-bottom-4 duration-500">
                     <div className="relative group">
-                        {/* Hide Button */}
-                       
-
-                   
+                        {/* Close Button */}
+                        <button 
+                            onClick={() => setShowInstallBtn(false)}
+                            className="absolute -top-3 -right-3 bg-white text-gray-400 hover:text-gray-600 rounded-full p-1 shadow-md border border-gray-100 opacity-0 group-hover:opacity-100 transition-all z-10"
+                        >
+                            <X className="w-4 h-4" />
+                        </button>
+                        {/* Install Action */}
+                        <button 
+                            onClick={handleInstallClick}
+                            className="flex items-center gap-3 bg-gray-900 text-white px-5 py-3.5 rounded-2xl shadow-xl hover:bg-gray-800 hover:scale-105 transition-all duration-300 border border-gray-700/50"
+                        >
+                            <div className="p-1.5 bg-gray-700 rounded-lg">
+                                <Smartphone className="w-5 h-5 text-green-400" />
+                            </div>
+                            <div className="text-left">
+                                <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Get the App</p>
+                                <p className="text-sm font-bold text-white">Install TallyPadi</p>
+                            </div>
+                        </button>
                     </div>
                 </div>
             )}

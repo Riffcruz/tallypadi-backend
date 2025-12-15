@@ -12,7 +12,7 @@ import UsersTab from '../../components/admin/UsersTab';
 import SettingsTab from '../../components/admin/SettingsTab';
 import BroadcastTab from '../../components/admin/BroadcastTab';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 
 export default function AdminDashboard() {
     const [adminKey, setAdminKey] = useState('');
