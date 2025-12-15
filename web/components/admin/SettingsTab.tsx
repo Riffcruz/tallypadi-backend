@@ -89,7 +89,7 @@ export default function SettingsTab({ settings, onUpdate, headers }: any) {
                             <Globe className="w-4 h-4 text-slate-500" />
                             <input
                                 type="text"
-                                placeholder="https://wa.me/234..."
+                                placeholder={localSettings.whatsappUrl || ''}
                                 value={localSettings.whatsappUrl || ''}
                                 onChange={(e) => handleUrlChange(e.target.value)}
                                 className="bg-transparent border-none text-white text-sm w-full focus:outline-none placeholder:text-slate-400"

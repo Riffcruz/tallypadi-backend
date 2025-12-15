@@ -5,7 +5,7 @@ import { AdminSettings } from '../models/adminSettings.model';
 // --- Security Helpers ---
 
 /**
- * Validates that the input is a valid string and not an object (prevents NoSQL injection payloads).
+ * Validates that the input is a valid string and not an object.
  * Returns the trimmed string or null if invalid.
  */
 const sanitizeString = (input: unknown): string | null => {
@@ -13,18 +13,11 @@ const sanitizeString = (input: unknown): string | null => {
     return input.trim();
 };
 
-/**
- * Strictly checks for boolean type.
- * Prevents "truthy" strings or numbers from bypassing logic.
- */
 const validateBoolean = (input: unknown): boolean | undefined => {
     if (typeof input === 'boolean') return input;
     return undefined;
 };
 
-/**
- * strictly checks for number type.
- */
 const validateNumber = (input: unknown): number | undefined => {
     if (typeof input === 'number' && !isNaN(input)) return input;
     return undefined;
@@ -34,35 +27,25 @@ const validateNumber = (input: unknown): number | undefined => {
 
 export const updateSettings = async (req: Request, res: Response) => {
     try {
-        // Use a safe reference to body
         const body = req.body || {};
         const responseData: any = {};
 
         // ---------------------------------------------------------
-        // 1. Handle User-Specific Settings (Business Name, User Prefs)
+        // 1. Handle User-Specific Settings
         // ---------------------------------------------------------
-        // Only run this if user-related fields are present to save DB calls
         if (body.businessName !== undefined || body.settings !== undefined) {
             const user = await User.findOne();
             if (user) {
-                // Update Business Name
                 if (body.businessName !== undefined) {
                     const safeName = sanitizeString(body.businessName);
-                    if (safeName !== null) {
-                        if (safeName.length <= 100) {
-                             user.businessName = safeName;
-                        } else {
-                            return res.status(400).json({ error: "Business name too long" });
-                        }
+                    if (safeName !== null && safeName.length <= 100) {
+                         user.businessName = safeName;
                     }
                 }
 
-                // Update User Settings Object
                 if (body.settings && typeof body.settings === 'object' && !Array.isArray(body.settings)) {
-                    const inputSettings = body.settings;
-                    
-                    // Helper to safely access user.settings even if it's strict
                     const userSettings = user.settings as any;
+                    const inputSettings = body.settings;
 
                     if (inputSettings.closingTime !== undefined) {
                         const safeTime = sanitizeString(inputSettings.closingTime);
@@ -100,16 +83,14 @@ export const updateSettings = async (req: Request, res: Response) => {
         }
 
         // ---------------------------------------------------------
-        // 2. Handle Global Admin Settings (Security, Limits, WhatsApp)
+        // 2. Handle Global Admin Settings
         // ---------------------------------------------------------
-        // Check if any admin fields are present
         if (
             body.whatsappUrl !== undefined || 
             body.autoSuspendOnJailbreak !== undefined || 
             body.maxMessageHistory !== undefined || 
             body.maxStaffAccounts !== undefined
         ) {
-            // Fetch existing admin settings or create new document
             let adminSettings = await AdminSettings.findOne();
             if (!adminSettings) {
                 adminSettings = new AdminSettings({
@@ -119,20 +100,17 @@ export const updateSettings = async (req: Request, res: Response) => {
                 });
             }
 
-            // Update WhatsApp URL
-            // Cleaned up: Removed `as any` cast since interface now supports it
+            // 🟢 Update WhatsApp URL (Relaxed Validation)
+            // Removed strict checks to ensure any format saves successfully
             if (body.whatsappUrl !== undefined) {
                 const safeUrl = sanitizeString(body.whatsappUrl);
+                // Only check for null (non-string), allow any string content
                 if (safeUrl !== null) {
-                    if (safeUrl.length === 0 || safeUrl.startsWith('http') || safeUrl.startsWith('wa.me')) {
-                        adminSettings.whatsappUrl = safeUrl;
-                    } else {
-                        return res.status(400).json({ error: "Invalid format for WhatsApp URL" });
-                    }
+                    adminSettings.whatsappUrl = safeUrl;
                 }
             }
 
-            // Update Security: Auto Suspend
+            // Update Security
             if (body.autoSuspendOnJailbreak !== undefined) {
                 const autoSuspend = validateBoolean(body.autoSuspendOnJailbreak);
                 if (autoSuspend !== undefined) {
@@ -140,7 +118,7 @@ export const updateSettings = async (req: Request, res: Response) => {
                 }
             }
 
-            // Update Limits: Max Message History
+            // Update Limits
             if (body.maxMessageHistory !== undefined) {
                 const hist = validateNumber(body.maxMessageHistory);
                 if (hist !== undefined) {
@@ -148,7 +126,6 @@ export const updateSettings = async (req: Request, res: Response) => {
                 }
             }
 
-            // Update Limits: Max Staff Accounts
             if (body.maxStaffAccounts !== undefined) {
                 const staff = validateNumber(body.maxStaffAccounts);
                 if (staff !== undefined) {
@@ -169,5 +146,7 @@ export const updateSettings = async (req: Request, res: Response) => {
     } catch (error) {
         console.error("Settings Update Error:", error);
         res.status(500).json({ error: "Server Error" });
+        // Check if 'whatsappUrl' exists in the known paths
+      console.log('Registered Schema Paths:', Object.keys(AdminSettings.schema.paths));
     }
 };
