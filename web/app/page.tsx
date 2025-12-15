@@ -1,7 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-// import Link from 'next/link'; // Removed to fix build error
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Phone, 
   ArrowRight, 
@@ -11,21 +10,84 @@ import {
   BarChart3, 
   PackageOpen, 
   Lock, 
-  Menu,
-  X,
-  MessageSquare,
-  Check
+  Menu, 
+  X, 
+  CheckCircle2, 
+  Star,
+  Camera
 } from 'lucide-react';
+
+// --- TYPES & INTERFACES ---
+
+interface FeatureCardProps {
+  icon: React.ReactNode;
+  color: 'emerald' | 'purple' | 'red' | 'blue' | 'orange' | 'teal';
+  title: string;
+  desc: string;
+  badge?: string | null;
+}
+
+interface PricingItemProps {
+  text: string;
+  light?: boolean;
+}
+
+interface AnimatedSectionProps {
+  children: React.ReactNode;
+  className?: string;
+  animation?: 'fade-up' | 'zoom-in' | 'slide-right';
+}
 
 // --- CONFIGURATION ---
 const DEFAULT_WHATSAPP_LINK = "https://wa.me/234XXXXXXXXXX?text=Hello%20Tallypadi"; 
 
 // --- Hero Background Images ---
 const HERO_IMAGES = [
-  "https://images.unsplash.com/photo-1542744173-8e7e53415bb0?q=80&w=2070&auto=format&fit=crop", 
   "https://images.unsplash.com/photo-1556742049-0cfed4f7a07d?q=80&w=2070&auto=format&fit=crop", 
+  "https://images.unsplash.com/photo-1542744173-8e7e53415bb0?q=80&w=2070&auto=format&fit=crop", 
   "https://images.unsplash.com/photo-1578575437130-527eed3abbec?q=80&w=2070&auto=format&fit=crop", 
 ];
+
+// --- Custom Hook for Scroll Animations ---
+const useScrollAnimation = (): [React.RefObject<HTMLDivElement | null>, boolean] => {
+  const [isVisible, setIsVisible] = useState(false);
+  const domRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(entries => {
+      entries.forEach(entry => setIsVisible(entry.isIntersecting));
+    });
+    
+    const currentElement = domRef.current;
+    if (currentElement) observer.observe(currentElement);
+    
+    return () => {
+        if(currentElement) observer.unobserve(currentElement);
+    };
+  }, []);
+
+  return [domRef, isVisible];
+};
+
+const AnimatedSection: React.FC<AnimatedSectionProps> = ({ children, className = "", animation = "fade-up" }) => {
+    const [ref, isVisible] = useScrollAnimation();
+    const baseClass = `transition-all duration-1000 ease-out transform`;
+    
+    let activeClass = "";
+    if (animation === "fade-up") {
+        activeClass = isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-20";
+    } else if (animation === "zoom-in") {
+        activeClass = isVisible ? "opacity-100 scale-100" : "opacity-0 scale-95";
+    } else if (animation === "slide-right") {
+        activeClass = isVisible ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-20";
+    }
+
+    return (
+        <div ref={ref} className={`${baseClass} ${activeClass} ${className}`}>
+            {children}
+        </div>
+    );
+};
 
 export default function LandingPage() {
   const [currentBg, setCurrentBg] = useState(0);
@@ -40,66 +102,59 @@ export default function LandingPage() {
     return () => clearInterval(timer);
   }, []);
 
-  // 🟢 FETCH REAL WHATSAPP LINK
+  // Fetch Whatsapp Link
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        // Use environment variable or fallback to default API URL
         const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
-        
-        // Fetch settings from the backend
-        // NOTE: Ensure this endpoint is public/unprotected in your backend router
         const res = await fetch(`${API_URL}/admin/settings`); 
-        
         if (res.ok) {
           const data = await res.json();
-          // If a custom URL is set in DB, use it. Otherwise, keep default.
           if (data && data.whatsappUrl) {
             setWhatsappLink(data.whatsappUrl);
           }
         }
       } catch (error) {
-        console.error("Failed to fetch global settings:", error);
+        console.error("Failed to fetch settings, using default");
       }
     };
-
     fetchSettings();
   }, []);
 
   return (
-    <div className="bg-white text-slate-600 overflow-x-hidden selection:bg-green-100 selection:text-green-900 font-sans">
+    <div className="bg-slate-50 text-slate-600 overflow-x-hidden font-sans selection:bg-emerald-500 selection:text-white">
       
       {/* --- Navbar --- */}
-      <nav className="fixed w-full z-50 transition-all duration-300 bg-white/95 backdrop-blur-xl border-b border-gray-100 shadow-sm">
+      <nav className="fixed w-full z-50 transition-all duration-300 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 shadow-lg">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-20 items-center">
             {/* Logo */}
             <div className="flex items-center gap-2 cursor-pointer group">
-              <div className="w-10 h-10 bg-gradient-to-tr from-green-600 to-emerald-500 rounded-xl flex items-center justify-center text-white shadow-lg shadow-green-600/20 group-hover:scale-105 transition-transform duration-300">
+              <div className="w-10 h-10 bg-gradient-to-tr from-emerald-500 to-green-400 rounded-xl flex items-center justify-center text-white shadow-lg shadow-emerald-500/20 group-hover:rotate-12 transition-transform duration-300">
                 <Phone fill="currentColor" size={20} />
               </div>
-              <span className="font-heading font-bold text-2xl tracking-tight text-slate-900">Tallypadi</span>
+              <span className="font-bold text-2xl tracking-tight text-white">Tallypadi</span>
             </div>
             
             {/* Desktop Links */}
             <div className="hidden md:flex space-x-8 items-center">
-              <a href="#features" className="text-sm font-medium text-slate-600 hover:text-green-600 transition">Features</a>
-              <a href="#how-it-works" className="text-sm font-medium text-slate-600 hover:text-green-600 transition">How it Works</a>
-              <a href="/policy" className="text-sm font-medium text-slate-600 hover:text-green-600 transition">Privacy</a>
-              <a href="/faq" className="text-sm font-medium text-slate-600 hover:text-green-600 transition">FAQ</a>
+              <a href="#how-it-works" className="text-sm font-medium text-slate-300 hover:text-emerald-400 transition">How it Works</a>
+              <a href="#features" className="text-sm font-medium text-slate-300 hover:text-emerald-400 transition">Features</a>
+              <a href="#pricing" className="text-sm font-medium text-slate-300 hover:text-emerald-400 transition">Pricing</a>
+              <a href="#gallery" className="text-sm font-medium text-slate-300 hover:text-emerald-400 transition">Showcase</a>
             </div>
 
             {/* Auth Buttons */}
             <div className="hidden md:flex items-center gap-4">
-              <a href="/login" className="text-sm font-semibold text-slate-900 hover:text-green-600">Login</a>
-              <a href={whatsappLink} target="_blank" rel="noreferrer" className="bg-slate-900 hover:bg-black text-white px-6 py-2.5 rounded-full font-medium transition shadow-lg hover:shadow-xl text-sm flex items-center gap-2 group">
-                Get Started <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
+              <a href="/login" className="text-sm font-semibold text-white hover:text-emerald-400 transition">Login</a>
+              <a href={whatsappLink} target="_blank" rel="noreferrer" className="bg-emerald-500 hover:bg-emerald-400 text-white px-6 py-2.5 rounded-full font-bold transition-all shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:shadow-[0_0_30px_rgba(16,185,129,0.5)] text-sm flex items-center gap-2 group hover:-translate-y-0.5">
+                Register Now <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
               </a>
             </div>
 
             {/* Mobile Toggle */}
             <div className="md:hidden">
-                <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg">
+                <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="p-2 text-white hover:bg-slate-800 rounded-lg transition">
                     {mobileMenuOpen ? <X size={24}/> : <Menu size={24} />}
                 </button>
             </div>
@@ -108,48 +163,49 @@ export default function LandingPage() {
         
         {/* Mobile Menu */}
         {mobileMenuOpen && (
-            <div className="md:hidden bg-white border-t p-4 flex flex-col gap-4 shadow-xl animate-fade-in absolute w-full">
-                 <a href="#features" className="block text-sm font-medium p-2 hover:bg-slate-50 rounded">Features</a>
-                 <a href="#how-it-works" className="block text-sm font-medium p-2 hover:bg-slate-50 rounded">How it Works</a>
-                 <a href="/login" className="block text-sm font-medium p-2 hover:bg-slate-50 rounded">Login</a>
-                 <a href={whatsappLink} target="_blank" rel="noreferrer" className="block text-center bg-green-600 text-white py-3 rounded-lg font-bold">Chat to Start</a>
+            <div className="md:hidden bg-slate-900 border-t border-slate-800 p-4 flex flex-col gap-4 shadow-2xl absolute w-full animate-fade-in">
+                 <a href="#how-it-works" onClick={() => setMobileMenuOpen(false)} className="block text-slate-300 hover:text-white font-medium p-2 hover:bg-slate-800 rounded">How it Works</a>
+                 <a href="#features" onClick={() => setMobileMenuOpen(false)} className="block text-slate-300 hover:text-white font-medium p-2 hover:bg-slate-800 rounded">Features</a>
+                 <a href="#pricing" onClick={() => setMobileMenuOpen(false)} className="block text-slate-300 hover:text-white font-medium p-2 hover:bg-slate-800 rounded">Pricing</a>
+                 <a href="/login" className="block text-slate-300 hover:text-white font-medium p-2 hover:bg-slate-800 rounded">Login</a>
+                 <a href={whatsappLink} target="_blank" rel="noreferrer" className="block text-center bg-emerald-500 text-white py-3 rounded-lg font-bold shadow-lg">Register on WhatsApp</a>
             </div>
         )}
       </nav>
 
-      {/* --- Hero Section --- */}
-      <section className="relative min-h-[85vh] flex items-center justify-center pt-20 overflow-hidden bg-slate-900">
+      {/* --- Hero Section (Full Screen) --- */}
+      <section className="relative min-h-screen flex items-center justify-center pt-20 overflow-hidden bg-slate-950">
         
-        {/* Background Image Slider with Better Overlay */}
+        {/* Background Image Slider */}
         {HERO_IMAGES.map((img, index) => (
           <div 
             key={index}
-            className={`absolute inset-0 bg-cover bg-center transition-opacity duration-[2000ms] ease-in-out ${
-              index === currentBg ? 'opacity-40' : 'opacity-0'
+            className={`absolute inset-0 bg-cover bg-center transition-all duration-[2000ms] ease-in-out ${
+              index === currentBg ? 'opacity-40 scale-105' : 'opacity-0 scale-100'
             }`}
             style={{ backgroundImage: `url(${img})` }}
           />
         ))}
 
-        {/* Cinematic Gradient Overlay */}
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/80 to-transparent z-10" />
-        <div className="absolute inset-0 bg-gradient-to-r from-slate-900/90 via-slate-900/40 to-transparent z-10" />
+        {/* Heavy Cinematic Gradient Overlay for Contrast */}
+        <div className="absolute inset-0 bg-gradient-to-b from-slate-950/90 via-slate-950/70 to-slate-950 z-10" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-emerald-900/20 via-slate-950/40 to-slate-950 z-10" />
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-20 w-full grid lg:grid-cols-2 gap-16 items-center">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-20 w-full grid lg:grid-cols-2 gap-12 lg:gap-20 items-center">
           
           {/* Text Content */}
           <div className="text-white pt-10 lg:pt-0">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 border border-white/10 text-emerald-300 text-sm font-semibold mb-8 backdrop-blur-md shadow-inner animate-fade-in">
-              <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse shadow-[0_0_10px_rgba(52,211,153,0.5)]"></span>
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-sm font-bold mb-8 backdrop-blur-md animate-pulse">
+              <span className="w-2 h-2 bg-emerald-400 rounded-full shadow-[0_0_10px_rgba(52,211,153,0.8)]"></span>
               The #1 AI Accountant in Nigeria
             </div>
             
-            <h1 className="text-5xl lg:text-7xl font-heading font-extrabold leading-[1.1] mb-6 tracking-tight">
+            <h1 className="text-5xl lg:text-7xl font-extrabold leading-[1.1] mb-6 tracking-tight drop-shadow-2xl">
               More Profit. <br/>
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-green-300">Less Stress.</span>
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-green-300 to-teal-200 animate-gradient-x">Less Stress.</span>
             </h1>
             
-            <p className="text-lg text-slate-300 mb-10 leading-relaxed max-w-lg font-light">
+            <p className="text-lg text-slate-300 mb-10 leading-relaxed max-w-lg font-light drop-shadow-md">
               Stop writing in notebooks. Manage your entire inventory, staff, and sales directly inside WhatsApp. It's as easy as chatting with a friend.
             </p>
             
@@ -158,100 +214,98 @@ export default function LandingPage() {
                 href={whatsappLink} 
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center justify-center px-8 py-4 text-base font-bold rounded-full text-white bg-green-600 hover:bg-green-500 transition-all duration-300 shadow-[0_10px_30px_-10px_rgba(22,163,74,0.5)] hover:-translate-y-1 hover:shadow-[0_20px_40px_-10px_rgba(22,163,74,0.6)]"
+                className="inline-flex items-center justify-center px-8 py-4 text-lg font-bold rounded-full text-slate-900 bg-emerald-400 hover:bg-emerald-300 transition-all duration-300 shadow-[0_0_30px_-5px_rgba(52,211,153,0.6)] hover:-translate-y-1 hover:scale-105"
               >
                 <Phone className="mr-2" size={20} fill="currentColor" /> Chat on WhatsApp
               </a>
-              <a href="/dashboard" className="inline-flex items-center justify-center px-8 py-4 text-base font-bold rounded-full text-white bg-white/5 backdrop-blur-md border border-white/10 hover:bg-white/10 transition-all duration-300 hover:-translate-y-1">
-                View Dashboard
+              <a href="#how-it-works" className="inline-flex items-center justify-center px-8 py-4 text-lg font-bold rounded-full text-white bg-white/5 backdrop-blur-md border border-white/10 hover:bg-white/10 transition-all duration-300 hover:-translate-y-1">
+                How it Works
               </a>
             </div>
             
-            <div className="mt-10 flex items-center gap-6 text-sm text-slate-400 font-medium">
+            <div className="mt-12 flex items-center gap-4 p-4 rounded-2xl bg-slate-900/50 border border-slate-800 backdrop-blur-sm w-fit">
                <div className="flex -space-x-3">
                    {[1,2,3,4].map(i => (
-                       <div key={i} className="w-9 h-9 rounded-full border-2 border-slate-900 bg-slate-800 flex items-center justify-center text-xs overflow-hidden">
-                          <img src={`https://i.pravatar.cc/100?img=${i + 10}`} alt="User" />
+                       <div key={i} className="w-10 h-10 rounded-full border-2 border-slate-900 bg-slate-700 overflow-hidden">
+                          <img src={`https://i.pravatar.cc/100?img=${i + 15}`} alt="User" className="w-full h-full object-cover" />
                        </div>
                    ))}
                </div>
                <div className="flex flex-col">
-                  <span className="text-white">Trusted by 500+ Vendors</span>
-                  <span className="text-emerald-400 text-xs">★★★★★ 4.9/5 Rating</span>
+                  <span className="text-slate-200 font-semibold text-sm">Trusted by 500+ Vendors</span>
+                  <div className="flex text-yellow-400 text-xs gap-0.5">
+                      <Star size={12} fill="currentColor" />
+                      <Star size={12} fill="currentColor" />
+                      <Star size={12} fill="currentColor" />
+                      <Star size={12} fill="currentColor" />
+                      <Star size={12} fill="currentColor" />
+                  </div>
                </div>
             </div>
           </div>
 
-          {/* Dynamic Phone Mockup */}
-          <div className="hidden lg:block relative perspective-1000" data-aos="fade-left">
-             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-green-500/20 rounded-full blur-[120px] animate-pulse"></div>
+          {/* Dynamic Phone Mockup with 3D Float */}
+          <div className="hidden lg:block relative perspective-1000">
+             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-emerald-500/20 rounded-full blur-[100px] animate-pulse"></div>
              
-             {/* Phone Container with Tilt Effect */}
-             <div className="relative mx-auto border-gray-900 bg-gray-900 border-[12px] rounded-[3rem] h-[640px] w-[320px] shadow-2xl animate-float z-10 overflow-hidden">
-                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-40 h-6 bg-gray-900 rounded-b-xl z-20"></div>
+             {/* Phone Body */}
+             <div className="relative mx-auto border-gray-900 bg-gray-900 border-[10px] rounded-[3rem] h-[680px] w-[340px] shadow-2xl animate-[float_6s_ease-in-out_infinite] z-10 overflow-hidden ring-1 ring-white/20">
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-6 bg-gray-900 rounded-b-xl z-20"></div>
                 
-                {/* Screen */}
+                {/* Screen Content */}
                 <div className="w-full h-full bg-[#efeae2] relative flex flex-col font-sans">
-                    
-                    {/* WhatsApp Header */}
-                    <div className="bg-[#075E54] h-20 pt-6 flex items-center px-4 text-white gap-3 shrink-0 shadow-md z-10">
+                    {/* Header */}
+                    <div className="bg-[#075E54] h-24 pt-8 flex items-center px-4 text-white gap-3 shrink-0 shadow-md z-10">
                         <ArrowRight size={20} className="rotate-180 opacity-80"/>
-                        <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center">
-                            <img src="https://cdn-icons-png.flaticon.com/512/4712/4712109.png" className="w-6 h-6" alt="Bot" />
+                        <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center p-1">
+                            <div className="w-full h-full bg-emerald-600 rounded-full flex items-center justify-center text-[10px] font-bold">TP</div>
                         </div>
                         <div className="flex-1">
                             <h4 className="font-bold text-base">Tallypadi Bot</h4>
-                            <p className="text-[10px] text-green-100 opacity-90">Business Account</p>
+                            <p className="text-[10px] text-green-100 opacity-90">Online</p>
                         </div>
                     </div>
 
-                    {/* Chat Messages */}
-                    <div className="flex-1 p-4 flex flex-col gap-4 overflow-hidden bg-[url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png')] bg-opacity-5">
+                    {/* Chat Area */}
+                    <div className="flex-1 p-4 flex flex-col gap-4 overflow-hidden bg-[url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png')] bg-opacity-10">
                         
-                        {/* Date Separator */}
-                        <div className="self-center bg-[#e1f3fb] text-slate-500 text-[10px] px-3 py-1 rounded-lg shadow-sm font-medium uppercase tracking-wide my-2">
+                        <div className="self-center bg-[#e1f3fb] text-slate-500 text-[10px] px-3 py-1 rounded-lg shadow-sm font-medium uppercase tracking-wide my-2 opacity-80">
                             Today
                         </div>
 
-                        {/* User Msg */}
-                        <div className="self-end bg-[#d9fdd3] p-3 rounded-xl rounded-tr-none shadow-[0_1px_0.5px_rgba(0,0,0,0.13)] max-w-[85%] text-sm text-slate-800 relative group">
-                             I sold 5 bags of rice
-                             <span className="block text-[10px] text-slate-400 text-right mt-1 flex justify-end items-center gap-1">10:02 AM <Check size={12} className="text-blue-500"/></span>
-                             <div className="absolute -right-2 top-0 w-3 h-3 bg-[#d9fdd3] [clip-path:polygon(0_0,0%_100%,100%_0)]"></div>
+                        {/* Animated Messages */}
+                        <div className="animate-[fade-in-up_0.5s_ease-out_forwards] self-end bg-[#d9fdd3] p-3 rounded-xl rounded-tr-none shadow-sm max-w-[85%] text-sm text-slate-800">
+                             Add 50 bags of Rice at 40k
+                             <span className="block text-[10px] text-slate-400 text-right mt-1 flex justify-end items-center gap-1">10:00 AM <CheckCircle2 size={12} className="text-blue-500"/></span>
                         </div>
 
-                        {/* Bot Msg */}
-                        <div className="self-start bg-white p-3 rounded-xl rounded-tl-none shadow-[0_1px_0.5px_rgba(0,0,0,0.13)] max-w-[90%] text-sm text-slate-800 relative">
-                             <p className="font-bold text-green-700 mb-1 text-xs">Tallypadi</p>
-                             ✅ <strong>Sale Recorded!</strong><br/>
-                             <div className="my-2 border-l-2 border-green-500 pl-2 bg-slate-50 py-1 text-xs text-slate-600">
-                                Item: Rice (5 Bags)<br/>
-                                Revenue: ₦125,000
-                             </div>
-                             📉 Stock Left: <strong>12 Bags</strong><br/>
-                             <span className="block text-[10px] text-slate-400 text-right mt-1">10:02 AM</span>
-                             <div className="absolute -left-2 top-0 w-3 h-3 bg-white [clip-path:polygon(100%_0,100%_100%,0_0)]"></div>
+                        <div className="animate-[fade-in-up_0.5s_ease-out_0.5s_forwards] opacity-0 self-start bg-white p-3 rounded-xl rounded-tl-none shadow-sm max-w-[90%] text-sm text-slate-800 border border-slate-100">
+                             <p className="font-bold text-emerald-700 mb-1 text-xs">Tallypadi</p>
+                             ✅ <strong>Stock Added!</strong><br/>
+                             Item: Rice<br/>
+                             Qty: 50 Bags<br/>
+                             Price: ₦40,000/bag
+                             <span className="block text-[10px] text-slate-400 text-right mt-1">10:00 AM</span>
                         </div>
 
-                        {/* User Msg 2 */}
-                        <div className="self-end bg-[#d9fdd3] p-3 rounded-xl rounded-tr-none shadow-[0_1px_0.5px_rgba(0,0,0,0.13)] max-w-[85%] text-sm text-slate-800 relative mt-2">
-                             How much profit today?
-                             <span className="block text-[10px] text-slate-400 text-right mt-1 flex justify-end items-center gap-1">10:05 AM <Check size={12} className="text-blue-500"/></span>
-                             <div className="absolute -right-2 top-0 w-3 h-3 bg-[#d9fdd3] [clip-path:polygon(0_0,0%_100%,100%_0)]"></div>
+                        <div className="animate-[fade-in-up_0.5s_ease-out_2.5s_forwards] opacity-0 self-end bg-[#d9fdd3] p-3 rounded-xl rounded-tr-none shadow-sm max-w-[85%] text-sm text-slate-800 mt-2">
+                             Sold 2 Rice
+                             <span className="block text-[10px] text-slate-400 text-right mt-1 flex justify-end items-center gap-1">12:30 PM <CheckCircle2 size={12} className="text-blue-500"/></span>
                         </div>
 
-                         {/* Bot Msg 2 */}
-                         <div className="self-start bg-white p-3 rounded-xl rounded-tl-none shadow-[0_1px_0.5px_rgba(0,0,0,0.13)] max-w-[90%] text-sm text-slate-800 relative">
-                             <p className="font-bold text-green-700 mb-1 text-xs">Tallypadi</p>
-                             📊 <strong>Daily Summary</strong><br/>
-                             Sales: ₦240,000<br/>
-                             Profit: ₦45,000<br/>
-                             <div className="mt-2 flex gap-2">
-                                <span className="bg-slate-100 text-slate-500 text-[10px] px-2 py-1 rounded border">View Full Report</span>
-                             </div>
-                             <span className="block text-[10px] text-slate-400 text-right mt-1">10:05 AM</span>
-                             <div className="absolute -left-2 top-0 w-3 h-3 bg-white [clip-path:polygon(100%_0,100%_100%,0_0)]"></div>
+                        <div className="animate-[fade-in-up_0.5s_ease-out_3.5s_forwards] opacity-0 self-start bg-white p-3 rounded-xl rounded-tl-none shadow-sm max-w-[90%] text-sm text-slate-800 border border-slate-100">
+                             <p className="font-bold text-emerald-700 mb-1 text-xs">Tallypadi</p>
+                             💰 <strong>Sale Recorded!</strong><br/>
+                             You made: ₦80,000<br/>
+                             Warning: Stock is low!
+                             <span className="block text-[10px] text-slate-400 text-right mt-1">12:30 PM</span>
                         </div>
+                    </div>
+                    {/* Input Area */}
+                    <div className="h-14 bg-white px-2 flex items-center gap-2">
+                         <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">+</div>
+                         <div className="flex-1 h-9 bg-slate-100 rounded-full px-4 flex items-center text-slate-400 text-sm">Type a message...</div>
+                         <div className="w-9 h-9 rounded-full bg-emerald-600 flex items-center justify-center text-white"><ArrowRight size={18}/></div>
                     </div>
                 </div>
              </div>
@@ -259,55 +313,50 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* --- How It Works (New Section) --- */}
-      <section id="how-it-works" className="py-24 bg-white relative overflow-hidden">
-        {/* Decorative blobs */}
-        <div className="absolute top-20 left-0 w-64 h-64 bg-green-50 rounded-full blur-3xl opacity-60 pointer-events-none"></div>
-        <div className="absolute bottom-20 right-0 w-96 h-96 bg-blue-50 rounded-full blur-3xl opacity-60 pointer-events-none"></div>
+      {/* --- How It Works (Dark Theme for Contrast) --- */}
+      <section id="how-it-works" className="py-24 bg-slate-900 relative overflow-hidden text-white">
+        <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-600/10 rounded-full blur-[100px]"></div>
+        <div className="absolute bottom-0 left-0 w-96 h-96 bg-blue-600/10 rounded-full blur-[100px]"></div>
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          <div className="text-center mb-16">
-            <span className="text-green-600 font-bold tracking-wider uppercase text-xs bg-green-50 px-3 py-1 rounded-full border border-green-100">Simple Process</span>
-            <h2 className="text-3xl md:text-4xl font-heading font-bold text-slate-900 mt-4">Start managing in 3 minutes.</h2>
-          </div>
+          <AnimatedSection className="text-center mb-16">
+            <span className="text-emerald-400 font-bold tracking-wider uppercase text-xs bg-emerald-950/50 px-3 py-1 rounded-full border border-emerald-900">Simple Process</span>
+            <h2 className="text-3xl md:text-5xl font-bold mt-4">Automate your shop in <span className="text-emerald-400">3 minutes</span>.</h2>
+          </AnimatedSection>
 
           <div className="grid md:grid-cols-3 gap-8">
             {/* Step 1 */}
-            <div className="relative group">
-              <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl transition-all duration-300 relative z-10 h-full">
-                <div className="w-14 h-14 bg-slate-900 text-white rounded-2xl flex items-center justify-center text-xl font-bold mb-6 shadow-lg shadow-slate-900/20 group-hover:scale-110 transition-transform">1</div>
-                <h3 className="text-xl font-bold text-slate-900 mb-3">Add Tallypadi</h3>
-                <p className="text-slate-500 leading-relaxed">
-                  Click the chat button to save our number. No app download required. Just say "Hello" on WhatsApp.
+            <AnimatedSection animation="fade-up" className="relative group">
+              <div className="bg-slate-800/50 p-8 rounded-3xl border border-slate-700 hover:border-emerald-500/50 transition-all duration-500 hover:bg-slate-800 relative z-10 h-full">
+                <div className="w-16 h-16 bg-slate-950 text-emerald-400 border border-slate-700 rounded-2xl flex items-center justify-center text-2xl font-bold mb-6 shadow-lg group-hover:scale-110 transition-transform">1</div>
+                <h3 className="text-xl font-bold text-white mb-3">Add Tallypadi</h3>
+                <p className="text-slate-400 leading-relaxed">
+                  Click the button to open WhatsApp. Save the number. No complex app downloads or installations.
                 </p>
               </div>
-              {/* Connector Line (Desktop) */}
-              <div className="hidden md:block absolute top-1/2 left-full w-full h-0.5 bg-gradient-to-r from-slate-200 to-transparent -translate-y-1/2 z-0"></div>
-            </div>
+            </AnimatedSection>
 
             {/* Step 2 */}
-            <div className="relative group">
-              <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl transition-all duration-300 relative z-10 h-full">
-                <div className="w-14 h-14 bg-green-600 text-white rounded-2xl flex items-center justify-center text-xl font-bold mb-6 shadow-lg shadow-green-600/20 group-hover:scale-110 transition-transform">2</div>
-                <h3 className="text-xl font-bold text-slate-900 mb-3">Add Your Stock</h3>
-                <p className="text-slate-500 leading-relaxed">
-                  Tell the bot what you sell. E.g., <span className="bg-slate-100 px-1 rounded font-mono text-xs text-slate-700">"Add 50 bags of Rice at 40k"</span>. It remembers everything.
+            <AnimatedSection animation="fade-up" className="relative group delay-100">
+              <div className="bg-slate-800/50 p-8 rounded-3xl border border-slate-700 hover:border-emerald-500/50 transition-all duration-500 hover:bg-slate-800 relative z-10 h-full">
+                <div className="w-16 h-16 bg-emerald-600 text-white rounded-2xl flex items-center justify-center text-2xl font-bold mb-6 shadow-lg shadow-emerald-600/20 group-hover:scale-110 transition-transform">2</div>
+                <h3 className="text-xl font-bold text-white mb-3">Add Your Stock</h3>
+                <p className="text-slate-400 leading-relaxed">
+                  Tell the bot what you sell. E.g., <span className="bg-slate-900 px-1.5 py-0.5 rounded text-emerald-300 font-mono text-xs">"Add 50 bags of Rice at 40k"</span>. It remembers everything instantly.
                 </p>
               </div>
-              {/* Connector Line (Desktop) */}
-              <div className="hidden md:block absolute top-1/2 left-full w-full h-0.5 bg-gradient-to-r from-slate-200 to-transparent -translate-y-1/2 z-0"></div>
-            </div>
+            </AnimatedSection>
 
             {/* Step 3 */}
-            <div className="relative group">
-              <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl transition-all duration-300 relative z-10 h-full">
-                <div className="w-14 h-14 bg-blue-600 text-white rounded-2xl flex items-center justify-center text-xl font-bold mb-6 shadow-lg shadow-blue-600/20 group-hover:scale-110 transition-transform">3</div>
-                <h3 className="text-xl font-bold text-slate-900 mb-3">Chat to Manage</h3>
-                <p className="text-slate-500 leading-relaxed">
-                  Record sales as they happen. <span className="bg-slate-100 px-1 rounded font-mono text-xs text-slate-700">"Sold 2 Rice"</span>. We calculate your profit automatically.
+            <AnimatedSection animation="fade-up" className="relative group delay-200">
+              <div className="bg-slate-800/50 p-8 rounded-3xl border border-slate-700 hover:border-emerald-500/50 transition-all duration-500 hover:bg-slate-800 relative z-10 h-full">
+                <div className="w-16 h-16 bg-blue-600 text-white rounded-2xl flex items-center justify-center text-2xl font-bold mb-6 shadow-lg shadow-blue-600/20 group-hover:scale-110 transition-transform">3</div>
+                <h3 className="text-xl font-bold text-white mb-3">Chat to Manage</h3>
+                <p className="text-slate-400 leading-relaxed">
+                  Record sales as they happen. <span className="bg-slate-900 px-1.5 py-0.5 rounded text-blue-300 font-mono text-xs">"Sold 2 Rice"</span>. We calculate your profit and track inventory.
                 </p>
               </div>
-            </div>
+            </AnimatedSection>
           </div>
         </div>
       </section>
@@ -315,79 +364,177 @@ export default function LandingPage() {
       {/* --- Features Grid --- */}
       <section id="features" className="py-24 bg-slate-50 relative">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          <div className="text-center mb-16">
-            <span className="text-green-600 font-bold tracking-wider uppercase text-xs">Features</span>
-            <h2 className="text-3xl md:text-4xl font-heading font-bold text-slate-900 mt-2">More than just a chat bot.</h2>
-          </div>
+          <AnimatedSection className="text-center mb-16">
+            <span className="text-emerald-600 font-bold tracking-wider uppercase text-xs">Powerful Features</span>
+            <h2 className="text-3xl md:text-5xl font-bold text-slate-900 mt-2">Everything a modern business needs.</h2>
+          </AnimatedSection>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            
             <FeatureCard 
               icon={<Wand2 size={24} />} 
-              color="green"
+              color="emerald"
               title="AI Powered Assistant"
-              desc="Talk naturally. Say 'I sold bread' or 'How much did I make yesterday?' and our AI understands you instantly."
+              desc="Talk naturally in English or Pidgin. Say 'I sold bread' or 'How much profit today?' and our AI understands instantly."
             />
-            
             <FeatureCard 
               icon={<Users size={24} />} 
               color="purple"
               title="Staff Management"
               badge="TYCOON PLAN"
-              desc="Add your sales boys and girls. They record sales on their own WhatsApp, and you see everything on your Master Dashboard."
+              desc="Add your sales staff. They record sales on their own WhatsApp, and you see everything on your Master Dashboard."
             />
-
             <FeatureCard 
               icon={<FileText size={24} />} 
               color="red"
               title="Instant PDF Invoices"
-              desc="Need to send a receipt? Tallypadi generates professional PDF invoices instantly that you can forward to customers."
+              desc="Need a receipt? Tallypadi generates professional PDF invoices instantly that you can share with customers."
             />
-
             <FeatureCard 
               icon={<BarChart3 size={24} />} 
               color="blue"
-              title="Web Dashboard"
-              desc="WhatsApp is great for entry, but login to our website for deep analytics, charts, and Excel exports."
+              title="Advanced Analytics"
+              desc="Login to our website for deep insights. Visual charts, best-selling items, and exportable Excel reports."
             />
-
             <FeatureCard 
               icon={<PackageOpen size={24} />} 
               color="orange"
-              title="Stock Alerts"
-              desc="Get notified before you run out of stock. Tallypadi keeps an eye on your inventory so you never miss a sale."
+              title="Low Stock Alerts"
+              desc="Get notified before you run out of stock. Never miss a sale because you forgot to restock."
             />
-
             <FeatureCard 
               icon={<Lock size={24} />} 
               color="teal"
               title="Secure & Private"
-              desc="Your business data is yours. We use bank-level encryption to ensure your sales records are safe."
+              desc="Your business data is yours. We use bank-level encryption to ensure your sales records are 100% safe."
             />
-
           </div>
         </div>
       </section>
 
-      {/* --- Pricing / CTA --- */}
-      <section className="py-24 bg-slate-900 text-white relative overflow-hidden">
-        {/* Abstract Shapes */}
-        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-green-600/10 rounded-full blur-[100px] animate-blob"></div>
-        <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-emerald-500/10 rounded-full blur-[100px] animate-blob animation-delay-2000"></div>
+      {/* --- Gallery / Photo Edits Section --- */}
+      <section id="gallery" className="py-24 bg-white border-t border-slate-100">
+         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <AnimatedSection className="flex flex-col md:flex-row justify-between items-end mb-12 gap-6">
+                <div className="max-w-2xl">
+                    <span className="text-purple-600 font-bold tracking-wider uppercase text-xs bg-purple-50 px-3 py-1 rounded-full">Business Showcase</span>
+                    <h2 className="text-3xl md:text-4xl font-bold text-slate-900 mt-4">Manage your product photos & receipts.</h2>
+                    <p className="text-slate-500 mt-4 text-lg">Keep your business organized. Upload product images, save payment receipts, and maintain a visual gallery of your inventory.</p>
+                </div>
+                <button className="bg-slate-100 text-slate-700 px-6 py-3 rounded-xl font-semibold hover:bg-slate-200 transition flex items-center gap-2">
+                    <Camera size={18} /> View Full Gallery
+                </button>
+            </AnimatedSection>
 
-        <div className="max-w-4xl mx-auto px-4 text-center relative z-10">
-          <h2 className="text-3xl md:text-5xl font-heading font-bold mb-6">Stop guessing your profit.</h2>
-          <p className="text-slate-400 mb-10 text-lg md:text-xl font-light">Join the Oga Bosses and Tycoons taking control of their business today.</p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 h-[500px]">
+                <AnimatedSection animation="zoom-in" className="col-span-2 row-span-2 relative rounded-3xl overflow-hidden group shadow-lg">
+                    <img src="https://images.unsplash.com/photo-1525904097878-94fb15817433?q=80&w=2070&auto=format&fit=crop" alt="Inventory" className="w-full h-full object-cover transition duration-700 group-hover:scale-110" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent flex flex-col justify-end p-6">
+                        <span className="text-white font-bold text-xl">Organized Inventory</span>
+                        <span className="text-slate-300 text-sm">Visual tracking</span>
+                    </div>
+                </AnimatedSection>
+                <AnimatedSection animation="zoom-in" className="relative rounded-3xl overflow-hidden group shadow-lg delay-100">
+                    <img src="https://images.unsplash.com/photo-1556740738-b6a63e27c4df?q=80&w=2070&auto=format&fit=crop" alt="Receipts" className="w-full h-full object-cover transition duration-700 group-hover:scale-110" />
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition duration-300 flex items-center justify-center">
+                        <span className="text-white font-semibold border border-white/30 px-4 py-2 rounded-full backdrop-blur-md">Receipts</span>
+                    </div>
+                </AnimatedSection>
+                <AnimatedSection animation="zoom-in" className="relative rounded-3xl overflow-hidden group shadow-lg delay-200">
+                    <img src="https://images.unsplash.com/photo-1580519542054-3a227237ce72?q=80&w=2074&auto=format&fit=crop" alt="Payment" className="w-full h-full object-cover transition duration-700 group-hover:scale-110" />
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition duration-300 flex items-center justify-center">
+                        <span className="text-white font-semibold border border-white/30 px-4 py-2 rounded-full backdrop-blur-md">Payments</span>
+                    </div>
+                </AnimatedSection>
+                <AnimatedSection animation="zoom-in" className="col-span-2 md:col-span-2 relative rounded-3xl overflow-hidden group shadow-lg delay-300">
+                     <div className="absolute inset-0 bg-slate-900 flex flex-col items-center justify-center text-center p-6">
+                        <Camera className="text-slate-600 mb-4" size={48} />
+                        <h3 className="text-white font-bold text-xl mb-2">Upload Your Own</h3>
+                        <p className="text-slate-400 text-sm mb-6 max-w-xs">Attach photos to your sales directly in WhatsApp to keep proof of every transaction.</p>
+                        <a href={whatsappLink} className="text-emerald-400 hover:text-emerald-300 font-semibold flex items-center gap-1">Try it now <ArrowRight size={16}/></a>
+                     </div>
+                </AnimatedSection>
+            </div>
+         </div>
+      </section>
+
+      {/* --- Pricing Section --- */}
+      <section id="pricing" className="py-24 bg-slate-50 relative">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <AnimatedSection className="text-center mb-16">
+                <span className="text-emerald-600 font-bold tracking-wider uppercase text-xs">Pricing Plans</span>
+                <h2 className="text-3xl md:text-5xl font-bold text-slate-900 mt-2">Choose your level.</h2>
+                <p className="text-slate-500 mt-4 max-w-2xl mx-auto">Start for free. Upgrade as you grow. No hidden fees.</p>
+            </AnimatedSection>
+
+            <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+                {/* Free Plan */}
+                <AnimatedSection animation="fade-up" className="bg-white p-8 md:p-12 rounded-3xl shadow-sm border border-slate-200 flex flex-col relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-full h-2 bg-slate-200"></div>
+                    <div className="mb-6">
+                        <h3 className="text-2xl font-bold text-slate-900">Starter Boss</h3>
+                        <div className="flex items-baseline gap-1 mt-4">
+                            <span className="text-4xl font-extrabold text-slate-900">Free</span>
+                            <span className="text-slate-500">/ forever</span>
+                        </div>
+                        <p className="text-slate-500 mt-4 text-sm">Perfect for small shop owners just starting to get organized.</p>
+                    </div>
+                    <ul className="space-y-4 mb-8 flex-1">
+                        <PricingItem text="Unlimited Sales Records" />
+                        <PricingItem text="Basic Inventory Tracking" />
+                        <PricingItem text="Daily Profit Summary" />
+                        <PricingItem text="1 User Account" />
+                    </ul>
+                    <a href={whatsappLink} className="w-full block text-center bg-slate-100 hover:bg-slate-200 text-slate-900 font-bold py-4 rounded-xl transition">
+                        Get Started Free
+                    </a>
+                </AnimatedSection>
+
+                {/* Paid Plan */}
+                <AnimatedSection animation="fade-up" className="bg-slate-900 p-8 md:p-12 rounded-3xl shadow-2xl flex flex-col relative overflow-hidden transform md:-translate-y-4 border border-slate-800">
+                    <div className="absolute top-0 right-0 bg-gradient-to-l from-emerald-500 to-green-400 text-white text-xs font-bold px-3 py-1 rounded-bl-xl">POPULAR</div>
+                    <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-emerald-500 to-green-400"></div>
+                    <div className="mb-6">
+                        <h3 className="text-2xl font-bold text-white">Tycoon</h3>
+                        <div className="flex items-baseline gap-1 mt-4">
+                            <span className="text-4xl font-extrabold text-white">₦2,500</span>
+                            <span className="text-slate-400">/ month</span>
+                        </div>
+                        <p className="text-slate-400 mt-4 text-sm">For growing businesses that need staff management and branding.</p>
+                    </div>
+                    <ul className="space-y-4 mb-8 flex-1">
+                        <PricingItem text="Everything in Starter" light />
+                        <PricingItem text="Multi-Staff Login (Up to 5)" light />
+                        <PricingItem text="Branded PDF Invoices" light />
+                        <PricingItem text="Advanced Web Dashboard" light />
+                        <PricingItem text="Priority Support" light />
+                    </ul>
+                    <a href={whatsappLink} className="w-full block text-center bg-emerald-500 hover:bg-emerald-400 text-white font-bold py-4 rounded-xl transition shadow-[0_0_20px_rgba(16,185,129,0.4)]">
+                        Upgrade to Tycoon
+                    </a>
+                </AnimatedSection>
+            </div>
+        </div>
+      </section>
+
+      {/* --- CTA --- */}
+      <section className="py-24 bg-slate-950 text-white relative overflow-hidden">
+        {/* Abstract Shapes */}
+        <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-emerald-600/10 rounded-full blur-[120px] animate-pulse"></div>
+        <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-blue-500/10 rounded-full blur-[120px]"></div>
+
+        <AnimatedSection animation="zoom-in" className="max-w-4xl mx-auto px-4 text-center relative z-10">
+          <h2 className="text-4xl md:text-6xl font-extrabold mb-6 tracking-tight">Stop guessing your profit.</h2>
+          <p className="text-slate-400 mb-10 text-lg md:text-xl font-light max-w-2xl mx-auto">
+              Join 500+ Oga Bosses and Tycoons taking control of their business today. It takes less than 3 minutes to setup.
+          </p>
           
           <div className="flex flex-col sm:flex-row justify-center gap-4">
-            <a href={whatsappLink} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center px-8 py-4 text-lg font-bold rounded-full text-slate-900 bg-green-500 hover:bg-white transition duration-300 shadow-[0_0_40px_-10px_rgba(34,197,94,0.6)]">
+            <a href={whatsappLink} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center px-10 py-5 text-xl font-bold rounded-full text-white bg-emerald-600 hover:bg-emerald-500 transition duration-300 shadow-[0_0_40px_-10px_rgba(16,185,129,0.6)] hover:scale-105">
               Start Free Trial
             </a>
-            <a href="/policy" className="inline-flex items-center justify-center px-8 py-4 text-lg font-bold rounded-full text-white border border-slate-700 hover:bg-slate-800 transition duration-300">
-              Read Policy
-            </a>
           </div>
-        </div>
+          <p className="mt-6 text-slate-500 text-sm">No credit card required. Cancel anytime.</p>
+        </AnimatedSection>
       </section>
 
       {/* --- Footer --- */}
@@ -395,32 +542,53 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row justify-between items-center gap-8">
             <div className="flex items-center gap-2">
-               <div className="bg-slate-800 p-2 rounded-lg">
-                  <Phone className="text-green-500" size={20} />
+               <div className="bg-slate-900 p-2 rounded-lg border border-slate-800">
+                  <Phone className="text-emerald-500" size={20} />
                </div>
-               <span className="font-heading font-bold text-xl text-slate-200">Tallypadi</span>
+               <span className="font-bold text-xl text-slate-200">Tallypadi</span>
             </div>
             
-            <div className="flex gap-8 text-sm">
-                <a href="/policy" className="hover:text-white transition">Privacy</a>
-                <a href="/policy#terms" className="hover:text-white transition">Terms</a>
-                <a href="#" className="hover:text-white transition">Support</a>
+            <div className="flex gap-8 text-sm font-medium">
+                <a href="/policy" className="hover:text-emerald-400 transition">Privacy Policy</a>
+                <a href="/terms" className="hover:text-emerald-400 transition">Terms of Service</a>
+                <a href={whatsappLink} className="hover:text-emerald-400 transition">Contact Support</a>
             </div>
           </div>
-          <div className="mt-8 text-center text-xs text-slate-600 border-t border-slate-900 pt-8">
-            &copy; 2025 Tallypadi. Built with ❤️ for Nigerian SMEs.
+          <div className="mt-12 text-center text-xs text-slate-600 border-t border-slate-900 pt-8">
+            &copy; {new Date().getFullYear()} Tallypadi. Built with ❤️ for Nigerian SMEs.
           </div>
         </div>
       </footer>
-
+      
+      {/* Global Animation Styles */}
+      <style jsx global>{`
+        @keyframes float {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-20px); }
+        }
+        @keyframes fade-in-up {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-gradient-x {
+            background-size: 200% 200%;
+            animation: gradient-move 5s ease infinite;
+        }
+        @keyframes gradient-move {
+            0% { background-position: 0% 50% }
+            50% { background-position: 100% 50% }
+            100% { background-position: 0% 50% }
+        }
+      `}</style>
     </div>
   );
 }
 
-// Helper Component for Feature Cards
-const FeatureCard = ({ icon, color, title, desc, badge }: any) => {
-    const colorClasses: any = {
-        green: "bg-green-50 text-green-600 group-hover:bg-green-100",
+// --- Sub-components ---
+
+const FeatureCard: React.FC<FeatureCardProps> = ({ icon, color, title, desc, badge = null }) => {
+    const colorClasses: Record<string, string> = {
+        emerald: "bg-emerald-50 text-emerald-600 group-hover:bg-emerald-100",
         purple: "bg-purple-50 text-purple-600 group-hover:bg-purple-100",
         red: "bg-red-50 text-red-600 group-hover:bg-red-100",
         blue: "bg-blue-50 text-blue-600 group-hover:bg-blue-100",
@@ -429,17 +597,26 @@ const FeatureCard = ({ icon, color, title, desc, badge }: any) => {
     };
 
     return (
-        <div className="bg-white p-6 rounded-2xl border border-slate-100 hover:border-green-500/30 hover:shadow-[0_10px_40px_-10px_rgba(0,0,0,0.05)] transition-all duration-300 group relative">
+        <AnimatedSection animation="fade-up" className="bg-white p-6 rounded-3xl border border-slate-100 hover:border-slate-200 hover:shadow-xl transition-all duration-300 group relative hover:-translate-y-1">
             {badge && (
-                <div className="absolute top-4 right-4 bg-purple-100 text-purple-700 text-[10px] font-bold px-2 py-1 rounded">
+                <div className="absolute top-4 right-4 bg-purple-100 text-purple-700 text-[10px] font-bold px-2 py-1 rounded-full">
                     {badge}
                 </div>
             )}
-            <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 transition-colors ${colorClasses[color]}`}>
+            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-6 transition-colors ${colorClasses[color]}`}>
                 {icon}
             </div>
-            <h4 className="text-lg font-bold text-slate-900 mb-2">{title}</h4>
+            <h4 className="text-xl font-bold text-slate-900 mb-3">{title}</h4>
             <p className="text-slate-500 text-sm leading-relaxed">{desc}</p>
-        </div>
+        </AnimatedSection>
     );
 };
+
+const PricingItem: React.FC<PricingItemProps> = ({ text, light = false }) => (
+    <li className="flex items-center gap-3">
+        <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${light ? 'bg-emerald-500/20 text-emerald-400' : 'bg-emerald-100 text-emerald-600'}`}>
+            <CheckCircle2 size={12} strokeWidth={3} />
+        </div>
+        <span className={`text-sm ${light ? 'text-slate-300' : 'text-slate-600'}`}>{text}</span>
+    </li>
+);
