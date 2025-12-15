@@ -22,12 +22,14 @@ import { getStaff, addStaff, removeStaff } from './controllers/staff.controller'
 import adminRouter from './routes/admin.routes'; 
 import webhookRoutes from './routes/webhook.routes';
 
+// 🟢 NEW: Import the Worker so it starts processing the queue
+import './worker'; 
+
 dotenv.config();
 
 const app = express();
 
-// 🟢 NEW: Trust Nginx Proxy (Required for Rate Limiting to work behind Nginx)
-// This fixes the ERR_ERL_UNEXPECTED_X_FORWARDED_FOR error
+// 🟢 Trust Nginx Proxy
 app.set('trust proxy', 1); 
 
 // ==========================================
@@ -47,6 +49,12 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.options(/.*/, cors(corsOptions)); 
 
+// 🟢 DEBUG LOGGER: Log all requests
+app.use((req, res, next) => {
+  console.log(`📨 Incoming Request: ${req.method} ${req.originalUrl} from ${req.ip}`);
+  next();
+});
+
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, 
   max: 100, 
@@ -57,10 +65,11 @@ app.use('/api', limiter);
 const verifySignature = (req: any, res: any, buf: any) => {
   const signature = req.headers['x-hub-signature-256'];
   
-  // 🟢 FIXED: Check for the new path '/api/whatsapp'
-  // using req.originalUrl is safer as it captures the full path
-  if (req.originalUrl.includes('/api/webhook') && req.method === 'POST') {
-    if (!signature) throw new Error('No signature found');
+  if (req.originalUrl.includes('/api/whatsapp') && req.method === 'POST') {
+    if (!signature) {
+      console.error("❌ Webhook Error: No signature found in headers");
+      throw new Error('No signature found');
+    }
     
     const appSecret = process.env.WHATSAPP_APP_SECRET;
     if (!appSecret) {
@@ -72,7 +81,11 @@ const verifySignature = (req: any, res: any, buf: any) => {
     const signatureHash = elements[1];
     const expectedHash = crypto.createHmac('sha256', appSecret).update(buf).digest('hex');
 
-    if (signatureHash !== expectedHash) throw new Error('Invalid signature. Request rejected.');
+    if (signatureHash !== expectedHash) {
+      console.error(`❌ Webhook Error: Invalid Signature. Got ${signatureHash}, expected ${expectedHash}`);
+      throw new Error('Invalid signature. Request rejected.');
+    }
+    console.log("✅ Webhook Signature Verified");
   }
 };
 
@@ -118,12 +131,11 @@ app.use('/api/admin', (req, res, next) => {
   next();
 }, adminRouter);
 
-// 🟢 FIXED: Moved WhatsApp to /api/whatsapp so Nginx routes it correctly
-// New Meta Webhook URL: https://tallypadi.com/api/whatsapp
-app.use('/api/webhook', whatsappRouter);
+// WhatsApp Webhook
+app.use('/api/whatsapp', whatsappRouter);
 
-// Paystack Webhook (Mounted at /api/webhook/paystack)
-app.use('/api/paystack', webhookRoutes);
+// Paystack Webhook
+app.use('/api/webhook', webhookRoutes);
 
 // Static Files
 app.use('/reports', express.static(path.join(__dirname, '..', 'public', 'reports')));
