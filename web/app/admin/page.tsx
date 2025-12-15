@@ -23,6 +23,9 @@ export default function AdminDashboard() {
     const [globalSettings, setGlobalSettings] = useState<any>(null);
     const [loading, setLoading] = useState(false);
     const [tab, setTab] = useState<'overview' | 'users' | 'settings' | 'broadcast'>('overview');
+    
+    // New state for mobile sidebar visibility
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
     const getHeaders = () => ({ 'x-admin-secret': adminKey });
 
@@ -92,13 +95,49 @@ export default function AdminDashboard() {
     if (loading || !stats) return <div className="flex h-screen items-center justify-center bg-slate-900 text-green-500">Loading Command Center...</div>;
 
     return (
-        <div className="min-h-screen bg-slate-900 text-slate-100 font-sans flex">
-            <Sidebar tab={tab} setTab={setTab} />
-            <main className="flex-1 p-8 overflow-y-auto">
-                {tab === 'overview' && <OverviewTab stats={stats} />}
-                {tab === 'users' && <UsersTab users={users} onAction={handleUserAction} adminKey={adminKey} />}
-                {tab === 'settings' && <SettingsTab settings={globalSettings} onUpdate={() => loadData(adminKey)} headers={getHeaders()} />}
-                {tab === 'broadcast' && <BroadcastTab headers={getHeaders()} />}
+        <div className="flex h-screen bg-slate-900 text-slate-100 font-sans overflow-hidden">
+            {/* Mobile Sidebar Overlay */}
+            {isSidebarOpen && (
+                <div 
+                    className="fixed inset-0 bg-black/50 z-40 md:hidden backdrop-blur-sm"
+                    onClick={() => setIsSidebarOpen(false)}
+                />
+            )}
+
+            {/* Responsive Sidebar Wrapper */}
+            <div className={`
+                fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 border-r border-slate-800 
+                transform transition-transform duration-300 ease-in-out
+                md:relative md:translate-x-0 md:border-r-0
+                ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+            `}>
+                <div className="h-full overflow-y-auto">
+                    {/* Pass a wrapped setTab to close sidebar on selection on mobile */}
+                    <Sidebar tab={tab} setTab={(t: any) => { setTab(t); setIsSidebarOpen(false); }} />
+                </div>
+            </div>
+
+            {/* Main Content */}
+            <main className="flex-1 flex flex-col h-full relative overflow-hidden">
+                {/* Mobile Header with Hamburger Menu */}
+                <div className="md:hidden flex items-center justify-between p-4 border-b border-slate-800 bg-slate-900 shrink-0">
+                    <span className="font-bold text-lg text-green-500">Admin Panel</span>
+                    <button 
+                        onClick={() => setIsSidebarOpen(true)}
+                        className="p-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-md transition-colors"
+                        aria-label="Open Menu"
+                    >
+                        {/* Hamburger Icon */}
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+                    </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-4 md:p-8">
+                    {tab === 'overview' && <OverviewTab stats={stats} />}
+                    {tab === 'users' && <UsersTab users={users} onAction={handleUserAction} adminKey={adminKey} />}
+                    {tab === 'settings' && <SettingsTab settings={globalSettings} onUpdate={() => loadData(adminKey)} headers={getHeaders()} />}
+                    {tab === 'broadcast' && <BroadcastTab headers={getHeaders()} />}
+                </div>
             </main>
         </div>
     );

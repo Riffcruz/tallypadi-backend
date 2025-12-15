@@ -224,7 +224,7 @@ export const handleMessageLogic = async (from: string, text: string, messageId: 
         user.email = text;
         user.registrationStage = 'PASSWORD';
         await user.save();
-        await sendWhatsAppText(from, "✅ Email Saved! Now, please reply with a **SECRET PASSWORD** (min 8 chars) to secure your account.\n\nYou can also login to the dashboard here:\n👉 https://tallypadi.com/user/login");
+        await sendWhatsAppText(from, "✅ Email Saved! Now, please reply with a **SECRET PASSWORD** (min 8 chars) to secure your account.\n\nYou can also login to the dashboard here:\n👉 https://tallypadi.com/login");
         return;
     }
 
