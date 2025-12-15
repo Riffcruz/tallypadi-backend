@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { User } from '../models/user.model';
+import { AdminSettings } from '../models/adminSettings.model';
 
 // --- Security Helpers ---
 
@@ -33,90 +34,137 @@ const validateNumber = (input: unknown): number | undefined => {
 
 export const updateSettings = async (req: Request, res: Response) => {
     try {
-        // In a real app, ensure req.user.id is used to fetch the user to prevent IDOR.
-        // For now, we keep the existing logic of finding the first user but validate inputs strictly.
-        
-        const user = await User.findOne();
-        if (!user) return res.status(404).json({ error: "User not found" });
-
         // Use a safe reference to body
         const body = req.body || {};
+        const responseData: any = {};
 
-        // 1. Update Business Name
-        // Security Fix: Explicitly check type to prevent object injection (e.g. { "$ne": null })
-        if (body.businessName !== undefined) {
-            const safeName = sanitizeString(body.businessName);
-            if (safeName !== null) {
-                // Optional: Add length limit check here
-                if (safeName.length > 100) return res.status(400).json({ error: "Business name too long" });
-                
-                user.businessName = safeName;
-            } else {
-                return res.status(400).json({ error: "Invalid format for businessName" });
-            }
-        }
-
-        // 2. Update Settings
-        if (body.settings && typeof body.settings === 'object' && !Array.isArray(body.settings)) {
-            const inputSettings = body.settings;
-
-            // Closing Time - Strict String
-            if (inputSettings.closingTime !== undefined) {
-                const safeTime = sanitizeString(inputSettings.closingTime);
-                if (safeTime) {
-                    // Optional: Regex validate time format HH:MM if needed
-                    user.settings.closingTime = safeTime;
-                }
-            }
-
-            // Language - Strict String
-            if (inputSettings.language !== undefined) {
-                const safeLang = sanitizeString(inputSettings.language);
-                if (safeLang) {
-                    // Optional: Check against allowed languages whitelist
-                    user.settings.language = safeLang;
-                }
-            }
-            
-            // 3. Plan Check for PDF Reports
-            // Security Fix: Strict boolean check prevents type coercion attacks
-            if (inputSettings.pdfReportsEnabled !== undefined) {
-                const isEnabled = validateBoolean(inputSettings.pdfReportsEnabled);
-                
-                if (isEnabled !== undefined) {
-                    if (user.planType === 'TYCOON') {
-                        user.settings.pdfReportsEnabled = isEnabled;
-                    } else if (isEnabled === true) {
-                        // Prevent enabling if not Tycoon
-                        return res.status(403).json({ error: "PDF Reports are for Tycoon Plan only." });
-                    } else {
-                        // Allow disabling even if not Tycoon (cleanup)
-                        user.settings.pdfReportsEnabled = false;
+        // ---------------------------------------------------------
+        // 1. Handle User-Specific Settings (Business Name, User Prefs)
+        // ---------------------------------------------------------
+        // Only run this if user-related fields are present to save DB calls
+        if (body.businessName !== undefined || body.settings !== undefined) {
+            const user = await User.findOne();
+            if (user) {
+                // Update Business Name
+                if (body.businessName !== undefined) {
+                    const safeName = sanitizeString(body.businessName);
+                    if (safeName !== null) {
+                        if (safeName.length <= 100) {
+                             user.businessName = safeName;
+                        } else {
+                            return res.status(400).json({ error: "Business name too long" });
+                        }
                     }
-                } else {
-                     return res.status(400).json({ error: "pdfReportsEnabled must be a boolean" });
                 }
-            }
-            
-            // UTC Offset - Strict Number
-            if (inputSettings.utcOffsetMinutes !== undefined) {
-                const offset = validateNumber(inputSettings.utcOffsetMinutes);
-                if (offset !== undefined) {
-                     user.settings.utcOffsetMinutes = offset;
+
+                // Update User Settings Object
+                if (body.settings && typeof body.settings === 'object' && !Array.isArray(body.settings)) {
+                    const inputSettings = body.settings;
+                    
+                    // Helper to safely access user.settings even if it's strict
+                    const userSettings = user.settings as any;
+
+                    if (inputSettings.closingTime !== undefined) {
+                        const safeTime = sanitizeString(inputSettings.closingTime);
+                        if (safeTime) userSettings.closingTime = safeTime;
+                    }
+
+                    if (inputSettings.language !== undefined) {
+                        const safeLang = sanitizeString(inputSettings.language);
+                        if (safeLang) userSettings.language = safeLang;
+                    }
+                    
+                    if (inputSettings.pdfReportsEnabled !== undefined) {
+                        const isEnabled = validateBoolean(inputSettings.pdfReportsEnabled);
+                        if (isEnabled !== undefined) {
+                            if (user.planType === 'TYCOON') {
+                                userSettings.pdfReportsEnabled = isEnabled;
+                            } else if (isEnabled === true) {
+                                return res.status(403).json({ error: "PDF Reports are for Tycoon Plan only." });
+                            } else {
+                                userSettings.pdfReportsEnabled = false;
+                            }
+                        }
+                    }
+                    
+                    if (inputSettings.utcOffsetMinutes !== undefined) {
+                        const offset = validateNumber(inputSettings.utcOffsetMinutes);
+                        if (offset !== undefined) userSettings.utcOffsetMinutes = offset;
+                    }
                 }
+                
+                user.markModified('settings');
+                await user.save();
+                responseData.user = { businessName: user.businessName, settings: user.settings };
             }
         }
 
-        await user.save();
+        // ---------------------------------------------------------
+        // 2. Handle Global Admin Settings (Security, Limits, WhatsApp)
+        // ---------------------------------------------------------
+        // Check if any admin fields are present
+        if (
+            body.whatsappUrl !== undefined || 
+            body.autoSuspendOnJailbreak !== undefined || 
+            body.maxMessageHistory !== undefined || 
+            body.maxStaffAccounts !== undefined
+        ) {
+            // Fetch existing admin settings or create new document
+            let adminSettings = await AdminSettings.findOne();
+            if (!adminSettings) {
+                adminSettings = new AdminSettings({
+                    security: { autoSuspendOnJailbreak: true, maxLoginAttempts: 5 },
+                    limits: { maxMessageHistory: 5, maxStaffAccounts: 5 },
+                    system: { maintenanceMode: false, allowNewRegistrations: true }
+                });
+            }
+
+            // Update WhatsApp URL
+            // Note: Since 'whatsappUrl' is not yet in the IAdminSettings interface provided,
+            // we cast to 'any' to avoid TS errors. Ideally, add this field to your Schema.
+            if (body.whatsappUrl !== undefined) {
+                const safeUrl = sanitizeString(body.whatsappUrl);
+                if (safeUrl !== null) {
+                    if (safeUrl.length === 0 || safeUrl.startsWith('http') || safeUrl.startsWith('wa.me')) {
+                        (adminSettings as any).whatsappUrl = safeUrl;
+                    } else {
+                        return res.status(400).json({ error: "Invalid format for WhatsApp URL" });
+                    }
+                }
+            }
+
+            // Update Security: Auto Suspend
+            if (body.autoSuspendOnJailbreak !== undefined) {
+                const autoSuspend = validateBoolean(body.autoSuspendOnJailbreak);
+                if (autoSuspend !== undefined) {
+                    adminSettings.security.autoSuspendOnJailbreak = autoSuspend;
+                }
+            }
+
+            // Update Limits: Max Message History
+            if (body.maxMessageHistory !== undefined) {
+                const hist = validateNumber(body.maxMessageHistory);
+                if (hist !== undefined) {
+                    adminSettings.limits.maxMessageHistory = hist;
+                }
+            }
+
+            // Update Limits: Max Staff Accounts
+            if (body.maxStaffAccounts !== undefined) {
+                const staff = validateNumber(body.maxStaffAccounts);
+                if (staff !== undefined) {
+                    adminSettings.limits.maxStaffAccounts = staff;
+                }
+            }
+
+            await adminSettings.save();
+            responseData.adminSettings = adminSettings;
+        }
 
         res.json({
             success: true,
             message: "Settings updated successfully",
-            user: {
-                businessName: user.businessName,
-                settings: user.settings,
-                planType: user.planType
-            }
+            ...responseData
         });
 
     } catch (error) {
