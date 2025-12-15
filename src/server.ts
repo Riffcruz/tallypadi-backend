@@ -26,6 +26,10 @@ dotenv.config();
 
 const app = express();
 
+// 🟢 NEW: Trust Nginx Proxy (Required for Rate Limiting to work behind Nginx)
+// This fixes the ERR_ERL_UNEXPECTED_X_FORWARDED_FOR error
+app.set('trust proxy', 1); 
+
 // ==========================================
 // 🛡️ SECURITY MIDDLEWARE LAYER
 // ==========================================
@@ -116,8 +120,10 @@ app.use('/api/admin', (req, res, next) => {
 
 // 🟢 FIXED: Moved WhatsApp to /api/whatsapp so Nginx routes it correctly
 // New Meta Webhook URL: https://tallypadi.com/api/whatsapp
-app.use('/api/webhook', whatsappRouter);
+app.use('/api/whatsapp', whatsappRouter);
 
+// Paystack Webhook (Mounted at /api/webhook/paystack)
+app.use('/api/webhook', webhookRoutes);
 
 // Static Files
 app.use('/reports', express.static(path.join(__dirname, '..', 'public', 'reports')));
