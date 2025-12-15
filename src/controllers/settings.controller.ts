@@ -120,13 +120,12 @@ export const updateSettings = async (req: Request, res: Response) => {
             }
 
             // Update WhatsApp URL
-            // Note: Since 'whatsappUrl' is not yet in the IAdminSettings interface provided,
-            // we cast to 'any' to avoid TS errors. Ideally, add this field to your Schema.
+            // Cleaned up: Removed `as any` cast since interface now supports it
             if (body.whatsappUrl !== undefined) {
                 const safeUrl = sanitizeString(body.whatsappUrl);
                 if (safeUrl !== null) {
                     if (safeUrl.length === 0 || safeUrl.startsWith('http') || safeUrl.startsWith('wa.me')) {
-                        (adminSettings as any).whatsappUrl = safeUrl;
+                        adminSettings.whatsappUrl = safeUrl;
                     } else {
                         return res.status(400).json({ error: "Invalid format for WhatsApp URL" });
                     }

@@ -22,13 +22,15 @@ export default function Sidebar() {
   ];
 
   return (
-    <div className="w-64 bg-white h-screen border-r border-gray-200 flex flex-col fixed left-0 top-0 z-10">
-      <div className="p-6 border-b border-gray-100 flex items-center gap-2">
+    // Changed h-screen to h-[100dvh] to fit actual visible screen area
+    <div className="w-64 bg-white h-[100dvh] border-r border-gray-200 flex flex-col fixed left-0 top-0 z-10">
+      <div className="p-6 border-b border-gray-100 flex items-center gap-2 shrink-0">
         <div className="w-8 h-8 bg-green-600 rounded-lg flex items-center justify-center text-white font-bold text-xl">T</div>
         <span className="font-bold text-xl text-green-700">Tallypadi</span>
       </div>
       
-      <nav className="flex-1 p-4 space-y-2">
+      {/* Added overflow-y-auto to allow scrolling if menu is tall */}
+      <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
         {menuItems.map((item) => {
           const isActive = pathname === item.href;
           return (
@@ -48,7 +50,7 @@ export default function Sidebar() {
         })}
       </nav>
 
-      <div className="p-4 border-t border-gray-100">
+      <div className="p-4 border-t border-gray-100 shrink-0 mt-auto">
         <button onClick={handleLogout} className="w-full flex items-center gap-2 text-red-600 hover:bg-red-50 px-4 py-2 rounded-lg transition">
           <LogOut size={18} /> Logout
         </button>
