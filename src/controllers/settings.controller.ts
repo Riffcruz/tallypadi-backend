@@ -91,6 +91,9 @@ export const updateSettings = async (req: Request, res: Response) => {
             body.maxMessageHistory !== undefined || 
             body.maxStaffAccounts !== undefined
         ) {
+            // 🟢 DEBUG LOG: View schema paths in terminal
+            console.log('DEBUG: Registered AdminSettings Schema Paths:', Object.keys(AdminSettings.schema.paths));
+
             let adminSettings = await AdminSettings.findOne();
             if (!adminSettings) {
                 adminSettings = new AdminSettings({
@@ -101,10 +104,8 @@ export const updateSettings = async (req: Request, res: Response) => {
             }
 
             // 🟢 Update WhatsApp URL (Relaxed Validation)
-            // Removed strict checks to ensure any format saves successfully
             if (body.whatsappUrl !== undefined) {
                 const safeUrl = sanitizeString(body.whatsappUrl);
-                // Only check for null (non-string), allow any string content
                 if (safeUrl !== null) {
                     adminSettings.whatsappUrl = safeUrl;
                 }
@@ -146,7 +147,5 @@ export const updateSettings = async (req: Request, res: Response) => {
     } catch (error) {
         console.error("Settings Update Error:", error);
         res.status(500).json({ error: "Server Error" });
-        // Check if 'whatsappUrl' exists in the known paths
-      console.log('Registered Schema Paths:', Object.keys(AdminSettings.schema.paths));
     }
 };
