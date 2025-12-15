@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
+// import Link from 'next/link'; // Removed to fix build error
 import { 
   Phone, 
   ArrowRight, 
@@ -18,8 +18,6 @@ import {
 } from 'lucide-react';
 
 // --- CONFIGURATION ---
-// 🟢 PLACEHOLDER FOR ADMIN: Change this URL in your Admin Settings or .env file
-// If you have an API, you can fetch this value in the useEffect below.
 const DEFAULT_WHATSAPP_LINK = "https://wa.me/234XXXXXXXXXX?text=Hello%20Tallypadi"; 
 
 // --- Hero Background Images ---
@@ -42,9 +40,30 @@ export default function LandingPage() {
     return () => clearInterval(timer);
   }, []);
 
-  // 🟢 OPTIONAL: Fetch real WhatsApp link from backend
+  // 🟢 FETCH REAL WHATSAPP LINK
   useEffect(() => {
-    // Example: fetch('/api/public/settings').then(res => res.json()).then(data => setWhatsappLink(data.whatsappUrl));
+    const fetchSettings = async () => {
+      try {
+        // Use environment variable or fallback to default API URL
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
+        
+        // Fetch settings from the backend
+        // NOTE: Ensure this endpoint is public/unprotected in your backend router
+        const res = await fetch(`${API_URL}/admin/settings`); 
+        
+        if (res.ok) {
+          const data = await res.json();
+          // If a custom URL is set in DB, use it. Otherwise, keep default.
+          if (data && data.whatsappUrl) {
+            setWhatsappLink(data.whatsappUrl);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch global settings:", error);
+      }
+    };
+
+    fetchSettings();
   }, []);
 
   return (
@@ -64,18 +83,18 @@ export default function LandingPage() {
             
             {/* Desktop Links */}
             <div className="hidden md:flex space-x-8 items-center">
-              <Link href="#features" className="text-sm font-medium text-slate-600 hover:text-green-600 transition">Features</Link>
-              <Link href="#how-it-works" className="text-sm font-medium text-slate-600 hover:text-green-600 transition">How it Works</Link>
-              <Link href="/policy" className="text-sm font-medium text-slate-600 hover:text-green-600 transition">Privacy</Link>
-              <Link href="/faq" className="text-sm font-medium text-slate-600 hover:text-green-600 transition">FAQ</Link>
+              <a href="#features" className="text-sm font-medium text-slate-600 hover:text-green-600 transition">Features</a>
+              <a href="#how-it-works" className="text-sm font-medium text-slate-600 hover:text-green-600 transition">How it Works</a>
+              <a href="/policy" className="text-sm font-medium text-slate-600 hover:text-green-600 transition">Privacy</a>
+              <a href="/faq" className="text-sm font-medium text-slate-600 hover:text-green-600 transition">FAQ</a>
             </div>
 
             {/* Auth Buttons */}
             <div className="hidden md:flex items-center gap-4">
-              <Link href="/login" className="text-sm font-semibold text-slate-900 hover:text-green-600">Login</Link>
-              <Link href={whatsappLink} target="_blank" className="bg-slate-900 hover:bg-black text-white px-6 py-2.5 rounded-full font-medium transition shadow-lg hover:shadow-xl text-sm flex items-center gap-2 group">
+              <a href="/login" className="text-sm font-semibold text-slate-900 hover:text-green-600">Login</a>
+              <a href={whatsappLink} target="_blank" rel="noreferrer" className="bg-slate-900 hover:bg-black text-white px-6 py-2.5 rounded-full font-medium transition shadow-lg hover:shadow-xl text-sm flex items-center gap-2 group">
                 Get Started <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
-              </Link>
+              </a>
             </div>
 
             {/* Mobile Toggle */}
@@ -90,10 +109,10 @@ export default function LandingPage() {
         {/* Mobile Menu */}
         {mobileMenuOpen && (
             <div className="md:hidden bg-white border-t p-4 flex flex-col gap-4 shadow-xl animate-fade-in absolute w-full">
-                 <Link href="#features" className="block text-sm font-medium p-2 hover:bg-slate-50 rounded">Features</Link>
-                 <Link href="#how-it-works" className="block text-sm font-medium p-2 hover:bg-slate-50 rounded">How it Works</Link>
-                 <Link href="/login" className="block text-sm font-medium p-2 hover:bg-slate-50 rounded">Login</Link>
-                 <Link href={whatsappLink} target="_blank" className="block text-center bg-green-600 text-white py-3 rounded-lg font-bold">Chat to Start</Link>
+                 <a href="#features" className="block text-sm font-medium p-2 hover:bg-slate-50 rounded">Features</a>
+                 <a href="#how-it-works" className="block text-sm font-medium p-2 hover:bg-slate-50 rounded">How it Works</a>
+                 <a href="/login" className="block text-sm font-medium p-2 hover:bg-slate-50 rounded">Login</a>
+                 <a href={whatsappLink} target="_blank" rel="noreferrer" className="block text-center bg-green-600 text-white py-3 rounded-lg font-bold">Chat to Start</a>
             </div>
         )}
       </nav>
@@ -135,16 +154,17 @@ export default function LandingPage() {
             </p>
             
             <div className="flex flex-col sm:flex-row gap-4">
-              <Link 
+              <a 
                 href={whatsappLink} 
                 target="_blank"
+                rel="noreferrer"
                 className="inline-flex items-center justify-center px-8 py-4 text-base font-bold rounded-full text-white bg-green-600 hover:bg-green-500 transition-all duration-300 shadow-[0_10px_30px_-10px_rgba(22,163,74,0.5)] hover:-translate-y-1 hover:shadow-[0_20px_40px_-10px_rgba(22,163,74,0.6)]"
               >
                 <Phone className="mr-2" size={20} fill="currentColor" /> Chat on WhatsApp
-              </Link>
-              <Link href="/dashboard" className="inline-flex items-center justify-center px-8 py-4 text-base font-bold rounded-full text-white bg-white/5 backdrop-blur-md border border-white/10 hover:bg-white/10 transition-all duration-300 hover:-translate-y-1">
+              </a>
+              <a href="/dashboard" className="inline-flex items-center justify-center px-8 py-4 text-base font-bold rounded-full text-white bg-white/5 backdrop-blur-md border border-white/10 hover:bg-white/10 transition-all duration-300 hover:-translate-y-1">
                 View Dashboard
-              </Link>
+              </a>
             </div>
             
             <div className="mt-10 flex items-center gap-6 text-sm text-slate-400 font-medium">
@@ -360,12 +380,12 @@ export default function LandingPage() {
           <p className="text-slate-400 mb-10 text-lg md:text-xl font-light">Join the Oga Bosses and Tycoons taking control of their business today.</p>
           
           <div className="flex flex-col sm:flex-row justify-center gap-4">
-            <Link href={whatsappLink} target="_blank" className="inline-flex items-center justify-center px-8 py-4 text-lg font-bold rounded-full text-slate-900 bg-green-500 hover:bg-white transition duration-300 shadow-[0_0_40px_-10px_rgba(34,197,94,0.6)]">
+            <a href={whatsappLink} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center px-8 py-4 text-lg font-bold rounded-full text-slate-900 bg-green-500 hover:bg-white transition duration-300 shadow-[0_0_40px_-10px_rgba(34,197,94,0.6)]">
               Start Free Trial
-            </Link>
-            <Link href="/policy" className="inline-flex items-center justify-center px-8 py-4 text-lg font-bold rounded-full text-white border border-slate-700 hover:bg-slate-800 transition duration-300">
+            </a>
+            <a href="/policy" className="inline-flex items-center justify-center px-8 py-4 text-lg font-bold rounded-full text-white border border-slate-700 hover:bg-slate-800 transition duration-300">
               Read Policy
-            </Link>
+            </a>
           </div>
         </div>
       </section>
@@ -382,9 +402,9 @@ export default function LandingPage() {
             </div>
             
             <div className="flex gap-8 text-sm">
-                <Link href="/policy" className="hover:text-white transition">Privacy</Link>
-                <Link href="/policy#terms" className="hover:text-white transition">Terms</Link>
-                <Link href="#" className="hover:text-white transition">Support</Link>
+                <a href="/policy" className="hover:text-white transition">Privacy</a>
+                <a href="/policy#terms" className="hover:text-white transition">Terms</a>
+                <a href="#" className="hover:text-white transition">Support</a>
             </div>
           </div>
           <div className="mt-8 text-center text-xs text-slate-600 border-t border-slate-900 pt-8">
