@@ -9,8 +9,9 @@ import Sidebar from '../../components/Sidebar';
 import { 
     Search, ShoppingCart, Plus, Minus, Trash2, 
     CheckCircle2, Loader2, AlertCircle, Menu, Smartphone,
-    History, FileDown, Calendar, Receipt, Crown, Shield
+    History, FileDown, Calendar, Receipt, Crown, Shield, Lock
 } from 'lucide-react';
+import Swal from 'sweetalert2';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 
@@ -39,6 +40,7 @@ interface UserProfile {
     id: string;
     planType: string; // 'OGA_BOSS' | 'TYCOON'
     shopName: string;
+    subscriptionStatus?: string; // 🟢 Added to track status
 }
 
 export default function SalesPage() {
@@ -190,6 +192,25 @@ export default function SalesPage() {
     );
 
     const addToCart = (item: InventoryItem) => {
+        // 🟢 1. Subscription Check
+        if (!user || user.subscriptionStatus !== 'active') {
+             Swal.fire({
+                title: 'Subscription Required',
+                text: 'You must have an active subscription to record new sales.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Subscribe Now',
+                confirmButtonColor: '#16a34a',
+                cancelButtonText: 'Close',
+                cancelButtonColor: '#64748b'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    router.push('/payment');
+                }
+            });
+            return;
+        }
+
         setCart(prev => {
             const existing = prev.find(i => i.id === item.id);
             if (existing) {
@@ -268,23 +289,32 @@ export default function SalesPage() {
                             </div>
                         </div>
 
-                        {/* 🟢 PLAN CHECKER BADGE */}
-                        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${
-                            user?.planType === 'TYCOON' 
-                            ? 'bg-amber-50 text-amber-700 border-amber-200' 
-                            : 'bg-gray-100 text-gray-600 border-gray-200'
-                        }`}>
-                            {/* Show Crown if Tycoon, Shield if Oga Boss, or Loader if getting info */}
-                            {!user ? (
-                                <Loader2 className="w-3 h-3 animate-spin" />
-                            ) : user.planType === 'TYCOON' ? (
-                                <Crown className="w-3 h-3" />
-                            ) : (
-                                <Shield className="w-3 h-3" />
+                        <div className="flex items-center gap-2">
+                             {/* 🟢 Optional: Visual Indicator for Subscription */}
+                            {user && user.subscriptionStatus !== 'active' && (
+                                <div onClick={() => router.push('/payment')} className="hidden sm:flex bg-red-50 border border-red-100 text-red-700 px-3 py-1.5 rounded-xl text-xs font-bold items-center gap-2 cursor-pointer hover:bg-red-100 transition">
+                                    <Lock size={12} /> Inactive
+                                </div>
                             )}
-                            <span>
-                                {user ? (user.planType?.replace('_', ' ') || 'PLAN UNKNOWN') : 'Checking...'}
-                            </span>
+
+                            {/* 🟢 PLAN CHECKER BADGE */}
+                            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${
+                                user?.planType === 'TYCOON' 
+                                ? 'bg-amber-50 text-amber-700 border-amber-200' 
+                                : 'bg-gray-100 text-gray-600 border-gray-200'
+                            }`}>
+                                {/* Show Crown if Tycoon, Shield if Oga Boss, or Loader if getting info */}
+                                {!user ? (
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                ) : user.planType === 'TYCOON' ? (
+                                    <Crown className="w-3 h-3" />
+                                ) : (
+                                    <Shield className="w-3 h-3" />
+                                )}
+                                <span>
+                                    {user ? (user.planType?.replace('_', ' ') || 'PLAN UNKNOWN') : 'Checking...'}
+                                </span>
+                            </div>
                         </div>
                     </div>
 
@@ -331,7 +361,7 @@ export default function SalesPage() {
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                            <div className={`grid grid-cols-2 sm:grid-cols-3 gap-4 ${user?.subscriptionStatus !== 'active' ? 'opacity-60 pointer-events-none filter grayscale-[50%]' : ''}`}>
                                 {filteredItems.slice(0, 12).map((item) => (
                                     <button
                                         key={item.id}
@@ -357,6 +387,18 @@ export default function SalesPage() {
                                     </div>
                                 )}
                             </div>
+                            
+                            {/* Overlay for Inactive Subscription */}
+                            {user?.subscriptionStatus !== 'active' && (
+                                <div className="lg:col-span-2 text-center py-8">
+                                    <button 
+                                        onClick={() => router.push('/payment')}
+                                        className="bg-red-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-red-700 transition flex items-center gap-2 mx-auto"
+                                    >
+                                        <Lock size={18} /> Unlock Sales Register
+                                    </button>
+                                </div>
+                            )}
                         </div>
 
                         {/* Cart */}

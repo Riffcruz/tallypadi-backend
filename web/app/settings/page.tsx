@@ -415,7 +415,10 @@ export default function SettingsPage() {
                         <div className="text-left md:text-right bg-white/5 p-4 rounded-xl border border-white/10 backdrop-blur-sm">
                             <span className="block text-3xl font-extrabold text-white">₦5,000</span>
                             <span className="text-xs text-slate-400 font-medium uppercase tracking-wide">Per Month</span>
-                            <button className="mt-4 w-full bg-white text-slate-900 px-6 py-2.5 rounded-lg text-sm font-bold hover:bg-slate-100 transition-colors shadow-lg">
+                            <button 
+                                onClick={() => router.push('/payment?plan=TYCOON')}
+                                className="mt-4 w-full bg-white text-slate-900 px-6 py-2.5 rounded-lg text-sm font-bold hover:bg-slate-100 transition-colors shadow-lg"
+                            >
                                 Get Started
                             </button>
                         </div>

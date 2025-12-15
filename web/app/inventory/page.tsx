@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 // Ensure this path matches where you saved your Sidebar component
 import Sidebar from '../../components/Sidebar';
 import { 
-    Plus, Edit2, Check, X, Loader2, Menu, Search, Package
+    Plus, Edit2, Check, X, Loader2, Menu, Search, Package, Lock
 } from 'lucide-react';
 import Swal from 'sweetalert2'; 
 
@@ -22,6 +22,7 @@ type InventoryItem = {
 
 export default function InventoryPage() {
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [user, setUser] = useState<any>(null); // 🟢 Added User State
   const [newItemName, setNewItemName] = useState('');
   const [newItemStock, setNewItemStock] = useState('');
   const [newItemPrice, setNewItemPrice] = useState('');
@@ -43,16 +44,24 @@ export default function InventoryPage() {
         return;
     }
 
-    axios.get(`${API_URL}/inventory`, { headers: { Authorization: `Bearer ${token}` }})
-      .then(res => {
-        setInventory(res.data);
-      })
-      .catch(err => {
-        console.error("Failed to fetch inventory:", err);
-      })
-      .finally(() => {
-        setLoading(false);
-      });
+    // 🟢 Updated: Fetch both Inventory AND User Profile
+    const fetchData = async () => {
+        try {
+            const [invRes, userRes] = await Promise.all([
+                axios.get(`${API_URL}/inventory`, { headers: { Authorization: `Bearer ${token}` }}),
+                axios.get(`${API_URL}/dashboard`, { headers: { Authorization: `Bearer ${token}` }})
+            ]);
+            
+            setInventory(invRes.data);
+            setUser(userRes.data.user);
+        } catch (err) {
+            console.error("Failed to fetch data:", err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    fetchData();
   }, [router]);
 
   // Filter items based on search
@@ -62,6 +71,26 @@ export default function InventoryPage() {
 
   const handleAddItem = (e: React.FormEvent) => {
     e.preventDefault();
+
+    // 🟢 1. Check Subscription Status
+    if (!user || user.subscriptionStatus !== 'active') {
+        Swal.fire({
+            title: 'Subscription Required',
+            text: 'You must have an active Oga Boss or Tycoon subscription to add new inventory items.',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Subscribe Now',
+            confirmButtonColor: '#16a34a',
+            cancelButtonText: 'Close',
+            cancelButtonColor: '#64748b'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                router.push('/payment'); // Navigate to payment page
+            }
+        });
+        return;
+    }
+
     if (!newItemName || !newItemStock || !newItemPrice) return;
 
     const token = localStorage.getItem('tallyToken');
@@ -184,18 +213,26 @@ export default function InventoryPage() {
                     <p className="text-gray-500 text-sm mt-1">Manage your stock and prices</p>
                 </div>
             </div>
+            {/* 🟢 Optional: Visual Indicator for Subscription */}
+            {user && user.subscriptionStatus !== 'active' && (
+                <div onClick={() => router.push('/payment')} className="bg-red-50 border border-red-100 text-red-700 px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer hover:bg-red-100 transition">
+                    <Lock size={14} /> Subscription Inactive
+                </div>
+            )}
         </header>
 
         {/* Action Bar (Search + Add Form) */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
             
             {/* Add New Item Card */}
-            <div className="lg:col-span-2 bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+            <div className={`lg:col-span-2 bg-white p-5 rounded-2xl border shadow-sm transition-colors ${
+                user?.subscriptionStatus !== 'active' ? 'border-red-100 opacity-90' : 'border-gray-100'
+            }`}>
                 <div className="flex items-center gap-2 mb-4 text-gray-800 font-semibold">
-                    <div className="p-1.5 bg-green-100 text-green-700 rounded-lg">
-                        <Plus className="w-4 h-4" />
+                    <div className={`p-1.5 rounded-lg ${user?.subscriptionStatus !== 'active' ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-700'}`}>
+                        {user?.subscriptionStatus !== 'active' ? <Lock className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
                     </div>
-                    Add New Item
+                    {user?.subscriptionStatus !== 'active' ? 'Adding Locked' : 'Add New Item'}
                 </div>
                 <form onSubmit={handleAddItem} className="flex flex-col sm:flex-row gap-3 items-end">
                     <div className="w-full sm:flex-1">
@@ -233,9 +270,13 @@ export default function InventoryPage() {
                     </div>
                     <button
                         type="submit"
-                        className="w-full sm:w-auto px-6 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl font-semibold text-sm shadow-lg shadow-green-600/20 transition-all active:scale-95"
+                        className={`w-full sm:w-auto px-6 py-2.5 rounded-xl font-semibold text-sm shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 ${
+                            user?.subscriptionStatus !== 'active' 
+                            ? 'bg-gray-300 text-gray-500 cursor-not-allowed shadow-none' 
+                            : 'bg-green-600 hover:bg-green-700 text-white shadow-green-600/20'
+                        }`}
                     >
-                        Add Stock
+                        {user?.subscriptionStatus !== 'active' && <Lock size={14} />} Add
                     </button>
                 </form>
             </div>
