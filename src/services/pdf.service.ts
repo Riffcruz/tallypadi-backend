@@ -11,21 +11,20 @@ interface ReportOptions {
   includeInventory?: boolean;
 }
 
-// ✅ Theme Configuration (Professional Invoice/Report Palette)
+// ✅ Theme Configuration
 const THEME = {
-  primary: '#0F766E',      // Teal 700 (Brand Color)
-  accent: '#14B8A6',       // Teal 500 (Highlights)
-  dark: '#1E293B',         // Slate 800 (Headings)
-  text: '#334155',         // Slate 700 (Body)
-  muted: '#64748B',        // Slate 500 (Subtext)
-  border: '#E2E8F0',       // Slate 200 (Dividers)
-  bgLight: '#F8FAFC',      // Slate 50 (Alternating rows)
-  bgHeader: '#F1F5F9',     // Slate 100 (Table Headers)
-  alert: '#EF4444',        // Red 500 (Warnings)
+  primary: '#0F766E',      // Teal 700
+  accent: '#14B8A6',       // Teal 500
+  dark: '#1E293B',         // Slate 800
+  text: '#334155',         // Slate 700
+  muted: '#64748B',        // Slate 500
+  border: '#E2E8F0',       // Slate 200
+  bgLight: '#F8FAFC',      // Slate 50
+  bgHeader: '#F1F5F9',     // Slate 100
+  alert: '#EF4444',        // Red 500
   white: '#FFFFFF'
 };
 
-// ✅ Expanded Currency Mapping
 const COUNTRY_CURRENCY_CODE: Record<string, string> = {
   NG: 'NGN', GH: 'GHS', US: 'USD', GB: 'GBP', EU: 'EUR',
   KE: 'KES', ZA: 'ZAR', IN: 'INR', CN: 'CNY', CA: 'CAD',
@@ -60,7 +59,7 @@ export const generatePdfReport = async (
     size: 'A4',
     margins: { top: 50, bottom: 50, left: 40, right: 40 },
     bufferPages: true,
-    autoFirstPage: false // <--- CRITICAL FIX: Stops ghost pages
+    autoFirstPage: false // Prevents ghost pages, but requires manual addPage()
   });
 
   const filename = `report-${user._id}-${Date.now()}.pdf`;
@@ -85,6 +84,10 @@ export const generatePdfReport = async (
     doc.registerFont('Regular', 'Helvetica');
     doc.registerFont('Bold', 'Helvetica-Bold');
   }
+
+  // --- ⚠️ CRITICAL FIX: ADD PAGE BEFORE READING DIMENSIONS ---
+  doc.addPage(); 
+  // -----------------------------------------------------------
 
   // --- DIMENSIONS ---
   const pageWidth = doc.page.width;
@@ -113,17 +116,11 @@ export const generatePdfReport = async (
   const drawWatermark = () => {
     const text = `TallyPadi • ${businessName}`;
     doc.save();
-    // Center logic that works with rotation
     doc.translate(pageWidth / 2, pageHeight / 2);
     doc.rotate(-45);
     doc.fillColor(THEME.dark).opacity(0.04);
     doc.fontSize(50);
-    // Draw text centered at origin (0,0) of the transformed coordinate system
-    doc.text(text, -pageWidth / 2, 0, { 
-        align: 'center', 
-        width: pageWidth,
-        lineBreak: false 
-    }); 
+    doc.text(text, -pageWidth / 2, 0, { align: 'center', width: pageWidth, lineBreak: false }); 
     doc.restore();
   };
 
@@ -188,14 +185,11 @@ export const generatePdfReport = async (
   };
 
   const drawTable = (headers: string[], widths: number[], rows: any[]) => {
-    // Initial Header
     let currentY = drawTableHeader(doc.y, headers, widths);
 
-    // Loop Rows
     doc.font('Regular').fontSize(9);
     
     rows.forEach((row, idx) => {
-        // Calculate dynamic height
         let maxH = 20;
         row.forEach((text: string, i: number) => {
             const h = doc.heightOfString(text, { width: widths[i] - 10 });
@@ -203,22 +197,19 @@ export const generatePdfReport = async (
         });
         maxH += 12; // Padding
 
-        // Check Page Break
         if (currentY + maxH > bottomLimit) {
             doc.addPage();
             drawWatermark();
             drawHeader(reportType === 'SALES' ? 'Sales Report' : 'Full Business Report');
             currentY = 80;
             currentY = drawTableHeader(currentY, headers, widths);
-            doc.font('Regular').fontSize(9); // Reset font after header
+            doc.font('Regular').fontSize(9);
         }
 
-        // Zebra background
         if (idx % 2 !== 0) {
             doc.rect(margin, currentY, contentWidth, maxH).fill(THEME.bgLight);
         }
 
-        // Draw Row Text
         let cx = margin;
         row.forEach((text: string, i: number) => {
             const hName = headers[i];
@@ -236,7 +227,6 @@ export const generatePdfReport = async (
             cx += widths[i];
         });
 
-        // Row Border
         doc.moveTo(margin, currentY + maxH).lineTo(margin + contentWidth, currentY + maxH)
            .strokeColor(THEME.border).lineWidth(0.5).stroke();
 
@@ -248,8 +238,7 @@ export const generatePdfReport = async (
 
   // --- REPORT GENERATION LOGIC ---
 
-  // Manually Add First Page
-  doc.addPage();
+  // NOTE: doc.addPage() was already called at the top, so we just draw the watermark/headers now.
   drawWatermark();
 
   if (reportType === 'SALES') {

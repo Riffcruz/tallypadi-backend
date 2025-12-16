@@ -11,9 +11,10 @@ import path from 'path'; // Import path module
 
 // Imports
 import whatsappRouter from './routes/whatsapp.routes';
-import paymentRouter from './routes/payment.routes'; // 🟢 1. Import the payment router
+import paymentRouter from './routes/payment.routes'; 
 import adminRouter from './routes/admin.routes'; 
-import webhookRoutes from './routes/webhook.routes'; // 🟢 2. Import webhook routes
+import webhookRoutes from './routes/webhook.routes';
+import healthRouter from './routes/health.routes'; // 🟢 IMPORT HEALTH ROUTER
 
 import { loginUser } from './controllers/auth.controller';
 import { startScheduler } from './services/scheduler'; // Your Cron Job
@@ -131,9 +132,11 @@ app.get('/api/staff', getStaff);
 app.post('/api/staff', addStaff);
 app.delete('/api/staff/:id', removeStaff);
 
-// 🟢 PAYMENT ROUTE (Restored)
-// This enables POST /api/payment/initialize
+// 🟢 PAYMENT ROUTE
 app.use('/api/payment', paymentRouter);
+
+// 🟢 HEALTH CHECK (For Worker Monitoring)
+app.use('/api/health', healthRouter);
 
 // Admin Panel Routes
 app.use('/api/admin', (req, res, next) => {
@@ -144,8 +147,7 @@ app.use('/api/admin', (req, res, next) => {
 // WhatsApp Webhook
 app.use('/api/whatsapp', whatsappRouter);
 
-// 🟢 PAYSTACK WEBHOOK (Restored)
-// This enables POST /api/webhook/paystack
+// Paystack Webhook
 app.use('/api/webhook', webhookRoutes);
 
 // Static Files
