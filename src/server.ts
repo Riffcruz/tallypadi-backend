@@ -11,18 +11,19 @@ import path from 'path'; // Import path module
 
 // Imports
 import whatsappRouter from './routes/whatsapp.routes';
+import paymentRouter from './routes/payment.routes'; // 🟢 1. Import the payment router
+import adminRouter from './routes/admin.routes'; 
+import webhookRoutes from './routes/webhook.routes'; // 🟢 2. Import webhook routes
+
 import { loginUser } from './controllers/auth.controller';
 import { startScheduler } from './services/scheduler'; // Your Cron Job
 import { env } from './config/env';
 import { getDashboardData } from './controllers/dashboard.controller';
 import { getInventory, addInventoryItem, updateInventoryItem } from './controllers/inventory.controller';
 import { updateSettings } from './controllers/settings.controller';
-// 🟢 CORRECTED IMPORT: Imported from admin.controller as requested
 import { getGlobalSettings } from './controllers/admin.controller';
 import { recordSale, getSalesHistory, generateSalesReport } from './controllers/sales.controller';
 import { getStaff, addStaff, removeStaff } from './controllers/staff.controller';
-import adminRouter from './routes/admin.routes'; 
-import webhookRoutes from './routes/webhook.routes';
 
 // 🟢 Import the Worker so it starts processing the queue
 import './worker'; 
@@ -123,13 +124,16 @@ app.get('/api/sales/report', generateSalesReport);
 app.put('/api/settings', updateSettings);
 
 // 🟢 NEW: Public Global Settings Route (For Landing Page)
-// Placing this BEFORE the admin router ensures it is accessible publicly without login
 app.get('/api/admin/settings', getGlobalSettings);
 
 // Staff Management Routes
 app.get('/api/staff', getStaff);
 app.post('/api/staff', addStaff);
 app.delete('/api/staff/:id', removeStaff);
+
+// 🟢 PAYMENT ROUTE (Restored)
+// This enables POST /api/payment/initialize
+app.use('/api/payment', paymentRouter);
 
 // Admin Panel Routes
 app.use('/api/admin', (req, res, next) => {
@@ -140,7 +144,8 @@ app.use('/api/admin', (req, res, next) => {
 // WhatsApp Webhook
 app.use('/api/whatsapp', whatsappRouter);
 
-// Paystack Webhook
+// 🟢 PAYSTACK WEBHOOK (Restored)
+// This enables POST /api/webhook/paystack
 app.use('/api/webhook', webhookRoutes);
 
 // Static Files
