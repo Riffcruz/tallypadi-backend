@@ -14,36 +14,43 @@ export interface ITransaction extends Document {
   paymentStatus: 'PAID' | 'CREDIT';
   items: ITransactionItem[];
   totalMoney: number | null;
-  
-  // 🕒 TIME TRACKING
-  timestamp: Date;         // Exact time (e.g. 14:30)
-  date: string;            // Calendar Day (e.g. "2025-12-09")
-  
-  // 🔒 SECURITY
-  messageId?: string;      // WhatsApp ID (Prevent duplicates)
+
+  timestamp: Date;
+  date: string;
+
+  messageId?: string;
 }
 
 const transactionSchema = new Schema<ITransaction>(
   {
-    user: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-    type: { type: String, enum: ['SALE', 'RESTOCK', 'ADJUSTMENT', 'PAYMENT_RECEIVED'], required: true },
-    
-    paymentStatus: { type: String, enum: ['PAID', 'CREDIT'], default: 'PAID' }, 
+    user: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
 
-    items: [{
-      name: String,
-      qty: Number,
-      unit: { type: String, default: '' },
-      unitPrice: Number,
-      total: Number
-    }],
+    type: {
+      type: String,
+      enum: ['SALE', 'RESTOCK', 'ADJUSTMENT', 'PAYMENT_RECEIVED'],
+      required: true,
+      index: true
+    },
+
+    paymentStatus: { type: String, enum: ['PAID', 'CREDIT'], default: 'PAID', index: true },
+
+    items: [
+      {
+        name: { type: String, index: true },
+        qty: Number,
+        unit: { type: String, default: '' },
+        unitPrice: Number,
+        total: Number
+      }
+    ],
+
     totalMoney: { type: Number, default: null },
-    
-    // 🟢 UPDATED TIME FIELDS
-    timestamp: { type: Date, default: Date.now },
-    date: { type: String, required: true }, // Stores "YYYY-MM-DD"
-    
-    messageId: { type: String, unique: true, sparse: true } 
+
+    timestamp: { type: Date, default: Date.now, index: true },
+    date: { type: String, required: true, index: true },
+
+    // Prevent duplicates (still useful for audits)
+    messageId: { type: String, unique: true, sparse: true, index: true }
   },
   { timestamps: true }
 );
