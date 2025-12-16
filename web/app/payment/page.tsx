@@ -52,7 +52,7 @@ const PLANS: PlanDetails[] = [
   }
 ];
 
-// Sanitize URL & Handle Localhost Logic
+// Sanitize URL & Handle Localhost/Network Logic
 const getApiUrl = () => {
     // 1. If explicit env var exists, use it
     if (process.env.NEXT_PUBLIC_API_URL) {
@@ -60,12 +60,20 @@ const getApiUrl = () => {
     }
     
     // 2. If running locally and no env var, assume local backend
-    // Checks for localhost and 127.0.0.1
     if (typeof window !== 'undefined') {
         const hostname = window.location.hostname;
-        if (hostname === 'localhost' || hostname === '127.0.0.1') {
+        const protocol = window.location.protocol;
+        
+        // Check for localhost, 127.0.0.1, or typical local network IPs (192.168..., 10...)
+        const isLocal = hostname === 'localhost' || 
+                        hostname === '127.0.0.1' || 
+                        hostname.startsWith('192.168.') || 
+                        hostname.startsWith('10.');
+
+        if (isLocal) {
             // Adjust port 5000 if your server runs on a different port (e.g. 3000, 8080)
-            return 'http://localhost:5000/api'; 
+            // Uses current protocol (http/https) and hostname to support mobile testing on same network
+            return `${protocol}//${hostname}:5000/api`; 
         }
     }
 
@@ -132,7 +140,7 @@ export default function PaymentPage() {
       
       // Handle 404 specifically (Route not found on server)
       if (err.response?.status === 404) {
-        setError(`Server Error (404): The new payment code was not found on the server.\n\nTarget: ${endpoint}\n\nACTION REQUIRED: Please restart your backend server so it can load the new payment routes.`);
+        setError(`Server Error (404): The payment endpoint was not found.\n\nTarget: ${endpoint}\n\nACTION REQUIRED: \n1. Ensure 'server.ts' includes the payment routes.\n2. RESTART your backend server to load the new code.`);
         return;
       }
 
