@@ -595,7 +595,9 @@ export const handleMessageLogic = async (from: string, text: string, messageId: 
             await queueOutboundMessage(from, parsed.reply_text); // 🟢 QUEUE RESPONSE
             break;
     }
-  } catch (err) {
-    console.error('❌ Error processing message logic:', err);
-  }
+ } catch (err) {
+  console.error('❌ Error processing message logic:', err);
+  throw err; // ✅ IMPORTANT: let BullMQ mark job as failed + retry
+}
+
 };
