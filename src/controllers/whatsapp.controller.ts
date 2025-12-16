@@ -428,7 +428,7 @@ export const handleMessageLogic = async (from: string, text: string, messageId: 
             if (user.planType === 'TYCOON') {
                 try {
                     const pdfFileName = await generatePdfReport(user._id as any, 'SALES', dateLabel, startDate, endDate);
-                    const downloadLink = `${env.appBaseUrl}/reports/${pdfFileName}`;
+                    const downloadLink = `https://tallypadi.com/reports/${pdfFileName}`;
                     await sendWhatsAppText(from, `✨ Tycoon Feature: Download your sales report as PDF here: ${downloadLink}\n\nLink expires in 24 hours.`);
                 } catch (pdfError) {
                     console.error('❌ Error generating PDF for sales report:', pdfError);
@@ -502,7 +502,7 @@ export const handleMessageLogic = async (from: string, text: string, messageId: 
             if (user.planType === 'TYCOON') {
                 try {
                     const pdfFileName = await generatePdfReport(user._id as any, 'FULL', dateLabel, startDate, endDate);
-                    const downloadLink = `${env.appBaseUrl}/reports/${pdfFileName}`;
+                    const downloadLink = `https://tallypadi.com/reports/${pdfFileName}`;
                     await sendWhatsAppText(from, `✨ Tycoon Feature: Download your comprehensive report as PDF here: ${downloadLink}\n\nLink expires in 24 hours.`);
                 } catch (pdfError) {
                     console.error('❌ Error generating PDF for full report:', pdfError);
@@ -585,7 +585,7 @@ export const handleMessageLogic = async (from: string, text: string, messageId: 
             
             try {
                 const pdfFileName = await generatePdfReport(user._id as any, pdfReportType, dateLabel, startDate, endDate);
-                const downloadLink = `${env.appBaseUrl}/reports/${pdfFileName}`; 
+                const downloadLink = `https://tallypadi.com/reports/${pdfFileName}`; 
                 await sendWhatsAppText(from, `✅ Your PDF report is ready: ${downloadLink}\n\nLink expires in 24 hours.`);
             } catch (pdfError) {
                 console.error('❌ Error generating PDF:', pdfError);

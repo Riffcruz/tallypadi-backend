@@ -11,6 +11,28 @@ interface ReportOptions {
   includeInventory?: boolean;
 }
 
+// ✅ Currency code mapping (stable in PDF fonts)
+const COUNTRY_CURRENCY_CODE: Record<string, string> = {
+  NG: 'NGN',
+  US: 'USD',
+  GB: 'GBP',
+  EU: 'EUR',
+  GH: 'GHS',
+  KE: 'KES',
+  ZA: 'ZAR',
+  IN: 'INR',
+  CN: 'CNY',
+  CA: 'CAD',
+};
+
+// ✅ Robust font resolver (Ubuntu paths vary)
+const pickFirstExisting = (paths: string[]) => {
+  for (const p of paths) {
+    if (fs.existsSync(p)) return p;
+  }
+  return null;
+};
+
 export const generatePdfReport = async (
   userId: Types.ObjectId,
   reportType: 'SALES' | 'FULL',
@@ -24,7 +46,16 @@ export const generatePdfReport = async (
 
   const businessName = user.businessName || 'Your Shop';
 
-  // ✅ bufferPages: allows page numbers after all pages are created
+  // ✅ detect country code -> currency code (adjust based on your schema)
+  const rawCountry =
+    (user as any).countryCode ||
+    (user as any).profile?.countryCode ||
+    'NG';
+
+  const currencyCode =
+    COUNTRY_CURRENCY_CODE[String(rawCountry).toUpperCase()] || 'NGN';
+
+  // ✅ bufferPages: page numbers after all pages are created
   const doc = new PDFDocument({
     size: 'A4',
     margins: { top: 56, bottom: 56, left: 48, right: 48 },
@@ -41,6 +72,17 @@ export const generatePdfReport = async (
   const stream = fs.createWriteStream(tempFilePath);
   doc.pipe(stream);
 
+  // ✅ Register Unicode font (helps stop weird missing chars / layout jumps)
+  const notoPath = pickFirstExisting([
+    '/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf',
+    '/usr/share/fonts/truetype/noto/NotoSansDisplay-Regular.ttf',
+    '/usr/share/fonts/opentype/noto/NotoSans-Regular.ttf',
+  ]);
+  if (notoPath) {
+    doc.registerFont('Body', notoPath);
+    doc.registerFont('BodyBold', notoPath); // using same file is fine; bold effect is simulated by PDF viewers
+  }
+
   // ---------- BRAND THEME ----------
   const BRAND = {
     primary: '#16a34a', // emerald-600
@@ -50,8 +92,6 @@ export const generatePdfReport = async (
     line: '#e2e8f0',
     soft: '#f1f5f9',
     white: '#ffffff',
-    blueSoft: '#eff6ff',
-    greenSoft: '#f0fdf4',
   };
 
   const pageW = () => doc.page.width;
@@ -60,65 +100,83 @@ export const generatePdfReport = async (
   const contentW = () => pageW() - m().left - m().right;
 
   // ---------- HELPERS ----------
-  const formatPeriod = () => {
-    const fmt = (d?: Date) =>
-      d ? d.toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
-    const s = fmt(startDate);
-    const e = fmt(endDate);
+  const fmtDate = (d?: Date) =>
+    d ? d.toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
 
-    if (startDate && endDate) return `${s} → ${e}`;
+  const formatPeriod = () => {
+    const s = fmtDate(startDate);
+    const e = fmtDate(endDate);
+    if (startDate && endDate) return `${s} to ${e}`;
     if (startDate && !endDate) return `From ${s}`;
     if (!startDate && endDate) return `Up to ${e}`;
     return dateLabel || 'All time';
   };
 
-  const formatMoney = (amount: number) => `₦${Math.round(amount).toLocaleString('en-NG')}`;
+  // ✅ decimals + currency code (no ₦)
+  const formatMoney = (amount: number) => {
+    const safe = Number.isFinite(amount) ? amount : 0;
+    const num = safe.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return `${currencyCode} ${num}`;
+  };
 
+  // ✅ Watermark that WON’T wrap/paginate (common cause of blank pages)
   const drawWatermark = () => {
     const text = `TallyPadi • ${businessName}`;
     doc.save();
     doc.rotate(-32, { origin: [pageW() / 2, pageH() / 2] });
     doc.fillColor(BRAND.dark).opacity(0.06);
-    doc.font('Helvetica-Bold').fontSize(52);
-    doc.text(text, -120, pageH() / 2 - 40, { width: pageW() + 240, align: 'center' });
+
+    if (notoPath) doc.font('BodyBold');
+    else doc.font('Helvetica-Bold');
+
+    doc.fontSize(48);
+
+    // IMPORTANT: lineBreak:false + huge width prevents forced wrapping/new pages
+    doc.text(text, -pageW(), pageH() / 2 - 24, {
+      width: pageW() * 3,
+      align: 'center',
+      lineBreak: false,
+    });
+
     doc.opacity(1).restore();
   };
 
   const drawHeader = (subtitle: string) => {
-    // top bar background
     doc.save();
     doc.rect(0, 0, pageW(), 72).fill(BRAND.dark);
 
-    // TP “logo”
     const left = m().left;
+
+    // TP “logo”
     doc.fillColor(BRAND.primary);
     doc.circle(left + 14, 36, 14).fill();
     doc.fillColor(BRAND.white).font('Helvetica-Bold').fontSize(10);
-    doc.text('TP', left + 6, 31, { width: 16, align: 'center' });
+    doc.text('TP', left + 6, 31, { width: 16, align: 'center', lineBreak: false });
 
     // Left title
     doc.fillColor(BRAND.white).font('Helvetica-Bold').fontSize(16);
-    doc.text('TallyPadi', left + 40, 22);
-    doc.fillColor('#cbd5e1').font('Helvetica').fontSize(10);
-    doc.text(subtitle, left + 40, 42);
+    doc.text('TallyPadi', left + 40, 22, { lineBreak: false });
 
-    // Right side: business + period + generated
+    doc.fillColor('#cbd5e1').font('Helvetica').fontSize(10);
+    doc.text(subtitle, left + 40, 42, { lineBreak: false });
+
+    // Right info
     doc.fillColor(BRAND.white).font('Helvetica-Bold').fontSize(12);
-    doc.text(businessName, left, 22, { width: contentW(), align: 'right' });
+    doc.text(businessName, left, 22, { width: contentW(), align: 'right', lineBreak: false });
 
     doc.fillColor('#cbd5e1').font('Helvetica').fontSize(9);
-    doc.text(`Period: ${formatPeriod()}`, left, 40, { width: contentW(), align: 'right' });
+    doc.text(`Period: ${formatPeriod()}`, left, 40, { width: contentW(), align: 'right', lineBreak: false });
 
     doc.fillColor('#94a3b8').font('Helvetica').fontSize(8);
-    doc.text(`Generated: ${new Date().toLocaleString('en-NG')}`, left, 54, {
-      width: contentW(),
-      align: 'right',
-    });
+    doc.text(`Currency: ${currencyCode}`, left, 54, { width: contentW(), align: 'right', lineBreak: false });
 
     doc.restore();
 
-    // divider
-    doc.moveTo(m().left, 84).lineTo(pageW() - m().right, 84).strokeColor(BRAND.line).lineWidth(1).stroke();
+    doc.moveTo(m().left, 84)
+      .lineTo(pageW() - m().right, 84)
+      .strokeColor(BRAND.line)
+      .lineWidth(1)
+      .stroke();
   };
 
   const drawFooter = (pageNumber: number, totalPages: number) => {
@@ -126,11 +184,13 @@ export const generatePdfReport = async (
 
     doc.save();
     doc.strokeColor(BRAND.line).lineWidth(1);
-    doc.moveTo(m().left, pageH() - m().bottom + 6).lineTo(pageW() - m().right, pageH() - m().bottom + 6).stroke();
+    doc.moveTo(m().left, pageH() - m().bottom + 6)
+      .lineTo(pageW() - m().right, pageH() - m().bottom + 6)
+      .stroke();
 
     doc.fillColor(BRAND.muted).font('Helvetica').fontSize(8);
-    doc.text('tallypadi.com', m().left, footerY, { align: 'left' });
-    doc.text(`Page ${pageNumber} of ${totalPages}`, m().left, footerY, { width: contentW(), align: 'right' });
+    doc.text('tallypadi.com', m().left, footerY, { align: 'left', lineBreak: false });
+    doc.text(`Page ${pageNumber} of ${totalPages}`, m().left, footerY, { width: contentW(), align: 'right', lineBreak: false });
 
     doc.restore();
   };
@@ -140,18 +200,25 @@ export const generatePdfReport = async (
     drawHeader(subtitle);
   };
 
-  // ---------- TABLE HELPERS (premium look) ----------
+  // ---------- TABLE HELPERS ----------
   const drawTableHeader = (y: number, headers: string[], colWidths: number[]) => {
     const rowH = 22;
     doc.save();
     doc.fillColor(BRAND.soft);
     doc.roundedRect(m().left, y, contentW(), rowH, 8).fill();
-    doc.fillColor(BRAND.text).font('Helvetica-Bold').fontSize(9);
+
+    if (notoPath) doc.font('BodyBold');
+    else doc.font('Helvetica-Bold');
+
+    doc.fillColor(BRAND.text).fontSize(9);
 
     let x = m().left;
     headers.forEach((h, i) => {
-      const align = (h.toLowerCase().includes('amount') || h.toLowerCase().includes('revenue')) ? 'right' : 'left';
-      doc.text(h.toUpperCase(), x + 10, y + 6, { width: colWidths[i] - 20, align });
+      const align =
+        h.toLowerCase().includes('amount') || h.toLowerCase().includes('revenue')
+          ? 'right'
+          : 'left';
+      doc.text(h.toUpperCase(), x + 10, y + 6, { width: colWidths[i] - 20, align, lineBreak: false });
       x += colWidths[i];
     });
 
@@ -166,17 +233,16 @@ export const generatePdfReport = async (
     rowIndex: number,
     opts?: { highlightRed?: boolean; rightAlignLast?: boolean }
   ) => {
-    // Calculate dynamic row height for wrapped columns (mainly item name)
-    doc.font('Helvetica').fontSize(9);
+    if (notoPath) doc.font('Body');
+    else doc.font('Helvetica');
+    doc.fontSize(9);
 
+    // dynamic row height
     let maxH = 22;
-    let x = m().left;
-
     cols.forEach((text, i) => {
       const w = colWidths[i] - 20;
       const h = doc.heightOfString(text || '-', { width: w });
       maxH = Math.max(maxH, h + 12);
-      x += colWidths[i];
     });
 
     // zebra background
@@ -188,19 +254,26 @@ export const generatePdfReport = async (
     doc.opacity(1).restore();
 
     // text
-    x = m().left;
+    let x = m().left;
     cols.forEach((text, i) => {
       const isLast = i === cols.length - 1;
-      const align =
-        isLast && (opts?.rightAlignLast ?? true) ? 'right' : 'left';
+      const align = isLast && (opts?.rightAlignLast ?? true) ? 'right' : 'left';
 
-      // red highlight support
-      if (opts?.highlightRed && (text.includes('Oversold') || text.includes('⚠️'))) {
-        doc.fillColor('#dc2626').font('Helvetica-Bold');
+      const hasAlert =
+        opts?.highlightRed && (text.includes('Oversold') || text.includes('ALERT'));
+
+      if (hasAlert) {
+        doc.fillColor('#dc2626');
+        if (notoPath) doc.font('BodyBold');
+        else doc.font('Helvetica-Bold');
       } else if (isLast) {
-        doc.fillColor(BRAND.primary).font('Helvetica-Bold');
+        doc.fillColor(BRAND.primary);
+        if (notoPath) doc.font('BodyBold');
+        else doc.font('Helvetica-Bold');
       } else {
-        doc.fillColor('#334155').font('Helvetica');
+        doc.fillColor('#334155');
+        if (notoPath) doc.font('Body');
+        else doc.font('Helvetica');
       }
 
       doc.text(text || '-', x + 10, y + 6, { width: colWidths[i] - 20, align });
@@ -233,19 +306,18 @@ export const generatePdfReport = async (
     if (options.includeSummary) {
       currentY = ensureSpace(currentY, 80, subtitle);
 
-      // Summary Cards
       doc.save();
       doc.roundedRect(m().left, currentY, contentW(), 58, 14).fillColor('#ffffff').opacity(0.9).fill();
       doc.opacity(1);
       doc.roundedRect(m().left, currentY, contentW(), 58, 14).strokeColor(BRAND.line).stroke();
 
       doc.fillColor(BRAND.muted).font('Helvetica-Bold').fontSize(9);
-      doc.text('TOTAL REVENUE', m().left + 16, currentY + 12);
-      doc.text('TRANSACTIONS', m().left + 210, currentY + 12);
+      doc.text('TOTAL REVENUE', m().left + 16, currentY + 12, { lineBreak: false });
+      doc.text('TRANSACTIONS', m().left + 240, currentY + 12, { lineBreak: false });
 
       doc.fillColor(BRAND.text).font('Helvetica-Bold').fontSize(16);
-      doc.text(formatMoney(summary.totalRevenue || 0), m().left + 16, currentY + 30);
-      doc.text(String(transactions.length), m().left + 210, currentY + 30);
+      doc.text(formatMoney(summary.totalRevenue || 0), m().left + 16, currentY + 30, { lineBreak: false });
+      doc.text(String(transactions.length), m().left + 240, currentY + 30, { lineBreak: false });
 
       doc.restore();
       currentY += 78;
@@ -258,8 +330,8 @@ export const generatePdfReport = async (
       doc.text('Transaction History', m().left, currentY);
       currentY += 16;
 
-      const headers = ['Time', 'Item', 'Qty', 'Amount', 'Staff'];
-      const colWidths = [80, 210, 70, 90, contentW() - (80 + 210 + 70 + 90)];
+      const headers = ['Time', 'Item', 'Qty', `Amount (${currencyCode})`, 'Staff'];
+      const colWidths = [80, 210, 70, 120, contentW() - (80 + 210 + 70 + 120)];
 
       currentY = drawTableHeader(currentY, headers, colWidths);
 
@@ -302,12 +374,12 @@ export const generatePdfReport = async (
       doc.roundedRect(m().left, currentY, contentW(), 58, 14).strokeColor(BRAND.line).stroke();
 
       doc.fillColor(BRAND.muted).font('Helvetica-Bold').fontSize(9);
-      doc.text('TOTAL REVENUE', m().left + 16, currentY + 12);
-      doc.text('ITEMS SOLD', m().left + 210, currentY + 12);
+      doc.text('TOTAL REVENUE', m().left + 16, currentY + 12, { lineBreak: false });
+      doc.text('ITEMS SOLD', m().left + 240, currentY + 12, { lineBreak: false });
 
       doc.fillColor(BRAND.text).font('Helvetica-Bold').fontSize(16);
-      doc.text(formatMoney(revenueSummary.totalRevenue || 0), m().left + 16, currentY + 30);
-      doc.text(String(revenueSummary.items?.length || 0), m().left + 210, currentY + 30);
+      doc.text(formatMoney(revenueSummary.totalRevenue || 0), m().left + 16, currentY + 30, { lineBreak: false });
+      doc.text(String(revenueSummary.items?.length || 0), m().left + 240, currentY + 30, { lineBreak: false });
 
       doc.restore();
       currentY += 78;
@@ -320,8 +392,8 @@ export const generatePdfReport = async (
       doc.text('Inventory & Sales Breakdown', m().left, currentY);
       currentY += 16;
 
-      const headers = ['Item Name', 'Sold (Paid)', 'Sold (Credit)', 'Stock Left', 'Revenue'];
-      const colWidths = [190, 85, 85, 95, contentW() - (190 + 85 + 85 + 95)];
+      const headers = ['Item Name', 'Sold (Paid)', 'Sold (Credit)', 'Stock Left', `Revenue (${currencyCode})`];
+      const colWidths = [190, 85, 85, 115, contentW() - (190 + 85 + 85 + 115)];
 
       currentY = drawTableHeader(currentY, headers, colWidths);
 
@@ -329,8 +401,9 @@ export const generatePdfReport = async (
       fullData.forEach((item: any) => {
         currentY = ensureSpace(currentY, 60, subtitle);
 
+        // ✅ no emoji (PDF safe)
         let stockText = `${item.stock} ${item.unit || 'units'}`;
-        if (item.stock < 0) stockText = `⚠️ -${Math.abs(item.stock)} (Oversold)`;
+        if (item.stock < 0) stockText = `ALERT -${Math.abs(item.stock)} (Oversold)`;
 
         const revenue = item.revenue > 0 ? formatMoney(item.revenue) : '-';
 
@@ -353,7 +426,7 @@ export const generatePdfReport = async (
     }
   }
 
-  // ---------- PAGE NUMBERS / FOOTER (after all pages exist) ----------
+  // ---------- PAGE NUMBERS / FOOTER ----------
   const range = doc.bufferedPageRange(); // { start, count }
   for (let i = range.start; i < range.start + range.count; i++) {
     doc.switchToPage(i);
