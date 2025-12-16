@@ -18,7 +18,7 @@ export const metadata: Metadata = {
     siteName: 'Tallypadi',
     images: [
       {
-        url: 'https://tallypadi.com/og.jpg', // create this image later (recommended)
+        url: 'https://tallypadi.com/og.png', // create this image later (recommended)
         width: 1200,
         height: 630,
         alt: 'Tallypadi',
@@ -30,7 +30,7 @@ export const metadata: Metadata = {
     title: 'Tallypadi — Track Sales, Stock & Profit on WhatsApp',
     description:
       'Record sales, manage inventory, and track profit directly in WhatsApp.',
-    images: ['https://tallypadi.com/og.jpg'],
+    images: ['https://tallypadi.com/og.png'],
   },
 };
 
