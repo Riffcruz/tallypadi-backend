@@ -1,23 +1,22 @@
 import express from 'express';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
-import helmet from 'helmet'; // Security Headers
-import cors from 'cors'; // Cross Origin Policy
+import helmet from 'helmet';
+import cors from 'cors';
 import sanitize from 'mongo-sanitize';
-import { xss } from 'express-xss-sanitizer'; // Anti-XSS (Modern replacement)
-import rateLimit from 'express-rate-limit'; // Anti-Brute Force
-import crypto from 'crypto'; // Native Crypto for signature verification
-import path from 'path'; // Import path module
+import { xss } from 'express-xss-sanitizer';
+import rateLimit from 'express-rate-limit';
+import crypto from 'crypto';
+import path from 'path';
 
-// Imports
 import whatsappRouter from './routes/whatsapp.routes';
-import paymentRouter from './routes/payment.routes'; 
-import adminRouter from './routes/admin.routes'; 
+import paymentRouter from './routes/payment.routes';
+import adminRouter from './routes/admin.routes';
 import webhookRoutes from './routes/webhook.routes';
-import healthRouter from './routes/health.routes'; // 🟢 IMPORT HEALTH ROUTER
+import healthRouter from './routes/health.routes';
 
 import { loginUser } from './controllers/auth.controller';
-import { startScheduler } from './services/scheduler'; // Your Cron Job
+import { startScheduler } from './services/scheduler';
 import { env } from './config/env';
 import { getDashboardData } from './controllers/dashboard.controller';
 import { getInventory, addInventoryItem, updateInventoryItem } from './controllers/inventory.controller';
@@ -26,145 +25,178 @@ import { getGlobalSettings } from './controllers/admin.controller';
 import { recordSale, getSalesHistory, generateSalesReport } from './controllers/sales.controller';
 import { getStaff, addStaff, removeStaff } from './controllers/staff.controller';
 
-// 🟢 Import the Worker so it starts processing the queue
-import './worker'; 
-
 dotenv.config();
 
 const app = express();
 
-// 🟢 Trust Nginx Proxy
-app.set('trust proxy', 1); 
+// ✅ Trust Nginx Proxy
+app.set('trust proxy', 1);
 
 // ==========================================
-// 🛡️ SECURITY MIDDLEWARE LAYER
+// 🛡️ BASIC SECURITY
 // ==========================================
-
 app.use(helmet());
 
-// Update CORS to allow requests from your domain
-const corsOptions = {
-  origin: process.env.NODE_ENV === 'production' ? 'https://tallypadi.com' : true, 
+// ✅ CORS
+const corsOptions: cors.CorsOptions = {
+  origin: process.env.NODE_ENV === 'production' ? 'https://tallypadi.com' : true,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-secret'] 
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-secret'],
 };
 
 app.use(cors(corsOptions));
-app.options(/.*/, cors(corsOptions)); 
+app.options(/.*/, cors(corsOptions));
 
-// 🟢 DEBUG LOGGER: Log all requests
-app.use((req, res, next) => {
-  console.log(`📨 Incoming Request: ${req.method} ${req.originalUrl} from ${req.ip}`);
+// ✅ Debug logger
+app.use((req, _res, next) => {
+  console.log(`📨 ${req.method} ${req.originalUrl} from ${req.ip}`);
   next();
 });
 
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, 
-  max: 100, 
-  message: 'Too many requests from this IP, please try again after 15 minutes'
-});
-app.use('/api', limiter); 
+// ==========================================
+// 🔐 WEBHOOK SIGNATURE (DO NOT THROW HERE)
+// ==========================================
+const verifySignature = (req: any, _res: any, buf: Buffer) => {
+  // Only check signature for WhatsApp webhook POST
+  if (!req.originalUrl.startsWith('/api/whatsapp') || req.method !== 'POST') return;
 
-const verifySignature = (req: any, res: any, buf: any) => {
-  const signature = req.headers['x-hub-signature-256'];
-  
-  if (req.originalUrl.includes('/api/whatsapp') && req.method === 'POST') {
-    if (!signature) {
-      console.error("❌ Webhook Error: No signature found in headers");
-      throw new Error('No signature found');
-    }
-    
-    const appSecret = process.env.WHATSAPP_APP_SECRET;
-    if (!appSecret) {
-        console.warn("⚠️ WHATSAPP_APP_SECRET not set. Signature verification skipped (NOT SECURE).");
-        return;
+  const signature = req.headers['x-hub-signature-256'] as string | undefined;
+  const appSecret = process.env.WHATSAPP_APP_SECRET;
+
+  // In production, enforce signature
+  if (process.env.NODE_ENV === 'production') {
+    if (!signature || !appSecret) {
+      req.signatureValid = false;
+      return;
     }
 
-    const elements = signature.split('=');
-    const signatureHash = elements[1];
-    const expectedHash = crypto.createHmac('sha256', appSecret).update(buf).digest('hex');
+    const expected = 'sha256=' + crypto.createHmac('sha256', appSecret).update(buf).digest('hex');
 
-    if (signatureHash !== expectedHash) {
-      console.error(`❌ Webhook Error: Invalid Signature. Got ${signatureHash}, expected ${expectedHash}`);
-      throw new Error('Invalid signature. Request rejected.');
+    try {
+      // timing-safe compare
+      const sigBuf = Buffer.from(signature);
+      const expBuf = Buffer.from(expected);
+
+      req.signatureValid = sigBuf.length === expBuf.length && crypto.timingSafeEqual(sigBuf, expBuf);
+    } catch {
+      req.signatureValid = false;
     }
-    console.log("✅ Webhook Signature Verified");
+  } else {
+    // In dev, allow
+    req.signatureValid = true;
   }
 };
 
-app.use(express.json({ limit: '10kb', verify: verifySignature })); 
+// ✅ Parse JSON — use bigger limit for webhooks
+app.use(express.json({ limit: '1mb', verify: verifySignature }));
+
+// ==========================================
+// 🚦 RATE LIMIT (DO NOT RATE LIMIT WEBHOOKS)
+// ==========================================
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: 'Too many requests from this IP, please try again after 15 minutes',
+});
+
+// Apply limiter to normal API, not webhooks
+app.use('/api', (req, res, next) => {
+  if (req.originalUrl.startsWith('/api/whatsapp') || req.originalUrl.startsWith('/api/webhook')) {
+    return next();
+  }
+  return apiLimiter(req, res, next);
+});
+
+// ==========================================
+// ✅ WEBHOOK ROUTES FIRST (NO XSS/SANITIZE)
+// ==========================================
+app.use('/api/whatsapp', (req: any, res, next) => {
+  // Enforce signature only in production
+  if (process.env.NODE_ENV === 'production' && req.method === 'POST' && req.signatureValid === false) {
+    console.error('❌ WhatsApp webhook rejected: invalid/missing signature');
+    return res.sendStatus(401);
+  }
+  next();
+}, whatsappRouter);
+
+app.use('/api/webhook', webhookRoutes);
+
+// ==========================================
+// 🧼 SANITIZE ONLY AFTER WEBHOOKS
+// ==========================================
 app.use(xss());
-app.use((req, res, next) => {
+
+app.use((req, _res, next) => {
+  // sanitize normal api input (not needed for raw webhooks)
   if (req.body) req.body = sanitize(req.body);
   if (req.params) req.params = sanitize(req.params);
   next();
 });
 
 // ==========================================
-// 🚀 ROUTES
+// 🚀 NORMAL API ROUTES
 // ==========================================
 
-// Auth Route
+// Auth
 app.post('/api/login', loginUser);
 
-// Dashboard Route
+// Dashboard
 app.get('/api/dashboard', getDashboardData);
 
-// Inventory Routes
+// Inventory
 app.get('/api/inventory', getInventory);
 app.post('/api/inventory', addInventoryItem);
 app.put('/api/inventory/:id', updateInventoryItem);
 
-// Sales Routes
+// Sales
 app.post('/api/sales', recordSale);
 app.get('/api/sales', getSalesHistory);
 app.get('/api/sales/report', generateSalesReport);
 
-// Settings Route (User Settings)
+// Settings
 app.put('/api/settings', updateSettings);
 
-// 🟢 NEW: Public Global Settings Route (For Landing Page)
+// Public Global Settings
 app.get('/api/admin/settings', getGlobalSettings);
 
-// Staff Management Routes
+// Staff
 app.get('/api/staff', getStaff);
 app.post('/api/staff', addStaff);
 app.delete('/api/staff/:id', removeStaff);
 
-// 🟢 PAYMENT ROUTE
+// Payment
 app.use('/api/payment', paymentRouter);
 
-// 🟢 HEALTH CHECK (For Worker Monitoring)
+// Health
 app.use('/api/health', healthRouter);
 
 // Admin Panel Routes
-app.use('/api/admin', (req, res, next) => {
+app.use('/api/admin', (req, _res, next) => {
   console.log(`🛡️ Admin API Hit: ${req.method} ${req.originalUrl}`);
   next();
 }, adminRouter);
 
-// WhatsApp Webhook
-app.use('/api/whatsapp', whatsappRouter);
-
-// Paystack Webhook
-app.use('/api/webhook', webhookRoutes);
-
-// Static Files
+// ==========================================
+// 📁 STATIC FILES
+// ==========================================
 app.use('/reports', express.static(path.join(__dirname, '..', 'public', 'reports')));
 
-// Health Check
-app.get('/', (req, res) => {
+// Root health
+app.get('/', (_req, res) => {
   res.send('🛡️ Tallypadi Server is Secured & Running');
 });
 
 // ==========================================
-// 🔌 SERVER START
+// 🔌 START SERVER
 // ==========================================
 mongoose.connect(env.mongoUri)
   .then(() => {
-    console.log("✅ MongoDB Connected (Secured)");
-    startScheduler(); 
+    console.log('✅ MongoDB Connected (Secured)');
+    startScheduler();
+
     app.listen(env.port, () => console.log(`🚀 Server running on port ${env.port}`));
   })
-  .catch(err => console.error("❌ DB Connection Error:", err));
+  .catch((err) => console.error('❌ DB Connection Error:', err));
