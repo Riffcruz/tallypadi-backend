@@ -560,7 +560,7 @@ export default function LandingPage() {
                         <PricingItem text="Advanced Analytics Suite" light />
                         <PricingItem text="Priority VIP Support" light />
                     </ul>
-                    <a href="/payment?plan=TYCOON" className="w-full block text-center  bg-blue-600 hover:bg-blue-700 text-slate-900 font-bold py-3.5 rounded-xl transition shadow-lg shadow-amber-500/20 active:scale-95">
+                    <a href="/payment?plan=TYCOON" className="w-full block text-center  bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl transition shadow-lg shadow-amber-500/20 active:scale-95">
                         Choose Tycoon Plan
                     </a>
                 </AnimatedSection>
