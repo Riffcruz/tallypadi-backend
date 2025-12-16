@@ -1,11 +1,12 @@
-'use client';
-
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Crown, X, ShoppingBag, Users, Calendar, Download, FileText, CheckCircle, Smartphone } from 'lucide-react';
+import { Crown, X, Calendar, Download, FileText, CheckCircle, Share2 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+
+// Ensure this package is installed or mocked if running outside a full Node environment
+// import { User, IUser } from '../models/user.model'; 
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 
@@ -186,27 +187,33 @@ export default function UserDeepDiveModal({ user, onClose, adminKey, onAction }:
 
     return (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-            <div className="bg-slate-800 w-full max-w-4xl max-h-[90vh] rounded-2xl border border-slate-700 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
-                <div className="p-6 border-b border-slate-700 flex justify-between items-start bg-slate-900/50">
+            {/* Modal Container: Max-width changed to reflect better mobile stacking, max-h adjusted */}
+            <div className="bg-slate-800 w-full max-w-xl md:max-w-4xl max-h-[95vh] rounded-2xl border border-slate-700 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+                
+                {/* Header */}
+                <div className="p-4 sm:p-6 border-b border-slate-700 flex justify-between items-start bg-slate-900/50 shrink-0">
                     <div>
-                        <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+                        <h2 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2">
                             {details.profile.businessName} {details.profile.planType === 'TYCOON' && <Crown className="text-purple-400 w-5 h-5" />}
                         </h2>
-                        <p className="text-slate-400 text-sm font-mono">{details.profile.phoneNumber}</p>
+                        <p className="text-slate-400 text-sm font-mono break-all">{details.profile.phoneNumber}</p>
                     </div>
-                    <button onClick={onClose} className="text-slate-400 hover:text-white"><X size={24} /></button>
+                    <button onClick={onClose} className="text-slate-400 hover:text-white p-1"><X size={24} /></button>
                 </div>
 
-                <div className="flex border-b border-slate-700">
+                {/* Tabs */}
+                <div className="flex border-b border-slate-700 overflow-x-auto shrink-0">
                     {['info', 'inventory', 'sales', 'staff'].map(m => (
-                        <button key={m} onClick={() => setView(m)} className={`px-6 py-3 text-sm font-medium capitalize ${view === m ? 'text-green-400 border-b-2 border-green-400' : 'text-slate-400 hover:text-white'}`}>{m}</button>
+                        <button key={m} onClick={() => setView(m)} className={`px-4 sm:px-6 py-3 text-sm font-medium capitalize whitespace-nowrap ${view === m ? 'text-green-400 border-b-2 border-green-400' : 'text-slate-400 hover:text-white'}`}>{m}</button>
                     ))}
                 </div>
 
-                <div className="p-6 overflow-y-auto flex-1">
+                {/* Content Area */}
+                <div className="p-4 sm:p-6 overflow-y-auto flex-1">
                     {/* INFO TAB */}
                     {view === 'info' && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        // Changed to flex-wrap on mobile, grid on medium screens
+                        <div className="flex flex-col md:grid md:grid-cols-2 gap-4">
                             <div className="p-4 bg-slate-700/30 rounded-xl border border-slate-600 space-y-3">
                                 <h3 className="text-slate-400 text-xs font-bold uppercase">Subscription</h3>
                                 <div className="space-y-2">
@@ -220,7 +227,6 @@ export default function UserDeepDiveModal({ user, onClose, adminKey, onAction }:
                                     <div className="flex justify-between text-sm text-slate-300">
                                         <span>Expires</span> <span>{new Date(details.profile.trialEndsAt).toLocaleDateString()}</span>
                                     </div>
-                                    {/* Added Country Info Display */}
                                     <div className="flex justify-between text-sm text-slate-300">
                                         <span>Region</span> <span>{details.profile.countryCode || 'NG'} ({currencySymbol})</span>
                                     </div>
@@ -238,7 +244,9 @@ export default function UserDeepDiveModal({ user, onClose, adminKey, onAction }:
                                 <h3 className="text-slate-400 text-xs uppercase font-bold mb-2">Last 5 Messages</h3>
                                 <div className="space-y-2">
                                     {details.lastMessages.map((msg: string, i: number) => (
-                                        <div key={i} className="text-xs bg-slate-900 p-2 rounded text-slate-300 border border-slate-700">"{msg}"</div>
+                                        <div key={i} className="text-xs bg-slate-900 p-2 rounded text-slate-300 border border-slate-700 overflow-x-auto">
+                                            <p className="min-w-fit">"{msg}"</p>
+                                        </div>
                                     ))}
                                     {details.lastMessages.length === 0 && <p className="text-slate-500 text-xs">No history.</p>}
                                 </div>
@@ -249,24 +257,24 @@ export default function UserDeepDiveModal({ user, onClose, adminKey, onAction }:
                     {/* SALES TAB */}
                     {view === 'sales' && (
                         <div className="space-y-4">
-                            <div className="flex justify-between items-center bg-slate-900 p-3 rounded-lg border border-slate-700">
-                                <div className="flex gap-2 items-center">
-                                    <input type="date" className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-xs text-white" onChange={e => setSalesDate({...salesDate, start: e.target.value})} />
+                            <div className="flex flex-col sm:flex-row gap-3 sm:gap-2 justify-between items-start sm:items-center bg-slate-900 p-3 rounded-lg border border-slate-700">
+                                <div className="flex flex-wrap gap-2 items-center">
+                                    <input type="date" className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-xs text-white max-w-[150px]" onChange={e => setSalesDate({...salesDate, start: e.target.value})} />
                                     <span className="text-slate-500">-</span>
-                                    <input type="date" className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-xs text-white" onChange={e => setSalesDate({...salesDate, end: e.target.value})} />
+                                    <input type="date" className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-xs text-white max-w-[150px]" onChange={e => setSalesDate({...salesDate, end: e.target.value})} />
                                 </div>
-                                <div className="flex gap-2">
-                                    <button onClick={() => exportSales('csv')} className="bg-green-700 text-white px-3 py-1.5 rounded text-xs flex gap-1 items-center hover:bg-green-600"><Download size={14}/> CSV</button>
-                                    <button onClick={() => exportSales('pdf')} className="bg-red-700 text-white px-3 py-1.5 rounded text-xs flex gap-1 items-center hover:bg-red-600"><FileText size={14}/> PDF</button>
+                                <div className="flex gap-2 w-full sm:w-auto">
+                                    <button onClick={() => exportSales('csv')} className="flex-1 sm:flex-none bg-green-700 text-white px-3 py-1.5 rounded text-xs flex gap-1 items-center justify-center hover:bg-green-600"><Download size={14}/> CSV</button>
+                                    <button onClick={() => exportSales('pdf')} className="flex-1 sm:flex-none bg-red-700 text-white px-3 py-1.5 rounded text-xs flex gap-1 items-center justify-center hover:bg-red-600"><FileText size={14}/> PDF</button>
                                 </div>
                             </div>
-                            <div className="bg-slate-900 rounded-lg overflow-hidden border border-slate-700 max-h-96 overflow-y-auto">
+                            <div className="bg-slate-900 rounded-lg overflow-hidden border border-slate-700 max-h-[60vh] overflow-y-auto">
                                 <table className="w-full text-xs text-left text-slate-300">
                                     <thead className="text-slate-500 bg-slate-800 sticky top-0">
                                         <tr>
-                                            <th className="px-4 py-2">Date</th>
-                                            <th className="px-4 py-2">Items</th>
-                                            <th className="px-4 py-2 text-right">Amount</th>
+                                            <th className="px-4 py-2 w-1/4">Date</th>
+                                            <th className="px-4 py-2 w-1/2">Items</th>
+                                            <th className="px-4 py-2 text-right w-1/4">Amount</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-800">
@@ -274,11 +282,11 @@ export default function UserDeepDiveModal({ user, onClose, adminKey, onAction }:
                                             <tr><td colSpan={3} className="px-4 py-6 text-center text-slate-500">No sales found in this period.</td></tr>
                                         ) : getFilteredSales().map((s: any) => (
                                             <tr key={s._id}>
-                                                <td className="px-4 py-2 text-slate-400">
+                                                <td className="px-4 py-2 text-slate-400 whitespace-nowrap">
                                                     {new Date(s.timestamp).toLocaleDateString()} <br/>
-                                                    <span className="text-[10px] opacity-70">{new Date(s.timestamp).toLocaleTimeString()}</span>
+                                                    <span className="text-[10px] opacity-70">{new Date(s.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                                                 </td>
-                                                <td className="px-4 py-2">
+                                                <td className="px-4 py-2 text-wrap">
                                                     {s.items && s.items.length > 0 ? (
                                                         s.items.map((i:any, idx:number) => (
                                                             <div key={idx} className="mb-0.5">
@@ -288,7 +296,7 @@ export default function UserDeepDiveModal({ user, onClose, adminKey, onAction }:
                                                         ))
                                                     ) : <span className="text-slate-500">Unknown Item</span>}
                                                 </td>
-                                                <td className="px-4 py-2 text-right text-green-400 font-mono">
+                                                <td className="px-4 py-2 text-right text-green-400 font-mono whitespace-nowrap">
                                                     {/* FIX: handle null totalMoney safely and use dynamic currency */}
                                                     {currencySymbol}{(s.totalMoney || 0).toLocaleString()}
                                                 </td>
@@ -302,7 +310,7 @@ export default function UserDeepDiveModal({ user, onClose, adminKey, onAction }:
                     
                     {/* INVENTORY TAB */}
                     {view === 'inventory' && (
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                              {details.inventory.map((item: any) => (
                                 <div key={item._id} className="bg-slate-700/50 p-3 rounded-lg border border-slate-600 flex justify-between items-center">
                                     <div className="min-w-0">
@@ -312,19 +320,20 @@ export default function UserDeepDiveModal({ user, onClose, adminKey, onAction }:
                                     <span className="bg-slate-800 text-slate-300 px-2 py-1 rounded text-xs whitespace-nowrap">x{item.quantity}</span>
                                 </div>
                             ))}
+                            {details.inventory.length === 0 && <p className="text-slate-500 p-4">No inventory found for this user.</p>}
                         </div>
                     )}
 
                     {/* STAFF TAB */}
                     {view === 'staff' && (
                         <div className="space-y-2">
-                            {details.staff.length === 0 ? <p className="text-slate-500">No staff found.</p> : details.staff.map((s: any) => (
+                            {details.staff.length === 0 ? <p className="text-slate-500 p-4">No staff found.</p> : details.staff.map((s: any) => (
                                 <div key={s._id} className="flex justify-between items-center bg-slate-700/50 p-3 rounded-lg border border-slate-600">
                                     <div>
                                         <p className="font-bold text-white">{s.name || 'Staff'}</p>
                                         <p className="text-xs text-slate-400">{s.phoneNumber}</p>
                                     </div>
-                                    <CheckCircle size={16} className="text-green-500" />
+                                    <Share2 size={16} className="text-green-500" /> {/* Changed from CheckCircle */}
                                 </div>
                             ))}
                         </div>
