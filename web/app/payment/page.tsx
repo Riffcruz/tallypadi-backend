@@ -52,10 +52,21 @@ const PLANS: PlanDetails[] = [
   }
 ];
 
-// Sanitize URL to prevent "String did not match expected pattern" errors
+// Sanitize URL & Handle Localhost Logic
 const getApiUrl = () => {
-    let url = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
-    return url.trim().replace(/\/$/, ''); // Remove trailing slash and spaces
+    // 1. If explicit env var exists, use it
+    if (process.env.NEXT_PUBLIC_API_URL) {
+        return process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, '');
+    }
+    
+    // 2. If running locally and no env var, assume local backend
+    if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+        // Adjust port 5000 if your server runs on a different port (e.g. 3000, 8080)
+        return 'http://localhost:5000/api'; 
+    }
+
+    // 3. Fallback to production
+    return 'https://tallypadi.com/api';
 };
 
 export default function PaymentPage() {
@@ -92,7 +103,7 @@ export default function PaymentPage() {
       const cleanEmail = email.trim();
       const API_URL = getApiUrl();
 
-      console.log(`Connecting to: ${API_URL}/payment/initialize`);
+      console.log(`Connecting to Backend: ${API_URL}/payment/initialize`);
 
       // 1. Call Backend
       const response = await axios.post(`${API_URL}/payment/initialize`, {
@@ -112,6 +123,13 @@ export default function PaymentPage() {
 
     } catch (err: any) {
       console.error("Payment Error:", err);
+      
+      // Handle 404 specifically (Route not found on server)
+      if (err.response?.status === 404) {
+        setError(`Server Error (404): Could not find the payment endpoint. Please ensure your backend server is running and the payment routes are registered.`);
+        return;
+      }
+
       // Detailed error message
       const msg = err.response?.data?.message || err.message || "Connection failed. Please check your internet.";
       setError(msg);
