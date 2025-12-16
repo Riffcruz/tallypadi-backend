@@ -1,50 +1,92 @@
-import { Worker, Job } from 'bullmq'; // 🟢 Updated to use BullMQ Worker
-import { messageQueue } from './services/queue.service';
-import { handleMessageLogic } from './controllers/whatsapp.controller';
-import { env } from './config/env'; 
+import { Queue, Worker } from 'bullmq';
+import IORedis from 'ioredis';
+import { sendWhatsAppText } from './services/whatsapp.service';
 
-console.log("👷 Worker initialized! Waiting for messages...");
+// Connect to Redis
+const connection = new IORedis(process.env.REDIS_URL || 'redis://127.0.0.1:6379', {
+    // Ensure connection is resilient
+    maxRetriesPerRequest: null,
+});
 
-// 🟢 Define the structure of the data inside the job
-interface WhatsappJobData {
-  from: string;
-  text: string;
-  messageId: string;
-  mediaId?: string;
-  isVoiceMessage?: boolean;
-  profileName?: string;
-}
+// ============================================================
+// QUEUE 1: DAILY SUMMARIES (Outbound - Rate Limited)
+// ============================================================
+export const notificationQueue = new Queue('daily-summary', { 
+    connection,
+    defaultJobOptions: {
+        // Retry a failing notification up to 3 times
+        attempts: 3, 
+        // Use exponential backoff to space out retries
+        backoff: { type: 'exponential', delay: 5000 },
+        // Clean up successful jobs automatically
+        removeOnComplete: true, 
+        // Keep the last 1000 failed jobs for inspection
+        removeOnFail: 1000, 
+    }
+});
 
-// 🟢 In BullMQ, we instantiate a Worker to process the queue
-// We use the queue name from the imported messageQueue
-const worker = new Worker<WhatsappJobData>(messageQueue.name, async (job: Job<WhatsappJobData>) => {
-  // Check job name if you use multiple types of jobs in the same queue
-  if (job.name === 'process-message') {
+const summaryWorker = new Worker('daily-summary', async (job) => {
+    const { phoneNumber, message } = job.data;
+    
+    console.log(`📤 Sending summary to ${phoneNumber}...`);
+    await sendWhatsAppText(phoneNumber, message);
+    
+}, { 
+    connection,
+    // Strict Rate Limiting to prevent WhatsApp ban
+    limiter: {
+        max: 80,      
+        duration: 1000 
+    }
+});
+
+// 🟢 ADDED: Lively logging events for visibility
+summaryWorker.on('active', job => console.log(`🚀 Summary active: Sending to ${job.data.phoneNumber}`)); 
+summaryWorker.on('completed', job => console.log(`✅ Summary sent to ${job.data.phoneNumber}`));
+// FIX: Using safe access for attemptsMade
+summaryWorker.on('failed', (job, err) => console.error(`❌ Summary failed [Attempt ${job?.attemptsMade || 'N/A'}]: ${err.message}`));
+summaryWorker.on('stalled', jobid => console.warn(`⚠️ Summary job ${jobid} stalled. Check network connection.`));
+
+
+// ============================================================
+// QUEUE 2: INCOMING MESSAGES (Inbound - High Speed)
+// ============================================================
+export const messageQueue = new Queue('incoming-messages', { 
+    connection,
+    defaultJobOptions: {
+        // Retry message processing persistently to ensure no data is lost
+        attempts: 1000, 
+        // Use exponential backoff for persistent, non-hammering retries
+        backoff: { type: 'exponential', delay: 5000 },
+        removeOnComplete: true, 
+        removeOnFail: 500, // Keep last 500 failed for inspection
+    }
+});
+
+const messageWorker = new Worker('incoming-messages', async (job) => {
+    // Extract message data from job
     const { from, text, messageId, mediaId, isVoiceMessage, profileName } = job.data;
     
-    console.log(`⚙️ Worker picking up message from ${from}`);
+    console.log(`⚡ Processing background job for ${from}...`);
+    if (profileName) console.log(`👤 Worker found profile name: ${profileName}`);
+
+    // Dynamic import to avoid circular dependency with the controller
+    // 🟢 FIX: Corrected relative path from src/worker.ts to src/controllers/whatsapp.controller
+    const { handleMessageLogic } = await import('./controllers/whatsapp.controller');
     
-    try {
-      await handleMessageLogic(from, text, messageId, mediaId, isVoiceMessage, profileName);
-      console.log(`✅ Worker finished processing message from ${from}`);
-    } catch (error) {
-      console.error(`❌ Worker failed to process message from ${from}:`, error);
-      throw error; // Throwing error marks the job as failed in BullMQ
-    }
-  }
-}, {
-  // 🟢 Worker needs its own connection configuration
-  connection: {
-    host: process.env.REDIS_HOST || 'localhost',
-    port: parseInt(process.env.REDIS_PORT || '6379'),
-    password: process.env.REDIS_PASSWORD || undefined
-  }
+    await handleMessageLogic(from, text, messageId, mediaId, isVoiceMessage, profileName);
+
+}, { 
+    connection,
+    // High concurrency: Process 50 messages at once since we are just doing DB/AI work
+    concurrency: 50,
+    // Checks for stalled jobs more frequently to restart them
+    stalledInterval: 10000 
 });
 
-worker.on('error', (err) => {
-  console.error('❌ Worker connection error:', err);
-});
-
-worker.on('failed', (job, err) => {
-  console.error(`❌ Job ${job?.id} failed:`, err);
-});
+// 🟢 ADDED: Lively logging events for visibility
+messageWorker.on('active', job => console.log(`⏩ Message active: Processing incoming text from ${job.data.from}`));
+messageWorker.on('completed', job => console.log(`✔️ Message processed for: ${job.data.from}`));
+// FIX: Using safe access for attemptsMade
+messageWorker.on('failed', (job, err) => console.error(`❌ Message processing failed [Attempt ${job?.attemptsMade || 'N/A'}]: ${err.message}`));
+messageWorker.on('stalled', jobid => console.warn(`⚠️ Message job ${jobid} stalled. Check database connection.`));

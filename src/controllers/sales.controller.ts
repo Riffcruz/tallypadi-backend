@@ -12,25 +12,12 @@ const getCurrentDateString = () => new Date().toISOString().split('T')[0];
 
 // ✅ EXPANDED Currency Mapping
 const COUNTRY_CURRENCY_CODE: Record<string, string> = {
-  NG: 'NGN', // Nigeria
-  GH: 'GHS', // Ghana
-  US: 'USD', // USA
-  GB: 'GBP', // UK
-  EU: 'EUR', // Eurozone
-  KE: 'KES', // Kenya
-  ZA: 'ZAR', // South Africa
-  IN: 'INR', // India
-  CN: 'CNY', // China
-  CA: 'CAD', // Canada
-  AU: 'AUD', // Australia
-  JP: 'JPY', // Japan
-  AE: 'AED', // UAE (Dubai)
-  RW: 'RWF', // Rwanda
-  TZ: 'TZS', // Tanzania
-  UG: 'UGX', // Uganda
+  NG: 'NGN', GH: 'GHS', US: 'USD', GB: 'GBP', EU: 'EUR',
+  KE: 'KES', ZA: 'ZAR', IN: 'INR', CN: 'CNY', CA: 'CAD',
+  AU: 'AUD', JP: 'JPY', AE: 'AED', RW: 'RWF', TZ: 'TZS', UG: 'UGX',
 };
 
-// ✅ Theme Configuration (Teal/Slate Professional Look)
+// ✅ Theme Configuration
 const THEME = {
   primary: '#0F766E',      // Teal 700
   accent: '#14B8A6',       // Teal 500
@@ -128,7 +115,7 @@ export const getSalesHistory = async (req: Request, res: Response) => {
     }
 };
 
-// 3. GENERATE PDF REPORT (Revamped)
+// 3. GENERATE PDF REPORT (FIXED)
 export const generateSalesReport = async (req: Request, res: Response) => {
   try {
     const user = await User.findOne(); // In real app, use req.user
@@ -150,7 +137,6 @@ export const generateSalesReport = async (req: Request, res: Response) => {
 
     const transactions = await Transaction.find(query).sort({ timestamp: 1 });
 
-    // Calculate Totals for Stats Cards
     const totalRevenue = transactions.reduce((sum, t) => sum + (t.totalMoney || 0), 0);
     const totalTx = transactions.length;
 
@@ -159,6 +145,7 @@ export const generateSalesReport = async (req: Request, res: Response) => {
       size: 'A4',
       margins: { top: 50, bottom: 50, left: 40, right: 40 },
       bufferPages: true,
+      autoFirstPage: false 
     });
 
     const safeStart = startDate || 'all';
@@ -169,10 +156,9 @@ export const generateSalesReport = async (req: Request, res: Response) => {
     doc.pipe(res);
 
     // --- FONTS ---
-    // Attempt to find NotoSans, fallback to Helvetica if missing
     const fontPaths = [
-      path.join(__dirname, '..', 'assets', 'fonts', 'NotoSans-Regular.ttf'), // Local
-      '/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf', // Linux system
+      path.join(__dirname, '..', 'assets', 'fonts', 'NotoSans-Regular.ttf'),
+      '/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf',
     ];
     let fontToUse = 'Helvetica';
     for(const p of fontPaths) {
@@ -182,12 +168,15 @@ export const generateSalesReport = async (req: Request, res: Response) => {
         break;
       }
     }
+    const boldFont = fontToUse === 'Noto' ? 'Noto' : 'Helvetica-Bold';
+    const regFont = fontToUse === 'Noto' ? 'Noto' : 'Helvetica';
 
     // --- DIMENSIONS ---
     const pageW = doc.page.width;
     const pageH = doc.page.height;
     const margin = doc.page.margins.left;
     const contentW = pageW - margin * 2;
+    const bottomLimit = pageH - 50; 
 
     // --- HELPERS ---
     const formatMoney = (n: number) => `${currencyCode} ${n.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
@@ -195,143 +184,137 @@ export const generateSalesReport = async (req: Request, res: Response) => {
     const drawWatermark = () => {
         const text = `TallyPadi • ${businessName}`;
         doc.save();
-        doc.rotate(-32, { origin: [pageW / 2, pageH / 2] });
+        // Move origin to center
+        doc.translate(pageW / 2, pageH / 2);
+        doc.rotate(-45);
         doc.fillColor(THEME.dark).opacity(0.04);
-        doc.fontSize(48);
-        doc.text(text, -pageW, pageH / 2 - 24, { width: pageW * 3, align: 'center', lineBreak: false });
+        doc.fontSize(50);
+        
+        // FIX: Removed transformOrigin. 
+        // We draw at negative half-width to center the text block over the (0,0) origin.
+        doc.text(text, -pageW / 2, 0, { 
+            align: 'center', 
+            width: pageW,
+            lineBreak: false 
+        }); 
         doc.restore();
     };
 
     const drawHeader = () => {
-      // Background Bar
       doc.rect(0, 0, pageW, 70).fill(THEME.dark);
-
-      // Logo Circle
       doc.circle(margin + 15, 35, 14).fill(THEME.primary);
-      doc.fillColor(THEME.white).font(fontToUse === 'Noto' ? 'Noto' : 'Helvetica-Bold').fontSize(10);
-      doc.text('TP', margin + 7, 31);
+      doc.fillColor(THEME.white).font(boldFont).fontSize(10).text('TP', margin + 7, 31);
 
-      // Titles
       doc.fillColor(THEME.white).fontSize(16).text('TallyPadi', margin + 40, 24);
       doc.fillColor(THEME.muted).fontSize(10).text('Sales Report', margin + 40, 46);
 
-      // Right Side Info
       doc.fillColor(THEME.white).fontSize(12).text(businessName, margin, 24, { width: contentW, align: 'right' });
       doc.fillColor('#94a3b8').fontSize(9).text(`Period: ${startDate || 'Start'} to ${endDate || 'Now'}`, margin, 44, { width: contentW, align: 'right' });
-    
-      doc.y = 90; // Move cursor down
-    };
-
-    const drawFooter = (page: number, total: number) => {
-        const y = pageH - 40;
-        doc.moveTo(margin, y - 10).lineTo(pageW - margin, y - 10).strokeColor(THEME.border).lineWidth(1).stroke();
-        doc.fillColor(THEME.muted).fontSize(8);
-        doc.text('Generated by TallyPadi Business Intelligence', margin, y);
-        doc.text(`Page ${page} of ${total}`, margin, y, { width: contentW, align: 'right' });
+      doc.y = 90;
     };
 
     const drawSummaryCards = () => {
         const cardW = (contentW / 2) - 10;
         const startY = doc.y;
         
-        // Revenue Card
         doc.roundedRect(margin, startY, cardW, 60, 6).fill(THEME.bgLight);
-        doc.rect(margin, startY, 5, 60).fill(THEME.primary); // Green strip
+        doc.rect(margin, startY, 5, 60).fill(THEME.primary);
         doc.fillColor(THEME.muted).fontSize(9).text('TOTAL REVENUE', margin + 15, startY + 12);
         doc.fillColor(THEME.dark).fontSize(18).text(formatMoney(totalRevenue), margin + 15, startY + 30);
 
-        // Transaction Count Card
         const x2 = margin + cardW + 20;
         doc.roundedRect(x2, startY, cardW, 60, 6).fill(THEME.bgLight);
-        doc.rect(x2, startY, 5, 60).fill(THEME.accent); // Teal strip
+        doc.rect(x2, startY, 5, 60).fill(THEME.accent);
         doc.fillColor(THEME.muted).fontSize(9).text('TOTAL TRANSACTIONS', x2 + 15, startY + 12);
         doc.fillColor(THEME.dark).fontSize(18).text(String(totalTx), x2 + 15, startY + 30);
 
-        doc.y = startY + 80; // Add spacing below cards
+        doc.y = startY + 80;
     };
 
-    // --- RENDER ---
+    const drawTableHeaders = (y: number) => {
+        doc.rect(margin, y, contentW, 25).fill(THEME.bgHeader);
+        doc.fillColor(THEME.text).fontSize(9).font(boldFont);
+        doc.text('DATE', margin + 10, y + 8, { width: 80 });
+        doc.text('ITEM DETAILS', margin + 90, y + 8, { width: contentW - 180 });
+        doc.text(`AMOUNT (${currencyCode})`, margin, y + 8, { width: contentW - 10, align: 'right' });
+    };
+
+    const drawFooter = (page: number, total: number) => {
+        const y = pageH - 40;
+        doc.moveTo(margin, y - 10).lineTo(pageW - margin, y - 10).strokeColor(THEME.border).lineWidth(1).stroke();
+        doc.fillColor(THEME.muted).fontSize(8).font(regFont);
+        doc.text('Generated by TallyPadi Business Intelligence', margin, y);
+        doc.text(`Page ${page} of ${total}`, margin, y, { width: contentW, align: 'right' });
+    };
+
+    // --- START DOCUMENT ---
+    
+    // 1. Manually add First Page
+    doc.addPage();
     drawWatermark();
     drawHeader();
     drawSummaryCards();
 
-    // --- TABLE RENDER ---
-    doc.fillColor(THEME.dark).fontSize(12).text('Transaction History', margin, doc.y);
+    // 2. Setup Table
+    doc.fillColor(THEME.dark).fontSize(12).font(boldFont).text('Transaction History', margin, doc.y);
     doc.y += 10;
+    
+    drawTableHeaders(doc.y);
+    doc.y += 30;
 
-    // Define Columns: Date (80), Items (Flex), Amount (90)
+    // 3. Loop Rows
+    doc.font(regFont);
     const colDate = 80;
     const colAmount = 90;
     const colItems = contentW - colDate - colAmount;
 
-    // Table Header
-    const headerY = doc.y;
-    doc.rect(margin, headerY, contentW, 25).fill(THEME.bgHeader);
-    doc.fillColor(THEME.text).fontSize(9).font(fontToUse === 'Noto' ? 'Noto' : 'Helvetica-Bold');
-    
-    doc.text('DATE', margin + 10, headerY + 8, { width: colDate });
-    doc.text('ITEM DETAILS', margin + 10 + colDate, headerY + 8, { width: colItems });
-    doc.text(`AMOUNT (${currencyCode})`, margin, headerY + 8, { width: contentW - 10, align: 'right' });
-    
-    doc.y += 30;
-
-    // Rows
-    doc.font(fontToUse === 'Noto' ? 'Noto' : 'Helvetica');
-    transactions.forEach((t: any, idx) => {
+    for (let idx = 0; idx < transactions.length; idx++) {
+        const t = transactions[idx];
         const dateStr = t.date || new Date().toISOString().split('T')[0];
-        const itemText = (t.items || []).map((i:any) => `${i.qty} x ${i.name}`).join(', ');
+        const itemText = (t.items || []).map((i: any) => `${i.qty} x ${i.name}`).join(', ');
         const amtStr = formatMoney(t.totalMoney || 0);
 
-        // Calc height based on item text wrapping
+        // Calculate dynamic height
         const textHeight = doc.heightOfString(itemText, { width: colItems - 10 });
         const rowHeight = Math.max(25, textHeight + 15);
 
-        // Check Page Break
-        if (doc.y + rowHeight > pageH - 50) {
-            doc.addPage();
+        // CHECK: Will this row fit?
+        if (doc.y + rowHeight > bottomLimit) {
+            doc.addPage(); 
             drawWatermark();
-            drawHeader();
+            drawHeader(); 
             doc.y = 90;
-            // Redraw Header
-            const hY = doc.y;
-            doc.rect(margin, hY, contentW, 25).fill(THEME.bgHeader);
-            doc.fillColor(THEME.text).fontSize(9).font(fontToUse === 'Noto' ? 'Noto' : 'Helvetica-Bold');
-            doc.text('DATE', margin + 10, hY + 8, { width: colDate });
-            doc.text('ITEM DETAILS', margin + 10 + colDate, hY + 8, { width: colItems });
-            doc.text(`AMOUNT (${currencyCode})`, margin, hY + 8, { width: contentW - 10, align: 'right' });
+            
+            drawTableHeaders(doc.y);
             doc.y += 30;
-            doc.font(fontToUse === 'Noto' ? 'Noto' : 'Helvetica');
+            doc.font(regFont);
         }
 
         const currentY = doc.y;
 
         // Zebra Stripe
-        if (idx % 2 !== 0) {
-            doc.rect(margin, currentY, contentW, rowHeight).fill(THEME.bgLight);
-        }
+        if (idx % 2 !== 0) doc.rect(margin, currentY, contentW, rowHeight).fill(THEME.bgLight);
 
         doc.fillColor(THEME.text);
         
-        // Vertically center Date and Amount (approximate)
+        // Vertically center Date & Amount
         const centerY = currentY + (rowHeight - 10) / 2;
         
         doc.text(dateStr, margin + 10, centerY, { width: colDate });
-        
-        // Item text might wrap, so we draw it normally with padding
         doc.text(itemText, margin + 10 + colDate, currentY + 8, { width: colItems - 10 });
         
-        doc.font(fontToUse === 'Noto' ? 'Noto' : 'Helvetica-Bold'); // Bold amount
+        doc.font(boldFont);
         doc.text(amtStr, margin, centerY, { width: contentW - 10, align: 'right' });
-        doc.font(fontToUse === 'Noto' ? 'Noto' : 'Helvetica'); // Reset font
+        doc.font(regFont);
 
-        // Bottom border
+        // Row Border
         doc.moveTo(margin, currentY + rowHeight).lineTo(pageW - margin, currentY + rowHeight)
            .strokeColor(THEME.border).lineWidth(0.5).stroke();
 
         doc.y = currentY + rowHeight;
-    });
+    }
 
-    // --- FINALIZE ---
+    // 4. Apply Footers
     const range = doc.bufferedPageRange();
     for (let i = range.start; i < range.start + range.count; i++) {
       doc.switchToPage(i);
