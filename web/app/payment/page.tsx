@@ -60,9 +60,13 @@ const getApiUrl = () => {
     }
     
     // 2. If running locally and no env var, assume local backend
-    if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
-        // Adjust port 5000 if your server runs on a different port (e.g. 3000, 8080)
-        return 'http://localhost:5000/api'; 
+    // Checks for localhost and 127.0.0.1
+    if (typeof window !== 'undefined') {
+        const hostname = window.location.hostname;
+        if (hostname === 'localhost' || hostname === '127.0.0.1') {
+            // Adjust port 5000 if your server runs on a different port (e.g. 3000, 8080)
+            return 'http://localhost:5000/api'; 
+        }
     }
 
     // 3. Fallback to production
@@ -99,14 +103,16 @@ export default function PaymentPage() {
     setLoading(true);
     setError(null);
 
+    const API_URL = getApiUrl();
+    const endpoint = `${API_URL}/payment/initialize`;
+
     try {
       const cleanEmail = email.trim();
-      const API_URL = getApiUrl();
-
-      console.log(`Connecting to Backend: ${API_URL}/payment/initialize`);
+      
+      console.log(`Connecting to Backend: ${endpoint}`);
 
       // 1. Call Backend
-      const response = await axios.post(`${API_URL}/payment/initialize`, {
+      const response = await axios.post(endpoint, {
         email: cleanEmail,
         targetPlan: selectedPlan
       });
@@ -126,7 +132,7 @@ export default function PaymentPage() {
       
       // Handle 404 specifically (Route not found on server)
       if (err.response?.status === 404) {
-        setError(`Server Error (404): Could not find the payment endpoint. Please ensure your backend server is running and the payment routes are registered.`);
+        setError(`Server Error (404): The new payment code was not found on the server.\n\nTarget: ${endpoint}\n\nACTION REQUIRED: Please restart your backend server so it can load the new payment routes.`);
         return;
       }
 
@@ -273,7 +279,7 @@ export default function PaymentPage() {
 
                     {/* Error Message */}
                     {error && (
-                        <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm flex items-start gap-2">
+                        <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm flex items-start gap-2 whitespace-pre-wrap">
                             <AlertCircle size={16} className="mt-0.5 shrink-0" />
                             {error}
                         </div>
