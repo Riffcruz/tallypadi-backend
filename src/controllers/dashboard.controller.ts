@@ -2,111 +2,114 @@ import { Request, Response } from 'express';
 import { Transaction } from '../models/transaction.model';
 import { Inventory } from '../models/inventory.model';
 import { User } from '../models/user.model';
-// import { getTodayRangeForOffset } from '../utils/dates'; // Keep if you have this file
 
 export const getDashboardData = async (req: Request, res: Response) => {
   try {
-    // ---------------------------------------------------------
-    // 1. IDENTIFY USER (Mock Auth for MVP)
-    // ---------------------------------------------------------
-    // In a real app, this comes from req.user.id (JWT)
-    const user = await User.findOne(); 
-    
+    // 1) Mock auth (replace with req.user.id later)
+    const user = await User.findOne();
     if (!user) {
-        return res.status(404).json({ error: "No user found. Please chat with the bot first!" });
+      return res.status(404).json({ error: "No user found. Please chat with the bot first!" });
     }
 
-    // ---------------------------------------------------------
-    // 2. FETCH INVENTORY (Bar Chart Data)
-    // ---------------------------------------------------------
+    // 2) Inventory
     const inventoryDocs = await Inventory.find({ user: user._id });
     const inventory = inventoryDocs.map(doc => ({
-        name: doc.name,
-        quantity: doc.quantity,
-        price: doc.lastUnitPrice || 0 
+      name: doc.name,
+      quantity: doc.quantity,
+      lastUnitPrice: doc.lastUnitPrice || 0, // ✅ match your dashboard reducer
     }));
 
-    // ---------------------------------------------------------
-    // 3. FETCH RECENT TRANSACTIONS (Table Data)
-    // ---------------------------------------------------------
+    // 3) Recent transactions
     const transactionDocs = await Transaction.find({ user: user._id })
-      .sort({ timestamp: -1 }) // Newest first
+      .sort({ timestamp: -1 })
       .limit(10);
 
     const transactions = transactionDocs.map(t => ({
-        id: t._id,
-        type: t.type, // 'SALE' or 'RESTOCK'
-        item: t.items.map(i => i.name).join(', '), // "Rice, Beans"
-        qty: t.items.reduce((acc, i) => acc + i.qty, 0), // Total items count
-        amount: t.totalMoney || 0,
-        date: t.timestamp.toISOString().split('T')[0] // YYYY-MM-DD
+      id: t._id,
+      type: t.type, // 'SALE' | 'RESTOCK'
+      item: t.items.map(i => i.name).join(', '),
+      qty: t.items.reduce((acc, i) => acc + i.qty, 0),
+      amount: t.totalMoney || 0,
+      date: t.timestamp.toISOString(), // ✅ full timestamp for date + time in UI
     }));
 
-    // ---------------------------------------------------------
-    // 4. CALCULATE TOTALS (Scorecards)
-    // ---------------------------------------------------------
+    // 4) Stats
     const totalRevenueAgg = await Transaction.aggregate([
       { $match: { user: user._id, type: 'SALE' } },
-      { $group: { _id: null, total: { $sum: "$totalMoney" } } }
+      { $group: { _id: null, total: { $sum: '$totalMoney' } } },
     ]);
 
     const totalItemsSoldAgg = await Transaction.aggregate([
       { $match: { user: user._id, type: 'SALE' } },
-      { $unwind: "$items" },
-      { $group: { _id: null, total: { $sum: "$items.qty" } } }
+      { $unwind: '$items' },
+      { $group: { _id: null, total: { $sum: '$items.qty' } } },
     ]);
 
-    // ---------------------------------------------------------
-    // 5. GENERATE SALES GRAPH DATA (Line Chart)
-    // ---------------------------------------------------------
-    const salesGraph = await Transaction.aggregate([
-      { 
-        $match: { 
-            user: user._id, 
-            type: 'SALE',
-            // Get data for last 30 days roughly
-            timestamp: { $gte: new Date(new Date().setDate(new Date().getDate() - 30)) }
-        } 
+    // 5) Sales chart (Mon..Sun) last 7 days
+    const start = new Date();
+    start.setDate(start.getDate() - 6);
+    start.setHours(0, 0, 0, 0);
+
+    const salesByDow = await Transaction.aggregate([
+      {
+        $match: {
+          user: user._id,
+          type: 'SALE',
+          timestamp: { $gte: start },
+        },
       },
       {
         $group: {
-            _id: { $dateToString: { format: "%Y-%m-%d", date: "$timestamp" } },
-            sales: { $sum: "$totalMoney" }
-        }
+          _id: { $dayOfWeek: '$timestamp' }, // 1=Sun ... 7=Sat
+          sales: { $sum: '$totalMoney' },
+        },
       },
-      { $sort: { _id: 1 } }, // Sort by date ascending
-      { $limit: 7 } // Just show last 7 active days for clarity
     ]);
 
-    // Format graph data for Recharts (name = day, sales = value)
-    const graphData = salesGraph.map(g => ({
-        name: g._id.split('-')[2], // Just the day number (e.g., "04")
-        sales: g.sales
+    const map: Record<string, number> = { Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0, Sat: 0, Sun: 0 };
+    const dowToName: Record<number, keyof typeof map> = {
+      1: 'Sun',
+      2: 'Mon',
+      3: 'Tue',
+      4: 'Wed',
+      5: 'Thu',
+      6: 'Fri',
+      7: 'Sat',
+    };
+
+    for (const row of salesByDow) {
+      const key = dowToName[row._id as number];
+      if (key) map[key] = Number(row.sales) || 0;
+    }
+
+    const salesChart = (['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const).map(day => ({
+      day,
+      sales: map[day],
     }));
 
-    // ---------------------------------------------------------
-    // 6. SEND RESPONSE
-    // ---------------------------------------------------------
-    res.json({
+    // 6) Response (✅ matches TSX)
+    return res.json({
       user: {
-        name: user.name || "Shop Owner",
-        shopName: user.businessName || "My Store",
-        initials: user.businessName ? user.businessName.slice(0,2).toUpperCase() : "IO",
-        planType: user.planType, // 🟢 FIXED: Now passing the planType to frontend
-        settings: user.settings
+        name: user.name || 'Shop Owner',
+        shopName: user.businessName || 'My Store',
+        initials: user.businessName ? user.businessName.slice(0, 2).toUpperCase() : 'IO',
+        planType: user.planType,
+        subscriptionStatus: user.subscriptionStatus, // ✅ for gating
+        trialEndsAt: user.trialEndsAt,               // ✅ for gating
+        nextBillingDate: user.nextBillingDate || null,
+        settings: user.settings,
       },
       stats: {
         revenue: totalRevenueAgg[0]?.total || 0,
         itemsSold: totalItemsSoldAgg[0]?.total || 0,
-        stockValue: 0 // Placeholder until cost price is tracked
+        stockValue: 0,
       },
       inventory,
       transactions,
-      graphData
+      salesChart, // ✅ your dashboard TSX checks this first
     });
-
   } catch (error) {
-    console.error("Dashboard Error:", error);
-    res.status(500).json({ error: "Server Error" });
+    console.error('Dashboard Error:', error);
+    return res.status(500).json({ error: 'Server Error' });
   }
 };
