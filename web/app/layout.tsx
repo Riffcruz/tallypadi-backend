@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, Poppins } from "next/font/google";
 import "./globals.css";
 
+
 // Keeping your existing InstallPrompt component import
 import InstallPrompt from "../components/InstallPrompt"; 
 
@@ -19,10 +20,48 @@ const poppins = Poppins({
   display: 'swap',
 });
 
+
+
 export const metadata: Metadata = {
-  title: "Tallypadi | The AI Accountant for Nigerian Vendors",
-  description: "Track sales, manage staff, and generate reports directly on WhatsApp.",
-  manifest: "/manifest.json", // Preserved your PWA manifest link
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://tallypadi.com"),
+  title: {
+    default: "TallyPadi — WhatsApp Sales & Inventory Tracker for Businesses and People Tryinng to Keep Track of Sales",
+    template: "%s — TallyPadi",
+  },
+  description:
+    "Track sales, stock, and profit directly on WhatsApp. Built for Businesses and vendors.",
+  applicationName: "TallyPadi",
+  keywords: ["WhatsApp inventory", "sales tracker", "inventory management", "SME", "POS"],
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    type: "website",
+    url: "/",
+    title: "TallyPadi — WhatsApp Sales & Inventory Tracker",
+    description:
+      "Track sales, stock, and profit directly on WhatsApp. Built for Businesses and vendors.",
+    siteName: "TallyPadi",
+    images: [{ url: "/og.png", width: 1200, height: 630, alt: "TallyPadi" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "TallyPadi — WhatsApp Sales & Inventory Tracker",
+    description:
+      "Track sales, stock, and profit directly on WhatsApp. Built for Businesses and vendors.",
+    images: ["/og.png"],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+      "max-video-preview": -1,
+    },
+  },
 };
 
 export default function RootLayout({
