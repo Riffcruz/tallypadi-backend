@@ -11,21 +11,26 @@ interface ReportOptions {
   includeInventory?: boolean;
 }
 
-// ✅ Currency code mapping (stable in PDF fonts)
-const COUNTRY_CURRENCY_CODE: Record<string, string> = {
-  NG: 'NGN',
-  US: 'USD',
-  GB: 'GBP',
-  EU: 'EUR',
-  GH: 'GHS',
-  KE: 'KES',
-  ZA: 'ZAR',
-  IN: 'INR',
-  CN: 'CNY',
-  CA: 'CAD',
+// ✅ Theme Configuration (Professional Invoice/Report Palette)
+const THEME = {
+  primary: '#0F766E',      // Teal 700 (Brand Color)
+  accent: '#14B8A6',       // Teal 500 (Highlights)
+  dark: '#1E293B',         // Slate 800 (Headings)
+  text: '#334155',         // Slate 700 (Body)
+  muted: '#64748B',        // Slate 500 (Subtext)
+  border: '#E2E8F0',       // Slate 200 (Dividers)
+  bgLight: '#F8FAFC',      // Slate 50 (Alternating rows)
+  bgHeader: '#F1F5F9',     // Slate 100 (Table Headers)
+  alert: '#EF4444',        // Red 500 (Warnings)
+  white: '#FFFFFF'
 };
 
-// ✅ Robust font resolver (Ubuntu paths vary)
+const COUNTRY_CURRENCY_CODE: Record<string, string> = {
+  NG: 'NGN', US: 'USD', GB: 'GBP', EU: 'EUR', GH: 'GHS',
+  KE: 'KES', ZA: 'ZAR', IN: 'INR', CN: 'CNY', CA: 'CAD',
+};
+
+// ✅ Robust font resolver
 const pickFirstExisting = (paths: string[]) => {
   for (const p of paths) {
     if (fs.existsSync(p)) return p;
@@ -44,393 +49,314 @@ export const generatePdfReport = async (
   const user = await User.findById(userId);
   if (!user) throw new Error('User not found');
 
-  const businessName = user.businessName || 'Your Shop';
+  const businessName = user.businessName || 'Business Report';
+  const rawCountry = (user as any).countryCode || (user as any).profile?.countryCode || 'NG';
+  const currencyCode = COUNTRY_CURRENCY_CODE[String(rawCountry).toUpperCase()] || 'NGN';
 
-  // ✅ detect country code -> currency code (adjust based on your schema)
-  const rawCountry =
-    (user as any).countryCode ||
-    (user as any).profile?.countryCode ||
-    'NG';
-
-  const currencyCode =
-    COUNTRY_CURRENCY_CODE[String(rawCountry).toUpperCase()] || 'NGN';
-
-  // ✅ bufferPages: page numbers after all pages are created
+  // Setup Document
   const doc = new PDFDocument({
     size: 'A4',
-    margins: { top: 56, bottom: 56, left: 48, right: 48 },
+    margins: { top: 50, bottom: 50, left: 40, right: 40 }, // Slightly tighter margins for more data space
     bufferPages: true,
   });
 
   const filename = `report-${user._id}-${Date.now()}.pdf`;
   const tempFilePath = path.join(process.cwd(), 'public', 'reports', filename);
-
-  // Ensure directory exists
   const dir = path.dirname(tempFilePath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
   const stream = fs.createWriteStream(tempFilePath);
   doc.pipe(stream);
 
-  // ✅ Register Unicode font (helps stop weird missing chars / layout jumps)
+  // ✅ Font Registration
   const notoPath = pickFirstExisting([
+    path.join(process.cwd(), 'assets', 'fonts', 'NotoSans-Regular.ttf'), // Priority to local assets if you have them
     '/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf',
-    '/usr/share/fonts/truetype/noto/NotoSansDisplay-Regular.ttf',
     '/usr/share/fonts/opentype/noto/NotoSans-Regular.ttf',
   ]);
+  
   if (notoPath) {
-    doc.registerFont('Body', notoPath);
-    doc.registerFont('BodyBold', notoPath); // using same file is fine; bold effect is simulated by PDF viewers
+    doc.registerFont('Regular', notoPath);
+    doc.registerFont('Bold', notoPath); // Simulate bold if separate file unavailable
+  } else {
+    doc.registerFont('Regular', 'Helvetica');
+    doc.registerFont('Bold', 'Helvetica-Bold');
   }
 
-  // ---------- BRAND THEME ----------
-  const BRAND = {
-    primary: '#16a34a', // emerald-600
-    dark: '#0b1220',
-    text: '#0f172a',
-    muted: '#64748b',
-    line: '#e2e8f0',
-    soft: '#f1f5f9',
-    white: '#ffffff',
-  };
+  // --- DIMENSIONS ---
+  const pageWidth = doc.page.width;
+  const pageHeight = doc.page.height;
+  const margin = doc.page.margins.left; // assuming left=right
+  const contentWidth = pageWidth - margin * 2;
 
-  const pageW = () => doc.page.width;
-  const pageH = () => doc.page.height;
-  const m = () => doc.page.margins;
-  const contentW = () => pageW() - m().left - m().right;
-
-  // ---------- HELPERS ----------
-  const fmtDate = (d?: Date) =>
-    d ? d.toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
-
-  const formatPeriod = () => {
-    const s = fmtDate(startDate);
-    const e = fmtDate(endDate);
-    if (startDate && endDate) return `${s} to ${e}`;
-    if (startDate && !endDate) return `From ${s}`;
-    if (!startDate && endDate) return `Up to ${e}`;
-    return dateLabel || 'All time';
-  };
-
-  // ✅ decimals + currency code (no ₦)
+  // --- HELPERS ---
   const formatMoney = (amount: number) => {
     const safe = Number.isFinite(amount) ? amount : 0;
-    const num = safe.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    return `${currencyCode} ${num}`;
+    return `${currencyCode} ${safe.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
-  // ✅ Watermark that WON’T wrap/paginate (common cause of blank pages)
-  const drawWatermark = () => {
-    const text = `TallyPadi • ${businessName}`;
-    doc.save();
-    doc.rotate(-32, { origin: [pageW() / 2, pageH() / 2] });
-    doc.fillColor(BRAND.dark).opacity(0.06);
+  const fmtDate = (d?: Date) => d ? d.toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
 
-    if (notoPath) doc.font('BodyBold');
-    else doc.font('Helvetica-Bold');
-
-    doc.fontSize(48);
-
-    // IMPORTANT: lineBreak:false + huge width prevents forced wrapping/new pages
-    doc.text(text, -pageW(), pageH() / 2 - 24, {
-      width: pageW() * 3,
-      align: 'center',
-      lineBreak: false,
-    });
-
-    doc.opacity(1).restore();
+  const getPeriodText = () => {
+    if (startDate && endDate) return `${fmtDate(startDate)} — ${fmtDate(endDate)}`;
+    if (startDate) return `From ${fmtDate(startDate)}`;
+    if (endDate) return `Until ${fmtDate(endDate)}`;
+    return dateLabel || 'All Time';
   };
 
-  const drawHeader = (subtitle: string) => {
-    doc.save();
-    doc.rect(0, 0, pageW(), 72).fill(BRAND.dark);
+  // --- DRAWING FUNCTIONS ---
 
-    const left = m().left;
+  const drawHeader = (title: string) => {
+    // 1. Top Bar Background
+    doc.rect(0, 0, pageWidth, 60).fill(THEME.dark);
+    
+    // 2. Logo / Icon
+    doc.circle(margin + 15, 30, 12).fill(THEME.primary);
+    doc.fillColor(THEME.white).font('Bold').fontSize(10).text('TP', margin + 8, 26.5);
 
-    // TP “logo”
-    doc.fillColor(BRAND.primary);
-    doc.circle(left + 14, 36, 14).fill();
-    doc.fillColor(BRAND.white).font('Helvetica-Bold').fontSize(10);
-    doc.text('TP', left + 6, 31, { width: 16, align: 'center', lineBreak: false });
+    // 3. Report Title (Left)
+    doc.fillColor(THEME.white).font('Bold').fontSize(16)
+       .text(title, margin + 40, 18);
+    
+    doc.fillColor(THEME.muted).font('Regular').fontSize(9)
+       .text('TallyPadi Business Intelligence', margin + 40, 38);
 
-    // Left title
-    doc.fillColor(BRAND.white).font('Helvetica-Bold').fontSize(16);
-    doc.text('TallyPadi', left + 40, 22, { lineBreak: false });
+    // 4. Business Info (Right)
+    doc.fillColor(THEME.white).font('Bold').fontSize(12)
+       .text(businessName, margin, 18, { width: contentWidth, align: 'right' });
 
-    doc.fillColor('#cbd5e1').font('Helvetica').fontSize(10);
-    doc.text(subtitle, left + 40, 42, { lineBreak: false });
-
-    // Right info
-    doc.fillColor(BRAND.white).font('Helvetica-Bold').fontSize(12);
-    doc.text(businessName, left, 22, { width: contentW(), align: 'right', lineBreak: false });
-
-    doc.fillColor('#cbd5e1').font('Helvetica').fontSize(9);
-    doc.text(`Period: ${formatPeriod()}`, left, 40, { width: contentW(), align: 'right', lineBreak: false });
-
-    doc.fillColor('#94a3b8').font('Helvetica').fontSize(8);
-    doc.text(`Currency: ${currencyCode}`, left, 54, { width: contentW(), align: 'right', lineBreak: false });
-
-    doc.restore();
-
-    doc.moveTo(m().left, 84)
-      .lineTo(pageW() - m().right, 84)
-      .strokeColor(BRAND.line)
-      .lineWidth(1)
-      .stroke();
+    doc.fillColor('#94a3b8').font('Regular').fontSize(9)
+       .text(getPeriodText(), margin, 36, { width: contentWidth, align: 'right' });
+       
+    // Reset cursor
+    doc.y = 80; 
   };
 
-  const drawFooter = (pageNumber: number, totalPages: number) => {
-    const footerY = pageH() - m().bottom + 18;
-
-    doc.save();
-    doc.strokeColor(BRAND.line).lineWidth(1);
-    doc.moveTo(m().left, pageH() - m().bottom + 6)
-      .lineTo(pageW() - m().right, pageH() - m().bottom + 6)
-      .stroke();
-
-    doc.fillColor(BRAND.muted).font('Helvetica').fontSize(8);
-    doc.text('tallypadi.com', m().left, footerY, { align: 'left', lineBreak: false });
-    doc.text(`Page ${pageNumber} of ${totalPages}`, m().left, footerY, { width: contentW(), align: 'right', lineBreak: false });
-
-    doc.restore();
+  const drawFooter = (page: number, total: number) => {
+    const y = pageHeight - 35;
+    doc.moveTo(margin, y - 10).lineTo(pageWidth - margin, y - 10).strokeColor(THEME.border).lineWidth(0.5).stroke();
+    
+    doc.fillColor(THEME.muted).font('Regular').fontSize(8);
+    doc.text('Generated by TallyPadi', margin, y);
+    doc.text(`Page ${page} of ${total}`, margin, y, { width: contentWidth, align: 'right' });
   };
 
-  const renderPageFrame = (subtitle: string) => {
-    drawWatermark();
-    drawHeader(subtitle);
+  const drawSummaryCards = (title1: string, val1: string, title2: string, val2: string) => {
+    const cardW = (contentWidth / 2) - 10;
+    const y = doc.y;
+    const h = 50;
+
+    // Card 1
+    doc.roundedRect(margin, y, cardW, h, 6).fill(THEME.bgLight);
+    doc.rect(margin, y, 4, h).fill(THEME.primary); // Accent strip
+    
+    doc.fillColor(THEME.muted).fontSize(8).font('Bold').text(title1.toUpperCase(), margin + 15, y + 10);
+    doc.fillColor(THEME.dark).fontSize(14).font('Bold').text(val1, margin + 15, y + 25);
+
+    // Card 2
+    const x2 = margin + cardW + 20;
+    doc.roundedRect(x2, y, cardW, h, 6).fill(THEME.bgLight);
+    doc.rect(x2, y, 4, h).fill(THEME.accent); // Accent strip
+
+    doc.fillColor(THEME.muted).fontSize(8).font('Bold').text(title2.toUpperCase(), x2 + 15, y + 10);
+    doc.fillColor(THEME.dark).fontSize(14).font('Bold').text(val2, x2 + 15, y + 25);
+
+    doc.y += h + 30; // Spacing after cards
   };
 
-  // ---------- TABLE HELPERS ----------
-  const drawTableHeader = (y: number, headers: string[], colWidths: number[]) => {
-    const rowH = 22;
-    doc.save();
-    doc.fillColor(BRAND.soft);
-    doc.roundedRect(m().left, y, contentW(), rowH, 8).fill();
-
-    if (notoPath) doc.font('BodyBold');
-    else doc.font('Helvetica-Bold');
-
-    doc.fillColor(BRAND.text).fontSize(9);
-
-    let x = m().left;
+  const drawTable = (headers: string[], widths: number[], rows: any[]) => {
+    const startX = margin;
+    let currentY = doc.y;
+    
+    // Header
+    doc.font('Bold').fontSize(8).fillColor(THEME.muted);
+    let x = startX;
+    
+    // Draw Header Background
+    doc.rect(startX, currentY, contentWidth, 25).fill(THEME.bgHeader);
+    
+    // Draw Header Text
+    doc.fillColor(THEME.text);
     headers.forEach((h, i) => {
-      const align =
-        h.toLowerCase().includes('amount') || h.toLowerCase().includes('revenue')
-          ? 'right'
-          : 'left';
-      doc.text(h.toUpperCase(), x + 10, y + 6, { width: colWidths[i] - 20, align, lineBreak: false });
-      x += colWidths[i];
+      // Auto-align numeric columns (headers with Price, Amount, Cost, Qty)
+      const align = (h.includes('Amount') || h.includes('Rev') || h.includes('Qty')) ? 'right' : 'left';
+      // Add slight padding to text
+      doc.text(h.toUpperCase(), x + 5, currentY + 8, { width: widths[i] - 10, align, lineBreak: false });
+      x += widths[i];
     });
 
-    doc.restore();
-    return y + rowH + 8;
-  };
+    currentY += 25;
 
-  const drawTableRow = (
-    y: number,
-    cols: string[],
-    colWidths: number[],
-    rowIndex: number,
-    opts?: { highlightRed?: boolean; rightAlignLast?: boolean }
-  ) => {
-    if (notoPath) doc.font('Body');
-    else doc.font('Helvetica');
-    doc.fontSize(9);
-
-    // dynamic row height
-    let maxH = 22;
-    cols.forEach((text, i) => {
-      const w = colWidths[i] - 20;
-      const h = doc.heightOfString(text || '-', { width: w });
-      maxH = Math.max(maxH, h + 12);
-    });
-
-    // zebra background
-    doc.save();
-    doc.fillColor(BRAND.white).opacity(rowIndex % 2 === 0 ? 0.88 : 0.60);
-    doc.roundedRect(m().left, y, contentW(), maxH, 8).fill();
-    doc.opacity(1);
-    doc.strokeColor(BRAND.line).opacity(0.65).roundedRect(m().left, y, contentW(), maxH, 8).stroke();
-    doc.opacity(1).restore();
-
-    // text
-    let x = m().left;
-    cols.forEach((text, i) => {
-      const isLast = i === cols.length - 1;
-      const align = isLast && (opts?.rightAlignLast ?? true) ? 'right' : 'left';
-
-      const hasAlert =
-        opts?.highlightRed && (text.includes('Oversold') || text.includes('ALERT'));
-
-      if (hasAlert) {
-        doc.fillColor('#dc2626');
-        if (notoPath) doc.font('BodyBold');
-        else doc.font('Helvetica-Bold');
-      } else if (isLast) {
-        doc.fillColor(BRAND.primary);
-        if (notoPath) doc.font('BodyBold');
-        else doc.font('Helvetica-Bold');
-      } else {
-        doc.fillColor('#334155');
-        if (notoPath) doc.font('Body');
-        else doc.font('Helvetica');
+    // Rows
+    rows.forEach((row, idx) => {
+      // Check for page break
+      if (currentY + 30 > pageHeight - 50) {
+        doc.addPage();
+        drawHeader(reportType === 'SALES' ? 'Sales Report' : 'Full Business Report');
+        currentY = 80; // Reset Y
+        // Redraw Header on new page
+        doc.font('Bold').fontSize(8).fillColor(THEME.text);
+        doc.rect(startX, currentY, contentWidth, 25).fill(THEME.bgHeader);
+        let rx = startX;
+        headers.forEach((h, i) => {
+          const align = (h.includes('Amount') || h.includes('Rev') || h.includes('Qty')) ? 'right' : 'left';
+          doc.text(h.toUpperCase(), rx + 5, currentY + 8, { width: widths[i] - 10, align, lineBreak: false });
+          rx += widths[i];
+        });
+        currentY += 25;
       }
 
-      doc.text(text || '-', x + 10, y + 6, { width: colWidths[i] - 20, align });
-      x += colWidths[i];
+      // Determine Row Height (Dynamic based on longest text)
+      doc.font('Regular').fontSize(9);
+      let maxH = 20;
+      row.forEach((text: string, i: number) => {
+        const h = doc.heightOfString(text, { width: widths[i] - 10 });
+        if (h > maxH) maxH = h;
+      });
+      maxH += 12; // Add vertical padding
+
+      // Zebra background
+      if (idx % 2 !== 0) {
+        doc.rect(startX, currentY, contentWidth, maxH).fill(THEME.bgLight);
+      }
+
+      // Draw Cell Text
+      let cx = startX;
+      row.forEach((text: string, i: number) => {
+        const hName = headers[i];
+        const isNum = (hName.includes('Amount') || hName.includes('Rev') || hName.includes('Qty'));
+        const align = isNum ? 'right' : 'left';
+
+        // Special Styling for Alerts
+        if (text.includes('ALERT')) {
+          doc.fillColor(THEME.alert).font('Bold');
+        } else if (i === row.length - 1) {
+             // Last column usually bold/primary
+            doc.fillColor(THEME.dark).font('Bold');
+        } else {
+          doc.fillColor(THEME.text).font('Regular');
+        }
+
+        // Vertically center text
+        const textHeight = doc.heightOfString(text, { width: widths[i] - 10 });
+        const textY = currentY + (maxH - textHeight) / 2;
+
+        doc.text(text, cx + 5, textY, { width: widths[i] - 10, align });
+        cx += widths[i];
+      });
+
+      // Bottom border for row
+      doc.moveTo(startX, currentY + maxH).lineTo(startX + contentWidth, currentY + maxH)
+         .strokeColor(THEME.border).lineWidth(0.5).stroke();
+
+      currentY += maxH;
     });
 
-    return y + maxH + 8;
+    doc.y = currentY + 20;
   };
 
-  const ensureSpace = (y: number, needed: number, subtitle: string) => {
-    if (y + needed > pageH() - m().bottom - 10) {
-      doc.addPage();
-      renderPageFrame(subtitle);
-      return 100;
-    }
-    return y;
-  };
+  // --- REPORT GENERATION LOGIC ---
 
-  // ---------- START ----------
-  const subtitle = reportType === 'SALES' ? 'Sales Report' : 'Full Business Report';
-  renderPageFrame(subtitle);
-
-  let currentY = 100;
-
-  // ---------- SALES REPORT ----------
   if (reportType === 'SALES') {
+    drawHeader('Sales Report');
+
     const summary = await getDailySummary(userId, startDate, endDate);
     const transactions = await getTodayTransactions(userId, startDate, endDate);
 
     if (options.includeSummary) {
-      currentY = ensureSpace(currentY, 80, subtitle);
-
-      doc.save();
-      doc.roundedRect(m().left, currentY, contentW(), 58, 14).fillColor('#ffffff').opacity(0.9).fill();
-      doc.opacity(1);
-      doc.roundedRect(m().left, currentY, contentW(), 58, 14).strokeColor(BRAND.line).stroke();
-
-      doc.fillColor(BRAND.muted).font('Helvetica-Bold').fontSize(9);
-      doc.text('TOTAL REVENUE', m().left + 16, currentY + 12, { lineBreak: false });
-      doc.text('TRANSACTIONS', m().left + 240, currentY + 12, { lineBreak: false });
-
-      doc.fillColor(BRAND.text).font('Helvetica-Bold').fontSize(16);
-      doc.text(formatMoney(summary.totalRevenue || 0), m().left + 16, currentY + 30, { lineBreak: false });
-      doc.text(String(transactions.length), m().left + 240, currentY + 30, { lineBreak: false });
-
-      doc.restore();
-      currentY += 78;
+      drawSummaryCards(
+        'Total Revenue', 
+        formatMoney(summary.totalRevenue || 0), 
+        'Total Transactions', 
+        String(transactions.length)
+      );
     }
 
     if (options.includeTransactions && transactions.length > 0) {
-      currentY = ensureSpace(currentY, 40, subtitle);
+      doc.fillColor(THEME.dark).fontSize(12).font('Bold').text('Transaction History', margin, doc.y);
+      doc.y += 10;
 
-      doc.fillColor(BRAND.text).font('Helvetica-Bold').fontSize(12);
-      doc.text('Transaction History', m().left, currentY);
-      currentY += 16;
+      // Define Column Widths (Fixed grid to ensure alignment)
+      // Time (60), Item (Flex), Qty (40), Amount (80), Staff (80)
+      const fixedW = 60 + 50 + 90 + 90;
+      const itemW = contentWidth - fixedW;
+      
+      const headers = ['Time', 'Item Details', 'Qty', 'Amount', 'Staff'];
+      const widths = [60, itemW, 50, 90, 90];
 
-      const headers = ['Time', 'Item', 'Qty', `Amount (${currencyCode})`, 'Staff'];
-      const colWidths = [80, 210, 70, 120, contentW() - (80 + 210 + 70 + 120)];
-
-      currentY = drawTableHeader(currentY, headers, colWidths);
-
-      let rowIndex = 0;
-      transactions.forEach((t: any) => {
+      const rows = transactions.flatMap((t: any) => {
         const timeStr = new Date(t.timestamp).toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit' });
-        const staffName = (t.user as any)?.name || (t.user as any)?.phoneNumber || 'Owner';
+        const staffName = (t.user as any)?.name || 'Admin';
 
-        (t.items || []).forEach((item: any) => {
-          const unitLabel = item.unit ? ` ${item.unit}` : '';
-          const amount = item.total ? formatMoney(item.total) : '-';
-
-          currentY = ensureSpace(currentY, 60, subtitle);
-
-          currentY = drawTableRow(
-            currentY,
-            [timeStr, item.name || '-', `${item.qty}${unitLabel}`, amount, staffName],
-            colWidths,
-            rowIndex++,
-            { rightAlignLast: false }
-          );
-        });
+        // Flatten items into rows
+        return (t.items || []).map((item: any) => [
+          timeStr,
+          item.name || 'Unknown Item',
+          `${item.qty} ${item.unit || ''}`,
+          formatMoney(item.total),
+          staffName
+        ]);
       });
-    } else {
-      doc.font('Helvetica-Oblique').fillColor(BRAND.muted).text('No sales recorded for this period.', m().left, currentY);
-    }
-  }
 
-  // ---------- FULL REPORT ----------
-  if (reportType === 'FULL') {
+      drawTable(headers, widths, rows);
+    } else {
+        doc.fontSize(10).font('Regular').fillColor(THEME.muted)
+           .text('No sales records found for this period.', margin, doc.y + 10);
+    }
+  } 
+  else if (reportType === 'FULL') {
+    drawHeader('Business Overview');
+
     const fullData = await getFullSummary(userId, startDate, endDate);
     const revenueSummary = await getDailySummary(userId, startDate, endDate);
 
     if (options.includeSummary) {
-      currentY = ensureSpace(currentY, 80, subtitle);
-
-      doc.save();
-      doc.roundedRect(m().left, currentY, contentW(), 58, 14).fillColor('#ffffff').opacity(0.9).fill();
-      doc.opacity(1);
-      doc.roundedRect(m().left, currentY, contentW(), 58, 14).strokeColor(BRAND.line).stroke();
-
-      doc.fillColor(BRAND.muted).font('Helvetica-Bold').fontSize(9);
-      doc.text('TOTAL REVENUE', m().left + 16, currentY + 12, { lineBreak: false });
-      doc.text('ITEMS SOLD', m().left + 240, currentY + 12, { lineBreak: false });
-
-      doc.fillColor(BRAND.text).font('Helvetica-Bold').fontSize(16);
-      doc.text(formatMoney(revenueSummary.totalRevenue || 0), m().left + 16, currentY + 30, { lineBreak: false });
-      doc.text(String(revenueSummary.items?.length || 0), m().left + 240, currentY + 30, { lineBreak: false });
-
-      doc.restore();
-      currentY += 78;
+      drawSummaryCards(
+        'Period Revenue', 
+        formatMoney(revenueSummary.totalRevenue || 0), 
+        'Active Items', 
+        String(revenueSummary.items?.length || 0)
+      );
     }
 
     if (options.includeInventory && fullData?.length > 0) {
-      currentY = ensureSpace(currentY, 40, subtitle);
+        doc.fillColor(THEME.dark).fontSize(12).font('Bold').text('Inventory Performance', margin, doc.y);
+        doc.y += 10;
 
-      doc.fillColor(BRAND.text).font('Helvetica-Bold').fontSize(12);
-      doc.text('Inventory & Sales Breakdown', m().left, currentY);
-      currentY += 16;
+        // Columns: Name (Flex), Paid(60), Credit(60), Stock(80), Revenue(90)
+        const fixedW = 60 + 60 + 90 + 100;
+        const nameW = contentWidth - fixedW;
+        
+        const headers = ['Item Name', 'Sold (Paid)', 'Sold (Credit)', 'Stock Level', 'Est. Revenue'];
+        const widths = [nameW, 60, 60, 100, 90];
 
-      const headers = ['Item Name', 'Sold (Paid)', 'Sold (Credit)', 'Stock Left', `Revenue (${currencyCode})`];
-      const colWidths = [190, 85, 85, 115, contentW() - (190 + 85 + 85 + 115)];
+        const rows = fullData.map((item: any) => {
+            let stockText = `${item.stock}`;
+            if (item.stock < 0) stockText = `ALERT: ${item.stock} (Oversold)`;
+            else if (item.stock === 0) stockText = 'Out of Stock';
+            else stockText += ` ${item.unit || ''}`;
 
-      currentY = drawTableHeader(currentY, headers, colWidths);
+            return [
+                (item.name || '-').toUpperCase(),
+                String(item.soldPaid ?? 0),
+                String(item.soldCredit ?? 0),
+                stockText,
+                formatMoney(item.revenue)
+            ];
+        });
 
-      let rowIndex = 0;
-      fullData.forEach((item: any) => {
-        currentY = ensureSpace(currentY, 60, subtitle);
-
-        // ✅ no emoji (PDF safe)
-        let stockText = `${item.stock} ${item.unit || 'units'}`;
-        if (item.stock < 0) stockText = `ALERT -${Math.abs(item.stock)} (Oversold)`;
-
-        const revenue = item.revenue > 0 ? formatMoney(item.revenue) : '-';
-
-        currentY = drawTableRow(
-          currentY,
-          [
-            String(item.name || '-').toUpperCase(),
-            String(item.soldPaid ?? 0),
-            String(item.soldCredit ?? 0),
-            stockText,
-            revenue,
-          ],
-          colWidths,
-          rowIndex++,
-          { highlightRed: true, rightAlignLast: true }
-        );
-      });
+        drawTable(headers, widths, rows);
     } else {
-      doc.font('Helvetica-Oblique').fillColor(BRAND.muted).text('No inventory data found.', m().left, currentY);
+        doc.fontSize(10).font('Regular').fillColor(THEME.muted)
+           .text('No inventory data available.', margin, doc.y + 10);
     }
   }
 
-  // ---------- PAGE NUMBERS / FOOTER ----------
-  const range = doc.bufferedPageRange(); // { start, count }
+  // --- PAGE BUFFERING ---
+  const range = doc.bufferedPageRange();
   for (let i = range.start; i < range.start + range.count; i++) {
     doc.switchToPage(i);
-    drawFooter(i - range.start + 1, range.count);
+    drawFooter(i + 1, range.count);
   }
 
   doc.end();
@@ -441,19 +367,18 @@ export const generatePdfReport = async (
   });
 };
 
-// Cleanup old PDF files (unchanged)
 export const cleanupPdfReports = () => {
   const reportsDir = path.join(process.cwd(), 'public', 'reports');
   if (!fs.existsSync(reportsDir)) return;
 
   fs.readdir(reportsDir, (err, files) => {
-    if (err) return console.error('Error reading reports dir:', err);
+    if (err) return;
     files.forEach(file => {
       const filePath = path.join(reportsDir, file);
       fs.stat(filePath, (err2, stats) => {
         if (err2) return;
-        const twentyFourHoursAgo = Date.now() - 24 * 60 * 60 * 1000;
-        if (stats.mtimeMs < twentyFourHoursAgo) fs.unlink(filePath, () => {});
+        const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+        if (stats.mtimeMs < oneDayAgo) fs.unlink(filePath, () => {});
       });
     });
   });

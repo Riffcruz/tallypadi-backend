@@ -4,17 +4,48 @@ import { Inventory } from '../models/inventory.model';
 import { User } from '../models/user.model';
 import PDFDocument from 'pdfkit';
 import path from 'path';
+import fs from 'fs';
 
 // --- Helpers ---
 const validateNumber = (input: unknown) => (typeof input === 'number' && !isNaN(input)) ? input : undefined;
-
-// Helper to get current date string "YYYY-MM-DD"
 const getCurrentDateString = () => new Date().toISOString().split('T')[0];
+
+// ✅ EXPANDED Currency Mapping
+const COUNTRY_CURRENCY_CODE: Record<string, string> = {
+  NG: 'NGN', // Nigeria
+  GH: 'GHS', // Ghana
+  US: 'USD', // USA
+  GB: 'GBP', // UK
+  EU: 'EUR', // Eurozone
+  KE: 'KES', // Kenya
+  ZA: 'ZAR', // South Africa
+  IN: 'INR', // India
+  CN: 'CNY', // China
+  CA: 'CAD', // Canada
+  AU: 'AUD', // Australia
+  JP: 'JPY', // Japan
+  AE: 'AED', // UAE (Dubai)
+  RW: 'RWF', // Rwanda
+  TZ: 'TZS', // Tanzania
+  UG: 'UGX', // Uganda
+};
+
+// ✅ Theme Configuration (Teal/Slate Professional Look)
+const THEME = {
+  primary: '#0F766E',      // Teal 700
+  accent: '#14B8A6',       // Teal 500
+  dark: '#1E293B',         // Slate 800
+  text: '#334155',         // Slate 700
+  muted: '#64748B',        // Slate 500
+  border: '#E2E8F0',       // Slate 200
+  bgLight: '#F8FAFC',      // Slate 50
+  bgHeader: '#F1F5F9',     // Slate 100
+  white: '#FFFFFF'
+};
 
 // 1. RECORD A SALE
 export const recordSale = async (req: Request, res: Response) => {
     try {
-        // We accept the single-item payload from the frontend and adapt it to the new model
         const { itemId, quantity, price } = req.body;
         
         const user = await User.findOne(); // Mock Auth
@@ -27,20 +58,16 @@ export const recordSale = async (req: Request, res: Response) => {
             return res.status(400).json({ error: "Invalid sale data" });
         }
 
-        // A. Find Inventory Item
         const item = await Inventory.findOne({ _id: itemId, user: user._id });
         if (!item) return res.status(404).json({ error: "Item not found in inventory" });
 
-        // B. Check Stock
         if (item.quantity < safeQty) {
             return res.status(400).json({ error: `Insufficient stock. Only ${item.quantity} left.` });
         }
 
-        // C. Deduct Stock
         item.quantity -= safeQty;
         await item.save();
 
-        // D. Create Transaction Record (Using your robust schema)
         const totalAmount = safeQty * safePrice;
         
         const transaction = await Transaction.create({
@@ -50,12 +77,12 @@ export const recordSale = async (req: Request, res: Response) => {
             items: [{
                 name: item.name,
                 qty: safeQty,
-                unit: 'pc', // Default unit
+                unit: 'pc',
                 unitPrice: safePrice,
                 total: totalAmount
             }],
             totalMoney: totalAmount,
-            date: getCurrentDateString(), // "YYYY-MM-DD"
+            date: getCurrentDateString(),
             timestamp: new Date()
         });
 
@@ -74,21 +101,17 @@ export const getSalesHistory = async (req: Request, res: Response) => {
         if (!user) return res.status(404).json({ error: "User not found" });
 
         const { startDate, endDate } = req.query;
-
         let query: any = { user: user._id, type: 'SALE' };
 
-        // Date Filtering (Using the string 'date' field YYYY-MM-DD)
         if (startDate && endDate) {
             query.date = { $gte: startDate, $lte: endDate };
         }
 
-        // Fetch and sort by newest timestamp
         const sales = await Transaction.find(query).sort({ timestamp: -1 });
 
-        // Map to frontend expectation
         const formattedSales = sales.map(t => ({
             id: t._id,
-            date: t.timestamp || new Date(), // Use timestamp for display time
+            date: t.timestamp || new Date(),
             totalAmount: t.totalMoney || 0,
             items: t.items.map(i => ({
                 name: i.name,
@@ -105,26 +128,10 @@ export const getSalesHistory = async (req: Request, res: Response) => {
     }
 };
 
-// 3. GENERATE PDF REPORT (Tycoon Only)
-
-
-// Currency code mapping (safe across all fonts)
-const COUNTRY_CURRENCY_CODE: Record<string, string> = {
-  NG: 'NGN',
-  US: 'USD',
-  GB: 'GBP',
-  EU: 'EUR',
-  GH: 'GHS',
-  KE: 'KES',
-  ZA: 'ZAR',
-  IN: 'INR',
-  CN: 'CNY',
-  CA: 'CAD',
-};
-
+// 3. GENERATE PDF REPORT (Revamped)
 export const generateSalesReport = async (req: Request, res: Response) => {
   try {
-    const user = await User.findOne();
+    const user = await User.findOne(); // In real app, use req.user
     if (!user) return res.status(404).json({ error: 'User not found' });
 
     if (user.planType !== 'TYCOON') {
@@ -143,10 +150,14 @@ export const generateSalesReport = async (req: Request, res: Response) => {
 
     const transactions = await Transaction.find(query).sort({ timestamp: 1 });
 
+    // Calculate Totals for Stats Cards
+    const totalRevenue = transactions.reduce((sum, t) => sum + (t.totalMoney || 0), 0);
+    const totalTx = transactions.length;
+
     // ---------- PDF SETUP ----------
     const doc = new PDFDocument({
       size: 'A4',
-      margins: { top: 56, bottom: 56, left: 48, right: 48 },
+      margins: { top: 50, bottom: 50, left: 40, right: 40 },
       bufferPages: true,
     });
 
@@ -157,160 +168,170 @@ export const generateSalesReport = async (req: Request, res: Response) => {
     res.setHeader('Content-Disposition', `attachment; filename=Sales_Report_${safeStart}_${safeEnd}.pdf`);
     doc.pipe(res);
 
-    // ---------- THEME ----------
-    const BRAND = {
-      primary: '#16a34a',
-      dark: '#0b1220',
-      text: '#0f172a',
-      muted: '#64748b',
-      line: '#e2e8f0',
-      soft: '#f1f5f9',
-      white: '#ffffff',
-    };
+    // --- FONTS ---
+    // Attempt to find NotoSans, fallback to Helvetica if missing
+    const fontPaths = [
+      path.join(__dirname, '..', 'assets', 'fonts', 'NotoSans-Regular.ttf'), // Local
+      '/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf', // Linux system
+    ];
+    let fontToUse = 'Helvetica';
+    for(const p of fontPaths) {
+      if(fs.existsSync(p)) {
+        doc.registerFont('Noto', p);
+        fontToUse = 'Noto';
+        break;
+      }
+    }
 
-    // Use getters (safe even after addPage)
-    const pageW = () => doc.page.width;
-    const pageH = () => doc.page.height;
-    const m = () => doc.page.margins;
-    const contentW = () => pageW() - m().left - m().right;
+    // --- DIMENSIONS ---
+    const pageW = doc.page.width;
+    const pageH = doc.page.height;
+    const margin = doc.page.margins.left;
+    const contentW = pageW - margin * 2;
 
-    // Register Noto Sans font (Unicode support)
-    const notoSansPath = path.join('/usr/share/fonts/truetype/noto', 'NotoSans-Regular.ttf');
-    doc.registerFont('NotoSans', notoSansPath);
+    // --- HELPERS ---
+    const formatMoney = (n: number) => `${currencyCode} ${n.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
 
-    const formatMoney = (n: number) => `${currencyCode} ${n.toFixed(2)}`;
-
-    const formatPeriod = () => {
-      if (startDate && endDate) return `${startDate} to ${endDate}`;
-      if (startDate && !endDate) return `From ${startDate}`;
-      if (!startDate && endDate) return `Up to ${endDate}`;
-      return `All time`;
-    };
-
-    // ✅ Watermark that NEVER wraps (prevents “ghost/empty pages”)
     const drawWatermark = () => {
-      const text = `TallyPadi • ${businessName}`;
-      doc.save();
-      doc.rotate(-32, { origin: [pageW() / 2, pageH() / 2] });
-      doc.fillColor(BRAND.dark).opacity(0.06);
-      doc.font('NotoSans').fontSize(48);
-
-      // Very wide single-line text; lineBreak:false prevents wrapping/pagination
-      doc.text(text, -pageW(), pageH() / 2 - 24, {
-        width: pageW() * 3,
-        align: 'center',
-        lineBreak: false,
-      });
-
-      doc.opacity(1).restore();
+        const text = `TallyPadi • ${businessName}`;
+        doc.save();
+        doc.rotate(-32, { origin: [pageW / 2, pageH / 2] });
+        doc.fillColor(THEME.dark).opacity(0.04);
+        doc.fontSize(48);
+        doc.text(text, -pageW, pageH / 2 - 24, { width: pageW * 3, align: 'center', lineBreak: false });
+        doc.restore();
     };
 
     const drawHeader = () => {
-      doc.save();
-      doc.rect(0, 0, pageW(), 72).fill(BRAND.dark);
+      // Background Bar
+      doc.rect(0, 0, pageW, 70).fill(THEME.dark);
 
-      // TP “logo”
-      doc.fillColor(BRAND.primary);
-      doc.circle(m().left + 14, 36, 14).fill();
-      doc.fillColor(BRAND.white).font('Helvetica-Bold').fontSize(10);
-      doc.text('TP', m().left + 6, 31, { width: 16, align: 'center', lineBreak: false });
+      // Logo Circle
+      doc.circle(margin + 15, 35, 14).fill(THEME.primary);
+      doc.fillColor(THEME.white).font(fontToUse === 'Noto' ? 'Noto' : 'Helvetica-Bold').fontSize(10);
+      doc.text('TP', margin + 7, 31);
 
-      doc.fillColor(BRAND.white).font('Helvetica-Bold').fontSize(16);
-      doc.text('TallyPadi', m().left + 40, 22, { lineBreak: false });
+      // Titles
+      doc.fillColor(THEME.white).fontSize(16).text('TallyPadi', margin + 40, 24);
+      doc.fillColor(THEME.muted).fontSize(10).text('Sales Report', margin + 40, 46);
 
-      doc.fillColor('#cbd5e1').font('Helvetica').fontSize(10);
-      doc.text('Sales Report', m().left + 40, 42, { lineBreak: false });
-
-      // Right info
-      doc.fillColor(BRAND.white).font('Helvetica-Bold').fontSize(12);
-      doc.text(businessName, m().left, 22, { width: contentW(), align: 'right', lineBreak: false });
-
-      doc.fillColor('#cbd5e1').font('Helvetica').fontSize(9);
-      doc.text(`Period: ${formatPeriod()}`, m().left, 40, { width: contentW(), align: 'right', lineBreak: false });
-
-      doc.fillColor('#94a3b8').font('Helvetica').fontSize(8);
-      doc.text(`Generated: ${new Date().toLocaleString('en-NG')}`, m().left, 54, {
-        width: contentW(),
-        align: 'right',
-        lineBreak: false,
-      });
-
-      doc.restore();
-      doc.moveTo(m().left, 84).lineTo(pageW() - m().right, 84).strokeColor(BRAND.line).lineWidth(1).stroke();
+      // Right Side Info
+      doc.fillColor(THEME.white).fontSize(12).text(businessName, margin, 24, { width: contentW, align: 'right' });
+      doc.fillColor('#94a3b8').fontSize(9).text(`Period: ${startDate || 'Start'} to ${endDate || 'Now'}`, margin, 44, { width: contentW, align: 'right' });
+    
+      doc.y = 90; // Move cursor down
     };
 
-    const drawFooter = (pageNumber: number, totalPages: number) => {
-      const y = pageH() - m().bottom + 18;
-      doc.save();
-      doc.strokeColor(BRAND.line).lineWidth(1);
-      doc.moveTo(m().left, pageH() - m().bottom + 6).lineTo(pageW() - m().right, pageH() - m().bottom + 6).stroke();
-
-      doc.fillColor(BRAND.muted).font('Helvetica').fontSize(8);
-      doc.text('tallypadi.com', m().left, y, { align: 'left', lineBreak: false });
-      doc.text(`Page ${pageNumber} of ${totalPages}`, m().left, y, { width: contentW(), align: 'right', lineBreak: false });
-      doc.restore();
+    const drawFooter = (page: number, total: number) => {
+        const y = pageH - 40;
+        doc.moveTo(margin, y - 10).lineTo(pageW - margin, y - 10).strokeColor(THEME.border).lineWidth(1).stroke();
+        doc.fillColor(THEME.muted).fontSize(8);
+        doc.text('Generated by TallyPadi Business Intelligence', margin, y);
+        doc.text(`Page ${page} of ${total}`, margin, y, { width: contentW, align: 'right' });
     };
 
-    // Draw first page frame
-    const renderFrame = () => {
-      drawWatermark();
-      drawHeader();
+    const drawSummaryCards = () => {
+        const cardW = (contentW / 2) - 10;
+        const startY = doc.y;
+        
+        // Revenue Card
+        doc.roundedRect(margin, startY, cardW, 60, 6).fill(THEME.bgLight);
+        doc.rect(margin, startY, 5, 60).fill(THEME.primary); // Green strip
+        doc.fillColor(THEME.muted).fontSize(9).text('TOTAL REVENUE', margin + 15, startY + 12);
+        doc.fillColor(THEME.dark).fontSize(18).text(formatMoney(totalRevenue), margin + 15, startY + 30);
+
+        // Transaction Count Card
+        const x2 = margin + cardW + 20;
+        doc.roundedRect(x2, startY, cardW, 60, 6).fill(THEME.bgLight);
+        doc.rect(x2, startY, 5, 60).fill(THEME.accent); // Teal strip
+        doc.fillColor(THEME.muted).fontSize(9).text('TOTAL TRANSACTIONS', x2 + 15, startY + 12);
+        doc.fillColor(THEME.dark).fontSize(18).text(String(totalTx), x2 + 15, startY + 30);
+
+        doc.y = startY + 80; // Add spacing below cards
     };
+
+    // --- RENDER ---
+    drawWatermark();
+    drawHeader();
+    drawSummaryCards();
+
+    // --- TABLE RENDER ---
+    doc.fillColor(THEME.dark).fontSize(12).text('Transaction History', margin, doc.y);
+    doc.y += 10;
+
+    // Define Columns: Date (80), Items (Flex), Amount (90)
+    const colDate = 80;
+    const colAmount = 90;
+    const colItems = contentW - colDate - colAmount;
 
     // Table Header
-    const drawTableHeader = (y: number) => {
-      const rowH = 22;
-      doc.save();
-      doc.fillColor(BRAND.soft);
-      doc.roundedRect(m().left, y, contentW(), rowH, 8).fill();
-      doc.fillColor(BRAND.text).font('Helvetica-Bold').fontSize(9);
+    const headerY = doc.y;
+    doc.rect(margin, headerY, contentW, 25).fill(THEME.bgHeader);
+    doc.fillColor(THEME.text).fontSize(9).font(fontToUse === 'Noto' ? 'Noto' : 'Helvetica-Bold');
+    
+    doc.text('DATE', margin + 10, headerY + 8, { width: colDate });
+    doc.text('ITEM DETAILS', margin + 10 + colDate, headerY + 8, { width: colItems });
+    doc.text(`AMOUNT (${currencyCode})`, margin, headerY + 8, { width: contentW - 10, align: 'right' });
+    
+    doc.y += 30;
 
-      doc.text('DATE', m().left + 10, y + 6, { width: 90, lineBreak: false });
-      doc.text('ITEMS', m().left + 100, y + 6, { width: contentW() - 90 - 130, lineBreak: false });
-      doc.text(`AMOUNT (${currencyCode})`, m().left, y + 6, { width: contentW() - 10, align: 'right', lineBreak: false });
+    // Rows
+    doc.font(fontToUse === 'Noto' ? 'Noto' : 'Helvetica');
+    transactions.forEach((t: any, idx) => {
+        const dateStr = t.date || new Date().toISOString().split('T')[0];
+        const itemText = (t.items || []).map((i:any) => `${i.qty} x ${i.name}`).join(', ');
+        const amtStr = formatMoney(t.totalMoney || 0);
 
-      doc.restore();
-      return y + rowH + 6;
-    };
+        // Calc height based on item text wrapping
+        const textHeight = doc.heightOfString(itemText, { width: colItems - 10 });
+        const rowHeight = Math.max(25, textHeight + 15);
 
-    // Row function
-    const drawRow = (y: number, idx: number, t: any) => {
-      const dateStr = t.date || '';
-      const itemSummary = (t.items || []).map((i: any) => `${i.qty}x ${i.name}`).join(', ');
-      const amt = t.totalMoney ?? 0;
+        // Check Page Break
+        if (doc.y + rowHeight > pageH - 50) {
+            doc.addPage();
+            drawWatermark();
+            drawHeader();
+            doc.y = 90;
+            // Redraw Header
+            const hY = doc.y;
+            doc.rect(margin, hY, contentW, 25).fill(THEME.bgHeader);
+            doc.fillColor(THEME.text).fontSize(9).font(fontToUse === 'Noto' ? 'Noto' : 'Helvetica-Bold');
+            doc.text('DATE', margin + 10, hY + 8, { width: colDate });
+            doc.text('ITEM DETAILS', margin + 10 + colDate, hY + 8, { width: colItems });
+            doc.text(`AMOUNT (${currencyCode})`, margin, hY + 8, { width: contentW - 10, align: 'right' });
+            doc.y += 30;
+            doc.font(fontToUse === 'Noto' ? 'Noto' : 'Helvetica');
+        }
 
-      const itemsW = contentW() - 90 - 130;
-      doc.font('Helvetica').fontSize(9);
+        const currentY = doc.y;
 
-      const itemsH = doc.heightOfString(itemSummary || '-', { width: itemsW });
-      const rowH = Math.max(22, itemsH + 10);
+        // Zebra Stripe
+        if (idx % 2 !== 0) {
+            doc.rect(margin, currentY, contentW, rowHeight).fill(THEME.bgLight);
+        }
 
-      // Zebra background
-      doc.save();
-      doc.fillColor('#ffffff').opacity(idx % 2 === 0 ? 0.85 : 0.6);
-      doc.roundedRect(m().left, y, contentW(), rowH, 8).fill();
-      doc.opacity(1).restore();
+        doc.fillColor(THEME.text);
+        
+        // Vertically center Date and Amount (approximate)
+        const centerY = currentY + (rowHeight - 10) / 2;
+        
+        doc.text(dateStr, margin + 10, centerY, { width: colDate });
+        
+        // Item text might wrap, so we draw it normally with padding
+        doc.text(itemText, margin + 10 + colDate, currentY + 8, { width: colItems - 10 });
+        
+        doc.font(fontToUse === 'Noto' ? 'Noto' : 'Helvetica-Bold'); // Bold amount
+        doc.text(amtStr, margin, centerY, { width: contentW - 10, align: 'right' });
+        doc.font(fontToUse === 'Noto' ? 'Noto' : 'Helvetica'); // Reset font
 
-      // text
-      doc.fillColor(BRAND.text).font('Helvetica').fontSize(9);
-      doc.text(dateStr, m().left + 10, y + 6, { width: 90 });
+        // Bottom border
+        doc.moveTo(margin, currentY + rowHeight).lineTo(pageW - margin, currentY + rowHeight)
+           .strokeColor(THEME.border).lineWidth(0.5).stroke();
 
-      doc.fillColor('#334155');
-      doc.text(itemSummary || '-', m().left + 100, y + 6, { width: itemsW });
+        doc.y = currentY + rowHeight;
+    });
 
-      doc.fillColor(BRAND.primary).font('Helvetica-Bold');
-      doc.text(formatMoney(amt), m().left, y + 6, { width: contentW() - 10, align: 'right', lineBreak: false });
-
-      // Line stroke for each row
-      doc.save();
-      doc.strokeColor(BRAND.line).opacity(0.6);
-      doc.roundedRect(m().left, y, contentW(), rowH, 8).stroke();
-      doc.opacity(1).restore();
-
-      return y + rowH + 8;
-    };
-
-    // --- FINAL FOOTER & PAGE NUMBERS ---
+    // --- FINALIZE ---
     const range = doc.bufferedPageRange();
     for (let i = range.start; i < range.start + range.count; i++) {
       doc.switchToPage(i);
@@ -324,4 +345,3 @@ export const generateSalesReport = async (req: Request, res: Response) => {
     if (!res.headersSent) res.status(500).json({ error: 'Could not generate report' });
   }
 };
-
