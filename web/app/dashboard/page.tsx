@@ -321,7 +321,7 @@ export default function DashboardPage() {
               trend="Going Up"
             />
             <StatCard
-              title="Value of Goods"
+              title="Total Value of Goods in Stock"
               value={formatNaira(stockValue)}
               icon={Coins}
               bgClass="bg-blue-50"
@@ -528,7 +528,7 @@ export default function DashboardPage() {
       </main>
 
       {/* PWA Install Button */}
-      {showInstallBtn && (
+      {/* {showInstallBtn && (
         <div className="fixed bottom-6 right-6 z-50 animate-in fade-in slide-in-from-bottom-4 duration-500">
           <div className="relative group">
             <button
@@ -552,7 +552,7 @@ export default function DashboardPage() {
             </button>
           </div>
         </div>
-      )}
+      )} */}
     </div>
   );
 }
