@@ -14,7 +14,13 @@ import {
   X, 
   CheckCircle2, 
   Star,
-  Camera
+  Zap,
+  Camera,
+  TrendingUp,
+  ShieldCheck,
+  Gift, // Added for Trial
+  Shield, // Added for Oga Boss
+  Crown // Added for Tycoon
 } from 'lucide-react';
 
 // --- TYPES & INTERFACES ---
@@ -30,6 +36,7 @@ interface FeatureCardProps {
 interface PricingItemProps {
   text: string;
   light?: boolean;
+  unavailable?: boolean;
 }
 
 interface AnimatedSectionProps {
@@ -37,6 +44,7 @@ interface AnimatedSectionProps {
   className?: string;
   animation?: 'fade-up' | 'zoom-in' | 'slide-right';
 }
+
 
 // --- CONFIGURATION ---
 const DEFAULT_WHATSAPP_LINK = "https://wa.me/234XXXXXXXXXX?text=Hello%20Tallypadi"; 
@@ -49,27 +57,29 @@ const HERO_IMAGES = [
 ];
 
 // --- Custom Hook for Scroll Animations ---
-const useScrollAnimation = (): [React.RefObject<HTMLDivElement | null>, boolean] => {
+// Use explicit generics and returns correct RefObject type
+const useScrollAnimation = () => {
   const [isVisible, setIsVisible] = useState(false);
-  const domRef = useRef<HTMLDivElement>(null);
+  // Specify type for the ref
+  const domRef = useRef<HTMLDivElement>(null); 
 
   useEffect(() => {
     const observer = new IntersectionObserver(entries => {
       entries.forEach(entry => setIsVisible(entry.isIntersecting));
     });
-    
     const currentElement = domRef.current;
     if (currentElement) observer.observe(currentElement);
-    
     return () => {
         if(currentElement) observer.unobserve(currentElement);
     };
   }, []);
 
-  return [domRef, isVisible];
+  // Ensure the ref object is returned directly
+  return [domRef, isVisible] as const;
 };
 
-const AnimatedSection: React.FC<AnimatedSectionProps> = ({ children, className = "", animation = "fade-up" }) => {
+const AnimatedSection = ({ children, className, animation = "fade-up" }: AnimatedSectionProps) => {
+    // Use tuple destructuring for clean type inference
     const [ref, isVisible] = useScrollAnimation();
     const baseClass = `transition-all duration-1000 ease-out transform`;
     
@@ -83,6 +93,7 @@ const AnimatedSection: React.FC<AnimatedSectionProps> = ({ children, className =
     }
 
     return (
+        // Pass the ref directly to the DOM element
         <div ref={ref} className={`${baseClass} ${activeClass} ${className}`}>
             {children}
         </div>
@@ -457,59 +468,100 @@ export default function LandingPage() {
          </div>
       </section>
 
-      {/* --- Pricing Section --- */}
+      {/* --- Pricing Section (UPDATED) --- */}
       <section id="pricing" className="py-24 bg-slate-50 relative">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <AnimatedSection className="text-center mb-16">
                 <span className="text-emerald-600 font-bold tracking-wider uppercase text-xs">Pricing Plans</span>
-                <h2 className="text-3xl md:text-5xl font-bold text-slate-900 mt-2">Choose your level.</h2>
-                <p className="text-slate-500 mt-4 max-w-2xl mx-auto">Start for free. Upgrade as you grow. No hidden fees.</p>
+                <h2 className="text-3xl md:text-5xl font-bold text-slate-900 mt-2">Scale your business, your way.</h2>
+                <p className="text-slate-500 mt-4 max-w-2xl mx-auto">Start with a free trial, then choose the perfect plan for your level of operation.</p>
             </AnimatedSection>
 
-            <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-                {/* Free Plan */}
-                <AnimatedSection animation="fade-up" className="bg-white p-8 md:p-12 rounded-3xl shadow-sm border border-slate-200 flex flex-col relative overflow-hidden">
-                    <div className="absolute top-0 left-0 w-full h-2 bg-slate-200"></div>
-                    <div className="mb-6">
-                        <h3 className="text-2xl font-bold text-slate-900">Starter Boss</h3>
-                        <div className="flex items-baseline gap-1 mt-4">
-                            <span className="text-4xl font-extrabold text-slate-900">Free</span>
-                            <span className="text-slate-500">/ forever</span>
-                        </div>
-                        <p className="text-slate-500 mt-4 text-sm">Perfect for small shop owners just starting to get organized.</p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                
+                {/* 1. Free Trial */}
+                <AnimatedSection animation="fade-up" className="bg-white p-6 rounded-3xl border-4 border-dashed border-green-200 flex flex-col shadow-lg transition-all hover:shadow-xl hover:scale-[1.02]">
+                    <div className="flex items-center gap-4 mb-6">
+                         <div className="p-3 rounded-xl bg-green-50 text-green-600">
+                            <Gift size={24} />
+                         </div>
+                        <h3 className="text-2xl font-bold text-slate-900">7-Day Trial</h3>
                     </div>
-                    <ul className="space-y-4 mb-8 flex-1">
-                        <PricingItem text="Unlimited Sales Records" />
-                        <PricingItem text="Basic Inventory Tracking" />
-                        <PricingItem text="Daily Profit Summary" />
-                        <PricingItem text="1 User Account" />
+                    
+                    <div className="mb-8">
+                        <span className="text-5xl font-extrabold text-green-600">₦0</span>
+                        <span className="text-slate-500 text-sm"> / 7 Days</span>
+                        <p className="text-slate-500 mt-2 text-sm">Experience the full power of Tallypadi with zero commitment.</p>
+                    </div>
+                    
+                    <ul className="space-y-4 mb-10 flex-1">
+                        <PricingItem text="Full Access to all features" />
+                        <PricingItem text="Single User Account" />
+                        <PricingItem text="Basic Web Dashboard" />
+                        <PricingItem text="WhatsApp Bot Support" />
+                        <PricingItem text="No credit card required" />
                     </ul>
-                    <a href={whatsappLink} className="w-full block text-center bg-slate-100 hover:bg-slate-200 text-slate-900 font-bold py-4 rounded-xl transition">
-                        Get Started Free
+                    <a href={whatsappLink} className="w-full block text-center bg-green-600 hover:bg-green-700 text-white font-bold py-3.5 rounded-xl transition shadow-lg shadow-green-600/20 active:scale-95">
+                        Start 7-Day Free Trial
                     </a>
                 </AnimatedSection>
 
-                {/* Paid Plan */}
-                <AnimatedSection animation="fade-up" className="bg-slate-900 p-8 md:p-12 rounded-3xl shadow-2xl flex flex-col relative overflow-hidden transform md:-translate-y-4 border border-slate-800">
-                    <div className="absolute top-0 right-0 bg-gradient-to-l from-emerald-500 to-green-400 text-white text-xs font-bold px-3 py-1 rounded-bl-xl">POPULAR</div>
-                    <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-emerald-500 to-green-400"></div>
-                    <div className="mb-6">
-                        <h3 className="text-2xl font-bold text-white">Tycoon</h3>
-                        <div className="flex items-baseline gap-1 mt-4">
-                            <span className="text-4xl font-extrabold text-white">₦2,500</span>
-                            <span className="text-slate-400">/ month</span>
-                        </div>
-                        <p className="text-slate-400 mt-4 text-sm">For growing businesses that need staff management and branding.</p>
+                {/* 2. Oga Boss - Highlighted */}
+                <AnimatedSection animation="fade-up" className="bg-white p-6 rounded-3xl shadow-2xl flex flex-col border-4 border-blue-400 transform md:-translate-y-6 transition-all hover:scale-[1.05] hover:shadow-blue-500/40">
+                    <div className="absolute top-0 right-0 bg-blue-500 text-white text-xs font-bold px-4 py-1.5 rounded-bl-xl shadow-md">
+                        BEST VALUE
                     </div>
-                    <ul className="space-y-4 mb-8 flex-1">
-                        <PricingItem text="Everything in Starter" light />
-                        <PricingItem text="Multi-Staff Login (Up to 5)" light />
-                        <PricingItem text="Branded PDF Invoices" light />
-                        <PricingItem text="Advanced Web Dashboard" light />
-                        <PricingItem text="Priority Support" light />
+                    <div className="flex items-center gap-4 mb-6">
+                        <div className="p-3 rounded-xl bg-blue-100 text-blue-600 shadow-xl">
+                            <Shield size={24} />
+                        </div>
+                        <h3 className="text-2xl font-bold text-slate-900">Oga Boss</h3>
+                    </div>
+                    
+                    <div className="mb-8">
+                        <span className="text-5xl font-extrabold text-blue-600">₦2,500</span>
+                        <span className="text-slate-500 text-sm"> / month</span>
+                        <p className="text-slate-500 mt-2 text-sm">The essential plan for serious owners focused on maximizing solo profit.</p>
+                    </div>
+                    
+                    <ul className="space-y-4 mb-10 flex-1">
+                        <PricingItem text="Unlimited Sales & Inventory" />
+                        <PricingItem text="Detailed Profit Calculation" />
+                        <PricingItem text="Advanced Dashboard Access" />
+                        <PricingItem text="1 User Account" />
+                        <PricingItem text="Email & WhatsApp Support" />
+                        <PricingItem text="Staff Management" unavailable />
+                        <PricingItem text="Automated PDF Reports" unavailable />
                     </ul>
-                    <a href={whatsappLink} className="w-full block text-center bg-emerald-500 hover:bg-emerald-400 text-white font-bold py-4 rounded-xl transition shadow-[0_0_20px_rgba(16,185,129,0.4)]">
-                        Upgrade to Tycoon
+                    <a href="/payment?plan=OGA_BOSS" className="w-full block text-center bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl transition shadow-lg shadow-blue-600/20 active:scale-95">
+                        Choose Oga Boss Plan
+                    </a>
+                </AnimatedSection>
+
+                {/* 3. Tycoon */}
+                <AnimatedSection animation="fade-up" className="bg-slate-900 p-6 rounded-3xl border border-slate-700 flex flex-col shadow-lg transition-all hover:shadow-xl hover:scale-[1.02]">
+                    <div className="flex items-center gap-4 mb-6">
+                        <div className="p-3 rounded-xl bg-white text-amber-500 shadow-xl">
+                            <Crown size={24} />
+                        </div>
+                        <h3 className="text-2xl font-bold text-white">Tycoon</h3>
+                    </div>
+                    
+                    <div className="mb-8">
+                        <span className="text-5xl font-extrabold text-amber-400">₦5,000</span>
+                        <span className="text-slate-400 text-sm"> / month</span>
+                        <p className="text-slate-400 mt-2 text-sm">Full power plan designed for management teams and scaling operations.</p>
+                    </div>
+                    
+                    <ul className="space-y-4 mb-10 flex-1">
+                        <PricingItem text="Everything in Oga Boss" light />
+                        <PricingItem text="Multi-Staff Login (Up to 5)" light />
+                        <PricingItem text="Branded PDF Invoices & Export" light />
+                        <PricingItem text="Advanced Analytics Suite" light />
+                        <PricingItem text="Priority VIP Support" light />
+                    </ul>
+                    <a href="/payment?plan=TYCOON" className="w-full block text-center bg-amber-500 hover:bg-amber-400 text-slate-900 font-bold py-3.5 rounded-xl transition shadow-lg shadow-amber-500/20 active:scale-95">
+                        Choose Tycoon Plan
                     </a>
                 </AnimatedSection>
             </div>
@@ -586,6 +638,7 @@ export default function LandingPage() {
 
 // --- Sub-components ---
 
+// FIX: Added explicit React.FC type assertion for components that rely on generics
 const FeatureCard: React.FC<FeatureCardProps> = ({ icon, color, title, desc, badge = null }) => {
     const colorClasses: Record<string, string> = {
         emerald: "bg-emerald-50 text-emerald-600 group-hover:bg-emerald-100",
@@ -612,11 +665,15 @@ const FeatureCard: React.FC<FeatureCardProps> = ({ icon, color, title, desc, bad
     );
 };
 
-const PricingItem: React.FC<PricingItemProps> = ({ text, light = false }) => (
-    <li className="flex items-center gap-3">
-        <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${light ? 'bg-emerald-500/20 text-emerald-400' : 'bg-emerald-100 text-emerald-600'}`}>
+const PricingItem: React.FC<PricingItemProps> = ({ text, light = false, unavailable = false }) => (
+    <li className={`flex items-start gap-3 transition-opacity ${unavailable ? 'opacity-50' : ''}`}>
+        <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
+            unavailable 
+                ? (light ? 'bg-slate-700 text-slate-500' : 'bg-gray-200 text-gray-400')
+                : (light ? 'bg-emerald-500/20 text-emerald-400' : 'bg-emerald-100 text-emerald-600')
+        }`}>
             <CheckCircle2 size={12} strokeWidth={3} />
         </div>
-        <span className={`text-sm ${light ? 'text-slate-300' : 'text-slate-600'}`}>{text}</span>
+        <span className={`text-sm ${unavailable ? 'line-through' : ''} ${light ? 'text-slate-300' : 'text-slate-600'}`}>{text}</span>
     </li>
 );
