@@ -6,7 +6,10 @@ import { User } from '../models/user.model';
 import { Inventory } from '../models/inventory.model';
 import { DeletedItem } from '../models/deletedItem.model';
 import { parseMessageWithGemini } from '../services/gemini.service';
-import { sendWhatsAppText } from '../services/whatsapp.service';
+// 🟢 NEW IMPORT: Import the function to queue outbound messages
+import { queueOutboundMessage } from '../services/queue.service'; 
+// 🔴 REMOVED: import { sendWhatsAppText } from '../services/whatsapp.service'; // We queue instead of sending directly
+
 import { processTransaction } from '../services/transaction.service';
 import { getDailySummary, getStockReport, getFullSummary, getTodayTransactions } from '../services/report.service';
 import { generatePdfReport } from '../services/pdf.service';
@@ -15,7 +18,6 @@ import { checkSubscriptionStatus } from '../services/billing.service';
 import { AdminSettings } from '../models/adminSettings.model';
 
 // 🌍 CURRENCY CONFIGURATION
-// You can move this to a separate JSON/config file later if you want
 const COUNTRY_CURRENCIES: { [key: string]: { symbol: string, code: string, locale: string } } = {
   'NG': { symbol: '₦', code: 'NGN', locale: 'en-NG' },
   'US': { symbol: '$', code: 'USD', locale: 'en-US' },
@@ -32,9 +34,8 @@ const COUNTRY_CURRENCIES: { [key: string]: { symbol: string, code: string, local
 
 // 🟢 HELPER: Get Currency Settings based on User
 const getUserCurrency = (user: any) => {
-    let countryCode = user.countryCode; // Try fetching from DB first
+    let countryCode = user.countryCode; 
 
-    // Fallback: Guess from Phone Number if DB field is missing/empty
     if (!countryCode && user.phoneNumber) {
         const phone = user.phoneNumber.replace('+', '');
         if (phone.startsWith('234')) countryCode = 'NG';
@@ -98,7 +99,6 @@ export const handleWebhook = async (req: Request, res: Response) => {
     const messageId = msg.id;
     
     // 🟢 EXTRACT PROFILE NAME (Robust)
-    // The contacts array sits at body.entry[0].changes[0].value.contacts
     const contacts = value.contacts;
     const profileName = contacts && contacts[0]?.profile?.name ? contacts[0].profile.name : undefined;
 
@@ -155,7 +155,6 @@ export const handleWebhook = async (req: Request, res: Response) => {
 };
 
 // 3. BACKGROUND PROCESSOR (Called by Worker)
-// ⚠️ IMPORTANT: Ensure your worker.ts calls this function with the 6th argument (profileName)
 export const handleMessageLogic = async (from: string, text: string, messageId: string, mediaId?: string, isVoiceMessage?: boolean, profileName?: string) => {
   try {
     console.log(`⚡ Processing Logic for ${from}: "${text}"`);
@@ -180,10 +179,12 @@ export const handleMessageLogic = async (from: string, text: string, messageId: 
     // --- USER AUTHENTICATION ---
     let user = await User.findOne({ phoneNumber: from });
 
-    // 🟢 DETERMINING CURRENCY FOR THIS SESSION
+    // 🟢 GET CURRENCY SYMBOL & LOCALE FOR THIS SESSION
+    const currency = getUserCurrency({ phoneNumber: from }); // Get based on phone number guess for new users
+    const { symbol, locale, code } = getUserCurrency(user || { phoneNumber: from }); // Re-fetch based on full user object if available
+
     if (!user) {
       // Logic to auto-detect country code for new user
-      const currency = getUserCurrency({ phoneNumber: from }); 
       
       // Derive shop name from profile name if available, otherwise default
       const initialShopName = profileName || "My Shop";
@@ -203,46 +204,43 @@ export const handleMessageLogic = async (from: string, text: string, messageId: 
           : `I've set your shop name to *"${user.businessName}"*`;
 
       const welcomeMsg = `Welcome to *Tallypadi*, ${profileName || 'Friend'}! 👋\n\n${shopNote}\n\nTo start, please reply with your **EMAIL ADDRESS** (for account recovery).`;
-      await sendWhatsAppText(from, welcomeMsg);
+      await queueOutboundMessage(from, welcomeMsg); // 🟢 QUEUE RESPONSE
       return;
     }
-
-    // 🟢 GET CURRENCY SYMBOL & LOCALE FOR THIS USER
-    const { symbol, locale, code } = getUserCurrency(user);
 
     if (user.registrationStage === 'EMAIL') {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(text)) {
-            await sendWhatsAppText(from, "❌ Invalid email format. Please enter a valid email address.");
+            await queueOutboundMessage(from, "❌ Invalid email format. Please enter a valid email address."); // 🟢 QUEUE RESPONSE
             return;
         }
         const existingUser = await User.findOne({ email: text });
         if (existingUser) {
-            await sendWhatsAppText(from, "This email is already registered. Please use a different email.");
+            await queueOutboundMessage(from, "This email is already registered. Please use a different email."); // 🟢 QUEUE RESPONSE
             return;
         }
         user.email = text;
         user.registrationStage = 'PASSWORD';
         await user.save();
-        await sendWhatsAppText(from, "✅ Email Saved! Now, please reply with a **SECRET PASSWORD** (min 8 chars) to secure your account.\n\nYou can also login to the dashboard here:\n👉 https://tallypadi.com/login");
+        await queueOutboundMessage(from, "✅ Email Saved! Now, please reply with a **SECRET PASSWORD** (min 8 chars) to secure your account.\n\nYou can also login to the dashboard here:\n👉 https://tallypadi.com/login"); // 🟢 QUEUE RESPONSE
         return;
     }
 
     if (user.registrationStage === 'PASSWORD') {
       if (text.length < 8) {
-        await sendWhatsAppText(from, "❌ Password too short. Please use at least 8 characters.");
+        await queueOutboundMessage(from, "❌ Password too short. Please use at least 8 characters."); // 🟢 QUEUE RESPONSE
         return;
       }
       const salt = await bcrypt.genSalt(10);
       user.password = await bcrypt.hash(text, salt);
       user.registrationStage = 'COMPLETED';
       await user.save();
-      await sendWhatsAppText(from, `✅ Password Saved! \n\nYou can now start using Tallypadi.\nTry saying: *'I sold 2 bags of rice for ${symbol}50k'*`);
+      await queueOutboundMessage(from, `✅ Password Saved! \n\nYou can now start using Tallypadi.\nTry saying: *'I sold 2 bags of rice for ${symbol}50k'*`); // 🟢 QUEUE RESPONSE
       return;
     }
 
     if (isVoiceMessage && user.planType !== 'TYCOON') {
-        await sendWhatsAppText(from, "🎤 Voice messages are only available for **Tycoon Plan** subscribers. Upgrade to use this feature!");
+        await queueOutboundMessage(from, "🎤 Voice messages are only available for **Tycoon Plan** subscribers. Upgrade to use this feature!"); // 🟢 QUEUE RESPONSE
         return;
     }
 
@@ -305,7 +303,7 @@ export const handleMessageLogic = async (from: string, text: string, messageId: 
             startDate = yesterday;
             endDate = yesterdayEnd;
             dateLabel = "Yesterday's (Closed)";
-            await sendWhatsAppText(from, "💡 You are replying late! I will close the book for **Yesterday**.");
+            await queueOutboundMessage(from, "💡 You are replying late! I will close the book for **Yesterday**."); // 🟢 QUEUE RESPONSE
         } else {
             dateLabel = "Today's";
         }
@@ -319,13 +317,13 @@ export const handleMessageLogic = async (from: string, text: string, messageId: 
         case 'SET_STOCK':
         case 'DEFINE_PRICE':
             await processTransaction(user._id as any, parsed, messageId);
-            await sendWhatsAppText(from, parsed.reply_text);
+            await queueOutboundMessage(from, parsed.reply_text); // 🟢 QUEUE RESPONSE
             break;
         
         case 'DELETED_STOCK':
             const itemToDelete = parsed.items[0]?.name?.toLowerCase();
             if (!itemToDelete) {
-                await sendWhatsAppText(from, "Which item you wan delete? (e.g. 'Delete Rice')");
+                await queueOutboundMessage(from, "Which item you wan delete? (e.g. 'Delete Rice')"); // 🟢 QUEUE RESPONSE
             } else {
                 const item = await Inventory.findOne({
                     user: user._id,
@@ -339,9 +337,9 @@ export const handleMessageLogic = async (from: string, text: string, messageId: 
                     });
                     await deletedItem.save();
                     await Inventory.deleteOne({ _id: item._id });
-                    await sendWhatsAppText(from, `🗑️ Deleted *${item.name}* from your stock.`);
+                    await queueOutboundMessage(from, `🗑️ Deleted *${item.name}* from your stock.`); // 🟢 QUEUE RESPONSE
                 } else {
-                    await sendWhatsAppText(from, `I no see "${itemToDelete}" inside your shop list o.`);
+                    await queueOutboundMessage(from, `I no see "${itemToDelete}" inside your shop list o.`); // 🟢 QUEUE RESPONSE
                 }
             }
             break;
@@ -350,13 +348,13 @@ export const handleMessageLogic = async (from: string, text: string, messageId: 
             await processTransaction(user._id as any, parsed, messageId);
             const amt = parsed.total_money ? `${symbol}${parsed.total_money.toLocaleString(locale)}` : 'the payment';
             const name = parsed.customer_name ? ` from ${parsed.customer_name}` : '';
-            await sendWhatsAppText(from, `✅ Payment Recorded! Received ${amt}${name}.`);
+            await queueOutboundMessage(from, `✅ Payment Recorded! Received ${amt}${name}.`); // 🟢 QUEUE RESPONSE
             break;
 
         case 'PRICE_CHECK':
             const itemQuery = parsed.items[0]?.name?.toLowerCase();
             if (!itemQuery) {
-                await sendWhatsAppText(from, "Which item price you wan check? (e.g. 'Price of Rice')");
+                await queueOutboundMessage(from, "Which item price you wan check? (e.g. 'Price of Rice')"); // 🟢 QUEUE RESPONSE
             } else {
                 const item = await Inventory.findOne({ 
                     user: user._id, 
@@ -366,15 +364,15 @@ export const handleMessageLogic = async (from: string, text: string, messageId: 
                     const priceFmt = item.lastUnitPrice > 0 
                         ? `${symbol}${item.lastUnitPrice.toLocaleString(locale)}` 
                         : "Not set yet";
-                    await sendWhatsAppText(from, `🏷️ *Price Check: ${item.name.toUpperCase()}*\n\n💰 Last recorded price: *${priceFmt}*\n📦 Stock Level: *${item.quantity}*`);
+                    await queueOutboundMessage(from, `🏷️ *Price Check: ${item.name.toUpperCase()}*\n\n💰 Last recorded price: *${priceFmt}*\n📦 Stock Level: *${item.quantity}*`); // 🟢 QUEUE RESPONSE
                 } else {
-                    await sendWhatsAppText(from, `I no see "${itemQuery}" inside your shop list o.`);
+                    await queueOutboundMessage(from, `I no see "${itemQuery}" inside your shop list o.`); // 🟢 QUEUE RESPONSE
                 }
             }
             break;
 
         case 'REPORT_SALES':
-            await sendWhatsAppText(from, `Calculating ${dateLabel.toLowerCase()} report... ⏳`);
+            await queueOutboundMessage(from, `Calculating ${dateLabel.toLowerCase()} report... ⏳`); // 🟢 QUEUE RESPONSE
             
             const summary = await getDailySummary(user._id as any, startDate, endDate);
             // 🟢 DYNAMIC CURRENCY
@@ -423,13 +421,13 @@ export const handleMessageLogic = async (from: string, text: string, messageId: 
             salesMsg += `💰 *Total Money:* ${totalFormatted}\n`;
             salesMsg += `📉 *Total Transactions:* ${transactions.length}`;
             
-            await sendWhatsAppText(from, salesMsg);
+            await queueOutboundMessage(from, salesMsg); // 🟢 QUEUE RESPONSE
 
             if (user.planType === 'TYCOON') {
                 try {
                     const pdfFileName = await generatePdfReport(user._id as any, 'SALES', dateLabel, startDate, endDate);
                     const downloadLink = `https://tallypadi.com/reports/${pdfFileName}`;
-                    await sendWhatsAppText(from, `✨ Tycoon Feature: Download your sales report as PDF here: ${downloadLink}\n\nLink expires in 24 hours.`);
+                    await queueOutboundMessage(from, `✨ Tycoon Feature: Download your sales report as PDF here: ${downloadLink}\n\nLink expires in 24 hours.`); // 🟢 QUEUE RESPONSE
                 } catch (pdfError) {
                     console.error('❌ Error generating PDF for sales report:', pdfError);
                 }
@@ -437,12 +435,12 @@ export const handleMessageLogic = async (from: string, text: string, messageId: 
             break;
 
         case 'REPORT_STOCK':
-            await sendWhatsAppText(from, "Checking inventory... 📦");
+            await queueOutboundMessage(from, "Checking inventory... 📦"); // 🟢 QUEUE RESPONSE
             const targetItem = parsed.items && parsed.items.length > 0 ? parsed.items[0].name : null;
             const stockList = await getStockReport(user._id as any, targetItem);
 
             if (stockList.length === 0) {
-               await sendWhatsAppText(from, "Your inventory is empty or item not found.");
+               await queueOutboundMessage(from, "Your inventory is empty or item not found."); // 🟢 QUEUE RESPONSE
             } else {
                let stockMsg = `📦 *Current Stock Balance* 📦\n\n`;
                let hasNegative = false;
@@ -457,12 +455,12 @@ export const handleMessageLogic = async (from: string, text: string, messageId: 
                if (hasNegative) {
                    stockMsg += `\n_Note: Some items show negative numbers. Please update me when you restock._`;
                }
-               await sendWhatsAppText(from, stockMsg);
+               await queueOutboundMessage(from, stockMsg); // 🟢 QUEUE RESPONSE
             }
             break;
 
         case 'REPORT_FULL':
-            await sendWhatsAppText(from, "Generating comprehensive report... 📋");
+            await queueOutboundMessage(from, "Generating comprehensive report... 📋"); // 🟢 QUEUE RESPONSE
             const fullData = await getFullSummary(user._id as any, startDate, endDate);
             const revenueSummary = await getDailySummary(user._id as any, startDate, endDate);
             
@@ -497,13 +495,13 @@ export const handleMessageLogic = async (from: string, text: string, messageId: 
                 });
                 fullMsg += `_End of Report_`;
             }
-            await sendWhatsAppText(from, fullMsg);
+            await queueOutboundMessage(from, fullMsg); // 🟢 QUEUE RESPONSE
 
             if (user.planType === 'TYCOON') {
                 try {
                     const pdfFileName = await generatePdfReport(user._id as any, 'FULL', dateLabel, startDate, endDate);
                     const downloadLink = `https://tallypadi.com/reports/${pdfFileName}`;
-                    await sendWhatsAppText(from, `✨ Tycoon Feature: Download your comprehensive report as PDF here: ${downloadLink}\n\nLink expires in 24 hours.`);
+                    await queueOutboundMessage(from, `✨ Tycoon Feature: Download your comprehensive report as PDF here: ${downloadLink}\n\nLink expires in 24 hours.`); // 🟢 QUEUE RESPONSE
                 } catch (pdfError) {
                     console.error('❌ Error generating PDF for full report:', pdfError);
                 }
@@ -514,9 +512,9 @@ export const handleMessageLogic = async (from: string, text: string, messageId: 
             if (parsed.settings_update.key === 'language' && parsed.settings_update.value) {
                 user.settings.language = parsed.settings_update.value as string;
                 await user.save();
-                await sendWhatsAppText(from, parsed.reply_text || `Language changed to ${parsed.settings_update.value}`);
+                await queueOutboundMessage(from, parsed.reply_text || `Language changed to ${parsed.settings_update.value}`); // 🟢 QUEUE RESPONSE
             } else {
-                await sendWhatsAppText(from, parsed.reply_text || "Okay.");
+                await queueOutboundMessage(from, parsed.reply_text || "Okay."); // 🟢 QUEUE RESPONSE
             }
             break;
 
@@ -524,33 +522,33 @@ export const handleMessageLogic = async (from: string, text: string, messageId: 
             if (parsed.settings_update.key === 'closingTime' && parsed.settings_update.value) {
               user.settings.closingTime = parsed.settings_update.value as string;
               await user.save();
-              await sendWhatsAppText(from, `✅ Done! Closing time set to ${user.settings.closingTime}.`);
+              await queueOutboundMessage(from, `✅ Done! Closing time set to ${user.settings.closingTime}.`); // 🟢 QUEUE RESPONSE
             } else {
-              await sendWhatsAppText(from, parsed.reply_text);
+              await queueOutboundMessage(from, parsed.reply_text); // 🟢 QUEUE RESPONSE
             }
             break;
 
         case 'ADD_STAFF':
             if (user.planType !== 'TYCOON') {
-                await sendWhatsAppText(from, "🛑 Staff accounts are for **Tycoon Plan** users only. Upgrade now to add your sales boy/girl.");
+                await queueOutboundMessage(from, "🛑 Staff accounts are for **Tycoon Plan** users only. Upgrade now to add your sales boy/girl."); // 🟢 QUEUE RESPONSE
                 break;
             }
 
             const staffPhoneNumber = parsed.staffPhoneNumber;
             if (!staffPhoneNumber) {
-                await sendWhatsAppText(from, "Please provide the phone number of the staff you want to add.");
+                await queueOutboundMessage(from, "Please provide the phone number of the staff you want to add."); // 🟢 QUEUE RESPONSE
                 break;
             }
 
             const staffCount = await User.countDocuments({ ownerId: user._id });
             if (staffCount >= MAX_STAFF) {
-                await sendWhatsAppText(from, `You have reached the maximum staff limit (${MAX_STAFF}).`);
+                await queueOutboundMessage(from, `You have reached the maximum staff limit (${MAX_STAFF}).`); // 🟢 QUEUE RESPONSE
                 break;
             }
 
             const existingStaff = await User.findOne({ phoneNumber: staffPhoneNumber });
             if (existingStaff) {
-                await sendWhatsAppText(from, "This user is already registered on Tallypadi.");
+                await queueOutboundMessage(from, "This user is already registered on Tallypadi."); // 🟢 QUEUE RESPONSE
                 break;
             }
 
@@ -562,17 +560,17 @@ export const handleMessageLogic = async (from: string, text: string, messageId: 
                 registrationStage: 'COMPLETED'
             });
 
-            await sendWhatsAppText(from, `✅ Successfully added ${newStaff.phoneNumber} as your staff.`);
-            await sendWhatsAppText(newStaff.phoneNumber, `🔔 You have been added as a staff member by ${user.phoneNumber}. You can now record sales for their shop.`);
+            await queueOutboundMessage(from, `✅ Successfully added ${newStaff.phoneNumber} as your staff.`); // 🟢 QUEUE RESPONSE
+            await queueOutboundMessage(newStaff.phoneNumber, `🔔 You have been added as a staff member by ${user.phoneNumber}. You can now record sales for their shop.`); // 🟢 QUEUE RESPONSE
             break;
 
         case 'DOWNLOAD_REPORT':
             if (user.planType !== 'TYCOON') {
-                await sendWhatsAppText(from, "📄 PDF reports are a **Tycoon Plan** feature. Upgrade your plan to unlock this functionality!");
+                await queueOutboundMessage(from, "📄 PDF reports are a **Tycoon Plan** feature. Upgrade your plan to unlock this functionality!"); // 🟢 QUEUE RESPONSE
                 break;
             }
 
-            await sendWhatsAppText(from, "Generating your PDF report... This may take a moment. 📄");
+            await queueOutboundMessage(from, "Generating your PDF report... This may take a moment. 📄"); // 🟢 QUEUE RESPONSE
 
             let pdfReportType: 'SALES' | 'FULL' = 'FULL'; 
             if (parsed.intent === 'DOWNLOAD_REPORT' && parsed.reply_text.toLowerCase().includes('sales')) {
@@ -586,15 +584,15 @@ export const handleMessageLogic = async (from: string, text: string, messageId: 
             try {
                 const pdfFileName = await generatePdfReport(user._id as any, pdfReportType, dateLabel, startDate, endDate);
                 const downloadLink = `https://tallypadi.com/reports/${pdfFileName}`; 
-                await sendWhatsAppText(from, `✅ Your PDF report is ready: ${downloadLink}\n\nLink expires in 24 hours.`);
+                await queueOutboundMessage(from, `✅ Your PDF report is ready: ${downloadLink}\n\nLink expires in 24 hours.`); // 🟢 QUEUE RESPONSE
             } catch (pdfError) {
                 console.error('❌ Error generating PDF:', pdfError);
-                await sendWhatsAppText(from, "Sorry, I encountered an error while generating your PDF report. Please try again later.");
+                await queueOutboundMessage(from, "Sorry, I encountered an error while generating your PDF report. Please try again later."); // 🟢 QUEUE RESPONSE
             }
             break;
 
         default:
-            await sendWhatsAppText(from, parsed.reply_text);
+            await queueOutboundMessage(from, parsed.reply_text); // 🟢 QUEUE RESPONSE
             break;
     }
   } catch (err) {
