@@ -1,15 +1,14 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 import { 
   CheckCircle2, 
   ShieldCheck, 
   Zap, 
-  Star, 
   AlertCircle, 
   Loader2,
   Lock,
-  CreditCard,
   ArrowRight
 } from 'lucide-react';
 
@@ -25,7 +24,6 @@ interface PlanDetails {
 }
 
 // --- CONFIGURATION ---
-// Must match your backend PLAN_CONFIG
 const PLANS: PlanDetails[] = [
   {
     id: 'OGA_BOSS',
@@ -54,17 +52,35 @@ const PLANS: PlanDetails[] = [
   }
 ];
 
+// Sanitize URL to prevent "String did not match expected pattern" errors
+const getApiUrl = () => {
+    let url = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
+    return url.trim().replace(/\/$/, ''); // Remove trailing slash and spaces
+};
+
 export default function PaymentPage() {
   const [selectedPlan, setSelectedPlan] = useState<PlanType>('OGA_BOSS');
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Auto-select plan from URL query param if present (e.g., ?plan=TYCOON)
+  // Auto-select plan from URL query param
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const planParam = params.get('plan');
-    if (planParam === 'TYCOON') setSelectedPlan('TYCOON');
+    // Only run on client
+    if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        const planParam = params.get('plan');
+        if (planParam === 'TYCOON') setSelectedPlan('TYCOON');
+
+        // Optional: Auto-fill email if stored in local storage
+        const savedUser = localStorage.getItem('tallyUser');
+        if (savedUser) {
+            try {
+                const user = JSON.parse(savedUser);
+                if (user.email) setEmail(user.email);
+            } catch (e) {}
+        }
+    }
   }, []);
 
   const handlePayment = async (e: React.FormEvent) => {
@@ -73,43 +89,37 @@ export default function PaymentPage() {
     setError(null);
 
     try {
-      // 1. Prepare Payload
-      // In a real app, user ID is usually inferred from the auth token in headers
-      const payload = {
-        email: email, 
-        targetPlan: selectedPlan
-      };
+      const cleanEmail = email.trim();
+      const API_URL = getApiUrl();
 
-      // 2. Call your Backend API
-      // Replace with your actual endpoint that uses initializePayment()
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
-      
-      const response = await fetch(`${API_URL}/payment/initialize`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          // 'Authorization': `Bearer ${userToken}` // Uncomment if using auth tokens
-        },
-        body: JSON.stringify(payload),
+      console.log(`Connecting to: ${API_URL}/payment/initialize`);
+
+      // 1. Call Backend
+      const response = await axios.post(`${API_URL}/payment/initialize`, {
+        email: cleanEmail,
+        targetPlan: selectedPlan
       });
 
-      const data = await response.json();
+      const { authorization_url } = response.data;
 
-      if (!response.ok) {
-        throw new Error(data.message || 'Failed to initialize payment');
-      }
-
-      // 3. Redirect to Paystack
-      // The backend initializePayment returns `authorization_url` inside data
-      if (data.authorization_url) {
-        window.location.href = data.authorization_url;
+      // 2. Validate URL before redirecting
+      if (authorization_url && authorization_url.startsWith('http')) {
+        console.log("Redirecting to Paystack:", authorization_url);
+        window.location.href = authorization_url;
       } else {
-        throw new Error('No payment URL returned from server');
+        throw new Error('Received invalid redirect URL from payment provider.');
       }
 
     } catch (err: any) {
       console.error("Payment Error:", err);
-      setError(err.message || "Something went wrong. Please try again.");
+      // Detailed error message
+      const msg = err.response?.data?.message || err.message || "Connection failed. Please check your internet.";
+      setError(msg);
+      
+      // If user not found, give a hint
+      if (msg.includes('User not found')) {
+        setError("This email is not registered. Please use the email you signed up with.");
+      }
     } finally {
       setLoading(false);
     }
@@ -123,12 +133,12 @@ export default function PaymentPage() {
       {/* Simple Header */}
       <div className="bg-white border-b border-slate-200 py-4 px-6 shadow-sm">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-2 font-bold text-xl text-slate-900">
+          <a href="/dashboard" className="flex items-center gap-2 font-bold text-xl text-slate-900 hover:opacity-80 transition">
             <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center text-white">
               <Zap size={18} fill="currentColor" />
             </div>
             Tallypadi
-          </div>
+          </a>
           <div className="text-sm text-slate-500 flex items-center gap-1">
             <Lock size={14} /> Secure Checkout
           </div>
@@ -224,7 +234,7 @@ export default function PaymentPage() {
                             onChange={(e) => setEmail(e.target.value)}
                             className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition outline-none"
                         />
-                        <p className="text-xs text-slate-400">We'll send your receipt to this email.</p>
+                        <p className="text-xs text-slate-400">Must match your login email.</p>
                     </div>
 
                     {/* Summary */}
@@ -260,7 +270,7 @@ export default function PaymentPage() {
                         {loading ? (
                             <>
                                 <Loader2 size={20} className="animate-spin" />
-                                Processing...
+                                Connecting...
                             </>
                         ) : (
                             <>
