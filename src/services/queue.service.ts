@@ -5,8 +5,8 @@ export const connection = new IORedis(process.env.REDIS_URL || 'redis://127.0.0.
   maxRetriesPerRequest: null,
 });
 
-// OUTBOUND (WhatsApp replies, summaries, etc.)
-export const notificationQueue = new Queue('daily-summary', {
+// ✅ interactive responses
+export const replyQueue = new Queue('outbound-replies', {
   connection,
   defaultJobOptions: {
     attempts: 3,
@@ -16,7 +16,18 @@ export const notificationQueue = new Queue('daily-summary', {
   },
 });
 
-// INBOUND (messages from webhook to worker)
+// ✅ bulk/summaries/pdf links
+export const bulkQueue = new Queue('outbound-bulk', {
+  connection,
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 5000 },
+    removeOnComplete: true,
+    removeOnFail: 1000,
+  },
+});
+
+// ✅ inbound
 export const messageQueue = new Queue('incoming-messages', {
   connection,
   defaultJobOptions: {
@@ -27,28 +38,20 @@ export const messageQueue = new Queue('incoming-messages', {
   },
 });
 
+// ✅ This keeps your controller import EXACTLY as you want:
 export const queueOutboundMessage = async (phoneNumber: string, message: string) => {
-  if (!phoneNumber || !message || !message.trim()) return;
-
-  await notificationQueue.add(
+  await replyQueue.add(
     'send-text',
     { phoneNumber, message },
-    { jobId: `outbound:${phoneNumber}:${Date.now()}` }
+    { jobId: `reply:${phoneNumber}:${Date.now()}` }
   );
 };
 
-// ✅ BULK SENDER (used for long reports split into chunks)
-export const queueOutboundBulk = async (phoneNumber: string, messages: string[]) => {
-  if (!phoneNumber || !Array.isArray(messages) || messages.length === 0) return;
-
-  for (let i = 0; i < messages.length; i++) {
-    const msg = messages[i];
-    if (!msg || !msg.trim()) continue;
-
-    await notificationQueue.add(
-      'send-text',
-      { phoneNumber, message: msg },
-      { jobId: `outbound:${phoneNumber}:${Date.now()}:${i}` }
-    );
-  }
+// optional helper if you need it
+export const queueOutboundBulk = async (phoneNumber: string, message: string) => {
+  await bulkQueue.add(
+    'send-text',
+    { phoneNumber, message },
+    { jobId: `bulk:${phoneNumber}:${Date.now()}` }
+  );
 };
