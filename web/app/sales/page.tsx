@@ -372,7 +372,10 @@ export default function SalesPage() {
   }, [user?.subscriptionStatus, canAddSales, trialDaysLeft, router]);
 
   return (
-    <div className="flex min-h-screen font-sans text-gray-900 relative overflow-x-hidden bg-slate-50">
+    // ✅ SINGLE SCROLL CONTAINER SETUP:
+    // - Outer shell: h-screen + overflow-hidden
+    // - Main: overflow-y-auto + min-h-0 (important for flex scrolling)
+    <div className="flex h-screen font-sans text-gray-900 relative overflow-hidden bg-slate-50">
       {/* soft color blobs */}
       <div className="pointer-events-none absolute -top-24 -left-24 w-96 h-96 bg-emerald-200/40 rounded-full blur-[80px]" />
       <div className="pointer-events-none absolute -bottom-28 -right-24 w-[30rem] h-[30rem] bg-blue-200/40 rounded-full blur-[90px]" />
@@ -395,8 +398,8 @@ export default function SalesPage() {
         <Sidebar />
       </div>
 
-      {/* Main Content: Removed nested overflow-x-hidden on mobile to prevent stickiness */}
-      <main className="relative z-10 flex-1 md:ml-64 p-4 md:p-8 min-h-screen w-full max-w-full">
+      {/* ✅ Main Content is the ONLY SCROLLER */}
+      <main className="relative z-10 flex-1 md:ml-64 p-4 md:p-8 overflow-y-auto overscroll-contain min-h-0 w-full max-w-full">
         {/* Header */}
         <header className="mb-6">
           <div className="flex justify-between items-start mb-6 gap-4">
@@ -494,7 +497,9 @@ export default function SalesPage() {
         {(errorMsg || successMsg) && (
           <div
             className={`mb-6 p-4 rounded-2xl flex items-center gap-3 border shadow-sm ${
-              errorMsg ? 'bg-red-50 text-red-700 border-red-100' : 'bg-emerald-50 text-emerald-700 border-emerald-100'
+              errorMsg
+                ? 'bg-red-50 text-red-700 border-red-100'
+                : 'bg-emerald-50 text-emerald-700 border-emerald-100'
             }`}
           >
             {errorMsg ? <AlertCircle className="w-5 h-5" /> : <CheckCircle2 className="w-5 h-5" />}
@@ -507,8 +512,8 @@ export default function SalesPage() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Left */}
             <div className="lg:col-span-2 space-y-6">
-              {/* Search */}
-              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 sticky top-4 z-10">
+              {/* Search (✅ Sticky only on desktop) */}
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 lg:sticky lg:top-4 z-10">
                 <div className="flex items-center justify-between gap-3 mb-3">
                   <div className="flex items-center gap-2">
                     <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center">
@@ -621,12 +626,15 @@ export default function SalesPage() {
               </div>
             </div>
 
-            {/* Cart - FIXED FOR MOBILE SCROLLING */}
+            {/* Cart */}
             <div className="lg:col-span-1">
-             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col overflow-hidden
-                h-auto
-                lg:sticky lg:top-4 lg:max-h-[calc(100vh-8rem)]">
-
+              <div
+                className="
+                  bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col overflow-hidden
+                  h-auto
+                  lg:sticky lg:top-4 lg:max-h-[calc(100vh-8rem)]
+                "
+              >
                 <div className="p-4 border-b border-gray-100 bg-gray-50">
                   <h2 className="font-extrabold text-gray-900 flex items-center gap-2">
                     <ShoppingCart className="w-5 h-5 text-emerald-700" />
@@ -635,13 +643,8 @@ export default function SalesPage() {
                   <p className="text-xs text-gray-500 mt-1">Edit qty/price, then checkout.</p>
                 </div>
 
-                {/* 🟢 MOBILE FIX: Removed max-h and overflow-y-auto for mobile (default breakpoints).
-                   It now flows naturally with the page scroll.
-                   Added internal scroll only for Desktop (lg).
-                */}
-                <div className="p-4 space-y-4
-                lg:overflow-y-auto lg:flex-1 lg:max-h-none">
-
+                {/* ✅ Desktop: internal scroll, Mobile: natural flow */}
+                <div className="p-4 space-y-4 lg:overflow-y-auto lg:flex-1 lg:min-h-0">
                   {cart.length === 0 ? (
                     <div className="py-8 flex flex-col items-center justify-center text-gray-400 space-y-2">
                       <ShoppingCart className="w-12 h-12 opacity-50" />
@@ -650,7 +653,10 @@ export default function SalesPage() {
                     </div>
                   ) : (
                     cart.map((item) => (
-                      <div key={item.id} className="flex flex-col gap-2 p-3 rounded-2xl border border-gray-200 bg-gray-50">
+                      <div
+                        key={item.id}
+                        className="flex flex-col gap-2 p-3 rounded-2xl border border-gray-200 bg-gray-50"
+                      >
                         <div className="flex justify-between items-start gap-3">
                           <span className="font-extrabold text-gray-900 truncate capitalize">{item.name}</span>
                           <button
@@ -676,9 +682,7 @@ export default function SalesPage() {
                               type="number"
                               className="w-12 text-center text-sm font-extrabold outline-none bg-transparent text-gray-900"
                               value={item.sellQty}
-                              onChange={(e) =>
-                                updateCartItem(item.id, 'sellQty', parseInt(e.target.value) || 1)
-                              }
+                              onChange={(e) => updateCartItem(item.id, 'sellQty', parseInt(e.target.value) || 1)}
                               disabled={!canAddSales}
                             />
 
@@ -715,7 +719,8 @@ export default function SalesPage() {
                   )}
                 </div>
 
-                <div className="p-4 border-t border-gray-100 bg-gray-50 sticky bottom-0 z-10">
+                {/* ✅ No sticky here; flex layout keeps it at bottom on desktop */}
+                <div className="p-4 border-t border-gray-100 bg-gray-50 mt-auto">
                   <div className="flex justify-between items-center mb-4">
                     <span className="text-gray-500 text-sm font-bold">Total</span>
                     <span className="text-2xl font-extrabold text-gray-900">
