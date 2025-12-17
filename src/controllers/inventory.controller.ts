@@ -105,7 +105,7 @@ export const addInventoryItem = async (req: Request, res: Response) => {
     }
 
     // Create or Update
-    let item = await Inventory.findOne({ user: user._id, name: safeName.toLowerCase() });
+    let item = await Inventory.findOne({ user: user._id, name: { $regex: new RegExp(`^${safeName}$`, 'i') } });
 
     if (item) {
       const stockToAdd = safeStock !== undefined ? safeStock : 0;

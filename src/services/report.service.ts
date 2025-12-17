@@ -95,9 +95,7 @@ export const getDailySummary = async (
   const result = await Transaction.aggregate<DailyAggResult>([
     {
       $match: {
-        user: { $in: relevantUserIds },
-        type: 'SALE',
-        createdAt: { $gte: start, $lte: end },
+        timestamp: { $gte: start, $lte: end },
       },
     },
     { $unwind: '$items' },
@@ -186,7 +184,7 @@ export const getFullSummary = async (
       $match: {
         user: { $in: salesUserIds },
         type: 'SALE',
-        createdAt: { $gte: start, $lte: end },
+        timestamp: { $gte: start, $lte: end },
       },
     },
     { $unwind: '$items' },
@@ -271,7 +269,7 @@ export const getTodayTransactions = async (
   const transactions = await Transaction.find({
     user: { $in: relevantUserIds },
     type: 'SALE',
-    createdAt: { $gte: start, $lte: end }
+    timestamp: { $gte: start, $lte: end }
   }).populate('user', 'phoneNumber name role').sort({ createdAt: 1 }); 
 
   return transactions;
