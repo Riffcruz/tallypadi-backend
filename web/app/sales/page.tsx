@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
 import Sidebar from '../../components/Sidebar';
@@ -31,7 +31,7 @@ import Swal from 'sweetalert2';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 
-// --- Types ---
+// --- Types (same as before) ---
 interface InventoryItem {
   id: string;
   name: string;
@@ -62,8 +62,6 @@ interface UserProfile {
   trialEndsAt?: string | Date;
 }
 
-// Define a more specific type for raw inventory items if possible,
-// or at least for the mapped items to avoid 'any'
 interface RawInventoryItem {
   _id?: string;
   id?: string;
@@ -76,6 +74,9 @@ interface RawInventoryItem {
 
 export default function SalesPage() {
   const router = useRouter();
+  const touchStartY = useRef(0);
+  const cartDrawerRef = useRef<HTMLDivElement>(null);
+  const isScrollingRef = useRef(false);
 
   // --- State: General ---
   const [activeTab, setActiveTab] = useState<'new' | 'history'>('new');
@@ -238,17 +239,20 @@ export default function SalesPage() {
         console.error('Failed to fetch user data', err);
       });
 
-    // Prevent zoom on mobile
-    const preventZoom = (e: TouchEvent) => {
-      if (e.touches.length > 1) {
+    // Fix for iOS scrolling issues
+    const preventPullToRefresh = (e: TouchEvent) => {
+      if (window.scrollY === 0) {
         e.preventDefault();
       }
     };
 
-    document.addEventListener('touchstart', preventZoom, { passive: false });
+    // Add CSS to fix overscroll behavior
+    document.body.style.overscrollBehavior = 'none';
+    document.addEventListener('touchmove', preventPullToRefresh, { passive: false });
 
     return () => {
-      document.removeEventListener('touchstart', preventZoom);
+      document.body.style.overscrollBehavior = '';
+      document.removeEventListener('touchmove', preventPullToRefresh);
     };
   }, [router]);
 
@@ -257,12 +261,13 @@ export default function SalesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
-  // Add swipe gesture for mobile cart
+  // Improved cart swipe gesture handling
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
     let startY = 0;
     let isSwiping = false;
+    let swipeTarget: HTMLElement | null = null;
 
     const handleTouchStart = (e: TouchEvent) => {
       const target = e.target as HTMLElement;
@@ -270,39 +275,68 @@ export default function SalesPage() {
       if (target.closest('.mobile-cart-header')) {
         startY = e.touches[0].clientY;
         isSwiping = true;
+        swipeTarget = target.closest('.mobile-cart-header');
+        e.stopPropagation();
       }
     };
 
     const handleTouchMove = (e: TouchEvent) => {
-      if (!isSwiping) return;
+      if (!isSwiping || isScrollingRef.current) return;
 
       const currentY = e.touches[0].clientY;
       const diff = startY - currentY;
+      const absDiff = Math.abs(diff);
 
-      // Swipe up to expand cart
-      if (diff > 50 && !isCartExpanded) {
-        setIsCartExpanded(true);
-        isSwiping = false;
-      }
-      // Swipe down to collapse cart
-      else if (diff < -50 && isCartExpanded) {
-        setIsCartExpanded(false);
-        isSwiping = false;
+      // Only trigger swipe if movement is mostly vertical
+      if (absDiff > 10) {
+        e.preventDefault();
+        
+        // Swipe up to expand cart
+        if (diff > 50 && !isCartExpanded) {
+          setIsCartExpanded(true);
+          isSwiping = false;
+        }
+        // Swipe down to collapse cart
+        else if (diff < -50 && isCartExpanded) {
+          setIsCartExpanded(false);
+          isSwiping = false;
+        }
       }
     };
 
     const handleTouchEnd = () => {
       isSwiping = false;
+      swipeTarget = null;
     };
 
-    document.addEventListener('touchstart', handleTouchStart);
-    document.addEventListener('touchmove', handleTouchMove);
-    document.addEventListener('touchend', handleTouchEnd);
+    // Add passive: true to improve scrolling performance
+    document.addEventListener('touchstart', handleTouchStart, { passive: true });
+    document.addEventListener('touchmove', handleTouchMove, { passive: false });
+    document.addEventListener('touchend', handleTouchEnd, { passive: true });
 
     return () => {
       document.removeEventListener('touchstart', handleTouchStart);
       document.removeEventListener('touchmove', handleTouchMove);
       document.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [isCartExpanded]);
+
+  // Lock body scroll when cart is expanded
+  useEffect(() => {
+    if (isCartExpanded) {
+      document.body.style.overflow = 'hidden';
+      document.body.style.position = 'fixed';
+      document.body.style.width = '100%';
+    } else {
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.width = '';
+    }
+
+    return () => {
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.width = '';
     };
   }, [isCartExpanded]);
 
@@ -331,20 +365,18 @@ export default function SalesPage() {
       const res = await axios.get(`${API_URL}/sales/report`, {
         headers: { Authorization: `Bearer ${token}` },
         params,
-        responseType: 'arraybuffer', // ✅ better than blob for detecting JSON/HTML
+        responseType: 'arraybuffer',
         validateStatus: () => true,
       });
 
       const contentType = String(res.headers?.['content-type'] || '').toLowerCase();
 
-      // ❌ non-200 => decode message if possible
       if (res.status !== 200) {
         const txt = new TextDecoder().decode(res.data);
         console.error('Report error body:', txt);
         throw new Error(`Report failed (${res.status})`);
       }
 
-      // ✅ If server returns JSON (e.g. { url: "...pdf" })
       if (contentType.includes('application/json')) {
         const jsonText = new TextDecoder().decode(res.data);
         const data = JSON.parse(jsonText);
@@ -357,7 +389,6 @@ export default function SalesPage() {
         return;
       }
 
-      // ✅ If server returns actual PDF bytes
       if (!contentType.includes('pdf')) {
         const txt = new TextDecoder().decode(res.data);
         console.error('Unexpected content-type:', contentType, 'body:', txt);
@@ -422,106 +453,102 @@ export default function SalesPage() {
   const calculateTotal = () => cart.reduce((acc, item) => acc + item.sellQty * item.sellPrice, 0);
 
   const handleCheckout = async () => {
-  if (!canAddSales) return showLockedModal();
+    if (!canAddSales) return showLockedModal();
 
-  if (cart.length === 0) {
-    setErrorMsg('Cart is empty. Add items to checkout.');
-    setTimeout(() => setErrorMsg(''), 3000);
-    return;
-  }
-
-  // ✅ Prevent 0 / invalid prices (this was causing “Invalid sale data” too)
-  const hasZeroPrice = cart.some(i => !Number.isFinite(i.sellPrice) || i.sellPrice <= 0);
-  if (hasZeroPrice) {
-    setErrorMsg('Set a selling price for all items before checkout.');
-    setTimeout(() => setErrorMsg(''), 4000);
-    return;
-  }
-
-  const token = localStorage.getItem('tallyToken');
-  if (!token) {
-    router.push('/login');
-    return;
-  }
-
-  setLoading(true);
-  setErrorMsg('');
-  setSuccessMsg('');
-
-  try {
-    // ✅ Stock check now works because backend has GET /api/inventory/:id
-    const stockCheckPromises = cart.map(async (item) => {
-      try {
-        const res = await axios.get(`${API_URL}/inventory/${item.id}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-
-        const currentStock = Number(res.data?.quantity ?? res.data?.stock ?? 0);
-        return { item, currentStock };
-      } catch {
-        return { item, currentStock: 0 };
-      }
-    });
-
-    const stockResults = await Promise.all(stockCheckPromises);
-    const outOfStockItems = stockResults.filter(({ item, currentStock }) => currentStock < item.sellQty);
-
-    if (outOfStockItems.length > 0) {
-      const itemNames = outOfStockItems.map(({ item }) => item.name).join(', ');
-      setErrorMsg(`Insufficient stock for: ${itemNames}`);
-      setTimeout(() => setErrorMsg(''), 5000);
-      setLoading(false);
+    if (cart.length === 0) {
+      setErrorMsg('Cart is empty. Add items to checkout.');
+      setTimeout(() => setErrorMsg(''), 3000);
       return;
     }
 
-    // ✅ This payload now matches backend (backend accepts batch)
-    const salesData = {
-      items: cart.map(item => ({
-        itemId: item.id,
-        quantity: item.sellQty,
-        price: item.sellPrice,
-      })),
-    };
-
-    await axios.post(`${API_URL}/sales`, salesData, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-
-    setSuccessMsg(`Successfully recorded ${cart.length} item${cart.length === 1 ? '' : 's'}!`);
-    setCart([]);
-    setIsCartExpanded(false);
-
-    fetchInventory(token);
-    if (activeTab === 'history') fetchHistory();
-  } catch (err: any) {
-    console.error('Checkout failed', err);
-
-    const status = err.response?.status;
-    const apiMsg = err.response?.data?.message || err.response?.data?.error;
-
-    if (status === 400) {
-      setErrorMsg(apiMsg || 'Invalid sale data. Please check quantities and prices.');
-    } else if (status === 401) {
-      setErrorMsg('Session expired. Please login again.');
-      setTimeout(() => router.push('/login'), 2000);
-    } else if (status === 403) {
-      setErrorMsg(apiMsg || 'You do not have permission to record sales.');
-    } else if (status === 404) {
-      setErrorMsg(apiMsg || 'Item not found. Please refresh inventory.');
-    } else if (status === 409) {
-      setErrorMsg(apiMsg || 'Insufficient stock for one or more items.');
-    } else {
-      setErrorMsg(apiMsg || 'Failed to record sale. Please try again.');
+    const hasZeroPrice = cart.some(i => !Number.isFinite(i.sellPrice) || i.sellPrice <= 0);
+    if (hasZeroPrice) {
+      setErrorMsg('Set a selling price for all items before checkout.');
+      setTimeout(() => setErrorMsg(''), 4000);
+      return;
     }
-  } finally {
-    setLoading(false);
-    setTimeout(() => {
-      setSuccessMsg('');
-      setErrorMsg('');
-    }, 5000);
-  }
-};
 
+    const token = localStorage.getItem('tallyToken');
+    if (!token) {
+      router.push('/login');
+      return;
+    }
+
+    setLoading(true);
+    setErrorMsg('');
+    setSuccessMsg('');
+
+    try {
+      const stockCheckPromises = cart.map(async (item) => {
+        try {
+          const res = await axios.get(`${API_URL}/inventory/${item.id}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+
+          const currentStock = Number(res.data?.quantity ?? res.data?.stock ?? 0);
+          return { item, currentStock };
+        } catch {
+          return { item, currentStock: 0 };
+        }
+      });
+
+      const stockResults = await Promise.all(stockCheckPromises);
+      const outOfStockItems = stockResults.filter(({ item, currentStock }) => currentStock < item.sellQty);
+
+      if (outOfStockItems.length > 0) {
+        const itemNames = outOfStockItems.map(({ item }) => item.name).join(', ');
+        setErrorMsg(`Insufficient stock for: ${itemNames}`);
+        setTimeout(() => setErrorMsg(''), 5000);
+        setLoading(false);
+        return;
+      }
+
+      const salesData = {
+        items: cart.map(item => ({
+          itemId: item.id,
+          quantity: item.sellQty,
+          price: item.sellPrice,
+        })),
+      };
+
+      await axios.post(`${API_URL}/sales`, salesData, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      setSuccessMsg(`Successfully recorded ${cart.length} item${cart.length === 1 ? '' : 's'}!`);
+      setCart([]);
+      setIsCartExpanded(false);
+
+      fetchInventory(token);
+      if (activeTab === 'history') fetchHistory();
+    } catch (err: any) {
+      console.error('Checkout failed', err);
+
+      const status = err.response?.status;
+      const apiMsg = err.response?.data?.message || err.response?.data?.error;
+
+      if (status === 400) {
+        setErrorMsg(apiMsg || 'Invalid sale data. Please check quantities and prices.');
+      } else if (status === 401) {
+        setErrorMsg('Session expired. Please login again.');
+        setTimeout(() => router.push('/login'), 2000);
+      } else if (status === 403) {
+        setErrorMsg(apiMsg || 'You do not have permission to record sales.');
+      } else if (status === 404) {
+        setErrorMsg(apiMsg || 'Item not found. Please refresh inventory.');
+      } else if (status === 409) {
+        setErrorMsg(apiMsg || 'Insufficient stock for one or more items.');
+      } else {
+        setErrorMsg(apiMsg || 'Failed to record sale. Please try again.');
+      }
+    } finally {
+      setLoading(false);
+      setTimeout(() => {
+        setSuccessMsg('');
+        setErrorMsg('');
+      }, 5000);
+    }
+  };
 
   // --- UI helpers ---
   const planBadge = useMemo(() => {
@@ -545,9 +572,6 @@ export default function SalesPage() {
       cls: 'bg-emerald-50 text-emerald-700 border-emerald-200',
     };
   }, [user]);
-
-
-
 
   const accessBadge = useMemo(() => {
     if (!normalizedSubscriptionStatus) return null;
@@ -586,15 +610,26 @@ export default function SalesPage() {
     );
   }, [normalizedSubscriptionStatus, canAddSales, trialDaysLeft, router]);
 
-  // Mobile Cart Summary Component
+  // Mobile Cart Summary Component - FIXED VERSION
   const MobileCartSummary = () => (
     <div className="lg:hidden">
       {/* Cart Summary Bar */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-50 mobile-cart-header">
+      <div 
+        ref={cartDrawerRef}
+        className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-2xl z-50 mobile-cart-header transform-gpu"
+        style={{
+          willChange: 'transform',
+          backfaceVisibility: 'hidden',
+          WebkitBackfaceVisibility: 'hidden',
+        }}
+      >
         <button
           onClick={() => setIsCartExpanded(!isCartExpanded)}
-          className="w-full p-4 flex items-center justify-between bg-gradient-to-r from-emerald-50 to-blue-50 active:bg-emerald-100 transition-colors"
-          style={{ WebkitTapHighlightColor: 'transparent' }}
+          className="w-full p-4 flex items-center justify-between bg-gradient-to-r from-emerald-50 to-blue-50 active:bg-emerald-100 transition-colors touch-manipulation"
+          style={{ 
+            WebkitTapHighlightColor: 'transparent',
+            touchAction: 'manipulation'
+          }}
         >
           <div className="flex items-center gap-3">
             <div className="relative">
@@ -621,13 +656,25 @@ export default function SalesPage() {
 
         {/* Expanded Cart Content */}
         <div
-          className={`transition-all duration-300 ease-in-out overflow-hidden ${
+          className={`transition-all duration-300 ease-in-out overflow-hidden transform-gpu ${
             isCartExpanded ? 'max-h-[70vh]' : 'max-h-0'
           }`}
+          style={{
+            willChange: 'max-height',
+            WebkitOverflowScrolling: 'touch',
+            overscrollBehavior: 'contain',
+          }}
         >
-          <div className="p-4 bg-white border-t">
+          <div className="p-4 bg-white">
             {/* Cart Items */}
-            <div className="mb-4 max-h-[40vh] overflow-y-auto">
+            <div 
+              className="mb-4 max-h-[40vh] overflow-y-auto overscroll-contain"
+              style={{
+                WebkitOverflowScrolling: 'touch',
+                scrollbarWidth: 'thin',
+                msOverflowStyle: 'none',
+              }}
+            >
               {cart.length === 0 ? (
                 <div className="py-6 flex flex-col items-center justify-center text-gray-400 space-y-2">
                   <ShoppingCart className="w-12 h-12 opacity-50" />
@@ -638,7 +685,8 @@ export default function SalesPage() {
                 cart.map((item) => (
                   <div
                     key={item.id}
-                    className="flex items-center justify-between py-3 border-b border-gray-100 last:border-b-0"
+                    className="flex items-center justify-between py-3 border-b border-gray-100 last:border-b-0 touch-manipulation"
+                    style={{ WebkitTapHighlightColor: 'transparent' }}
                   >
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-gray-900 truncate capitalize">{item.name}</p>
@@ -646,15 +694,17 @@ export default function SalesPage() {
                         <div className="flex items-center bg-gray-50 rounded-lg overflow-hidden">
                           <button
                             onClick={() => updateCartItem(item.id, 'sellQty', Math.max(1, item.sellQty - 1))}
-                            className="px-2 py-1.5 hover:bg-gray-200 text-gray-700 disabled:opacity-50"
+                            className="px-2 py-1.5 hover:bg-gray-200 text-gray-700 disabled:opacity-50 touch-manipulation"
+                            style={{ WebkitTapHighlightColor: 'transparent' }}
                             disabled={!canAddSales || loading}
                           >
                             <Minus className="w-3.5 h-3.5" />
                           </button>
-                          <span className="px-2 text-sm font-bold">{item.sellQty}</span>
+                          <span className="px-2 text-sm font-bold min-w-[20px] text-center">{item.sellQty}</span>
                           <button
                             onClick={() => updateCartItem(item.id, 'sellQty', item.sellQty + 1)}
-                            className="px-2 py-1.5 hover:bg-gray-200 text-gray-700 disabled:opacity-50"
+                            className="px-2 py-1.5 hover:bg-gray-200 text-gray-700 disabled:opacity-50 touch-manipulation"
+                            style={{ WebkitTapHighlightColor: 'transparent' }}
                             disabled={!canAddSales || loading}
                           >
                             <Plus className="w-3.5 h-3.5" />
@@ -665,13 +715,15 @@ export default function SalesPage() {
                           <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs">₦</span>
                           <input
                             type="number"
-                            className="w-full pl-5 pr-2 py-1 text-sm border border-gray-200 bg-white rounded-lg focus:ring-1 focus:ring-emerald-500 outline-none text-gray-900"
+                            className="w-full pl-5 pr-2 py-1 text-sm border border-gray-200 bg-white rounded-lg focus:ring-1 focus:ring-emerald-500 outline-none text-gray-900 touch-manipulation"
+                            style={{ WebkitAppearance: 'none' }}
                             value={item.sellPrice}
                             onChange={(e) =>
                               updateCartItem(item.id, 'sellPrice', Math.max(0, parseInt(e.target.value) || 0))
                             }
                             disabled={!canAddSales || loading}
                             min="0"
+                            inputMode="numeric"
                           />
                         </div>
                       </div>
@@ -682,7 +734,7 @@ export default function SalesPage() {
                       </p>
                       <button
                         onClick={() => removeFromCart(item.id)}
-                        className="p-2 text-red-500 hover:bg-red-50 rounded-lg active:scale-95 transition-transform"
+                        className="p-2 text-red-500 hover:bg-red-50 rounded-lg active:scale-95 transition-transform touch-manipulation"
                         style={{ WebkitTapHighlightColor: 'transparent' }}
                         disabled={loading}
                       >
@@ -706,7 +758,7 @@ export default function SalesPage() {
               <button
                 onClick={handleCheckout}
                 disabled={loading || cart.length === 0 || !canAddSales}
-                className={`w-full py-4 rounded-xl font-bold shadow-lg active:scale-[0.98] transition-all disabled:opacity-50 flex justify-center items-center gap-2 ${
+                className={`w-full py-4 rounded-xl font-bold shadow-lg active:scale-[0.98] transition-all disabled:opacity-50 flex justify-center items-center gap-2 touch-manipulation ${
                   canAddSales
                     ? 'bg-emerald-600 hover:bg-emerald-700 text-white active:bg-emerald-800'
                     : 'bg-gray-100 text-gray-400'
@@ -727,7 +779,7 @@ export default function SalesPage() {
                 <button
                   type="button"
                   onClick={showLockedModal}
-                  className="mt-3 w-full py-3 rounded-xl font-bold bg-gray-900 text-white hover:bg-black active:bg-gray-800 transition flex items-center justify-center gap-2"
+                  className="mt-3 w-full py-3 rounded-xl font-bold bg-gray-900 text-white hover:bg-black active:bg-gray-800 transition flex items-center justify-center gap-2 touch-manipulation"
                   style={{ WebkitTapHighlightColor: 'transparent' }}
                 >
                   Unlock Sales <ArrowRight className="w-4 h-4" />
@@ -744,7 +796,14 @@ export default function SalesPage() {
   );
 
   return (
-    <div className="flex min-h-screen font-sans text-gray-900 relative overflow-x-hidden bg-slate-50">
+    <div 
+      className="flex min-h-screen font-sans text-gray-900 relative overflow-x-hidden bg-slate-50"
+      style={{
+        WebkitTapHighlightColor: 'transparent',
+        touchAction: 'pan-y',
+        overscrollBehavior: 'none',
+      }}
+    >
       {/* soft color blobs */}
       <div className="pointer-events-none absolute -top-24 -left-24 w-96 h-96 bg-emerald-200/40 rounded-full blur-[80px]" />
       <div className="pointer-events-none absolute -bottom-28 -right-24 w-[30rem] h-[30rem] bg-blue-200/40 rounded-full blur-[90px]" />
@@ -768,14 +827,22 @@ export default function SalesPage() {
       </div>
 
       {/* Main Content */}
-      <main className="relative z-10 flex-1 md:ml-64 p-4 md:p-8 min-h-screen w-full max-w-full">
+      <main 
+        className="relative z-10 flex-1 md:ml-64 p-4 md:p-8 min-h-screen w-full max-w-full overflow-y-auto"
+        style={{
+          WebkitOverflowScrolling: 'touch',
+          overscrollBehavior: 'contain',
+          transform: 'translateZ(0)',
+          backfaceVisibility: 'hidden',
+        }}
+      >
         {/* Header */}
         <header className="mb-6">
           <div className="flex justify-between items-start mb-6 gap-4">
             <div className="flex items-center gap-3 min-w-0">
               <button
                 onClick={() => setIsMobileMenuOpen(true)}
-                className="p-2 -ml-2 text-gray-700 bg-white shadow-sm border border-gray-100 rounded-xl md:hidden active:scale-95 transition-transform"
+                className="p-2 -ml-2 text-gray-700 bg-white shadow-sm border border-gray-100 rounded-xl md:hidden active:scale-95 transition-transform touch-manipulation"
                 style={{ WebkitTapHighlightColor: 'transparent' }}
               >
                 <Menu className="w-6 h-6" />
@@ -805,7 +872,7 @@ export default function SalesPage() {
                 setActiveTab('history');
                 setIsCartExpanded(false);
               }}
-              className="shrink-0 relative overflow-hidden rounded-2xl px-4 py-3 text-sm font-extrabold border border-emerald-200 bg-white shadow-md hover:shadow-lg active:scale-95 transition-all"
+              className="shrink-0 relative overflow-hidden rounded-2xl px-4 py-3 text-sm font-extrabold border border-emerald-200 bg-white shadow-md hover:shadow-lg active:scale-95 transition-all touch-manipulation"
               title="View Sales History"
               style={{ WebkitTapHighlightColor: 'transparent' }}
             >
@@ -831,7 +898,7 @@ export default function SalesPage() {
                   setActiveTab('new');
                   setIsCartExpanded(false);
                 }}
-                className={`flex-1 py-3 px-4 rounded-xl text-sm font-extrabold transition-all flex items-center justify-center gap-2 active:scale-95 ${
+                className={`flex-1 py-3 px-4 rounded-xl text-sm font-extrabold transition-all flex items-center justify-center gap-2 active:scale-95 touch-manipulation ${
                   activeTab === 'new'
                     ? 'bg-emerald-600 text-white shadow'
                     : 'text-gray-700 hover:bg-gray-50 active:bg-gray-100'
@@ -848,7 +915,7 @@ export default function SalesPage() {
 
               <button
                 onClick={() => setActiveTab('history')}
-                className={`flex-1 py-3 px-4 rounded-xl text-sm font-extrabold transition-all flex items-center justify-center gap-2 active:scale-95 ${
+                className={`flex-1 py-3 px-4 rounded-xl text-sm font-extrabold transition-all flex items-center justify-center gap-2 active:scale-95 touch-manipulation ${
                   activeTab === 'history'
                     ? 'bg-emerald-600 text-white shadow'
                     : 'text-gray-700 hover:bg-gray-50 active:bg-gray-100'
@@ -914,7 +981,7 @@ export default function SalesPage() {
                   {!canAddSales && (
                     <button
                       onClick={showLockedModal}
-                      className="text-xs font-extrabold px-3 py-2 rounded-xl bg-red-50 border border-red-200 text-red-700 hover:bg-red-100 active:bg-red-200 transition"
+                      className="text-xs font-extrabold px-3 py-2 rounded-xl bg-red-50 border border-red-200 text-red-700 hover:bg-red-100 active:bg-red-200 transition touch-manipulation"
                       style={{ WebkitTapHighlightColor: 'transparent' }}
                     >
                       <Lock className="w-4 h-4 inline-block mr-1" />
@@ -928,10 +995,10 @@ export default function SalesPage() {
                   <input
                     type="text"
                     placeholder="Search inventory..."
-                    className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all text-gray-900 placeholder:text-gray-400 text-base"
+                    className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all text-gray-900 placeholder:text-gray-400 text-base touch-manipulation"
+                    style={{ WebkitAppearance: 'none' }}
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    style={{ WebkitAppearance: 'none' }}
                   />
                 </div>
               </div>
@@ -943,10 +1010,10 @@ export default function SalesPage() {
                     <button
                       key={item.id}
                       onClick={() => addToCart(item)}
-                      className="group rounded-xl border border-gray-200 bg-white hover:border-emerald-300 hover:shadow-md active:scale-95 transition-all duration-200 active:bg-emerald-50"
+                      className="group rounded-xl border border-gray-200 bg-white hover:border-emerald-300 hover:shadow-md active:scale-95 transition-all duration-200 active:bg-emerald-50 touch-manipulation"
                       style={{
-                        touchAction: 'manipulation',
                         WebkitTapHighlightColor: 'transparent',
+                        touchAction: 'manipulation',
                       }}
                       disabled={!canAddSales || loading}
                     >
@@ -1010,7 +1077,7 @@ export default function SalesPage() {
                     </div>
                     <button
                       onClick={showLockedModal}
-                      className="px-4 py-2.5 rounded-xl font-extrabold text-sm bg-gray-900 text-white hover:bg-black active:bg-gray-800 transition"
+                      className="px-4 py-2.5 rounded-xl font-extrabold text-sm bg-gray-900 text-white hover:bg-black active:bg-gray-800 transition touch-manipulation"
                       style={{ WebkitTapHighlightColor: 'transparent' }}
                     >
                       Upgrade Now <ArrowRight className="w-4 h-4 inline-block ml-1" />
@@ -1046,8 +1113,9 @@ export default function SalesPage() {
                           <span className="font-extrabold text-gray-900 truncate capitalize">{item.name}</span>
                           <button
                             onClick={() => removeFromCart(item.id)}
-                            className="text-red-500 hover:text-red-700 hover:bg-red-50 border border-transparent hover:border-red-200 p-2 rounded-xl transition"
+                            className="text-red-500 hover:text-red-700 hover:bg-red-50 border border-transparent hover:border-red-200 p-2 rounded-xl transition touch-manipulation"
                             title="Remove"
+                            style={{ WebkitTapHighlightColor: 'transparent' }}
                             disabled={loading}
                           >
                             <Trash2 className="w-4 h-4" />
@@ -1058,7 +1126,8 @@ export default function SalesPage() {
                           <div className="flex items-center bg-white rounded-xl border border-gray-200 overflow-hidden">
                             <button
                               onClick={() => updateCartItem(item.id, 'sellQty', Math.max(1, item.sellQty - 1))}
-                              className="px-3 py-2 hover:bg-gray-50 text-gray-700 disabled:opacity-50"
+                              className="px-3 py-2 hover:bg-gray-50 text-gray-700 disabled:opacity-50 touch-manipulation"
+                              style={{ WebkitTapHighlightColor: 'transparent' }}
                               disabled={!canAddSales || loading}
                             >
                               <Minus className="w-3.5 h-3.5" />
@@ -1066,18 +1135,21 @@ export default function SalesPage() {
 
                             <input
                               type="number"
-                              className="w-12 text-center text-sm font-extrabold outline-none bg-transparent text-gray-900"
+                              className="w-12 text-center text-sm font-extrabold outline-none bg-transparent text-gray-900 touch-manipulation"
+                              style={{ WebkitAppearance: 'none' }}
                               value={item.sellQty}
                               onChange={(e) =>
                                 updateCartItem(item.id, 'sellQty', Math.max(1, parseInt(e.target.value) || 1))
                               }
                               disabled={!canAddSales || loading}
                               min="1"
+                              inputMode="numeric"
                             />
 
                             <button
                               onClick={() => updateCartItem(item.id, 'sellQty', item.sellQty + 1)}
-                              className="px-3 py-2 hover:bg-gray-50 text-gray-700 disabled:opacity-50"
+                              className="px-3 py-2 hover:bg-gray-50 text-gray-700 disabled:opacity-50 touch-manipulation"
+                              style={{ WebkitTapHighlightColor: 'transparent' }}
                               disabled={!canAddSales || loading}
                             >
                               <Plus className="w-3.5 h-3.5" />
@@ -1090,13 +1162,15 @@ export default function SalesPage() {
                             <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs">₦</span>
                             <input
                               type="number"
-                              className="w-full pl-5 pr-2 py-2 text-sm border border-gray-200 bg-white rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none text-gray-900"
+                              className="w-full pl-5 pr-2 py-2 text-sm border border-gray-200 bg-white rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none text-gray-900 touch-manipulation"
+                              style={{ WebkitAppearance: 'none' }}
                               value={item.sellPrice}
                               onChange={(e) =>
                                 updateCartItem(item.id, 'sellPrice', Math.max(0, parseInt(e.target.value) || 0))
                               }
                               disabled={!canAddSales || loading}
                               min="0"
+                              inputMode="numeric"
                             />
                           </div>
                         </div>
@@ -1120,11 +1194,12 @@ export default function SalesPage() {
                   <button
                     onClick={handleCheckout}
                     disabled={loading || cart.length === 0 || !canAddSales}
-                    className={`w-full py-3.5 rounded-2xl font-extrabold shadow-lg active:scale-[0.98] transition-all disabled:opacity-50 flex justify-center items-center gap-2 ${
+                    className={`w-full py-3.5 rounded-2xl font-extrabold shadow-lg active:scale-[0.98] transition-all disabled:opacity-50 flex justify-center items-center gap-2 touch-manipulation ${
                       canAddSales
                         ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20'
                         : 'bg-white text-gray-400 border border-gray-200'
                     }`}
+                    style={{ WebkitTapHighlightColor: 'transparent' }}
                   >
                     {loading ? (
                       <Loader2 className="animate-spin w-5 h-5" />
@@ -1140,7 +1215,8 @@ export default function SalesPage() {
                     <button
                       type="button"
                       onClick={showLockedModal}
-                      className="mt-3 w-full py-3 rounded-2xl font-extrabold bg-gray-900 text-white hover:bg-black transition flex items-center justify-center gap-2"
+                      className="mt-3 w-full py-3 rounded-2xl font-extrabold bg-gray-900 text-white hover:bg-black transition flex items-center justify-center gap-2 touch-manipulation"
+                      style={{ WebkitTapHighlightColor: 'transparent' }}
                     >
                       Unlock Sales <ArrowRight className="w-4 h-4" />
                     </button>
@@ -1165,7 +1241,8 @@ export default function SalesPage() {
                     <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
                     <input
                       type="date"
-                      className="pl-9 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm w-full sm:w-44 text-gray-900"
+                      className="pl-9 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm w-full sm:w-44 text-gray-900 touch-manipulation"
+                      style={{ WebkitAppearance: 'none' }}
                       value={dateRange.start}
                       onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
                     />
@@ -1175,7 +1252,8 @@ export default function SalesPage() {
                     <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
                     <input
                       type="date"
-                      className="pl-9 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm w-full sm:w-44 text-gray-900"
+                      className="pl-9 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm w-full sm:w-44 text-gray-900 touch-manipulation"
+                      style={{ WebkitAppearance: 'none' }}
                       value={dateRange.end}
                       onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
                     />
@@ -1185,7 +1263,7 @@ export default function SalesPage() {
                 <button
                   onClick={fetchHistory}
                   disabled={historyLoading}
-                  className="px-5 py-2.5 rounded-xl font-extrabold text-sm bg-gray-900 text-white hover:bg-black active:bg-gray-800 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  className="px-5 py-2.5 rounded-xl font-extrabold text-sm bg-gray-900 text-white hover:bg-black active:bg-gray-800 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 touch-manipulation"
                   style={{ WebkitTapHighlightColor: 'transparent' }}
                 >
                   {historyLoading ? (
@@ -1196,7 +1274,7 @@ export default function SalesPage() {
 
               <button
                 onClick={downloadPDF}
-                className={`flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-extrabold text-sm border transition-all active:scale-95 ${
+                className={`flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-extrabold text-sm border transition-all active:scale-95 touch-manipulation ${
                   user?.planType === 'TYCOON'
                     ? 'bg-blue-600 text-white hover:bg-blue-700 border-blue-500 shadow-lg shadow-blue-600/20 active:bg-blue-800'
                     : 'bg-gray-50 text-gray-400 border-gray-200 cursor-not-allowed'
@@ -1212,7 +1290,13 @@ export default function SalesPage() {
 
             {/* Table */}
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-              <div className="overflow-x-auto">
+              <div 
+                className="overflow-x-auto"
+                style={{
+                  WebkitOverflowScrolling: 'touch',
+                  overscrollBehavior: 'contain',
+                }}
+              >
                 <table className="w-full text-sm text-left">
                   <thead className="bg-gray-50 text-gray-600 font-extrabold border-b border-gray-100">
                     <tr>
@@ -1284,7 +1368,7 @@ export default function SalesPage() {
           <div className="lg:hidden fixed bottom-24 right-4 z-40">
             <button
               onClick={() => setIsCartExpanded(!isCartExpanded)}
-              className="w-14 h-14 rounded-full bg-emerald-600 text-white shadow-lg flex items-center justify-center hover:bg-emerald-700 active:scale-95 transition-all active:bg-emerald-800"
+              className="w-14 h-14 rounded-full bg-emerald-600 text-white shadow-lg flex items-center justify-center hover:bg-emerald-700 active:scale-95 transition-all active:bg-emerald-800 touch-manipulation"
               style={{ WebkitTapHighlightColor: 'transparent' }}
             >
               {isCartExpanded ? (
