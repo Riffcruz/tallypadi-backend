@@ -82,8 +82,7 @@ export default function InstallPrompt() {
   // 1. If installed (isStandalone) -> Hide
   // 2. If browser doesn't support install AND isn't iOS (!showInstallButton) -> Hide
   // 3. If we are on the Home Page (pathname === "/") -> Hide
-  const hideOnRoutes = ["/", "/sale"];
-if (isStandalone || !showInstallButton || hideOnRoutes.includes(pathname)) return null;
+  if (isStandalone || !showInstallButton || pathname === "/" || pathname === "/sales") return null;
 
   return (
     <>
