@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import mongoose from 'mongoose';
 import { Transaction } from '../models/transaction.model';
 import { Inventory } from '../models/inventory.model';
 import { User } from '../models/user.model';
@@ -9,9 +10,37 @@ import fs from 'fs';
 // --- Helpers ---
 const getCurrentDateString = () => new Date().toISOString().split('T')[0];
 
-const toNumber = (v: any) => {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
+/**
+ * Accepts numbers OR numeric strings (e.g "2", "6000")
+ */
+const toNumber = (input: unknown): number | undefined => {
+  if (typeof input === 'number' && Number.isFinite(input)) return input;
+  if (typeof input === 'string' && input.trim() !== '') {
+    const n = Number(input);
+    if (Number.isFinite(n)) return n;
+  }
+  return undefined;
+};
+
+const toPositiveInt = (input: unknown): number | undefined => {
+  const n = toNumber(input);
+  if (n === undefined) return undefined;
+  const i = Math.floor(n);
+  if (!Number.isFinite(i) || i <= 0) return undefined;
+  return i;
+};
+
+const toPositiveMoney = (input: unknown): number | undefined => {
+  const n = toNumber(input);
+  if (n === undefined) return undefined;
+  if (n <= 0) return undefined;
+  return n;
+};
+
+const sanitizeString = (input: unknown): string | null => {
+  if (typeof input !== 'string') return null;
+  const s = input.trim();
+  return s ? s : null;
 };
 
 // ✅ EXPANDED Currency Mapping
@@ -31,72 +60,103 @@ const THEME = {
   border: '#E2E8F0',
   bgLight: '#F8FAFC',
   bgHeader: '#F1F5F9',
-  white: '#FFFFFF'
+  white: '#FFFFFF',
 };
 
-/**
- * ✅ RECORD SALE
- * Supports BOTH payloads:
- * 1) Single item:
- *    { itemId, quantity, price }
- *
- * 2) Cart/batch:
- *    { items: [{ itemId, quantity, price }, ...] }
- */
+type SaleItemInput = {
+  itemId: string;
+  quantity: number;
+  price: number;
+};
+
+const normalizeSalePayload = (body: any): SaleItemInput[] => {
+  // Supports:
+  // 1) { itemId, quantity, price }
+  // 2) { items: [{ itemId, quantity, price }, ...] }
+  if (Array.isArray(body?.items)) {
+    return body.items
+      .map((x: any) => ({
+        itemId: sanitizeString(x?.itemId) || '',
+        quantity: toPositiveInt(x?.quantity) || 0,
+        price: toPositiveMoney(x?.price) || 0,
+      }))
+      .filter((x: SaleItemInput) => x.itemId && x.quantity > 0 && x.price > 0);
+  }
+
+  const itemId = sanitizeString(body?.itemId) || '';
+  const quantity = toPositiveInt(body?.quantity) || 0;
+  const price = toPositiveMoney(body?.price) || 0;
+
+  if (!itemId || quantity <= 0 || price <= 0) return [];
+  return [{ itemId, quantity, price }];
+};
+
+// =====================================================
+// 1) RECORD A SALE (UPDATED: supports cart items[])
+// =====================================================
 export const recordSale = async (req: Request, res: Response) => {
+  let session: mongoose.ClientSession | null = null;
+
   try {
     const user = await User.findOne(); // TODO: replace with real auth
     if (!user) return res.status(404).json({ error: "User not found" });
 
-    const rawItems = Array.isArray(req.body?.items)
-      ? req.body.items
-      : [{ itemId: req.body?.itemId, quantity: req.body?.quantity, price: req.body?.price }];
+    const items = normalizeSalePayload(req.body);
 
-    if (!rawItems.length) {
-      return res.status(400).json({ error: "Invalid sale data", message: "No sale items provided." });
+    if (!items.length) {
+      return res.status(400).json({
+        error: "Invalid sale data",
+        message: "Send { itemId, quantity, price } OR { items: [{ itemId, quantity, price }] } with quantity>0 and price>0",
+      });
     }
 
-    // Validate input first
-    const items = rawItems.map((it: any, idx: number) => {
-      const itemId = String(it?.itemId || '').trim();
-      const quantity = toNumber(it?.quantity);
-      const price = toNumber(it?.price);
-
-      if (!itemId) {
-        throw new Error(`Item #${idx + 1}: missing itemId`);
+    // merge duplicates
+    const merged = new Map<string, { itemId: string; quantity: number; price: number }>();
+    for (const it of items) {
+      const key = it.itemId;
+      const existing = merged.get(key);
+      if (!existing) merged.set(key, { ...it });
+      else {
+        existing.quantity += it.quantity;
+        existing.price = it.price;
       }
-      if (quantity === null || quantity <= 0) {
-        throw new Error(`Item #${idx + 1}: invalid quantity`);
-      }
-      if (price === null || price <= 0) {
-        throw new Error(`Item #${idx + 1}: invalid price (must be > 0)`);
-      }
+    }
+    const finalItems = Array.from(merged.values());
 
-      return { itemId, quantity, price };
-    });
+    // start transaction if possible
+    try {
+      session = await mongoose.startSession();
+      session.startTransaction();
+    } catch {
+      session = null;
+    }
 
-    // ✅ Stock-safe update (prevents negative stock)
+    // ✅ .session(session) expects ClientSession | null (NOT undefined)
+    const invDocs = await Inventory.find({
+      _id: { $in: finalItems.map(i => i.itemId) },
+      user: user._id,
+    }).session(session);
+
+    const invMap = new Map<string, any>();
+    invDocs.forEach((d) => invMap.set(String(d._id), d));
+
     const txItems: any[] = [];
     let totalMoney = 0;
 
-    for (const it of items) {
-      // Atomically reduce stock only if enough stock exists
-      const updated = await Inventory.findOneAndUpdate(
-        { _id: it.itemId, user: user._id, quantity: { $gte: it.quantity } },
-        { $inc: { quantity: -it.quantity } },
-        { new: true }
-      );
+    for (const it of finalItems) {
+      const inv = invMap.get(String(it.itemId));
+      if (!inv) {
+        if (session) await session.abortTransaction();
+        return res.status(404).json({ error: "Item not found in inventory", itemId: it.itemId });
+      }
 
-      if (!updated) {
-        // determine if item exists at all
-        const exists = await Inventory.findOne({ _id: it.itemId, user: user._id });
-        if (!exists) {
-          return res.status(404).json({ error: "Item not found", itemId: it.itemId });
-        }
+      if (inv.quantity < it.quantity) {
+        if (session) await session.abortTransaction();
         return res.status(409).json({
           error: "Insufficient stock",
           itemId: it.itemId,
-          message: "Not enough stock to complete this sale."
+          available: inv.quantity,
+          requested: it.quantity,
         });
       }
 
@@ -104,7 +164,7 @@ export const recordSale = async (req: Request, res: Response) => {
       totalMoney += lineTotal;
 
       txItems.push({
-        name: updated.name,
+        name: inv.name,
         qty: it.quantity,
         unit: 'pc',
         unitPrice: it.price,
@@ -112,34 +172,78 @@ export const recordSale = async (req: Request, res: Response) => {
       });
     }
 
-    const transaction = await Transaction.create({
-      user: user._id,
-      type: 'SALE',
-      paymentStatus: 'PAID',
-      items: txItems,
-      totalMoney,
-      date: getCurrentDateString(),
-      timestamp: new Date(),
-    });
+    // Apply stock decrement
+    for (const it of finalItems) {
+      if (session) {
+        const inv = invMap.get(String(it.itemId));
+        inv.quantity -= it.quantity;
+        await inv.save({ session }); // ✅ session is ClientSession (not null here)
+      } else {
+        const r = await Inventory.updateOne(
+          { _id: it.itemId, user: user._id, quantity: { $gte: it.quantity } },
+          { $inc: { quantity: -it.quantity } }
+        );
+
+        if (r.matchedCount === 0) {
+          return res.status(409).json({
+            error: "Insufficient stock (race condition)",
+            itemId: it.itemId,
+          });
+        }
+      }
+    }
+
+    // Create transaction (avoid passing undefined/null session)
+    let createdTx: any;
+    if (session) {
+      const docs = await Transaction.create([{
+        user: user._id,
+        type: 'SALE',
+        paymentStatus: 'PAID',
+        items: txItems,
+        totalMoney,
+        date: getCurrentDateString(),
+        timestamp: new Date(),
+      }], { session });
+
+      createdTx = docs[0];
+      await session.commitTransaction();
+    } else {
+      createdTx = await Transaction.create({
+        user: user._id,
+        type: 'SALE',
+        paymentStatus: 'PAID',
+        items: txItems,
+        totalMoney,
+        date: getCurrentDateString(),
+        timestamp: new Date(),
+      });
+    }
 
     return res.json({
       success: true,
-      transaction,
-      remaining: txItems.map((x) => x.name),
+      transaction: createdTx,
+      totalMoney,
+      itemsCount: txItems.length,
     });
-  } catch (error: any) {
+
+  } catch (error) {
     console.error("Record Sale Error:", error);
-
-    // If we threw a validation error string above:
-    if (typeof error?.message === 'string' && error.message.includes('Item #')) {
-      return res.status(400).json({ error: "Invalid sale data", message: error.message });
-    }
-
+    try {
+      if (session) await session.abortTransaction();
+    } catch {}
     return res.status(500).json({ error: "Server Error" });
+  } finally {
+    try {
+      if (session) session.endSession();
+    } catch {}
   }
 };
 
-// ✅ SALES HISTORY
+
+// =====================================================
+// 2) GET SALES HISTORY (same)
+// =====================================================
 export const getSalesHistory = async (req: Request, res: Response) => {
   try {
     const user = await User.findOne();
@@ -161,21 +265,24 @@ export const getSalesHistory = async (req: Request, res: Response) => {
       items: (t.items || []).map((i: any) => ({
         name: i.name,
         quantity: i.qty,
-        price: i.unitPrice
-      }))
+        price: i.unitPrice,
+      })),
     }));
 
-    return res.json(formattedSales);
+    res.json(formattedSales);
+
   } catch (error) {
     console.error("Fetch History Error:", error);
-    return res.status(500).json({ error: "Server Error" });
+    res.status(500).json({ error: "Server Error" });
   }
 };
 
-// ✅ PDF REPORT (FIXED: doc.page is only available AFTER addPage)
+// =====================================================
+// 3) GENERATE PDF REPORT (FIXED doc.page usage)
+// =====================================================
 export const generateSalesReport = async (req: Request, res: Response) => {
   try {
-    const user = await User.findOne();
+    const user = await User.findOne(); // In real app, use req.user
     if (!user) return res.status(404).json({ error: 'User not found' });
 
     if (user.planType !== 'TYCOON') {
@@ -192,16 +299,16 @@ export const generateSalesReport = async (req: Request, res: Response) => {
     let query: any = { user: user._id, type: 'SALE' };
     if (startDate && endDate) query.date = { $gte: startDate, $lte: endDate };
 
-    const transactions: any[] = await Transaction.find(query).sort({ timestamp: 1 });
+    const transactions = await Transaction.find(query).sort({ timestamp: 1 });
 
-    const totalRevenue = transactions.reduce((sum, t) => sum + (t.totalMoney || 0), 0);
+    const totalRevenue = transactions.reduce((sum: number, t: any) => sum + (t.totalMoney || 0), 0);
     const totalTx = transactions.length;
 
     const doc = new PDFDocument({
       size: 'A4',
       margins: { top: 50, bottom: 50, left: 40, right: 40 },
       bufferPages: true,
-      autoFirstPage: false
+      autoFirstPage: false,
     });
 
     const safeStart = startDate || 'all';
@@ -211,11 +318,12 @@ export const generateSalesReport = async (req: Request, res: Response) => {
     res.setHeader('Content-Disposition', `attachment; filename=Sales_Report_${safeStart}_${safeEnd}.pdf`);
     doc.pipe(res);
 
-    // --- Fonts ---
+    // --- FONTS ---
     const fontPaths = [
       path.join(__dirname, '..', 'assets', 'fonts', 'NotoSans-Regular.ttf'),
       '/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf',
     ];
+
     let fontToUse = 'Helvetica';
     for (const p of fontPaths) {
       if (fs.existsSync(p)) {
@@ -227,7 +335,10 @@ export const generateSalesReport = async (req: Request, res: Response) => {
     const boldFont = fontToUse === 'Noto' ? 'Noto' : 'Helvetica-Bold';
     const regFont = fontToUse === 'Noto' ? 'Noto' : 'Helvetica';
 
-    // ✅ Add first page BEFORE reading doc.page.*
+    const formatMoney = (n: number) =>
+      `${currencyCode} ${n.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+
+    // ✅ IMPORTANT FIX: add a page BEFORE reading doc.page.*
     doc.addPage();
 
     const pageW = doc.page.width;
@@ -236,9 +347,6 @@ export const generateSalesReport = async (req: Request, res: Response) => {
     const contentW = pageW - margin * 2;
     const bottomLimit = pageH - 50;
 
-    const formatMoney = (n: number) =>
-      `${currencyCode} ${n.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
-
     const drawWatermark = () => {
       const text = `TallyPadi • ${businessName}`;
       doc.save();
@@ -246,13 +354,8 @@ export const generateSalesReport = async (req: Request, res: Response) => {
       doc.rotate(-45);
       doc.fillColor(THEME.dark).opacity(0.04);
       doc.fontSize(50);
-      doc.text(text, -pageW / 2, 0, {
-        align: 'center',
-        width: pageW,
-        lineBreak: false
-      });
+      doc.text(text, -pageW / 2, 0, { align: 'center', width: pageW, lineBreak: false });
       doc.restore();
-      doc.opacity(1);
     };
 
     const drawHeader = () => {
@@ -264,12 +367,16 @@ export const generateSalesReport = async (req: Request, res: Response) => {
       doc.fillColor(THEME.muted).fontSize(10).text('Sales Report', margin + 40, 46);
 
       doc.fillColor(THEME.white).fontSize(12).text(businessName, margin, 24, { width: contentW, align: 'right' });
-      doc.fillColor('#94a3b8').fontSize(9).text(`Period: ${startDate || 'Start'} to ${endDate || 'Now'}`, margin, 44, { width: contentW, align: 'right' });
+      doc
+        .fillColor('#94a3b8')
+        .fontSize(9)
+        .text(`Period: ${startDate || 'Start'} to ${endDate || 'Now'}`, margin, 44, { width: contentW, align: 'right' });
+
       doc.y = 90;
     };
 
     const drawSummaryCards = () => {
-      const cardW = (contentW / 2) - 10;
+      const cardW = contentW / 2 - 10;
       const startY = doc.y;
 
       doc.roundedRect(margin, startY, cardW, 60, 6).fill(THEME.bgLight);
@@ -302,7 +409,7 @@ export const generateSalesReport = async (req: Request, res: Response) => {
       doc.text(`Page ${page} of ${total}`, margin, y, { width: contentW, align: 'right' });
     };
 
-    // --- Build PDF ---
+    // --- Render ---
     drawWatermark();
     drawHeader();
     drawSummaryCards();
@@ -332,7 +439,6 @@ export const generateSalesReport = async (req: Request, res: Response) => {
         doc.addPage();
         drawWatermark();
         drawHeader();
-        doc.y = 90;
 
         drawTableHeaders(doc.y);
         doc.y += 30;
@@ -366,6 +472,7 @@ export const generateSalesReport = async (req: Request, res: Response) => {
     }
 
     doc.end();
+
   } catch (error) {
     console.error('PDF Gen Error:', error);
     if (!res.headersSent) res.status(500).json({ error: 'Could not generate report' });
