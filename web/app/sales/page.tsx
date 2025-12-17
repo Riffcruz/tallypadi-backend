@@ -172,7 +172,7 @@ export default function SalesPage() {
       }
     }
 
-    // ✅ Token guard (fixes string|null TS error)
+    // ✅ Token guard
     if (!token) {
       router.push('/login');
       return;
@@ -373,7 +373,7 @@ export default function SalesPage() {
 
   return (
     <div className="flex min-h-screen font-sans text-gray-900 relative overflow-x-hidden bg-slate-50">
-      {/* soft color blobs (white bg preserved) */}
+      {/* soft color blobs */}
       <div className="pointer-events-none absolute -top-24 -left-24 w-96 h-96 bg-emerald-200/40 rounded-full blur-[80px]" />
       <div className="pointer-events-none absolute -bottom-28 -right-24 w-[30rem] h-[30rem] bg-blue-200/40 rounded-full blur-[90px]" />
       <div className="pointer-events-none absolute top-1/3 -right-24 w-[28rem] h-[28rem] bg-amber-200/30 rounded-full blur-[90px]" />
@@ -395,8 +395,8 @@ export default function SalesPage() {
         <Sidebar />
       </div>
 
-      {/* Main */}
-      <main className="relative z-10 flex-1 md:ml-64 p-4 md:p-8 min-h-screen w-full max-w-full overflow-x-hidden">
+      {/* Main Content: Removed nested overflow-x-hidden on mobile to prevent stickiness */}
+      <main className="relative z-10 flex-1 md:ml-64 p-4 md:p-8 min-h-screen w-full max-w-full">
         {/* Header */}
         <header className="mb-6">
           <div className="flex justify-between items-start mb-6 gap-4">
@@ -425,7 +425,7 @@ export default function SalesPage() {
               </div>
             </div>
 
-            {/* History CTA (very visible) */}
+            {/* History CTA */}
             <button
               type="button"
               onClick={() => setActiveTab('history')}
@@ -550,7 +550,7 @@ export default function SalesPage() {
                     <button
                       key={item.id}
                       onClick={() => addToCart(item)}
-                      className="group rounded-2xl border border-gray-200 bg-white hover:border-emerald-300 hover:shadow-md transition text-left overflow-hidden"
+                      className="group rounded-2xl border border-gray-200 bg-white hover:border-emerald-300 hover:shadow-md transition text-left overflow-hidden active:scale-95"
                     >
                       <div className="p-4">
                         <div className="flex justify-between items-start mb-3">
@@ -573,7 +573,7 @@ export default function SalesPage() {
                         <p className="text-sm text-gray-500 mt-1">₦{(item.price || 0).toLocaleString()}</p>
 
                         <div className="mt-4 flex items-center gap-2 text-xs font-extrabold text-gray-600">
-                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-50 border border-emerald-100 text-emerald-700">
+                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-50 border border-emerald-100 text-emerald-700 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
                             <Plus className="w-3.5 h-3.5" />
                             Add
                           </span>
@@ -621,7 +621,7 @@ export default function SalesPage() {
               </div>
             </div>
 
-            {/* Cart */}
+            {/* Cart - FIXED FOR MOBILE SCROLLING */}
             <div className="lg:col-span-1">
              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col overflow-hidden
                 h-auto
@@ -635,13 +635,16 @@ export default function SalesPage() {
                   <p className="text-xs text-gray-500 mt-1">Edit qty/price, then checkout.</p>
                 </div>
 
+                {/* 🟢 MOBILE FIX: Removed max-h and overflow-y-auto for mobile (default breakpoints).
+                   It now flows naturally with the page scroll.
+                   Added internal scroll only for Desktop (lg).
+                */}
                 <div className="p-4 space-y-4
-                max-h-[55vh] overflow-y-auto
-                lg:flex-1 lg:max-h-none">
+                lg:overflow-y-auto lg:flex-1 lg:max-h-none">
 
                   {cart.length === 0 ? (
-                    <div className="h-full flex flex-col items-center justify-center text-gray-400 space-y-2">
-                      <ShoppingCart className="w-12 h-12" />
+                    <div className="py-8 flex flex-col items-center justify-center text-gray-400 space-y-2">
+                      <ShoppingCart className="w-12 h-12 opacity-50" />
                       <p className="text-sm font-semibold">Cart is empty</p>
                       <p className="text-xs text-gray-400">Tap items to add them.</p>
                     </div>
@@ -663,7 +666,7 @@ export default function SalesPage() {
                           <div className="flex items-center bg-white rounded-xl border border-gray-200 overflow-hidden">
                             <button
                               onClick={() => updateCartItem(item.id, 'sellQty', Math.max(1, item.sellQty - 1))}
-                              className="px-2.5 py-2 hover:bg-gray-50 text-gray-700"
+                              className="px-3 py-2 hover:bg-gray-50 text-gray-700"
                               disabled={!canAddSales}
                             >
                               <Minus className="w-3.5 h-3.5" />
@@ -681,7 +684,7 @@ export default function SalesPage() {
 
                             <button
                               onClick={() => updateCartItem(item.id, 'sellQty', item.sellQty + 1)}
-                              className="px-2.5 py-2 hover:bg-gray-50 text-gray-700"
+                              className="px-3 py-2 hover:bg-gray-50 text-gray-700"
                               disabled={!canAddSales}
                             >
                               <Plus className="w-3.5 h-3.5" />
@@ -712,7 +715,7 @@ export default function SalesPage() {
                   )}
                 </div>
 
-                <div className="p-4 border-t border-gray-100 bg-gray-50">
+                <div className="p-4 border-t border-gray-100 bg-gray-50 sticky bottom-0 z-10">
                   <div className="flex justify-between items-center mb-4">
                     <span className="text-gray-500 text-sm font-bold">Total</span>
                     <span className="text-2xl font-extrabold text-gray-900">
@@ -723,7 +726,7 @@ export default function SalesPage() {
                   <button
                     onClick={handleCheckout}
                     disabled={loading || cart.length === 0 || !canAddSales}
-                    className={`w-full py-3 rounded-2xl font-extrabold shadow-lg active:scale-[0.99] transition-all disabled:opacity-50 flex justify-center items-center gap-2 ${
+                    className={`w-full py-3.5 rounded-2xl font-extrabold shadow-lg active:scale-[0.98] transition-all disabled:opacity-50 flex justify-center items-center gap-2 ${
                       canAddSales
                         ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20'
                         : 'bg-white text-gray-400 border border-gray-200'

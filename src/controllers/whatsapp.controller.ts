@@ -11,13 +11,17 @@ import { Transaction } from '../models/transaction.model';
 
 import { parseMessageWithGemini } from '../services/gemini.service';
 import { processTransaction } from '../services/transaction.service';
-import { getDailySummary, getStockReport, getFullSummary, getTodayTransactions } from '../services/report.service';
+import {
+  getDailySummary,
+  getStockReport,
+  getFullSummary,
+  getTodayTransactions
+} from '../services/report.service';
 import { generatePdfReport } from '../services/pdf.service';
 import { checkSubscriptionStatus } from '../services/billing.service';
 
 import { messageQueue, queueOutboundMessage } from '../services/queue.service';
 import { undoLastSale } from '../services/undo.service';
-
 
 // 🌍 CURRENCY CONFIGURATION
 const COUNTRY_CURRENCIES: Record<string, { symbol: string; code: string; locale: string }> = {
@@ -36,6 +40,7 @@ const COUNTRY_CURRENCIES: Record<string, { symbol: string; code: string; locale:
 const getUserCurrency = (user: any) => {
   let countryCode = user?.countryCode;
 
+  // Guess from phone prefix if missing
   if (!countryCode && user?.phoneNumber) {
     const phone = String(user.phoneNumber).replace('+', '');
     if (phone.startsWith('234')) countryCode = 'NG';
@@ -50,8 +55,17 @@ const getUserCurrency = (user: any) => {
   return COUNTRY_CURRENCIES[countryCode] || COUNTRY_CURRENCIES.DEFAULT;
 };
 
+function normalizeName(name: string) {
+  return String(name || '')
+    .replace(/\s*\(.*?\)\s*$/, '')
+    .toLowerCase()
+    .trim();
+}
+
 // HELPER: Fetch Image Data from Meta
-const getMediaBuffer = async (mediaId: string): Promise<{ data: string; mimeType: string } | null> => {
+const getMediaBuffer = async (
+  mediaId: string
+): Promise<{ data: string; mimeType: string } | null> => {
   try {
     const urlRes = await axios.get(`https://graph.facebook.com/v21.0/${mediaId}`, {
       headers: { Authorization: `Bearer ${env.whatsappToken}` },
@@ -150,16 +164,16 @@ export const handleWebhook = async (req: Request, res: Response) => {
   }
 };
 
-// ✅ debtors list helper (requires Transaction.customerName field)
+// ✅ debtors list helper (supports old CREDIT docs + new balance docs)
 const buildDebtSummary = async (userId: any, symbol: string, locale: string) => {
   const debtSales = await Transaction.find({
     user: userId,
     type: 'SALE',
-    paymentStatus: 'CREDIT',
-    totalMoney: { $gt: 0 },
+    isUndone: { $ne: true },
+    $or: [{ paymentStatus: 'CREDIT' }, { balance: { $gt: 0 } }],
   })
     .sort({ timestamp: -1 })
-    .limit(500)
+    .limit(2000)
     .lean();
 
   if (!debtSales.length) return `✅ Nobody dey owe you.`;
@@ -168,16 +182,29 @@ const buildDebtSummary = async (userId: any, symbol: string, locale: string) => 
 
   for (const t of debtSales as any[]) {
     const name = String(t.customerName || 'Unknown').trim() || 'Unknown';
-    const amt = Number(t.totalMoney || 0);
-    byName[name] = (byName[name] || 0) + amt;
+
+    // ✅ prefer balance if present, else fallback totalMoney - amountPaid
+    let outstanding = 0;
+    if (typeof t.balance === 'number') {
+      outstanding = Number(t.balance || 0);
+    } else {
+      const total = Number(t.totalMoney || 0);
+      const paid = Number(t.amountPaid || 0);
+      outstanding = Math.max(total - paid, 0);
+    }
+
+    if (outstanding <= 0) continue;
+    byName[name] = (byName[name] || 0) + outstanding;
   }
 
-  const lines = Object.entries(byName)
-    .sort((a, b) => b[1] - a[1])
+  const entries = Object.entries(byName).sort((a, b) => b[1] - a[1]);
+  if (!entries.length) return `✅ Nobody dey owe you.`;
+
+  const lines = entries
     .slice(0, 30)
     .map(([n, v]) => `• *${n}* — ${symbol}${v.toLocaleString(locale)}`);
 
-  return `📌 *Debtors List*\n\n${lines.join('\n')}\n\nReply: *Emeka paid 20k* to record payment.`;
+  return `📌 *Debtors List*\n\n${lines.join('\n')}\n\nReply like: *Emeka paid 20000* to record payment.`;
 };
 
 // 3) BACKGROUND PROCESSOR (called by Worker)
@@ -192,14 +219,14 @@ export const handleMessageLogic = async (
   try {
     console.log(`⚡ Processing Logic for ${from}: "${text}"`);
 
-    // --- GLOBAL SETTINGS (with safe fallback) ---
+    // --- GLOBAL SETTINGS (safe fallback) ---
     let MAX_HISTORY = 5;
     let MAX_STAFF = 5;
     try {
       const globalSettings = await AdminSettings.findOne().lean();
       MAX_HISTORY = globalSettings?.limits?.maxMessageHistory || 5;
       MAX_STAFF = globalSettings?.limits?.maxStaffAccounts || 5;
-    } catch (e) {
+    } catch {
       console.warn('⚠️ AdminSettings not reachable, using defaults.');
     }
 
@@ -229,7 +256,14 @@ export const handleMessageLogic = async (
         phoneNumber: from,
         businessName: initialShopName,
         name: profileName,
-        countryCode: guessedCurrency.code === 'NGN' ? 'NG' : guessedCurrency.code === 'USD' ? 'US' : 'NG',
+        countryCode:
+          guessedCurrency.code === 'NGN'
+            ? 'NG'
+            : guessedCurrency.code === 'USD'
+            ? 'US'
+            : guessedCurrency.code === 'GBP'
+            ? 'GB'
+            : 'NG',
         registrationStage: 'EMAIL',
         settings: {
           dailySummaryEnabled: false,
@@ -309,45 +343,44 @@ export const handleMessageLogic = async (
       await user.save();
     }
 
-    // ✅ QUICK DEBT LIST COMMAND (no Gemini)
+    // ✅ QUICK COMMANDS (no Gemini)
     const low = (text || '').toLowerCase().trim();
 
-// ✅ 1) Debt / Debtors list
-const isDebtCmd =
-  low === 'debt' ||
-  low.includes('debtors') ||
-  /\b(debt|debts|debtor|debtors|owing|owes|owe|gbese|bashi|ugwo)\b/.test(low) ||
-  low.includes('dey owe') ||
-  low.includes('who dey owe') ||
-  low.includes('who is owing') ||
-  low.includes('who owes');
-  const isPaymentPhrase = /\b(paid|pay|payment|settle|settled|i paid|don pay)\b/.test(low);
+    // ✅ 1) Debt list
+    const isDebtCmd =
+      low === 'debt' ||
+      low.includes('debtors') ||
+      /\b(debt|debts|debtor|debtors|owing|owes|owe|gbese|bashi|ugwo)\b/.test(low) ||
+      low.includes('dey owe') ||
+      low.includes('who dey owe') ||
+      low.includes('who is owing') ||
+      low.includes('who owes');
 
-if (isDebtCmd && !isPaymentPhrase) {
-  const msg = await buildDebtSummary(user._id, symbol, locale);
-  await queueOutboundMessage(from, msg);
-  return;
-}
+    const isPaymentPhrase = /\b(paid|pay|payment|settle|settled|i paid|don pay)\b/.test(low);
 
-// ✅ 2) Undo last sale
-const isUndoCmd =
-  low === 'undo' ||
-  low === 'undo last' ||
-  low === 'undo last sale' ||
-  low === 'cancel last sale' ||
-  low === 'reverse last sale';
+    if (isDebtCmd && !isPaymentPhrase) {
+      const msg = await buildDebtSummary(user._id, symbol, locale);
+      await queueOutboundMessage(from, msg);
+      return;
+    }
 
-if (isUndoCmd) {
-  const r = await undoLastSale(user._id, messageId);
-  await queueOutboundMessage(from, r.message);
-  return;
-}
+    // ✅ 2) Undo last sale (quick)
+    const isUndoCmd =
+      low === 'undo' ||
+      low === 'undo last' ||
+      low === 'undo last sale' ||
+      low === 'cancel last sale' ||
+      low === 'reverse last sale';
 
+    if (isUndoCmd) {
+      const r = await undoLastSale(user._id, messageId);
+      await queueOutboundMessage(from, r.message);
+      return;
+    }
 
     // --- AI PARSE ---
     const currentLang = user.settings?.language || 'English';
     const parsed: any = await parseMessageWithGemini(text, currentLang, imageBuffer, imageMime);
-    
 
     // --- DATE PARSING ---
     let startDate: Date | undefined;
@@ -376,6 +409,7 @@ if (isUndoCmd) {
       }
     }
 
+    // Close book behavior
     if (parsed?.intent === 'CLOSE_BOOK') {
       const currentHour = new Date().getHours();
       if (currentHour < 12) {
@@ -400,7 +434,6 @@ if (isUndoCmd) {
       case 'RESTOCK':
       case 'SET_STOCK':
       case 'DEFINE_PRICE': {
-        // ✅ records SALE, CREDIT sales, and customer_name if your Transaction model + processTransaction are updated (see below)
         await processTransaction(user._id as any, parsed, messageId);
         await queueOutboundMessage(from, parsed.reply_text || '✅ Done.');
         break;
@@ -410,8 +443,13 @@ if (isUndoCmd) {
         const r = await undoLastSale(user._id, messageId);
         await queueOutboundMessage(from, r.message);
         break;
-        }
+      }
 
+      case 'REPORT_DEBTS': {
+        const msg = await buildDebtSummary(user._id, symbol, locale);
+        await queueOutboundMessage(from, msg);
+        break;
+      }
 
       case 'DELETED_STOCK': {
         const itemToDelete = parsed.items?.[0]?.name?.toLowerCase();
@@ -436,12 +474,10 @@ if (isUndoCmd) {
       }
 
       case 'DEBT_PAYMENT': {
-        // ✅ records PAYMENT_RECEIVED and customer_name (if processTransaction is updated)
         await processTransaction(user._id as any, parsed, messageId);
 
-        const amt = parsed.total_money ? `${symbol}${Number(parsed.total_money).toLocaleString(locale)}` : 'the payment';
-        const nm = parsed.customer_name ? ` from ${parsed.customer_name}` : '';
-        await queueOutboundMessage(from, `✅ Payment Recorded! Received ${amt}${nm}.`);
+        // ✅ IMPORTANT: use parsed.reply_text (so you see applied/remaining/cleared)
+        await queueOutboundMessage(from, parsed.reply_text || '✅ Payment recorded.');
         break;
       }
 
@@ -669,9 +705,10 @@ if (isUndoCmd) {
         break;
       }
 
-      default:
+      default: {
         await queueOutboundMessage(from, parsed.reply_text || 'Noted.');
         break;
+      }
     }
   } catch (err) {
     console.error('❌ Error processing message logic:', err);
