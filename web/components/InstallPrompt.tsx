@@ -1,34 +1,35 @@
 "use client";
 import { useEffect, useState } from "react";
 import { Smartphone, X } from "lucide-react";
+import { usePathname } from "next/navigation"; // 1. Import usePathname
 
 export default function InstallPrompt() {
+  const pathname = usePathname(); // 2. Get the current URL path
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isVisible, setIsVisible] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
 
   useEffect(() => {
-    // 1. Check if already installed (Standalone mode)
+    // Check if already installed
     const matches = window.matchMedia("(display-mode: standalone)").matches;
     setIsStandalone(matches);
-    if (matches) return; // Stop here if already installed
+    if (matches) return;
 
-    // 2. Check for iOS
+    // Check for iOS
     const userAgent = window.navigator.userAgent.toLowerCase();
     const ios = /iphone|ipad|ipod/.test(userAgent);
     
     if (ios) {
       setIsIOS(true);
-      setIsVisible(true); // <--- FIX: Force visible for iOS
+      setIsVisible(true);
     }
 
-    // 3. Listen for the 'beforeinstallprompt' event (Android/Desktop)
+    // Listen for 'beforeinstallprompt' (Android/Desktop)
     const handleBeforeInstallPrompt = (e: any) => {
-      e.preventDefault(); // Prevent default mini-infobar
+      e.preventDefault();
       setDeferredPrompt(e);
-      setIsVisible(true); // Show our custom button
-      console.log("Install Prompt Fired"); // Debugging log
+      setIsVisible(true);
     };
 
     window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
@@ -53,9 +54,10 @@ export default function InstallPrompt() {
     setIsVisible(false);
   };
 
-  // Don't render if app is installed or user dismissed it (technically)
-  // Logic: If it's standalone, don't show. If it's NOT standalone, verify isVisible.
-  if (isStandalone || !isVisible) return null;
+  // --- LOGIC CHANGE HERE ---
+  // If app is installed, OR prompt isn't visible, OR we are on the Landing Page ("/")
+  // Then return null (don't show anything)
+  if (isStandalone || !isVisible || pathname === "/") return null;
 
   // iOS Instructions
   if (isIOS) {
