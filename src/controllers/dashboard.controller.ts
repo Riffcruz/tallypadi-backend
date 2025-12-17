@@ -20,7 +20,7 @@ export const getDashboardData = async (req: Request, res: Response) => {
     }));
 
     // 3) Recent transactions
-    const transactionDocs = await Transaction.find({ user: user._id })
+    const transactionDocs = await Transaction.find({ user: user._id, isUndone: false })
       .sort({ timestamp: -1 })
       .limit(10);
 

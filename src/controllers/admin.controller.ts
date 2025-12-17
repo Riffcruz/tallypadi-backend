@@ -114,7 +114,7 @@ export const getUserDeepDive = async (req: Request, res: Response) => {
 
         const staff = await User.find({ ownerId: user._id });
         const inventory = await Inventory.find({ user: user._id }).limit(100);
-        const recentSales = await Transaction.find({ user: user._id, type: 'SALE' })
+        const recentSales = await Transaction.find({ user: user._id, type: 'SALE', isUndone: false })
             .sort({ timestamp: -1 })
             .limit(100); 
 

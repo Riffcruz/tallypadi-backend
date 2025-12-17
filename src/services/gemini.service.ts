@@ -3,7 +3,7 @@ import { env } from '../config/env';
 
 const genAI = new GoogleGenerativeAI(env.geminiApiKey);
 
-// Try JSON mode; if a model/version doesn’t support it, your cleaning+JSON.parse still works.
+// Try JSON mode; if unsupported, your cleaning+JSON.parse still works.
 const model = genAI.getGenerativeModel({
   model: env.geminiModel,
   generationConfig: { responseMimeType: "application/json" as any }
@@ -25,6 +25,7 @@ export type ParsedIntent =
   | 'CLOSE_BOOK'
   | 'ADD_STAFF'
   | 'DOWNLOAD_REPORT'
+  | 'UNDO_LAST_SALE'
   | 'UNKNOWN';
 
 export interface ParsedItem {
@@ -76,7 +77,6 @@ const sanitizeInput = (input: string): string => {
   // ✅ Unicode-safe allow letters/numbers across languages
   s = s.replace(/[^\p{L}\p{N}\s₦$€£₵.,\-\/+()%@'_]/gu, " ");
 
-
   s = s.replace(/\s+/g, " ").trim();
   return s;
 };
@@ -84,7 +84,7 @@ const sanitizeInput = (input: string): string => {
 const allowedIntents: ParsedIntent[] = [
   "SALE","RESTOCK","SET_STOCK","DELETED_STOCK","DEFINE_PRICE","PRICE_CHECK",
   "REPORT_SALES","REPORT_STOCK","REPORT_FULL","CLOSE_BOOK","SETTINGS",
-  "CHANGE_LANGUAGE","DEBT_PAYMENT","ADD_STAFF","DOWNLOAD_REPORT","UNKNOWN"
+  "CHANGE_LANGUAGE","DEBT_PAYMENT","ADD_STAFF","DOWNLOAD_REPORT","UNDO_LAST_SALE","UNKNOWN"
 ];
 
 function safeParsedResult(p: any): ParsedResult {
@@ -151,9 +151,57 @@ async function geminiWithRetry(parts: any[]) {
   }
 }
 
-// Simple fallback so “sold/add” still works when Gemini fails
+// ✅ Undo detection (works even if misspelled / slang / different language)
+function looksLikeUndo(message: string): boolean {
+  const m = sanitizeInput(message).toLowerCase();
+
+  // common phrases + misspellings
+  const patterns: RegExp[] = [
+    /\bundo\b/,
+    /\bundoo+\b/,
+    /\b(undo|cancel|reverse|revert|rollback|roll\s?back)\b/,
+    /\b(delete|remove)\s+(the\s+)?last\b/,
+    /\b(last|previous)\s+(sale|transaction|record)\b/,
+    /\b(cancel|reverse|undo)\s+(the\s+)?last\s+(sale|transaction|record)\b/,
+
+    // pidgin-ish
+    /\b(abeg\s+)?reverse\b/,
+    /\bcommot\s+last\b/,
+    /\bno\s+count\s+that\s+one\b/,
+
+    // Yoruba hints
+    /\bpada\b/,
+    /\bda\s+pada\b/,
+    /\bfi\s+se\s+yin\b/,
+
+    // Hausa hints
+    /\bsoke\b/,
+    /\bsoke\s+na\s+karshe\b/,
+
+    // Igbo hints
+    /\bweghachi\b/,
+    /\bkpochapu\b/,
+  ];
+
+  return patterns.some((re) => re.test(m));
+}
+
+// Simple fallback so “sold/add/undo” still works when Gemini fails
 function fallbackParse(message: string): ParsedResult | null {
   const m = sanitizeInput(message).toLowerCase();
+
+  // ✅ undo
+  if (looksLikeUndo(m)) {
+    return safeParsedResult({
+      intent: "UNDO_LAST_SALE",
+      is_credit: false,
+      items: [],
+      total_money: null,
+      report_params: { start_date: null, end_date: null },
+      settings_update: { key: null, value: null },
+      reply_text: "Okay ✅ I will undo your last sale."
+    });
+  }
 
   // sold 2 rice for 50k / ₦5000 / 5000
   const sold = m.match(/\b(sold|sell|comot)\s+(\d+)\s+(.+?)(?:\s+(?:for|@|at)\s+([₦$€£₵]?\s*\d+(?:k)?))?\b/i);
@@ -206,23 +254,33 @@ STRICT LANGUAGE:
 User language is ${userLanguage}. Reply ONLY in ${userLanguage}.
 
 INTENTS:
-- SALE: "Sold 5 rice", "Comot 2"
+- SALE: "Sold 5 rice", "Comot 2", "I sold on credit to Emeka"
 - RESTOCK: "Add 5", "Restock 10"
 - SET_STOCK: "Set rice to 50", "Rice is now 20"
 - DEFINE_PRICE: "Rice is 20k"
 - DELETED_STOCK: "Delete rice"
 - PRICE_CHECK: "Price of rice?"
 - REPORT_SALES, REPORT_STOCK, REPORT_FULL
-- DEBT_PAYMENT: "Emeka paid 20k"
+- DEBT_PAYMENT: "Emeka paid 20k" (customer_name required if present)
 - ADD_STAFF: "Add 080... as staff"
 - DOWNLOAD_REPORT: "Send pdf"
 - CLOSE_BOOK: "Close the book"
-- SETTINGS / CHANGE_LANGUAGE
+
+✅ UNDO_LAST_SALE:
+User wants to reverse the last recorded sale/transaction.
+Examples (any language / spelling):
+- "undo", "undo last", "undo last sale", "reverse last sale", "cancel that last one"
+- "abeg reverse am", "no count that one", "commot last sale"
+- "pada", "da pada" (Yoruba)
+- "soke na karshe" (Hausa)
+- "weghachi" (Igbo)
+If the user message means undo/reverse/cancel the last sale, set intent = "UNDO_LAST_SALE".
+
 Return ONLY JSON.
 
 <schema>
 {
-  "intent": "SALE" | "RESTOCK" | "SET_STOCK" | "DELETED_STOCK" | "DEFINE_PRICE" | "PRICE_CHECK" | "REPORT_SALES" | "REPORT_STOCK" | "REPORT_FULL" | "CLOSE_BOOK" | "SETTINGS" | "CHANGE_LANGUAGE" | "DEBT_PAYMENT" | "ADD_STAFF" | "DOWNLOAD_REPORT" | "UNKNOWN",
+  "intent": "SALE" | "RESTOCK" | "SET_STOCK" | "DELETED_STOCK" | "DEFINE_PRICE" | "PRICE_CHECK" | "REPORT_SALES" | "REPORT_STOCK" | "REPORT_FULL" | "CLOSE_BOOK" | "SETTINGS" | "CHANGE_LANGUAGE" | "DEBT_PAYMENT" | "ADD_STAFF" | "DOWNLOAD_REPORT" | "UNDO_LAST_SALE" | "UNKNOWN",
   "is_credit": boolean,
   "customer_name": "string | null",
   "staffPhoneNumber": "string | null",
@@ -246,6 +304,19 @@ export const parseMessageWithGemini = async (
   const safeMessage = sanitizeInput(message);
   const isoDate = new Date().toISOString();
 
+  // ✅ Ultra-fast local detect first (so misspellings still work even before Gemini)
+  if (looksLikeUndo(safeMessage)) {
+    return safeParsedResult({
+      intent: "UNDO_LAST_SALE",
+      is_credit: false,
+      items: [],
+      total_money: null,
+      report_params: { start_date: null, end_date: null },
+      settings_update: { key: null, value: null },
+      reply_text: "Okay ✅ I will undo your last sale."
+    });
+  }
+
   const systemInstruction = getSystemPrompt(userLanguage, isoDate);
 
   const parts: any[] = [
@@ -267,7 +338,7 @@ export const parseMessageWithGemini = async (
 
     return safeParsedResult(parsed);
   } catch (err: any) {
-    // ✅ fallback parser (prevents lost sales when Gemini fails)
+    // ✅ fallback parser (prevents lost sales/undo when Gemini fails)
     const fb = fallbackParse(safeMessage);
     if (fb) return fb;
 

@@ -1,55 +1,54 @@
 import { Queue } from 'bullmq';
 import IORedis from 'ioredis';
 
-// Connect to Redis using environment variable or default fallback
-const connection = new IORedis(process.env.REDIS_URL || 'redis://127.0.0.1:6379', {
-    maxRetriesPerRequest: null,
+export const connection = new IORedis(process.env.REDIS_URL || 'redis://127.0.0.1:6379', {
+  maxRetriesPerRequest: null,
 });
 
-// ============================================================
-// QUEUE 1: OUTBOUND NOTIFICATIONS (Daily Summaries / User Responses)
-// This queue is rate-limited in worker.ts to prevent Meta/WhatsApp throttling.
-// ============================================================
-export const notificationQueue = new Queue('daily-summary', { 
-    connection,
-    defaultJobOptions: {
-        // Options match the worker's expected defaults
-        attempts: 3, 
-        backoff: { type: 'exponential', delay: 5000 },
-        removeOnComplete: true, 
-        removeOnFail: 1000, 
-    }
+// OUTBOUND (WhatsApp replies, summaries, etc.)
+export const notificationQueue = new Queue('daily-summary', {
+  connection,
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 5000 },
+    removeOnComplete: true,
+    removeOnFail: 1000,
+  },
 });
 
-/**
- * Helper to queue an outbound WhatsApp message. This uses the rate-limited notification queue.
- * This should be called instead of sendWhatsAppText directly inside the controller logic.
- * @param phoneNumber The recipient's phone number (with country code).
- * @param message The text message content.
- */
+// INBOUND (messages from webhook to worker)
+export const messageQueue = new Queue('incoming-messages', {
+  connection,
+  defaultJobOptions: {
+    attempts: 1000,
+    backoff: { type: 'exponential', delay: 5000 },
+    removeOnComplete: true,
+    removeOnFail: 500,
+  },
+});
+
 export const queueOutboundMessage = async (phoneNumber: string, message: string) => {
-    await notificationQueue.add('send-text', { 
-        phoneNumber, 
-        message 
-    }, { 
-        // Use the phone number and a timestamp as the job ID for unique tracking
-        jobId: `outbound:${phoneNumber}:${Date.now()}`
-    });
+  if (!phoneNumber || !message || !message.trim()) return;
+
+  await notificationQueue.add(
+    'send-text',
+    { phoneNumber, message },
+    { jobId: `outbound:${phoneNumber}:${Date.now()}` }
+  );
 };
 
+// ✅ BULK SENDER (used for long reports split into chunks)
+export const queueOutboundBulk = async (phoneNumber: string, messages: string[]) => {
+  if (!phoneNumber || !Array.isArray(messages) || messages.length === 0) return;
 
-// ============================================================
-// QUEUE 2: INCOMING MESSAGES
-// This queue is used by the webhook receiver to quickly add jobs.
-// Its workers are defined in worker.ts.
-// ============================================================
-export const messageQueue = new Queue('incoming-messages', { 
-    connection,
-    defaultJobOptions: {
-        // High retry count for sales data persistence (1000 attempts)
-        attempts: 1000, 
-        backoff: { type: 'exponential', delay: 5000 },
-        removeOnComplete: true, 
-        removeOnFail: 500, 
-    }
-});
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i];
+    if (!msg || !msg.trim()) continue;
+
+    await notificationQueue.add(
+      'send-text',
+      { phoneNumber, message: msg },
+      { jobId: `outbound:${phoneNumber}:${Date.now()}:${i}` }
+    );
+  }
+};
