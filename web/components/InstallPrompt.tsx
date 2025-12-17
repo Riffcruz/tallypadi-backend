@@ -9,20 +9,26 @@ export default function InstallPrompt() {
   const [isStandalone, setIsStandalone] = useState(false);
 
   useEffect(() => {
-    // 1. Check if already installed
+    // 1. Check if already installed (Standalone mode)
     const matches = window.matchMedia("(display-mode: standalone)").matches;
     setIsStandalone(matches);
-    if (matches) return;
+    if (matches) return; // Stop here if already installed
 
     // 2. Check for iOS
-    const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
-    setIsIOS(ios);
+    const userAgent = window.navigator.userAgent.toLowerCase();
+    const ios = /iphone|ipad|ipod/.test(userAgent);
+    
+    if (ios) {
+      setIsIOS(true);
+      setIsVisible(true); // <--- FIX: Force visible for iOS
+    }
 
     // 3. Listen for the 'beforeinstallprompt' event (Android/Desktop)
     const handleBeforeInstallPrompt = (e: any) => {
       e.preventDefault(); // Prevent default mini-infobar
       setDeferredPrompt(e);
       setIsVisible(true); // Show our custom button
+      console.log("Install Prompt Fired"); // Debugging log
     };
 
     window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
@@ -47,7 +53,8 @@ export default function InstallPrompt() {
     setIsVisible(false);
   };
 
-  // Don't render if app is installed or user dismissed it
+  // Don't render if app is installed or user dismissed it (technically)
+  // Logic: If it's standalone, don't show. If it's NOT standalone, verify isVisible.
   if (isStandalone || !isVisible) return null;
 
   // iOS Instructions
@@ -73,11 +80,10 @@ export default function InstallPrompt() {
     );
   }
 
-  // Android / Desktop Button (Restored Cleaner Style)
+  // Android / Desktop Button
   return (
     <div className="fixed bottom-6 right-6 z-50 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="relative group">
-        {/* Hide Button */}
         <button 
           onClick={handleDismiss}
           className="absolute -top-2 -right-1 bg-white text-gray-400 hover:text-gray-600 rounded-full p-1 shadow-sm border border-gray-200 z-10 transition-colors"
@@ -86,7 +92,6 @@ export default function InstallPrompt() {
           <X className="w-3 h-3" />
         </button>
 
-        {/* Main Install Button - Clean Pill Style */}
         <button 
           onClick={handleInstallClick}
           className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-6 rounded-full shadow-xl shadow-indigo-600/20 transition-all transform hover:scale-105"

@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Inter, Poppins } from "next/font/google";
 import "./globals.css";
 
-
 // Keeping your existing InstallPrompt component import
 import InstallPrompt from "../components/InstallPrompt"; 
 
@@ -20,18 +19,20 @@ const poppins = Poppins({
   display: 'swap',
 });
 
-
-
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://tallypadi.com"),
   title: {
-    default: "TallyPadi — WhatsApp Sales & Inventory Tracker for Businesses and People Tryinng to Keep Track of Sales",
+    default: "TallyPadi — WhatsApp Sales & Inventory Tracker for Businesses and People Trying to Keep Track of Sales",
     template: "%s — TallyPadi",
   },
   description:
     "Track sales, stock, and profit directly on WhatsApp. Built for Businesses and vendors.",
   applicationName: "TallyPadi",
   keywords: ["WhatsApp inventory", "sales tracker", "inventory management", "SME", "POS"],
+  // --- CRITICAL FIX START ---
+  // This link is required for the browser to detect the app as installable
+  manifest: "/manifest.json", 
+  // --- CRITICAL FIX END ---
   alternates: {
     canonical: "/",
   },
@@ -61,6 +62,12 @@ export const metadata: Metadata = {
       "max-snippet": -1,
       "max-video-preview": -1,
     },
+  },
+  // Optional: Helps with iOS "Add to Home Screen" styling
+  appleWebApp: {
+    capable: true,
+    title: "TallyPadi",
+    statusBarStyle: "black-translucent",
   },
 };
 
