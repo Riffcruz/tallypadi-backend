@@ -33,47 +33,67 @@ const THEME = {
 // 1. RECORD A SALE
 export const recordSale = async (req: Request, res: Response) => {
     try {
-        const { itemId, quantity, price } = req.body;
-        
+        const { items } = req.body; // Expect an array of items
+
         const user = await User.findOne(); // Mock Auth
         if (!user) return res.status(404).json({ error: "User not found" });
 
-        const safeQty = validateNumber(quantity);
-        const safePrice = validateNumber(price);
-
-        if (!itemId || !safeQty || !safePrice) {
-            return res.status(400).json({ error: "Invalid sale data" });
+        if (!Array.isArray(items) || items.length === 0) {
+            return res.status(400).json({ error: "Invalid sale data: items array is required." });
         }
 
-        const item = await Inventory.findOne({ _id: itemId, user: user._id });
-        if (!item) return res.status(404).json({ error: "Item not found in inventory" });
+        let totalAmount = 0;
+        const transactionItems = [];
 
-        if (item.quantity < safeQty) {
-            return res.status(400).json({ error: `Insufficient stock. Only ${item.quantity} left.` });
+        for (const cartItem of items) {
+            const { itemId, quantity, price } = cartItem;
+
+            const safeQty = validateNumber(quantity);
+            const safePrice = validateNumber(price);
+
+            if (!itemId || !safeQty || !safePrice) {
+                return res.status(400).json({ error: `Invalid data for one of the items.` });
+            }
+
+            const inventoryItem = await Inventory.findOne({ _id: itemId, user: user._id });
+            if (!inventoryItem) {
+                return res.status(404).json({ error: `Item with ID ${itemId} not found.` });
+            }
+
+            if (inventoryItem.quantity < safeQty) {
+                return res.status(400).json({ error: `Insufficient stock for ${inventoryItem.name}.` });
+            }
+
+            inventoryItem.quantity -= safeQty;
+            await inventoryItem.save();
+
+            const itemTotal = safeQty * safePrice;
+            totalAmount += itemTotal;
+
+            transactionItems.push({
+                name: inventoryItem.name,
+                qty: safeQty,
+                unit: 'pc',
+                unitPrice: safePrice,
+                total: itemTotal
+            });
         }
 
-        item.quantity -= safeQty;
-        await item.save();
+        if (transactionItems.length === 0) {
+            return res.status(400).json({ error: "No valid items to process." });
+        }
 
-        const totalAmount = safeQty * safePrice;
-        
         const transaction = await Transaction.create({
             user: user._id,
             type: 'SALE',
             paymentStatus: 'PAID',
-            items: [{
-                name: item.name,
-                qty: safeQty,
-                unit: 'pc',
-                unitPrice: safePrice,
-                total: totalAmount
-            }],
+            items: transactionItems,
             totalMoney: totalAmount,
             date: getCurrentDateString(),
             timestamp: new Date()
         });
 
-        res.json({ success: true, transaction, remainingStock: item.quantity });
+        res.json({ success: true, transaction });
 
     } catch (error) {
         console.error("Record Sale Error:", error);
@@ -135,10 +155,21 @@ export const generateSalesReport = async (req: Request, res: Response) => {
     let query: any = { user: user._id, type: 'SALE' };
     if (startDate && endDate) query.date = { $gte: startDate, $lte: endDate };
 
-    const transactions = await Transaction.find(query).sort({ timestamp: 1 });
+    const stats = await Transaction.aggregate([
+        { $match: query },
+        {
+            $group: {
+                _id: null,
+                totalRevenue: { $sum: '$totalMoney' },
+                totalTx: { $sum: 1 },
+            },
+        },
+    ]);
 
-    const totalRevenue = transactions.reduce((sum, t) => sum + (t.totalMoney || 0), 0);
-    const totalTx = transactions.length;
+    const { totalRevenue, totalTx } =
+        stats.length > 0 ? stats[0] : { totalRevenue: 0, totalTx: 0 };
+
+    const transactions = await Transaction.find(query).sort({ timestamp: 1 });
 
     // ---------- PDF SETUP ----------
     const doc = new PDFDocument({
@@ -155,21 +186,8 @@ export const generateSalesReport = async (req: Request, res: Response) => {
     res.setHeader('Content-Disposition', `attachment; filename=Sales_Report_${safeStart}_${safeEnd}.pdf`);
     doc.pipe(res);
 
-    // --- FONTS ---
-    const fontPaths = [
-      path.join(__dirname, '..', 'assets', 'fonts', 'NotoSans-Regular.ttf'),
-      '/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf',
-    ];
-    let fontToUse = 'Helvetica';
-    for(const p of fontPaths) {
-      if(fs.existsSync(p)) {
-        doc.registerFont('Noto', p);
-        fontToUse = 'Noto';
-        break;
-      }
-    }
-    const boldFont = fontToUse === 'Noto' ? 'Noto' : 'Helvetica-Bold';
-    const regFont = fontToUse === 'Noto' ? 'Noto' : 'Helvetica';
+    const boldFont = 'Helvetica-Bold';
+    const regFont = 'Helvetica';
 
     // --- DIMENSIONS ---
     const pageW = doc.page.width;

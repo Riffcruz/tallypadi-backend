@@ -465,19 +465,18 @@ export default function SalesPage() {
         return;
       }
 
-      // Record sales - Simple loop like the working version
-      for (const item of cart) {
-        await axios.post(
-          `${API_URL}/sales`,
-          {
-            itemId: item.id,
-            quantity: item.sellQty,
-            price: item.sellPrice,
-            date: new Date().toISOString(),
-          },
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-      }
+      const salesData = {
+        items: cart.map(item => ({
+          itemId: item.id,
+          quantity: item.sellQty,
+          price: item.sellPrice,
+        })),
+        date: new Date().toISOString(),
+      };
+
+      await axios.post(`${API_URL}/sales`, salesData, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
 
       setSuccessMsg(`Successfully recorded ${cart.length} item${cart.length === 1 ? '' : 's'}!`);
       setCart([]);
