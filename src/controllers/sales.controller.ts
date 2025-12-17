@@ -31,7 +31,11 @@ const THEME = {
 };
 
 // 1. RECORD A SALE
+import { Lock } from '../models/lock.model';
+
+// 1. RECORD A SALE
 export const recordSale = async (req: Request, res: Response) => {
+    const locks: ILock[] = [];
     try {
         const { items } = req.body; // Expect an array of items
 
@@ -40,6 +44,17 @@ export const recordSale = async (req: Request, res: Response) => {
 
         if (!Array.isArray(items) || items.length === 0) {
             return res.status(400).json({ error: "Invalid sale data: items array is required." });
+        }
+
+        // Acquire locks
+        for (const cartItem of items) {
+            const { itemId } = cartItem;
+            try {
+                const lock = await Lock.create({ itemId });
+                locks.push(lock);
+            } catch (error) {
+                return res.status(409).json({ error: 'Item is currently being processed by another transaction. Please try again.' });
+            }
         }
 
         let totalAmount = 0;
@@ -98,6 +113,9 @@ export const recordSale = async (req: Request, res: Response) => {
     } catch (error) {
         console.error("Record Sale Error:", error);
         res.status(500).json({ error: "Server Error" });
+    } finally {
+        // Release locks
+        await Lock.deleteMany({ _id: { $in: locks.map(lock => lock._id) } });
     }
 };
 
@@ -178,6 +196,8 @@ export const generateSalesReport = async (req: Request, res: Response) => {
       bufferPages: true,
       autoFirstPage: false 
     });
+
+    doc.addPage();
 
     const safeStart = startDate || 'all';
     const safeEnd = endDate || 'all';
