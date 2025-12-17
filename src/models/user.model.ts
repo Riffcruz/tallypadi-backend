@@ -15,6 +15,9 @@ export interface IUser extends Document {
   nextBillingDate?: Date;
   paystackCustomerCode?: string;
   paystackPlanCode?: string;
+  nextSummaryAt?: Date | null;      // UTC date when next summary should run
+  lastSummaryDateKey?: string | null; // YYYY-MM-DD for last summary sent (user-local day)
+
 
   // Plan & Staff Fields
   planType: 'OGA_BOSS' | 'TYCOON'; 
@@ -46,6 +49,9 @@ const userSchema = new Schema<IUser>(
     },
     businessName: { type: String, default: "My Shop" },
     name: { type: String },
+    nextSummaryAt: { type: Date, default: null, index: true },
+    lastSummaryDateKey: { type: String, default: null, index: true },
+
     
     // 🟢 ADDED: Country Code Field
     countryCode: { 
@@ -83,6 +89,7 @@ const userSchema = new Schema<IUser>(
     ownerId: { type: Schema.Types.ObjectId, ref: 'User' },
     
     messageHistory: { type: [String], default: [] },
+    
 
     settings: {
       closingTime: { type: String, default: '20:00' },
@@ -94,5 +101,7 @@ const userSchema = new Schema<IUser>(
   },
   { timestamps: true }
 );
+
+userSchema.index({ 'settings.dailySummaryEnabled': 1, nextSummaryAt: 1 });
 
 export const User = model<IUser>('User', userSchema);
