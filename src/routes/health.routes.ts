@@ -1,55 +1,68 @@
-// import { Router } from 'express';
-// import { messageQueue, notificationQueue } from '../services/queue.service';
+import { Router } from 'express';
+import { messageQueue, replyQueue, bulkQueue } from '../services/queue.service';
 
-// const router = Router();
+const router = Router();
 
-// // GET /api/health/queue
-// // Check how many messages are waiting vs processed
-// router.get('/queue', async (req, res) => {
-//     try {
-//         const [msgWaiting, msgActive, msgFailed, msgCompleted] = await Promise.all([
-//             messageQueue.getWaitingCount(),
-//             messageQueue.getActiveCount(),
-//             messageQueue.getFailedCount(),
-//             messageQueue.getCompletedCount()
-//         ]);
+// GET /api/health/queue
+router.get('/queue', async (req, res) => {
+  try {
+    const [
+      msgWaiting, msgActive, msgFailed, msgCompleted,
+      replyWaiting, replyActive, replyFailed,
+      bulkWaiting, bulkActive, bulkFailed
+    ] = await Promise.all([
+      messageQueue.getWaitingCount(),
+      messageQueue.getActiveCount(),
+      messageQueue.getFailedCount(),
+      messageQueue.getCompletedCount(),
 
-//         const [notifWaiting, notifActive, notifFailed] = await Promise.all([
-//             notificationQueue.getWaitingCount(),
-//             notificationQueue.getActiveCount(),
-//             notificationQueue.getFailedCount()
-//         ]);
+      replyQueue.getWaitingCount(),
+      replyQueue.getActiveCount(),
+      replyQueue.getFailedCount(),
 
-//         res.json({
-//             status: 'online',
-//             timestamp: new Date(),
-//             incoming_messages: {
-//                 waiting: msgWaiting,
-//                 active: msgActive,
-//                 failed: msgFailed,
-//                 completed: msgCompleted
-//             },
-//             outbound_notifications: {
-//                 waiting: notifWaiting,
-//                 active: notifActive,
-//                 failed: notifFailed
-//             }
-//         });
-//     } catch (error: any) {
-//         res.status(500).json({ status: 'error', message: error.message });
-//     }
-// });
+      bulkQueue.getWaitingCount(),
+      bulkQueue.getActiveCount(),
+      bulkQueue.getFailedCount(),
+    ]);
 
-// // GET /api/health/retry
-// // Force retry of failed jobs (Emergency Button)
-// router.post('/retry', async (req, res) => {
-//     try {
-//         await messageQueue.retryJobs({ count: 100 });
-//         await notificationQueue.retryJobs({ count: 100 });
-//         res.json({ message: "Retrying failed jobs..." });
-//     } catch (error: any) {
-//         res.status(500).json({ error: error.message });
-//     }
-// });
+    res.json({
+      status: 'online',
+      timestamp: new Date().toISOString(),
+      incoming_messages: {
+        waiting: msgWaiting,
+        active: msgActive,
+        failed: msgFailed,
+        completed: msgCompleted,
+      },
+      outbound_replies: {
+        waiting: replyWaiting,
+        active: replyActive,
+        failed: replyFailed,
+      },
+      outbound_bulk: {
+        waiting: bulkWaiting,
+        active: bulkActive,
+        failed: bulkFailed,
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({ status: 'error', message: error?.message || 'Unknown error' });
+  }
+});
 
-// export default router;
+// POST /api/health/retry
+router.post('/retry', async (req, res) => {
+  try {
+    await Promise.all([
+      messageQueue.retryJobs({ count: 200 }),
+      replyQueue.retryJobs({ count: 200 }),
+      bulkQueue.retryJobs({ count: 200 }),
+    ]);
+
+    res.json({ message: 'Retrying failed jobs...' });
+  } catch (error: any) {
+    res.status(500).json({ status: 'error', message: error?.message || 'Unknown error' });
+  }
+});
+
+export default router;
