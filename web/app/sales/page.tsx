@@ -471,7 +471,6 @@ export default function SalesPage() {
           quantity: item.sellQty,
           price: item.sellPrice,
         })),
-        date: new Date().toISOString(),
       };
 
       await axios.post(`${API_URL}/sales`, salesData, {

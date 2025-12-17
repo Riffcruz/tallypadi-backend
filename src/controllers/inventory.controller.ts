@@ -2,25 +2,18 @@ import { Request, Response } from 'express';
 import { Inventory } from '../models/inventory.model';
 import { User } from '../models/user.model';
 
-// --- Security Helpers ---
-
+// --- Helpers ---
 const sanitizeString = (input: unknown): string | null => {
   if (typeof input !== 'string') return null;
   return input.trim();
 };
 
 const validateNumber = (input: unknown): number | undefined => {
-  if (typeof input === 'number' && !isNaN(input)) return input;
-  return undefined;
+  const n = typeof input === 'string' ? Number(input) : (input as any);
+  return typeof n === 'number' && Number.isFinite(n) ? n : undefined;
 };
 
 // --- Subscription Guard ---
-
-/**
- * Returns true if the user can access inventory write features.
- * - active => allowed
- * - trial => allowed only before trialEndsAt
- */
 const hasInventoryWriteAccess = (user: any): boolean => {
   if (!user) return false;
 
@@ -49,32 +42,56 @@ const denySubscription = (res: Response, user: any) => {
   });
 };
 
-// --- Controller Methods ---
+const getAuthUser = async (req: Request) => {
+  const userId = (req as any).user?.id || (req as any).user?.userId || (req as any).userId;
+  if (!userId) return null;
+  return await User.findById(userId);
+};
 
 // GET all inventory items
 export const getInventory = async (req: Request, res: Response) => {
   try {
-    /**
-     * ✅ Replace this mock auth with your real auth user:
-     * const userId = (req as any).user?.id;
-     * const user = await User.findById(userId);
-     */
-    const user = await User.findOne();
-    if (!user) return res.status(404).json({ error: 'User not found' });
+    const user = await getAuthUser(req);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
 
-    const items = await Inventory.find({ user: user._id });
+    const items = await Inventory.find({ user: user._id }).lean();
 
-    const formattedItems = items.map((item) => ({
+    const formattedItems = (items || []).map((item: any) => ({
       id: item._id,
       name: item.name,
       stock: item.quantity,
       price: item.lastUnitPrice || 0,
     }));
 
-    res.json(formattedItems);
+    return res.json(formattedItems);
   } catch (error) {
     console.error('Inventory Fetch Error:', error);
-    res.status(500).json({ error: 'Server Error' });
+    return res.status(500).json({ error: 'Server Error' });
+  }
+};
+
+// ✅ GET single inventory item (needed by your SalesPage stock check)
+export const getInventoryItem = async (req: Request, res: Response) => {
+  try {
+    const user = await getAuthUser(req);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+
+    const item = await Inventory.findOne({ _id: req.params.id, user: user._id }).lean();
+    if (!item) return res.status(404).json({ error: 'Item not found' });
+
+    return res.json({
+      id: item._id,
+      name: item.name,
+      stock: item.quantity,
+      price: item.lastUnitPrice || 0,
+
+      // extra fields (safe for frontend)
+      quantity: item.quantity,
+      lastUnitPrice: item.lastUnitPrice || 0,
+    });
+  } catch (error) {
+    console.error('Get Inventory Item Error:', error);
+    return res.status(500).json({ error: 'Server Error' });
   }
 };
 
@@ -87,15 +104,9 @@ export const addInventoryItem = async (req: Request, res: Response) => {
     const safeStock = validateNumber(body.stock);
     const safePrice = validateNumber(body.price);
 
-    /**
-     * ✅ Replace this mock auth with your real auth user:
-     * const userId = (req as any).user?.id;
-     * const user = await User.findById(userId);
-     */
-    const user = await User.findOne();
-    if (!user) return res.status(404).json({ error: 'User not found' });
+    const user = await getAuthUser(req);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
 
-    // ✅ Enforce Trial/Active access
     if (!hasInventoryWriteAccess(user)) {
       return denySubscription(res, user);
     }
@@ -104,8 +115,7 @@ export const addInventoryItem = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Item name is required and must be a string' });
     }
 
-    // Create or Update
-    let item = await Inventory.findOne({ user: user._id, name: { $regex: new RegExp(`^${safeName}$`, 'i') } });
+    let item = await Inventory.findOne({ user: user._id, name: safeName.toLowerCase() });
 
     if (item) {
       const stockToAdd = safeStock !== undefined ? safeStock : 0;
@@ -122,7 +132,7 @@ export const addInventoryItem = async (req: Request, res: Response) => {
       });
     }
 
-    res.json({
+    return res.json({
       id: item._id,
       name: item.name,
       stock: item.quantity,
@@ -130,7 +140,7 @@ export const addInventoryItem = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('Add Item Error:', error);
-    res.status(500).json({ error: 'Server Error' });
+    return res.status(500).json({ error: 'Server Error' });
   }
 };
 
@@ -143,31 +153,22 @@ export const updateInventoryItem = async (req: Request, res: Response) => {
     const safeStock = validateNumber(body.stock);
     const safePrice = validateNumber(body.price);
 
-    /**
-     * ✅ Replace this mock auth with your real auth user:
-     * const userId = (req as any).user?.id;
-     * const user = await User.findById(userId);
-     */
-    const user = await User.findOne();
-    if (!user) return res.status(404).json({ error: 'User not found' });
+    const user = await getAuthUser(req);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
 
-    // ✅ Enforce Trial/Active access
     if (!hasInventoryWriteAccess(user)) {
       return denySubscription(res, user);
     }
 
     const item = await Inventory.findOne({ _id: id, user: user._id });
-
-    if (!item) {
-      return res.status(404).json({ error: 'Item not found' });
-    }
+    if (!item) return res.status(404).json({ error: 'Item not found' });
 
     if (safeStock !== undefined) item.quantity = safeStock;
     if (safePrice !== undefined) item.lastUnitPrice = safePrice;
 
     await item.save();
 
-    res.json({
+    return res.json({
       id: item._id,
       name: item.name,
       stock: item.quantity,
@@ -175,6 +176,6 @@ export const updateInventoryItem = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('Update Item Error:', error);
-    res.status(500).json({ error: 'Server Error' });
+    return res.status(500).json({ error: 'Server Error' });
   }
 };
