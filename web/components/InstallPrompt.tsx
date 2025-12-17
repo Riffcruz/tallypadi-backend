@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Smartphone, X, Share, PlusSquare, ArrowUp, Check } from "lucide-react";
+import { Smartphone, X, Share, PlusSquare, ArrowUp } from "lucide-react";
 import { usePathname } from "next/navigation";
 
 export default function InstallPrompt() {
@@ -78,8 +78,11 @@ export default function InstallPrompt() {
     }
   };
 
-  // If installed, don't render anything
-  if (isStandalone || !showInstallButton) return null;
+  // LOGIC: 
+  // 1. If installed (isStandalone) -> Hide
+  // 2. If browser doesn't support install AND isn't iOS (!showInstallButton) -> Hide
+  // 3. If we are on the Home Page (pathname === "/") -> Hide
+  if (isStandalone || !showInstallButton || pathname === "/") return null;
 
   return (
     <>
