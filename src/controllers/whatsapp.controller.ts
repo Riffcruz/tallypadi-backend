@@ -316,11 +316,14 @@ export const handleMessageLogic = async (
 const isDebtCmd =
   low === 'debt' ||
   low.includes('debtors') ||
+  /\b(debt|debts|debtor|debtors|owing|owes|owe|gbese|bashi|ugwo)\b/.test(low) ||
+  low.includes('dey owe') ||
   low.includes('who dey owe') ||
   low.includes('who is owing') ||
   low.includes('who owes');
+  const isPaymentPhrase = /\b(paid|pay|payment|settle|settled|i paid|don pay)\b/.test(low);
 
-if (isDebtCmd) {
+if (isDebtCmd && !isPaymentPhrase) {
   const msg = await buildDebtSummary(user._id, symbol, locale);
   await queueOutboundMessage(from, msg);
   return;

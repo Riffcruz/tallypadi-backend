@@ -26,6 +26,7 @@ export type ParsedIntent =
   | 'ADD_STAFF'
   | 'DOWNLOAD_REPORT'
   | 'UNDO_LAST_SALE'
+  | 'REPORT_DEBTS'
   | 'UNKNOWN';
 
 export interface ParsedItem {
@@ -83,7 +84,7 @@ const sanitizeInput = (input: string): string => {
 
 const allowedIntents: ParsedIntent[] = [
   "SALE","RESTOCK","SET_STOCK","DELETED_STOCK","DEFINE_PRICE","PRICE_CHECK",
-  "REPORT_SALES","REPORT_STOCK","REPORT_FULL","CLOSE_BOOK","SETTINGS",
+  "REPORT_SALES","REPORT_DEBTS","REPORT_STOCK","REPORT_FULL","CLOSE_BOOK","SETTINGS",
   "CHANGE_LANGUAGE","DEBT_PAYMENT","ADD_STAFF","DOWNLOAD_REPORT","UNDO_LAST_SALE","UNKNOWN"
 ];
 
@@ -203,6 +204,19 @@ function fallbackParse(message: string): ParsedResult | null {
     });
   }
 
+  if (/\b(debt|debts|debtor|debtors|owing|owes|gbese|bashi|ugwo)\b/.test(m) || m.includes('dey owe')) {
+  return safeParsedResult({
+    intent: "REPORT_DEBTS",
+    is_credit: false,
+    items: [],
+    total_money: null,
+    report_params: { start_date: null, end_date: null },
+    settings_update: { key: null, value: null },
+    reply_text: "📌 Debt summary"
+  });
+}
+
+
   // sold 2 rice for 50k / ₦5000 / 5000
   const sold = m.match(/\b(sold|sell|comot)\s+(\d+)\s+(.+?)(?:\s+(?:for|@|at)\s+([₦$€£₵]?\s*\d+(?:k)?))?\b/i);
   if (sold) {
@@ -266,6 +280,12 @@ INTENTS:
 - DOWNLOAD_REPORT: "Send pdf"
 - CLOSE_BOOK: "Close the book"
 
+- REPORT_DEBTS: user wants list of people owing and balances.
+  Examples (any language/spelling):
+  "debt", "debts", "debt summary", "debtors", "who owes me", "who dey owe", "who dey owe me money",
+  "gbese" (Yoruba), "bashi" (Hausa), "ugwo" (Igbo), "aboki dey owe", "list debtors"
+
+
 ✅ UNDO_LAST_SALE:
 User wants to reverse the last recorded sale/transaction.
 Examples (any language / spelling):
@@ -280,7 +300,7 @@ Return ONLY JSON.
 
 <schema>
 {
-  "intent": "SALE" | "RESTOCK" | "SET_STOCK" | "DELETED_STOCK" | "DEFINE_PRICE" | "PRICE_CHECK" | "REPORT_SALES" | "REPORT_STOCK" | "REPORT_FULL" | "CLOSE_BOOK" | "SETTINGS" | "CHANGE_LANGUAGE" | "DEBT_PAYMENT" | "ADD_STAFF" | "DOWNLOAD_REPORT" | "UNDO_LAST_SALE" | "UNKNOWN",
+  "intent": "SALE" | "RESTOCK" | "SET_STOCK" | "DELETED_STOCK" | "DEFINE_PRICE" | "PRICE_CHECK" | "REPORT_SALES" | "REPORT_STOCK" | "REPORT_DEBTS" | "REPORT_FULL" | "CLOSE_BOOK" | "SETTINGS" | "CHANGE_LANGUAGE" | "DEBT_PAYMENT" | "ADD_STAFF" | "DOWNLOAD_REPORT" | "UNDO_LAST_SALE" | "UNKNOWN",
   "is_credit": boolean,
   "customer_name": "string | null",
   "staffPhoneNumber": "string | null",
