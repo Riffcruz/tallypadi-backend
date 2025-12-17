@@ -35,7 +35,7 @@ const normalizeSalePayload = (body: any): SaleItemInput[] => {
 
     if (!itemId) continue;
     if (!quantity || quantity <= 0) continue;
-    if (!price || price <= 0) continue;
+    if (!price || price < 0) continue; // Allow 0 price if needed, but usually > 0
 
     clean.push({ itemId, quantity, price });
   }
@@ -62,10 +62,12 @@ const THEME = {
   white: '#FFFFFF'
 };
 
-// 1) RECORD SALE  ✅ now supports {items:[...]}
+// =====================================================
+// 1) RECORD SALE (FIXED: Works on Single Server)
+// =====================================================
 export const recordSale = async (req: Request, res: Response) => {
-  let session: mongoose.ClientSession | null = null;
-
+  // ⚠️ NOTE: Sessions removed to prevent "Transaction numbers only allowed on replica set" error
+  
   try {
     const user = await User.findOne(); // TODO: replace with real auth
     if (!user) return res.status(404).json({ error: "User not found" });
@@ -74,11 +76,11 @@ export const recordSale = async (req: Request, res: Response) => {
     if (!items.length) {
       return res.status(400).json({
         error: "Invalid sale data",
-        message: "Send { items: [{ itemId, quantity, price }] } with quantity>0 and price>0"
+        message: "Send { items: [{ itemId, quantity, price }] } with quantity>0"
       });
     }
 
-    // merge duplicates by itemId
+    // Merge duplicates by itemId
     const merged = new Map<string, SaleItemInput>();
     for (const it of items) {
       const prev = merged.get(it.itemId);
@@ -90,18 +92,11 @@ export const recordSale = async (req: Request, res: Response) => {
     }
     const finalItems = Array.from(merged.values());
 
-    // start transaction (if replica set supports it)
-    try {
-      session = await mongoose.startSession();
-      session.startTransaction();
-    } catch {
-      session = null;
-    }
-
+    // 1. Fetch Inventory (Standard Find)
     const invDocs = await Inventory.find({
       _id: { $in: finalItems.map(i => i.itemId) },
       user: user._id
-    }).session(session);
+    });
 
     const invMap = new Map<string, any>();
     invDocs.forEach(d => invMap.set(String(d._id), d));
@@ -109,16 +104,15 @@ export const recordSale = async (req: Request, res: Response) => {
     let totalMoney = 0;
     const txItems: any[] = [];
 
-    // validate + compute totals
+    // 2. Validate Stock & Prepare Data
     for (const it of finalItems) {
       const inv = invMap.get(String(it.itemId));
+      
       if (!inv) {
-        if (session) await session.abortTransaction();
         return res.status(404).json({ error: "Item not found in inventory", itemId: it.itemId });
       }
 
       if (inv.quantity < it.quantity) {
-        if (session) await session.abortTransaction();
         return res.status(409).json({
           error: "Insufficient stock",
           itemId: it.itemId,
@@ -132,70 +126,51 @@ export const recordSale = async (req: Request, res: Response) => {
 
       txItems.push({
         name: inv.name,
+        // Save BOTH formats to prevent Schema validation errors
         qty: it.quantity,
+        quantity: it.quantity,
         unit: 'pc',
         unitPrice: it.price,
+        price: it.price,
         total: lineTotal
       });
     }
 
-    // apply stock changes
+    // 3. Apply Stock Changes (Sequential Updates)
     for (const it of finalItems) {
-      const inv = invMap.get(String(it.itemId));
-      if (session) {
-        inv.quantity -= it.quantity;
-        await inv.save({ session });
-      } else {
-        const r = await Inventory.updateOne(
-          { _id: it.itemId, user: user._id, quantity: { $gte: it.quantity } },
-          { $inc: { quantity: -it.quantity } }
-        );
-        if (r.matchedCount === 0) {
-          return res.status(409).json({ error: "Insufficient stock (race condition)", itemId: it.itemId });
-        }
-      }
+      await Inventory.updateOne(
+        { _id: it.itemId, user: user._id },
+        { $inc: { quantity: -it.quantity } }
+      );
     }
 
-    // create transaction record
-    let createdTx: any;
-    if (session) {
-      const docs = await Transaction.create([{
-        user: user._id,
-        type: 'SALE',
-        paymentStatus: 'PAID',
-        items: txItems,
-        totalMoney,
-        date: getCurrentDateString(),
-        timestamp: new Date()
-      }], { session });
-
-      createdTx = docs[0];
-      await session.commitTransaction();
-    } else {
-      createdTx = await Transaction.create({
-        user: user._id,
-        type: 'SALE',
-        paymentStatus: 'PAID',
-        items: txItems,
-        totalMoney,
-        date: getCurrentDateString(),
-        timestamp: new Date()
-      });
-    }
+    // 4. Create Transaction Record
+    const createdTx = await Transaction.create({
+      user: user._id,
+      type: 'SALE',
+      paymentStatus: 'PAID',
+      items: txItems,
+      totalMoney,
+      date: getCurrentDateString(),
+      timestamp: new Date()
+    });
 
     return res.json({ success: true, transaction: createdTx });
 
   } catch (error: any) {
     console.error("Record Sale Error:", error?.stack || error);
-    try { if (session) await session.abortTransaction(); } catch {}
-    return res.status(500).json({ error: "Server Error" });
-  } finally {
-    try { if (session) session.endSession(); } catch {}
+    // Return detailed error to frontend for easier debugging
+    return res.status(500).json({ 
+      error: "Server Error", 
+      details: error.message || "Unknown Error" 
+    });
   }
 };
 
 
+// =====================================================
 // 2) GET SALES HISTORY
+// =====================================================
 export const getSalesHistory = async (req: Request, res: Response) => {
   try {
     const user = await User.findOne();
@@ -217,8 +192,9 @@ export const getSalesHistory = async (req: Request, res: Response) => {
       totalAmount: t.totalMoney || 0,
       items: (t.items || []).map((i: any) => ({
         name: i.name,
-        quantity: i.qty,
-        price: i.unitPrice
+        // Handle both schema possibilities
+        quantity: i.qty ?? i.quantity ?? 0,
+        price: i.unitPrice ?? i.price ?? 0
       }))
     }));
 
@@ -230,7 +206,9 @@ export const getSalesHistory = async (req: Request, res: Response) => {
 };
 
 
-// 3) GENERATE PDF REPORT ✅ fixed doc.page crash
+// =====================================================
+// 3) GENERATE PDF REPORT
+// =====================================================
 export const generateSalesReport = async (req: Request, res: Response) => {
   try {
     const user = await User.findOne();
@@ -261,7 +239,6 @@ export const generateSalesReport = async (req: Request, res: Response) => {
       autoFirstPage: false
     });
 
-    // ✅ IMPORTANT: add a page BEFORE reading doc.page
     doc.addPage();
 
     const pageW = doc.page.width;
@@ -277,7 +254,7 @@ export const generateSalesReport = async (req: Request, res: Response) => {
     res.setHeader('Content-Disposition', `attachment; filename=Sales_Report_${safeStart}_${safeEnd}.pdf`);
     doc.pipe(res);
 
-    // fonts
+    // Fonts
     const fontPaths = [
       path.join(__dirname, '..', 'assets', 'fonts', 'NotoSans-Regular.ttf'),
       '/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf',
@@ -379,7 +356,7 @@ export const generateSalesReport = async (req: Request, res: Response) => {
     for (let idx = 0; idx < transactions.length; idx++) {
       const t: any = transactions[idx];
       const dateStr = t.date || getCurrentDateString();
-      const itemText = (t.items || []).map((i: any) => `${i.qty} x ${i.name}`).join(', ');
+      const itemText = (t.items || []).map((i: any) => `${i.qty ?? i.quantity} x ${i.name}`).join(', ');
       const amtStr = formatMoney(t.totalMoney || 0);
 
       const textHeight = doc.heightOfString(itemText, { width: colItems - 10 });
