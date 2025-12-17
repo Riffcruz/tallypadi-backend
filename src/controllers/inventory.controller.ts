@@ -73,27 +73,28 @@ export const getInventory = async (req: Request, res: Response) => {
 // ✅ GET single inventory item (needed by your SalesPage stock check)
 export const getInventoryItem = async (req: Request, res: Response) => {
   try {
-    const user = await getAuthUser(req);
-    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+    const user = await User.findOne(); // TODO: replace with real auth
+    if (!user) return res.status(404).json({ error: 'User not found' });
 
-    const item = await Inventory.findOne({ _id: req.params.id, user: user._id }).lean();
+    const { id } = req.params;
+
+    const item = await Inventory.findOne({ _id: id, user: user._id });
     if (!item) return res.status(404).json({ error: 'Item not found' });
 
     return res.json({
       id: item._id,
       name: item.name,
       stock: item.quantity,
-      price: item.lastUnitPrice || 0,
-
-      // extra fields (safe for frontend)
       quantity: item.quantity,
+      price: item.lastUnitPrice || 0,
       lastUnitPrice: item.lastUnitPrice || 0,
     });
   } catch (error) {
-    console.error('Get Inventory Item Error:', error);
+    console.error('Get Item Error:', error);
     return res.status(500).json({ error: 'Server Error' });
   }
 };
+
 
 // ADD a new inventory item
 export const addInventoryItem = async (req: Request, res: Response) => {

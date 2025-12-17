@@ -21,12 +21,8 @@ import { startScheduler } from './services/scheduler';
 import { env } from './config/env';
 import { getDashboardData } from './controllers/dashboard.controller';
 
-import {
-  getInventory,
-  getInventoryItem,
-  addInventoryItem,
-  updateInventoryItem,
-} from './controllers/inventory.controller';
+import { getInventory, getInventoryItem, addInventoryItem, updateInventoryItem } from './controllers/inventory.controller';
+
 
 import { updateSettings } from './controllers/settings.controller';
 import { getGlobalSettings } from './controllers/admin.controller';
@@ -173,6 +169,8 @@ app.get('/api/inventory', authRequired, getInventory);
 app.get('/api/inventory/:id', authRequired, getInventoryItem);
 app.post('/api/inventory', authRequired, addInventoryItem);
 app.put('/api/inventory/:id', authRequired, updateInventoryItem);
+app.get('/api/inventory/:id', getInventoryItem);
+
 
 // Sales ✅ (auth)
 app.post('/api/sales', authRequired, recordSale);

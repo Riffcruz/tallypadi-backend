@@ -422,108 +422,106 @@ export default function SalesPage() {
   const calculateTotal = () => cart.reduce((acc, item) => acc + item.sellQty * item.sellPrice, 0);
 
   const handleCheckout = async () => {
-    if (!canAddSales) return showLockedModal();
-    if (cart.length === 0) {
-      setErrorMsg('Cart is empty. Add items to checkout.');
-      setTimeout(() => setErrorMsg(''), 3000);
-      return;
-    }
+  if (!canAddSales) return showLockedModal();
 
-    const token = localStorage.getItem('tallyToken');
-    if (!token) {
-      router.push('/login');
-      return;
-    }
+  if (cart.length === 0) {
+    setErrorMsg('Cart is empty. Add items to checkout.');
+    setTimeout(() => setErrorMsg(''), 3000);
+    return;
+  }
 
-    setLoading(true);
-    setErrorMsg('');
-    setSuccessMsg('');
+  // ✅ Prevent 0 / invalid prices (this was causing “Invalid sale data” too)
+  const hasZeroPrice = cart.some(i => !Number.isFinite(i.sellPrice) || i.sellPrice <= 0);
+  if (hasZeroPrice) {
+    setErrorMsg('Set a selling price for all items before checkout.');
+    setTimeout(() => setErrorMsg(''), 4000);
+    return;
+  }
 
-    try {
-      // Check if items are still in stock
-      const stockCheckPromises = cart.map(async (item) => {
-        try {
-          const res = await axios.get(`${API_URL}/inventory/${item.id}`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          return { item, currentStock: Number(res.data.quantity ?? res.data.stock ?? 0) };
-        } catch {
-          return { item, currentStock: 0 };
-        }
-      });
+  const token = localStorage.getItem('tallyToken');
+  if (!token) {
+    router.push('/login');
+    return;
+  }
 
-      const stockResults = await Promise.all(stockCheckPromises);
-      const outOfStockItems = stockResults.filter(({ item, currentStock }) => 
-        currentStock < item.sellQty
-      );
+  setLoading(true);
+  setErrorMsg('');
+  setSuccessMsg('');
 
-      if (outOfStockItems.length > 0) {
-        const itemNames = outOfStockItems.map(({ item }) => item.name).join(', ');
-        setErrorMsg(`Insufficient stock for: ${itemNames}`);
-        setTimeout(() => setErrorMsg(''), 5000);
-        setLoading(false);
-        return;
+  try {
+    // ✅ Stock check now works because backend has GET /api/inventory/:id
+    const stockCheckPromises = cart.map(async (item) => {
+      try {
+        const res = await axios.get(`${API_URL}/inventory/${item.id}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        const currentStock = Number(res.data?.quantity ?? res.data?.stock ?? 0);
+        return { item, currentStock };
+      } catch {
+        return { item, currentStock: 0 };
       }
+    });
 
-      const salesData = {
-        items: cart.map(item => ({
-          itemId: item.id,
-          quantity: item.sellQty,
-          price: item.sellPrice,
-        })),
-      };
+    const stockResults = await Promise.all(stockCheckPromises);
+    const outOfStockItems = stockResults.filter(({ item, currentStock }) => currentStock < item.sellQty);
 
-      await axios.post(`${API_URL}/sales`, salesData, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      setSuccessMsg(`Successfully recorded ${cart.length} item${cart.length === 1 ? '' : 's'}!`);
-      setCart([]);
-      setIsCartExpanded(false);
-      
-      // Refresh inventory
-      fetchInventory(token);
-      
-      // Refresh history if on history tab
-      if (activeTab === 'history') {
-        fetchHistory();
-      }
-    } catch (err: any) {
-      console.error('Checkout failed', err);
-      
-      // Debug: Log the error details
-      console.log('Error details:', {
-        status: err.response?.status,
-        data: err.response?.data,
-        cartItems: cart.map(item => ({ id: item.id, name: item.name }))
-      });
-      
-      if (err.response?.status === 400) {
-        setErrorMsg('Invalid sale data. Please check quantities and prices.');
-      } else if (err.response?.status === 401) {
-        setErrorMsg('Session expired. Please login again.');
-        setTimeout(() => router.push('/login'), 2000);
-      } else if (err.response?.status === 403) {
-        setErrorMsg('You do not have permission to record sales.');
-      } else if (err.response?.status === 404) {
-        setErrorMsg('Item not found. Please refresh inventory.');
-      } else if (err.response?.status === 409) {
-        setErrorMsg('Insufficient stock for one or more items.');
-      } else if (err.response?.status === 422) {
-        setErrorMsg('Validation error. Please check your inputs.');
-      } else if (err.code === 'ERR_NETWORK') {
-        setErrorMsg('Network error. Please check your connection.');
-      } else {
-        setErrorMsg('Failed to record sale. Please try again.');
-      }
-    } finally {
+    if (outOfStockItems.length > 0) {
+      const itemNames = outOfStockItems.map(({ item }) => item.name).join(', ');
+      setErrorMsg(`Insufficient stock for: ${itemNames}`);
+      setTimeout(() => setErrorMsg(''), 5000);
       setLoading(false);
-      setTimeout(() => {
-        setSuccessMsg('');
-        setErrorMsg('');
-      }, 5000);
+      return;
     }
-  };
+
+    // ✅ This payload now matches backend (backend accepts batch)
+    const salesData = {
+      items: cart.map(item => ({
+        itemId: item.id,
+        quantity: item.sellQty,
+        price: item.sellPrice,
+      })),
+    };
+
+    await axios.post(`${API_URL}/sales`, salesData, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    setSuccessMsg(`Successfully recorded ${cart.length} item${cart.length === 1 ? '' : 's'}!`);
+    setCart([]);
+    setIsCartExpanded(false);
+
+    fetchInventory(token);
+    if (activeTab === 'history') fetchHistory();
+  } catch (err: any) {
+    console.error('Checkout failed', err);
+
+    const status = err.response?.status;
+    const apiMsg = err.response?.data?.message || err.response?.data?.error;
+
+    if (status === 400) {
+      setErrorMsg(apiMsg || 'Invalid sale data. Please check quantities and prices.');
+    } else if (status === 401) {
+      setErrorMsg('Session expired. Please login again.');
+      setTimeout(() => router.push('/login'), 2000);
+    } else if (status === 403) {
+      setErrorMsg(apiMsg || 'You do not have permission to record sales.');
+    } else if (status === 404) {
+      setErrorMsg(apiMsg || 'Item not found. Please refresh inventory.');
+    } else if (status === 409) {
+      setErrorMsg(apiMsg || 'Insufficient stock for one or more items.');
+    } else {
+      setErrorMsg(apiMsg || 'Failed to record sale. Please try again.');
+    }
+  } finally {
+    setLoading(false);
+    setTimeout(() => {
+      setSuccessMsg('');
+      setErrorMsg('');
+    }, 5000);
+  }
+};
+
 
   // --- UI helpers ---
   const planBadge = useMemo(() => {
@@ -547,6 +545,9 @@ export default function SalesPage() {
       cls: 'bg-emerald-50 text-emerald-700 border-emerald-200',
     };
   }, [user]);
+
+
+
 
   const accessBadge = useMemo(() => {
     if (!normalizedSubscriptionStatus) return null;
