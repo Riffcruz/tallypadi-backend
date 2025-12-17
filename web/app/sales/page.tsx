@@ -130,11 +130,15 @@ export default function SalesPage() {
   const fetchInventory = async (token: string) => {
     try {
       const res = await axios.get(`${API_URL}/inventory`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { 
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
       });
-      setInventory(res.data);
+      setInventory(res.data || []);
     } catch (err) {
       console.error('Failed to load inventory', err);
+      setErrorMsg('Failed to load inventory. Please refresh.');
     }
   };
 
@@ -149,13 +153,22 @@ export default function SalesPage() {
     }
 
     try {
+      const params: any = {};
+      if (dateRange.start) params.startDate = dateRange.start;
+      if (dateRange.end) params.endDate = dateRange.end;
+
       const res = await axios.get(`${API_URL}/sales`, {
-        headers: { Authorization: `Bearer ${token}` },
-        params: { startDate: dateRange.start, endDate: dateRange.end },
+        headers: { 
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        params,
       });
-      setSalesHistory(res.data);
-    } catch (err) {
+      setSalesHistory(res.data || []);
+    } catch (err: any) {
       console.error('Failed to fetch history', err);
+      setErrorMsg('Failed to load sales history. Please try again.');
+      setSalesHistory([]);
     } finally {
       setHistoryLoading(false);
     }
@@ -192,15 +205,20 @@ export default function SalesPage() {
     fetchInventory(token);
 
     axios
-      .get(`${API_URL}/dashboard`, { headers: { Authorization: `Bearer ${token}` } })
+      .get(`${API_URL}/dashboard`, { 
+        headers: { 
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        } 
+      })
       .then((res) => {
-        if (res.data.user) {
+        if (res.data?.user) {
           setUser(res.data.user);
           localStorage.setItem('tallyUser', JSON.stringify(res.data.user));
         }
       })
-      .catch(() => {
-        // ignore
+      .catch((err) => {
+        console.error('Failed to fetch user data', err);
       });
 
     // Prevent zoom on mobile
@@ -285,29 +303,52 @@ export default function SalesPage() {
     }
 
     setLoading(true);
+    setErrorMsg('');
 
     try {
+      const params: any = { format: 'pdf' };
+      if (dateRange.start) params.startDate = dateRange.start;
+      if (dateRange.end) params.endDate = dateRange.end;
+
       const response = await axios.get(`${API_URL}/sales/report`, {
-        headers: { Authorization: `Bearer ${token}` },
-        params: { format: 'pdf', startDate: dateRange.start, endDate: dateRange.end },
+        headers: { 
+          Authorization: `Bearer ${token}`,
+          'Accept': 'application/pdf'
+        },
+        params,
         responseType: 'blob',
       });
 
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `Sales_Report_${dateRange.start}_${dateRange.end}.pdf`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
+      if (response.status === 200 && response.data.size > 0) {
+        const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', `Sales_Report_${dateRange.start || 'start'}_${dateRange.end || 'end'}.pdf`);
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.URL.revokeObjectURL(url);
 
-      setSuccessMsg('Report downloaded!');
-    } catch (err) {
+        setSuccessMsg('Report downloaded successfully!');
+      } else {
+        throw new Error('Empty PDF response');
+      }
+    } catch (err: any) {
       console.error('Download failed', err);
-      setErrorMsg('Failed to generate PDF. Try again.');
+      
+      if (err.response?.status === 403) {
+        setErrorMsg('Access denied. Please upgrade your plan to download PDF reports.');
+      } else if (err.response?.status === 404) {
+        setErrorMsg('PDF generation service is currently unavailable.');
+      } else {
+        setErrorMsg('Failed to generate PDF. Please try again later.');
+      }
     } finally {
       setLoading(false);
-      setTimeout(() => setSuccessMsg(''), 3000);
+      setTimeout(() => {
+        setSuccessMsg('');
+        setErrorMsg('');
+      }, 3000);
     }
   };
 
@@ -346,7 +387,11 @@ export default function SalesPage() {
 
   const handleCheckout = async () => {
     if (!canAddSales) return showLockedModal();
-    if (cart.length === 0) return;
+    if (cart.length === 0) {
+      setErrorMsg('Cart is empty. Add items to checkout.');
+      setTimeout(() => setErrorMsg(''), 3000);
+      return;
+    }
 
     const token = localStorage.getItem('tallyToken');
     if (!token) {
@@ -355,30 +400,98 @@ export default function SalesPage() {
     }
 
     setLoading(true);
+    setErrorMsg('');
+    setSuccessMsg('');
 
     try {
-      for (const item of cart) {
-        await axios.post(
-          `${API_URL}/sales`,
-          {
-            itemId: item.id,
-            quantity: item.sellQty,
-            price: item.sellPrice,
-            date: new Date().toISOString(),
-          },
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
+      // Check if items are still in stock
+      const stockCheckPromises = cart.map(async (item) => {
+        try {
+          const res = await axios.get(`${API_URL}/inventory/${item.id}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          return { item, currentStock: res.data.stock || 0 };
+        } catch {
+          return { item, currentStock: 0 };
+        }
+      });
+
+      const stockResults = await Promise.all(stockCheckPromises);
+      const outOfStockItems = stockResults.filter(({ item, currentStock }) => 
+        currentStock < item.sellQty
+      );
+
+      if (outOfStockItems.length > 0) {
+        const itemNames = outOfStockItems.map(({ item }) => item.name).join(', ');
+        setErrorMsg(`Insufficient stock for: ${itemNames}`);
+        setTimeout(() => setErrorMsg(''), 5000);
+        setLoading(false);
+        return;
       }
 
-      setSuccessMsg('Sale recorded successfully!');
+      // Record sales
+      const salesPromises = cart.map(async (item) => {
+        const saleData = {
+          itemId: item.id,
+          itemName: item.name,
+          quantity: item.sellQty,
+          price: item.sellPrice,
+          total: item.sellQty * item.sellPrice,
+          date: new Date().toISOString(),
+        };
+
+        return axios.post(
+          `${API_URL}/sales`,
+          saleData,
+          { 
+            headers: { 
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            } 
+          }
+        );
+      });
+
+      await Promise.all(salesPromises);
+
+      setSuccessMsg(`Successfully recorded ${cart.length} item${cart.length === 1 ? '' : 's'}!`);
       setCart([]);
       setIsCartExpanded(false);
+      
+      // Refresh inventory
       fetchInventory(token);
-    } catch (err) {
-      setErrorMsg('Failed to record sale.');
+      
+      // Refresh history if on history tab
+      if (activeTab === 'history') {
+        fetchHistory();
+      }
+    } catch (err: any) {
+      console.error('Checkout failed', err);
+      
+      if (err.response?.status === 400) {
+        setErrorMsg('Invalid sale data. Please check quantities and prices.');
+      } else if (err.response?.status === 401) {
+        setErrorMsg('Session expired. Please login again.');
+        setTimeout(() => router.push('/login'), 2000);
+      } else if (err.response?.status === 403) {
+        setErrorMsg('You do not have permission to record sales.');
+      } else if (err.response?.status === 404) {
+        setErrorMsg('Item not found. Please refresh inventory.');
+      } else if (err.response?.status === 409) {
+        setErrorMsg('Insufficient stock for one or more items.');
+      } else if (err.response?.status === 422) {
+        setErrorMsg('Validation error. Please check your inputs.');
+      } else if (err.code === 'ERR_NETWORK') {
+        setErrorMsg('Network error. Please check your connection.');
+      } else {
+        setErrorMsg('Failed to record sale. Please try again.');
+      }
     } finally {
       setLoading(false);
-      setTimeout(() => setSuccessMsg(''), 3000);
+      setTimeout(() => {
+        setSuccessMsg('');
+        setErrorMsg('');
+      }, 5000);
     }
   };
 
@@ -503,7 +616,7 @@ export default function SalesPage() {
                           <button
                             onClick={() => updateCartItem(item.id, 'sellQty', Math.max(1, item.sellQty - 1))}
                             className="px-2 py-1.5 hover:bg-gray-200 text-gray-700 disabled:opacity-50"
-                            disabled={!canAddSales}
+                            disabled={!canAddSales || loading}
                           >
                             <Minus className="w-3.5 h-3.5" />
                           </button>
@@ -511,15 +624,25 @@ export default function SalesPage() {
                           <button
                             onClick={() => updateCartItem(item.id, 'sellQty', item.sellQty + 1)}
                             className="px-2 py-1.5 hover:bg-gray-200 text-gray-700 disabled:opacity-50"
-                            disabled={!canAddSales}
+                            disabled={!canAddSales || loading}
                           >
                             <Plus className="w-3.5 h-3.5" />
                           </button>
                         </div>
                         <span className="text-gray-400">×</span>
-                        <span className="text-sm text-gray-600">
-                          ₦{item.sellPrice.toLocaleString()}
-                        </span>
+                        <div className="relative flex-1">
+                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs">₦</span>
+                          <input
+                            type="number"
+                            className="w-full pl-5 pr-2 py-1 text-sm border border-gray-200 bg-white rounded-lg focus:ring-1 focus:ring-emerald-500 outline-none text-gray-900"
+                            value={item.sellPrice}
+                            onChange={(e) =>
+                              updateCartItem(item.id, 'sellPrice', Math.max(0, parseInt(e.target.value) || 0))
+                            }
+                            disabled={!canAddSales || loading}
+                            min="0"
+                          />
+                        </div>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 ml-2">
@@ -530,6 +653,7 @@ export default function SalesPage() {
                         onClick={() => removeFromCart(item.id)}
                         className="p-2 text-red-500 hover:bg-red-50 rounded-lg active:scale-95 transition-transform"
                         style={{ WebkitTapHighlightColor: 'transparent' }}
+                        disabled={loading}
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -726,6 +850,15 @@ export default function SalesPage() {
           >
             {errorMsg ? <AlertCircle className="w-5 h-5" /> : <CheckCircle2 className="w-5 h-5" />}
             <p className="text-sm font-semibold">{errorMsg || successMsg}</p>
+            <button
+              onClick={() => {
+                setErrorMsg('');
+                setSuccessMsg('');
+              }}
+              className="ml-auto p-1 hover:bg-white/50 rounded-lg"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
         )}
 
@@ -784,7 +917,7 @@ export default function SalesPage() {
                         touchAction: 'manipulation',
                         WebkitTapHighlightColor: 'transparent',
                       }}
-                      disabled={!canAddSales}
+                      disabled={!canAddSales || loading}
                     >
                       <div className="p-3">
                         <div className="flex justify-between items-start mb-2">
@@ -884,6 +1017,7 @@ export default function SalesPage() {
                             onClick={() => removeFromCart(item.id)}
                             className="text-red-500 hover:text-red-700 hover:bg-red-50 border border-transparent hover:border-red-200 p-2 rounded-xl transition"
                             title="Remove"
+                            disabled={loading}
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -893,8 +1027,8 @@ export default function SalesPage() {
                           <div className="flex items-center bg-white rounded-xl border border-gray-200 overflow-hidden">
                             <button
                               onClick={() => updateCartItem(item.id, 'sellQty', Math.max(1, item.sellQty - 1))}
-                              className="px-3 py-2 hover:bg-gray-50 text-gray-700"
-                              disabled={!canAddSales}
+                              className="px-3 py-2 hover:bg-gray-50 text-gray-700 disabled:opacity-50"
+                              disabled={!canAddSales || loading}
                             >
                               <Minus className="w-3.5 h-3.5" />
                             </button>
@@ -904,15 +1038,16 @@ export default function SalesPage() {
                               className="w-12 text-center text-sm font-extrabold outline-none bg-transparent text-gray-900"
                               value={item.sellQty}
                               onChange={(e) =>
-                                updateCartItem(item.id, 'sellQty', parseInt(e.target.value) || 1)
+                                updateCartItem(item.id, 'sellQty', Math.max(1, parseInt(e.target.value) || 1))
                               }
-                              disabled={!canAddSales}
+                              disabled={!canAddSales || loading}
+                              min="1"
                             />
 
                             <button
                               onClick={() => updateCartItem(item.id, 'sellQty', item.sellQty + 1)}
-                              className="px-3 py-2 hover:bg-gray-50 text-gray-700"
-                              disabled={!canAddSales}
+                              className="px-3 py-2 hover:bg-gray-50 text-gray-700 disabled:opacity-50"
+                              disabled={!canAddSales || loading}
                             >
                               <Plus className="w-3.5 h-3.5" />
                             </button>
@@ -927,9 +1062,10 @@ export default function SalesPage() {
                               className="w-full pl-5 pr-2 py-2 text-sm border border-gray-200 bg-white rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none text-gray-900"
                               value={item.sellPrice}
                               onChange={(e) =>
-                                updateCartItem(item.id, 'sellPrice', parseInt(e.target.value) || 0)
+                                updateCartItem(item.id, 'sellPrice', Math.max(0, parseInt(e.target.value) || 0))
                               }
-                              disabled={!canAddSales}
+                              disabled={!canAddSales || loading}
+                              min="0"
                             />
                           </div>
                         </div>
@@ -1017,10 +1153,13 @@ export default function SalesPage() {
 
                 <button
                   onClick={fetchHistory}
-                  className="px-5 py-2.5 rounded-xl font-extrabold text-sm bg-gray-900 text-white hover:bg-black active:bg-gray-800 transition"
+                  disabled={historyLoading}
+                  className="px-5 py-2.5 rounded-xl font-extrabold text-sm bg-gray-900 text-white hover:bg-black active:bg-gray-800 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                   style={{ WebkitTapHighlightColor: 'transparent' }}
                 >
-                  Filter
+                  {historyLoading ? (
+                    <Loader2 className="animate-spin w-4 h-4" />
+                  ) : 'Filter'}
                 </button>
               </div>
 
@@ -1032,7 +1171,7 @@ export default function SalesPage() {
                     : 'bg-gray-50 text-gray-400 border-gray-200 cursor-not-allowed'
                 }`}
                 title={user?.planType !== 'TYCOON' ? 'Upgrade to Tycoon to download' : 'Download PDF Report'}
-                disabled={user?.planType !== 'TYCOON' || loading}
+                disabled={user?.planType !== 'TYCOON' || loading || historyLoading}
                 style={{ WebkitTapHighlightColor: 'transparent' }}
               >
                 {loading ? <Loader2 className="animate-spin w-4 h-4" /> : <FileDown className="w-4 h-4" />}
