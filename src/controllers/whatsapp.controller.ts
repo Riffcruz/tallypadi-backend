@@ -450,7 +450,7 @@ export const handleMessageLogic = async (
           `• Undo last sale\n\n` +
           
           `💸 *Debts & Payments:*\n` +
-          `• Who dey owe me?\n` +
+          `• Who is owing me?\n` +
           `• Emeka paid 20k\n\n` +
           
           `📦 *Stock Management:*\n` +
@@ -464,8 +464,9 @@ export const handleMessageLogic = async (
           
           `💎 *Tycoon Plan Features:*\n` +
           `• 🎤 Record sales with Voice Notes\n` +
+          `• 📷 Scan by image \n` +
           `• 📄 Download Professional PDF Reports\n` +
-          `• 👥 Add Staff Accounts (up to 5)\n` +
+          `• 👥 Add Staff Accounts (up to 5 or more)\n` +
           `• ☁️ Automatic Cloud Backup`;
 
         await queueOutboundMessage(from, helpMsg);

@@ -1,6 +1,6 @@
 "use client";
-import { useEffect, useState } from "react";
-import { Smartphone, X, Share, PlusSquare, ArrowUp } from "lucide-react";
+import { useEffect, useState, useRef } from "react";
+import { Smartphone, X, Share, PlusSquare, ArrowUp, ChevronLeft, ChevronRight } from "lucide-react";
 import { usePathname } from "next/navigation";
 
 export default function InstallPrompt() {
@@ -9,9 +9,14 @@ export default function InstallPrompt() {
   const [isIOS, setIsIOS] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
   const [showInstructions, setShowInstructions] = useState(false);
-  
-  // Triggers the "Install App" button to appear
   const [showInstallButton, setShowInstallButton] = useState(false);
+  
+  // New states for collapsible behavior
+  const [isExpanded, setIsExpanded] = useState(true);
+  const [isHovering, setIsHovering] = useState(false);
+  const [hasAutoCollapsed, setHasAutoCollapsed] = useState(false);
+  const collapseTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const hoverTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     // 1. Check if app is already installed (Standalone mode)
@@ -30,23 +35,22 @@ export default function InstallPrompt() {
     const userAgent = window.navigator.userAgent.toLowerCase();
     const platform = window.navigator.platform;
     
-    // Broad iOS detection (iPhone/iPad/iPod) - covers Safari, Chrome, Firefox
     const ios = /iphone|ipad|ipod/.test(userAgent) || 
                 (platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
     if (ios) {
       setIsIOS(true);
-      setShowInstallButton(true); // Always show button on iOS if not installed
+      setShowInstallButton(true);
     }
 
     // 3. Handle Android/Desktop Native Install Prompt
     const handleBeforeInstallPrompt = (e: any) => {
-      e.preventDefault(); // Prevent default mini-infobar
+      e.preventDefault();
       setDeferredPrompt(e);
-      setShowInstallButton(true); // Show button when browser says it's installable
+      setShowInstallButton(true);
     };
 
-    // 4. Listen for successful install to hide button permanently
+    // 4. Listen for successful install
     const handleAppInstalled = () => {
       setIsStandalone(true);
       setShowInstallButton(false);
@@ -56,14 +60,28 @@ export default function InstallPrompt() {
     window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
     window.addEventListener("appinstalled", handleAppInstalled);
 
+    // Auto-collapse after 5 seconds
+    if (showInstallButton && isExpanded) {
+      collapseTimerRef.current = setTimeout(() => {
+        setIsExpanded(false);
+        setHasAutoCollapsed(true);
+      }, 5000); // 5 seconds
+    }
+
     return () => {
       window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
       window.removeEventListener("appinstalled", handleAppInstalled);
+      
+      if (collapseTimerRef.current) {
+        clearTimeout(collapseTimerRef.current);
+      }
+      if (hoverTimerRef.current) {
+        clearTimeout(hoverTimerRef.current);
+      }
     };
-  }, []);
+  }, [showInstallButton, isExpanded]);
 
   const handleClick = async () => {
-    // ANDROID / DESKTOP: Trigger native prompt
     if (deferredPrompt) {
       deferredPrompt.prompt();
       const { outcome } = await deferredPrompt.userChoice;
@@ -71,45 +89,124 @@ export default function InstallPrompt() {
         setDeferredPrompt(null);
         setShowInstallButton(false);
       }
-    } 
-    // iOS: Open the instruction modal
-    else if (isIOS) {
+    } else if (isIOS) {
       setShowInstructions(true);
     }
   };
 
-  // LOGIC: 
-  // 1. If installed (isStandalone) -> Hide
-  // 2. If browser doesn't support install AND isn't iOS (!showInstallButton) -> Hide
-  // 3. If we are on the Home Page (pathname === "/") -> Hide
+  const handleMouseEnter = () => {
+    setIsHovering(true);
+    setIsExpanded(true);
+    
+    // Clear any existing collapse timer
+    if (collapseTimerRef.current) {
+      clearTimeout(collapseTimerRef.current);
+    }
+  };
+
+  const handleMouseLeave = () => {
+    setIsHovering(false);
+    
+    // Auto-collapse after 3 seconds if not hovering
+    if (hoverTimerRef.current) {
+      clearTimeout(hoverTimerRef.current);
+    }
+    
+    hoverTimerRef.current = setTimeout(() => {
+      if (!isHovering) {
+        setIsExpanded(false);
+      }
+    }, 3000);
+  };
+
+  const toggleExpand = () => {
+    setIsExpanded(!isExpanded);
+    if (!isExpanded) {
+      // When manually expanding, set auto-collapse for 5 seconds
+      if (collapseTimerRef.current) {
+        clearTimeout(collapseTimerRef.current);
+      }
+      collapseTimerRef.current = setTimeout(() => {
+        setIsExpanded(false);
+      }, 5000);
+    }
+  };
+
+  // Hide on home page AND sales page
   if (isStandalone || !showInstallButton || pathname === "/" || pathname === "/sales") return null;
 
   return (
     <>
-      {/* --- PERSISTENT TRIGGER BUTTON (Bottom Left) --- */}
-      <div className="fixed bottom-6 left-6 z-50 animate-in fade-in slide-in-from-bottom-4 duration-500">
-        <button 
-          onClick={handleClick}
-          className="group flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white pl-3 pr-4 py-3 rounded-full shadow-lg shadow-emerald-900/20 transition-all hover:scale-105 active:scale-95"
-        >
-          <div className="bg-white/20 p-1.5 rounded-full">
-            <Smartphone size={18} className="text-white" />
+      {/* --- COLLAPSIBLE INSTALL BUTTON (Right Side) --- */}
+      <div 
+        className="fixed bottom-6 right-6 z-50 animate-in fade-in slide-in-from-bottom-4 duration-500"
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+      >
+        {isExpanded ? (
+          // EXPANDED STATE
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={handleClick}
+              className="group flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white pl-3 pr-4 py-3 rounded-full shadow-lg shadow-emerald-900/20 transition-all hover:scale-105 active:scale-95"
+            >
+              <div className="bg-white/20 p-1.5 rounded-full">
+                <Smartphone size={18} className="text-white" />
+              </div>
+              <span className="font-semibold text-sm whitespace-nowrap">Install App</span>
+            </button>
+            
+            {/* Collapse Button */}
+            <button
+              onClick={toggleExpand}
+              className="w-8 h-8 flex items-center justify-center bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-full shadow-md transition-all active:scale-95"
+              title="Collapse"
+            >
+              <ChevronRight size={16} />
+            </button>
           </div>
-          <span className="font-semibold text-sm">Install App</span>
-        </button>
+        ) : (
+          // COLLAPSED STATE (Icon only)
+          <div className="relative">
+            <button 
+              onClick={toggleExpand}
+              className="group w-12 h-12 flex items-center justify-center bg-emerald-600 hover:bg-emerald-700 text-white rounded-full shadow-lg shadow-emerald-900/20 transition-all hover:scale-110 active:scale-95"
+              title="Install App"
+            >
+              <Smartphone size={20} className="text-white" />
+              
+              {/* Badge indicator */}
+              {hasAutoCollapsed && (
+                <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full border-2 border-white animate-pulse">
+                  <div className="w-full h-full flex items-center justify-center">
+                    <span className="text-white text-[8px] font-bold">!</span>
+                  </div>
+                </div>
+              )}
+            </button>
+            
+            {/* Tooltip on hover */}
+            {isHovering && (
+              <div className="absolute right-full top-1/2 -translate-y-1/2 mr-2 px-3 py-2 bg-gray-900 text-white text-xs font-semibold rounded-lg whitespace-nowrap animate-in fade-in slide-in-from-right-1 duration-200">
+                Install App
+                <div className="absolute top-1/2 right-0 translate-x-1/2 -translate-y-1/2 w-2 h-2 bg-gray-900 rotate-45"></div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* --- iOS INSTRUCTION MODAL (Small, Bottom Left) --- */}
+      {/* --- iOS INSTRUCTION MODAL (Updated position to right) --- */}
       {showInstructions && (
         <>
-          {/* Transparent Backdrop to close on click outside */}
+          {/* Transparent Backdrop */}
           <div 
             className="fixed inset-0 z-[60] bg-black/20 backdrop-blur-[1px]" 
             onClick={() => setShowInstructions(false)}
           />
 
-          {/* Small Instruction Card */}
-          <div className="fixed bottom-20 left-6 z-[70] w-72 bg-white rounded-2xl shadow-2xl animate-in slide-in-from-bottom-2 duration-200 border border-gray-100 overflow-hidden">
+          {/* Small Instruction Card - Positioned to right */}
+          <div className="fixed bottom-20 right-6 z-[70] w-72 bg-white rounded-2xl shadow-2xl animate-in slide-in-from-bottom-2 duration-200 border border-gray-100 overflow-hidden">
             
             {/* Header */}
             <div className="bg-emerald-50 px-4 py-3 flex justify-between items-center border-b border-emerald-100">
