@@ -8,49 +8,48 @@ import path from 'path';
 import fs from 'fs';
 
 // --- Helpers ---
-const getCurrentDateString = () => new Date().toISOString().split('T')[0];
-
-/**
- * Accepts numbers OR numeric strings (e.g "2", "6000")
- */
-const toNumber = (input: unknown): number | undefined => {
+const toNumber = (input: unknown): number | null => {
   if (typeof input === 'number' && Number.isFinite(input)) return input;
   if (typeof input === 'string' && input.trim() !== '') {
     const n = Number(input);
     if (Number.isFinite(n)) return n;
   }
-  return undefined;
+  return null;
 };
 
-const toPositiveInt = (input: unknown): number | undefined => {
-  const n = toNumber(input);
-  if (n === undefined) return undefined;
-  const i = Math.floor(n);
-  if (!Number.isFinite(i) || i <= 0) return undefined;
-  return i;
+const getCurrentDateString = () => new Date().toISOString().split('T')[0];
+
+// Accepts BOTH:
+// 1) { itemId, quantity, price }
+// 2) { items: [{ itemId, quantity, price }, ...] }
+type SaleItemInput = { itemId: string; quantity: number; price: number };
+
+const normalizeSalePayload = (body: any): SaleItemInput[] => {
+  const list = Array.isArray(body?.items) ? body.items : [body];
+  const clean: SaleItemInput[] = [];
+
+  for (const x of list) {
+    const itemId = String(x?.itemId || '').trim();
+    const quantity = toNumber(x?.quantity);
+    const price = toNumber(x?.price);
+
+    if (!itemId) continue;
+    if (!quantity || quantity <= 0) continue;
+    if (!price || price <= 0) continue;
+
+    clean.push({ itemId, quantity, price });
+  }
+
+  return clean;
 };
 
-const toPositiveMoney = (input: unknown): number | undefined => {
-  const n = toNumber(input);
-  if (n === undefined) return undefined;
-  if (n <= 0) return undefined;
-  return n;
-};
-
-const sanitizeString = (input: unknown): string | null => {
-  if (typeof input !== 'string') return null;
-  const s = input.trim();
-  return s ? s : null;
-};
-
-// ✅ EXPANDED Currency Mapping
+// ✅ Currency Mapping
 const COUNTRY_CURRENCY_CODE: Record<string, string> = {
   NG: 'NGN', GH: 'GHS', US: 'USD', GB: 'GBP', EU: 'EUR',
   KE: 'KES', ZA: 'ZAR', IN: 'INR', CN: 'CNY', CA: 'CAD',
   AU: 'AUD', JP: 'JPY', AE: 'AED', RW: 'RWF', TZ: 'TZS', UG: 'UGX',
 };
 
-// ✅ Theme Configuration
 const THEME = {
   primary: '#0F766E',
   accent: '#14B8A6',
@@ -60,40 +59,10 @@ const THEME = {
   border: '#E2E8F0',
   bgLight: '#F8FAFC',
   bgHeader: '#F1F5F9',
-  white: '#FFFFFF',
+  white: '#FFFFFF'
 };
 
-type SaleItemInput = {
-  itemId: string;
-  quantity: number;
-  price: number;
-};
-
-const normalizeSalePayload = (body: any): SaleItemInput[] => {
-  // Supports:
-  // 1) { itemId, quantity, price }
-  // 2) { items: [{ itemId, quantity, price }, ...] }
-  if (Array.isArray(body?.items)) {
-    return body.items
-      .map((x: any) => ({
-        itemId: sanitizeString(x?.itemId) || '',
-        quantity: toPositiveInt(x?.quantity) || 0,
-        price: toPositiveMoney(x?.price) || 0,
-      }))
-      .filter((x: SaleItemInput) => x.itemId && x.quantity > 0 && x.price > 0);
-  }
-
-  const itemId = sanitizeString(body?.itemId) || '';
-  const quantity = toPositiveInt(body?.quantity) || 0;
-  const price = toPositiveMoney(body?.price) || 0;
-
-  if (!itemId || quantity <= 0 || price <= 0) return [];
-  return [{ itemId, quantity, price }];
-};
-
-// =====================================================
-// 1) RECORD A SALE (UPDATED: supports cart items[])
-// =====================================================
+// 1) RECORD SALE  ✅ now supports {items:[...]}
 export const recordSale = async (req: Request, res: Response) => {
   let session: mongoose.ClientSession | null = null;
 
@@ -102,28 +71,26 @@ export const recordSale = async (req: Request, res: Response) => {
     if (!user) return res.status(404).json({ error: "User not found" });
 
     const items = normalizeSalePayload(req.body);
-
     if (!items.length) {
       return res.status(400).json({
         error: "Invalid sale data",
-        message: "Send { itemId, quantity, price } OR { items: [{ itemId, quantity, price }] } with quantity>0 and price>0",
+        message: "Send { items: [{ itemId, quantity, price }] } with quantity>0 and price>0"
       });
     }
 
-    // merge duplicates
-    const merged = new Map<string, { itemId: string; quantity: number; price: number }>();
+    // merge duplicates by itemId
+    const merged = new Map<string, SaleItemInput>();
     for (const it of items) {
-      const key = it.itemId;
-      const existing = merged.get(key);
-      if (!existing) merged.set(key, { ...it });
+      const prev = merged.get(it.itemId);
+      if (!prev) merged.set(it.itemId, { ...it });
       else {
-        existing.quantity += it.quantity;
-        existing.price = it.price;
+        prev.quantity += it.quantity;
+        prev.price = it.price; // keep latest price
       }
     }
     const finalItems = Array.from(merged.values());
 
-    // start transaction if possible
+    // start transaction (if replica set supports it)
     try {
       session = await mongoose.startSession();
       session.startTransaction();
@@ -131,18 +98,18 @@ export const recordSale = async (req: Request, res: Response) => {
       session = null;
     }
 
-    // ✅ .session(session) expects ClientSession | null (NOT undefined)
     const invDocs = await Inventory.find({
       _id: { $in: finalItems.map(i => i.itemId) },
-      user: user._id,
+      user: user._id
     }).session(session);
 
     const invMap = new Map<string, any>();
-    invDocs.forEach((d) => invMap.set(String(d._id), d));
+    invDocs.forEach(d => invMap.set(String(d._id), d));
 
-    const txItems: any[] = [];
     let totalMoney = 0;
+    const txItems: any[] = [];
 
+    // validate + compute totals
     for (const it of finalItems) {
       const inv = invMap.get(String(it.itemId));
       if (!inv) {
@@ -156,7 +123,7 @@ export const recordSale = async (req: Request, res: Response) => {
           error: "Insufficient stock",
           itemId: it.itemId,
           available: inv.quantity,
-          requested: it.quantity,
+          requested: it.quantity
         });
       }
 
@@ -168,32 +135,28 @@ export const recordSale = async (req: Request, res: Response) => {
         qty: it.quantity,
         unit: 'pc',
         unitPrice: it.price,
-        total: lineTotal,
+        total: lineTotal
       });
     }
 
-    // Apply stock decrement
+    // apply stock changes
     for (const it of finalItems) {
+      const inv = invMap.get(String(it.itemId));
       if (session) {
-        const inv = invMap.get(String(it.itemId));
         inv.quantity -= it.quantity;
-        await inv.save({ session }); // ✅ session is ClientSession (not null here)
+        await inv.save({ session });
       } else {
         const r = await Inventory.updateOne(
           { _id: it.itemId, user: user._id, quantity: { $gte: it.quantity } },
           { $inc: { quantity: -it.quantity } }
         );
-
         if (r.matchedCount === 0) {
-          return res.status(409).json({
-            error: "Insufficient stock (race condition)",
-            itemId: it.itemId,
-          });
+          return res.status(409).json({ error: "Insufficient stock (race condition)", itemId: it.itemId });
         }
       }
     }
 
-    // Create transaction (avoid passing undefined/null session)
+    // create transaction record
     let createdTx: any;
     if (session) {
       const docs = await Transaction.create([{
@@ -203,7 +166,7 @@ export const recordSale = async (req: Request, res: Response) => {
         items: txItems,
         totalMoney,
         date: getCurrentDateString(),
-        timestamp: new Date(),
+        timestamp: new Date()
       }], { session });
 
       createdTx = docs[0];
@@ -216,73 +179,61 @@ export const recordSale = async (req: Request, res: Response) => {
         items: txItems,
         totalMoney,
         date: getCurrentDateString(),
-        timestamp: new Date(),
+        timestamp: new Date()
       });
     }
 
-    return res.json({
-      success: true,
-      transaction: createdTx,
-      totalMoney,
-      itemsCount: txItems.length,
-    });
+    return res.json({ success: true, transaction: createdTx });
 
-  } catch (error) {
-    console.error("Record Sale Error:", error);
-    try {
-      if (session) await session.abortTransaction();
-    } catch {}
+  } catch (error: any) {
+    console.error("Record Sale Error:", error?.stack || error);
+    try { if (session) await session.abortTransaction(); } catch {}
     return res.status(500).json({ error: "Server Error" });
   } finally {
-    try {
-      if (session) session.endSession();
-    } catch {}
+    try { if (session) session.endSession(); } catch {}
   }
 };
 
 
-// =====================================================
-// 2) GET SALES HISTORY (same)
-// =====================================================
+// 2) GET SALES HISTORY
 export const getSalesHistory = async (req: Request, res: Response) => {
   try {
     const user = await User.findOne();
     if (!user) return res.status(404).json({ error: "User not found" });
 
-    const { startDate, endDate } = req.query;
-    let query: any = { user: user._id, type: 'SALE' };
+    const startDate = String(req.query.startDate || '');
+    const endDate = String(req.query.endDate || '');
 
+    const query: any = { user: user._id, type: 'SALE' };
     if (startDate && endDate) {
       query.date = { $gte: startDate, $lte: endDate };
     }
 
     const sales = await Transaction.find(query).sort({ timestamp: -1 });
 
-    const formattedSales = sales.map((t: any) => ({
+    const formatted = sales.map((t: any) => ({
       id: t._id,
-      date: t.timestamp || new Date(),
+      date: t.timestamp || t.date || new Date(),
       totalAmount: t.totalMoney || 0,
       items: (t.items || []).map((i: any) => ({
         name: i.name,
         quantity: i.qty,
-        price: i.unitPrice,
-      })),
+        price: i.unitPrice
+      }))
     }));
 
-    res.json(formattedSales);
-
-  } catch (error) {
-    console.error("Fetch History Error:", error);
+    res.json(formatted);
+  } catch (error: any) {
+    console.error("Fetch History Error:", error?.stack || error);
     res.status(500).json({ error: "Server Error" });
   }
 };
 
-// =====================================================
-// 3) GENERATE PDF REPORT (FIXED doc.page usage)
-// =====================================================
+
+// 3) GENERATE PDF REPORT ✅ fixed doc.page crash
 export const generateSalesReport = async (req: Request, res: Response) => {
   try {
-    const user = await User.findOne(); // In real app, use req.user
+    const user = await User.findOne();
     if (!user) return res.status(404).json({ error: 'User not found' });
 
     if (user.planType !== 'TYCOON') {
@@ -290,17 +241,16 @@ export const generateSalesReport = async (req: Request, res: Response) => {
     }
 
     const businessName = user.businessName || 'My Shop';
-    const countryCode = (user as any).countryCode || 'NG';
-    const currencyCode = COUNTRY_CURRENCY_CODE[String(countryCode).toUpperCase()] || 'NGN';
+    const countryCode = String((user as any).countryCode || 'NG').toUpperCase();
+    const currencyCode = COUNTRY_CURRENCY_CODE[countryCode] || 'NGN';
 
-    const startDate = (req.query.startDate as string) || '';
-    const endDate = (req.query.endDate as string) || '';
+    const startDate = String(req.query.startDate || '');
+    const endDate = String(req.query.endDate || '');
 
-    let query: any = { user: user._id, type: 'SALE' };
+    const query: any = { user: user._id, type: 'SALE' };
     if (startDate && endDate) query.date = { $gte: startDate, $lte: endDate };
 
     const transactions = await Transaction.find(query).sort({ timestamp: 1 });
-
     const totalRevenue = transactions.reduce((sum: number, t: any) => sum + (t.totalMoney || 0), 0);
     const totalTx = transactions.length;
 
@@ -308,8 +258,17 @@ export const generateSalesReport = async (req: Request, res: Response) => {
       size: 'A4',
       margins: { top: 50, bottom: 50, left: 40, right: 40 },
       bufferPages: true,
-      autoFirstPage: false,
+      autoFirstPage: false
     });
+
+    // ✅ IMPORTANT: add a page BEFORE reading doc.page
+    doc.addPage();
+
+    const pageW = doc.page.width;
+    const pageH = doc.page.height;
+    const margin = doc.page.margins.left;
+    const contentW = pageW - margin * 2;
+    const bottomLimit = pageH - 50;
 
     const safeStart = startDate || 'all';
     const safeEnd = endDate || 'all';
@@ -318,12 +277,11 @@ export const generateSalesReport = async (req: Request, res: Response) => {
     res.setHeader('Content-Disposition', `attachment; filename=Sales_Report_${safeStart}_${safeEnd}.pdf`);
     doc.pipe(res);
 
-    // --- FONTS ---
+    // fonts
     const fontPaths = [
       path.join(__dirname, '..', 'assets', 'fonts', 'NotoSans-Regular.ttf'),
       '/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf',
     ];
-
     let fontToUse = 'Helvetica';
     for (const p of fontPaths) {
       if (fs.existsSync(p)) {
@@ -336,16 +294,7 @@ export const generateSalesReport = async (req: Request, res: Response) => {
     const regFont = fontToUse === 'Noto' ? 'Noto' : 'Helvetica';
 
     const formatMoney = (n: number) =>
-      `${currencyCode} ${n.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
-
-    // ✅ IMPORTANT FIX: add a page BEFORE reading doc.page.*
-    doc.addPage();
-
-    const pageW = doc.page.width;
-    const pageH = doc.page.height;
-    const margin = doc.page.margins.left;
-    const contentW = pageW - margin * 2;
-    const bottomLimit = pageH - 50;
+      `${currencyCode} ${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
 
     const drawWatermark = () => {
       const text = `TallyPadi • ${businessName}`;
@@ -367,16 +316,18 @@ export const generateSalesReport = async (req: Request, res: Response) => {
       doc.fillColor(THEME.muted).fontSize(10).text('Sales Report', margin + 40, 46);
 
       doc.fillColor(THEME.white).fontSize(12).text(businessName, margin, 24, { width: contentW, align: 'right' });
-      doc
-        .fillColor('#94a3b8')
-        .fontSize(9)
-        .text(`Period: ${startDate || 'Start'} to ${endDate || 'Now'}`, margin, 44, { width: contentW, align: 'right' });
+      doc.fillColor('#94a3b8').fontSize(9).text(
+        `Period: ${startDate || 'Start'} to ${endDate || 'Now'}`,
+        margin,
+        44,
+        { width: contentW, align: 'right' }
+      );
 
       doc.y = 90;
     };
 
     const drawSummaryCards = () => {
-      const cardW = contentW / 2 - 10;
+      const cardW = (contentW / 2) - 10;
       const startY = doc.y;
 
       doc.roundedRect(margin, startY, cardW, 60, 6).fill(THEME.bgLight);
@@ -409,7 +360,7 @@ export const generateSalesReport = async (req: Request, res: Response) => {
       doc.text(`Page ${page} of ${total}`, margin, y, { width: contentW, align: 'right' });
     };
 
-    // --- Render ---
+    // Build PDF
     drawWatermark();
     drawHeader();
     drawSummaryCards();
@@ -421,14 +372,13 @@ export const generateSalesReport = async (req: Request, res: Response) => {
     doc.y += 30;
 
     doc.font(regFont);
-
     const colDate = 80;
     const colAmount = 90;
     const colItems = contentW - colDate - colAmount;
 
     for (let idx = 0; idx < transactions.length; idx++) {
       const t: any = transactions[idx];
-      const dateStr = t.date || new Date().toISOString().split('T')[0];
+      const dateStr = t.date || getCurrentDateString();
       const itemText = (t.items || []).map((i: any) => `${i.qty} x ${i.name}`).join(', ');
       const amtStr = formatMoney(t.totalMoney || 0);
 
@@ -439,7 +389,7 @@ export const generateSalesReport = async (req: Request, res: Response) => {
         doc.addPage();
         drawWatermark();
         drawHeader();
-
+        doc.y = 90;
         drawTableHeaders(doc.y);
         doc.y += 30;
         doc.font(regFont);
@@ -450,8 +400,8 @@ export const generateSalesReport = async (req: Request, res: Response) => {
       if (idx % 2 !== 0) doc.rect(margin, currentY, contentW, rowHeight).fill(THEME.bgLight);
 
       doc.fillColor(THEME.text);
-
       const centerY = currentY + (rowHeight - 10) / 2;
+
       doc.text(dateStr, margin + 10, centerY, { width: colDate });
       doc.text(itemText, margin + 10 + colDate, currentY + 8, { width: colItems - 10 });
 
@@ -473,8 +423,8 @@ export const generateSalesReport = async (req: Request, res: Response) => {
 
     doc.end();
 
-  } catch (error) {
-    console.error('PDF Gen Error:', error);
+  } catch (error: any) {
+    console.error('PDF Gen Error:', error?.stack || error);
     if (!res.headersSent) res.status(500).json({ error: 'Could not generate report' });
   }
 };
