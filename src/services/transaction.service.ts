@@ -221,8 +221,11 @@ export const processTransaction = async (
     }
 
     // =========================================================
-    // INVENTORY UPDATES (per item)
+    // INVENTORY UPDATES + PRICE CALCULATIONS (Fix for 0 balance)
     // =========================================================
+    const finalItems: any[] = [];
+    let calculatedTotal = 0;
+
     for (const item of parsed.items || []) {
       const qty = toNumber(item.qty);
       if (qty <= 0) continue;
@@ -231,6 +234,8 @@ export const processTransaction = async (
       if (!cleanName) continue;
 
       let inv = await Inventory.findOne({ user: userId, name: cleanName });
+      
+      // If item doesn't exist, create it
       if (!inv) {
         inv = new Inventory({
           user: userId,
@@ -240,72 +245,83 @@ export const processTransaction = async (
         });
       }
 
-      const uPrice = item.unit_price == null ? null : toNumber(item.unit_price);
-      if (uPrice != null && uPrice > 0) {
-        inv.lastUnitPrice = uPrice;
+      // Determine Price: Message price > DB Last Price > 0
+      let effectiveUnitPrice = 0;
+      const msgPrice = item.unit_price == null ? null : toNumber(item.unit_price);
+      
+      if (msgPrice !== null && msgPrice > 0) {
+        effectiveUnitPrice = msgPrice;
+        inv.lastUnitPrice = msgPrice; // Update DB with new price
+      } else {
+        effectiveUnitPrice = toNumber(inv.lastUnitPrice);
       }
 
+      // Update Stock
       if (type === 'SALE') {
         inv.quantity = toNumber(inv.quantity) - qty;
       } else if (type === 'RESTOCK') {
-        // ✅ always add (even from negative)
         inv.quantity = toNumber(inv.quantity) + qty;
       } else {
-        // ADJUSTMENT (SET_STOCK)
-        inv.quantity = qty;
+        inv.quantity = qty; // SET_STOCK
       }
 
       await inv.save();
 
-      // ✅ LOW STOCK ALERT (use queueOutboundMessage)
-      // keep it simple: only on SALE, when stock is 1..5
+      // ✅ LOW STOCK ALERT
       if (type === 'SALE' && inv.quantity <= 5 && inv.quantity > 0 && user?.phoneNumber) {
         await queueOutboundMessage(
           user.phoneNumber,
           `⚠️ *Low Stock Alert:* ${inv.name} is running low (${inv.quantity} left). Restock soon!`
         );
       }
+
+      // ✅ Add to final list with calculated totals
+      const lineTotal = effectiveUnitPrice * qty;
+      calculatedTotal += lineTotal;
+
+      finalItems.push({
+        name: cleanName,
+        qty,
+        unit: (item.unit || 'pcs').toString(),
+        unitPrice: effectiveUnitPrice,
+        total: lineTotal
+      });
     }
 
     // =========================================================
     // RECORD TRANSACTION
     // =========================================================
-    const totalMoney = parsed.total_money ?? null;
-    const totalNum = toNumber(totalMoney);
+    
+    // ✅ Logic: If parsed.total_money is missing (AI didn't catch price), use calculatedTotal
+    let finalTotalMoney = parsed.total_money != null ? toNumber(parsed.total_money) : calculatedTotal;
 
-    const items = (parsed.items || []).slice(0, 30).map((i) => {
-      const name = normalizeItemName(i.name || 'unknown_item');
-      const qty = toNumber(i.qty);
-      const unitPrice = i.unit_price == null ? null : toNumber(i.unit_price);
-      return {
-        name,
-        qty,
-        unit: (i.unit || 'pcs').toString(),
-        unitPrice,
-        total: unitPrice != null && qty > 0 ? unitPrice * qty : null,
-      };
-    });
+    // Safety: If it's a SALE and total is 0, but we calculated something from DB, use that.
+    if (type === 'SALE' && finalTotalMoney === 0 && calculatedTotal > 0) {
+        finalTotalMoney = calculatedTotal;
+    }
 
     const paymentStatus =
       type === 'SALE' ? (parsed.is_credit ? 'CREDIT' : 'PAID') : 'PAID';
 
     const isCredit = paymentStatus === 'CREDIT';
 
+    // ✅ Set Balance correctly based on credit status
+    const amountPaid = type === 'SALE' ? (isCredit ? 0 : finalTotalMoney) : 0;
+    const balance = type === 'SALE' ? (isCredit ? finalTotalMoney : 0) : 0;
+
     await Transaction.create({
       user: userId,
       type,
       paymentStatus,
-      items,
-      totalMoney,
+      items: finalItems, // Use finalItems with prices
+      totalMoney: finalTotalMoney,
 
-      // ✅ debtor linkage only for credit sales
       debtorId: isCreditSale ? debtorId : null,
       customerName: isCreditSale ? customerName : null,
       customerKey: isCreditSale ? customerKey : null,
 
-      // ✅ debt tracking only meaningful for sales
-      amountPaid: type === 'SALE' ? (isCredit ? 0 : totalNum) : 0,
-      balance: type === 'SALE' ? (isCredit ? totalNum : 0) : 0,
+      amountPaid,
+      balance, // Correct balance (not 0)
       settledAt: type === 'SALE' ? (isCredit ? null : now) : null,
 
       messageId,
@@ -316,10 +332,10 @@ export const processTransaction = async (
     // =========================================================
     // DAILY STATS (only count PAID sales as revenue)
     // =========================================================
-    if (type === 'SALE' && paymentStatus === 'PAID' && totalNum > 0) {
+    if (type === 'SALE' && paymentStatus === 'PAID' && finalTotalMoney > 0) {
       await DailyStats.findOneAndUpdate(
         { user: userId, date: todayString },
-        { $inc: { totalRevenue: totalNum, totalTransactions: 1 } },
+        { $inc: { totalRevenue: finalTotalMoney, totalTransactions: 1 } },
         { upsert: true }
       );
     }

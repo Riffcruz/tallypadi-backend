@@ -3,7 +3,6 @@ import { env } from '../config/env';
 
 const genAI = new GoogleGenerativeAI(env.geminiApiKey);
 
-// Try JSON mode; if unsupported, your cleaning+JSON.parse still works.
 const model = genAI.getGenerativeModel({
   model: env.geminiModel,
   generationConfig: { responseMimeType: 'application/json' as any },
@@ -27,6 +26,8 @@ export type ParsedIntent =
   | 'DOWNLOAD_REPORT'
   | 'UNDO_LAST_SALE'
   | 'REPORT_DEBTS'
+  | 'REPORT_RECENT' // ✅ Added Recent Sales
+  | 'HELP'          // ✅ Added Help
   | 'UNKNOWN';
 
 export interface ParsedItem {
@@ -83,23 +84,12 @@ const sanitizeInput = (input: string): string => {
 };
 
 const allowedIntents: ParsedIntent[] = [
-  'SALE',
-  'RESTOCK',
-  'SET_STOCK',
-  'DELETED_STOCK',
-  'DEFINE_PRICE',
-  'PRICE_CHECK',
-  'REPORT_SALES',
-  'REPORT_DEBTS',
-  'REPORT_STOCK',
-  'REPORT_FULL',
-  'CLOSE_BOOK',
-  'SETTINGS',
-  'CHANGE_LANGUAGE',
-  'DEBT_PAYMENT',
-  'ADD_STAFF',
-  'DOWNLOAD_REPORT',
-  'UNDO_LAST_SALE',
+  'SALE', 'RESTOCK', 'SET_STOCK', 'DELETED_STOCK', 'DEFINE_PRICE',
+  'PRICE_CHECK', 'REPORT_SALES', 'REPORT_DEBTS', 'REPORT_STOCK',
+  'REPORT_FULL', 'CLOSE_BOOK', 'SETTINGS', 'CHANGE_LANGUAGE',
+  'DEBT_PAYMENT', 'ADD_STAFF', 'DOWNLOAD_REPORT', 'UNDO_LAST_SALE',
+  'REPORT_RECENT', // ✅ Added Recent Sales
+  'HELP',          // ✅ Added Help
   'UNKNOWN',
 ];
 
@@ -126,12 +116,7 @@ function safeParsedResult(p: any): ParsedResult {
       end_date: typeof p?.report_params?.end_date === 'string' ? p.report_params.end_date : null,
     },
     settings_update: {
-      key:
-        p?.settings_update?.key === 'closingTime' ||
-        p?.settings_update?.key === 'dailySummary' ||
-        p?.settings_update?.key === 'language'
-          ? p.settings_update.key
-          : null,
+      key: p?.settings_update?.key && ['closingTime', 'dailySummary', 'language'].includes(p.settings_update.key) ? p.settings_update.key : null,
       value: p?.settings_update?.value ?? null,
     },
     reply_text: typeof p?.reply_text === 'string' && p.reply_text.trim() ? p.reply_text.trim() : 'Noted.',
@@ -222,6 +207,18 @@ function looksLikeDebtRequest(message: string): boolean {
 function fallbackParse(message: string): ParsedResult | null {
   const m = sanitizeInput(message).toLowerCase();
 
+  // ✅ 1. Check HELP
+  if (['help', 'menu', 'commands', 'options', 'how to use'].includes(m)) {
+    return safeParsedResult({
+      intent: 'HELP',
+      is_credit: false, items: [], total_money: null,
+      report_params: { start_date: null, end_date: null },
+      settings_update: { key: null, value: null },
+      reply_text: '',
+    });
+  }
+
+  // ✅ 2. Check Undo
   if (looksLikeUndo(m)) {
     return safeParsedResult({
       intent: 'UNDO_LAST_SALE',
@@ -234,6 +231,7 @@ function fallbackParse(message: string): ParsedResult | null {
     });
   }
 
+  // ✅ 3. Check Debt List
   if (looksLikeDebtRequest(m)) {
     return safeParsedResult({
       intent: 'REPORT_DEBTS',
@@ -246,11 +244,19 @@ function fallbackParse(message: string): ParsedResult | null {
     });
   }
 
+  // ✅ 4. Detect Credit Keywords (for sales)
+  const isCredit = m.includes('credit') || m.includes('owe') || m.includes('later') || m.includes('pay small small');
+
+  // Attempt to extract name (e.g., "to emeka")
+  let customerName = 'Customer';
+  const toMatch = m.match(/\bto\s+([a-z0-9]+)\b/i);
+  if (toMatch) customerName = toMatch[1];
+
   // sold 2 rice for 50k / ₦5000 / 5000
   const sold = m.match(/\b(sold|sell|comot)\s+(\d+)\s+(.+?)(?:\s+(?:for|@|at)\s+([₦$€£₵]?\s*\d+(?:k)?))?\b/i);
   if (sold) {
     const qty = Number(sold[2]);
-    const name = sold[3].trim();
+    const name = sold[3].replace(/\b(on|credit|to|for)\b.*/, '').trim(); 
     const moneyRaw = (sold[4] || '').replace(/\s+/g, '');
     let total: number | null = null;
 
@@ -261,12 +267,13 @@ function fallbackParse(message: string): ParsedResult | null {
 
     return safeParsedResult({
       intent: 'SALE',
-      is_credit: false,
+      is_credit: isCredit,
+      customer_name: isCredit ? customerName : null,
       items: [{ name, qty, unit_price: null, unit: '' }],
       total_money: total,
       report_params: { start_date: null, end_date: null },
       settings_update: { key: null, value: null },
-      reply_text: '✅ Recorded.',
+      reply_text: isCredit ? `✅ Recorded as credit sale to ${customerName} (Fallback).` : '✅ Recorded (Fallback).',
     });
   }
 
@@ -308,27 +315,20 @@ INTENTS:
 - ADD_STAFF: "Add 080... as staff"
 - DOWNLOAD_REPORT: "Send pdf"
 - CLOSE_BOOK: "Close the book"
+- UNDO_LAST_SALE: "Undo last sale", "reverse last one"
+- REPORT_RECENT: "last 5 sales", "recent transactions", "show me last 3 records", "what did i just sell"
+- HELP: "help", "how to use", "what can you do", "commands", "menu"
 
 - REPORT_DEBTS: user wants list of people owing and balances.
   Examples (any language/spelling):
   "debt", "debts", "debt summary", "debtors", "who owes me", "who dey owe", "who dey owe me money",
   "gbese" (Yoruba), "bashi" (Hausa), "ugwo" (Igbo)
 
-✅ UNDO_LAST_SALE:
-User wants to reverse the last recorded sale/transaction.
-Examples (any language / spelling):
-- "undo", "undo last", "undo last sale", "reverse last sale", "cancel that last one"
-- "abeg reverse am", "no count that one", "commot last sale"
-- "pada", "da pada" (Yoruba)
-- "soke na karshe" (Hausa)
-- "weghachi" (Igbo)
-If the user message means undo/reverse/cancel the last sale, set intent = "UNDO_LAST_SALE".
-
 Return ONLY JSON.
 
 <schema>
 {
-  "intent": "SALE" | "RESTOCK" | "SET_STOCK" | "DELETED_STOCK" | "DEFINE_PRICE" | "PRICE_CHECK" | "REPORT_SALES" | "REPORT_STOCK" | "REPORT_DEBTS" | "REPORT_FULL" | "CLOSE_BOOK" | "SETTINGS" | "CHANGE_LANGUAGE" | "DEBT_PAYMENT" | "ADD_STAFF" | "DOWNLOAD_REPORT" | "UNDO_LAST_SALE" | "UNKNOWN",
+  "intent": "SALE|RESTOCK|SET_STOCK|DELETED_STOCK|DEFINE_PRICE|PRICE_CHECK|REPORT_SALES|REPORT_STOCK|REPORT_DEBTS|REPORT_FULL|CLOSE_BOOK|SETTINGS|CHANGE_LANGUAGE|DEBT_PAYMENT|ADD_STAFF|DOWNLOAD_REPORT|UNDO_LAST_SALE|REPORT_RECENT|HELP|UNKNOWN",
   "is_credit": boolean,
   "customer_name": "string | null",
   "staffPhoneNumber": "string | null",
@@ -353,28 +353,10 @@ export const parseMessageWithGemini = async (
   const isoDate = new Date().toISOString();
 
   // ✅ Ultra-fast local detect first (so misspellings still work even before Gemini)
-  if (looksLikeUndo(safeMessage)) {
-    return safeParsedResult({
-      intent: 'UNDO_LAST_SALE',
-      is_credit: false,
-      items: [],
-      total_money: null,
-      report_params: { start_date: null, end_date: null },
-      settings_update: { key: null, value: null },
-      reply_text: 'Okay ✅ I will undo your last sale.',
-    });
-  }
-
-  if (looksLikeDebtRequest(safeMessage)) {
-    return safeParsedResult({
-      intent: 'REPORT_DEBTS',
-      is_credit: false,
-      items: [],
-      total_money: null,
-      report_params: { start_date: null, end_date: null },
-      settings_update: { key: null, value: null },
-      reply_text: '📌 Debt summary',
-    });
+  const fb = fallbackParse(safeMessage);
+  // We respect explicit HELP, UNDO, or DEBT checks from fallback first
+  if (fb && (fb.intent === 'UNDO_LAST_SALE' || fb.intent === 'REPORT_DEBTS' || fb.intent === 'HELP')) {
+    return fb;
   }
 
   const systemInstruction = getSystemPrompt(userLanguage, isoDate);

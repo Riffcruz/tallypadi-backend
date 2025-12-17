@@ -439,6 +439,84 @@ export const handleMessageLogic = async (
         break;
       }
 
+      // ... inside switch (parsed.intent) ...
+
+      case 'HELP': {
+        const helpMsg = 
+          `🤖 *How to use Tallypadi*\n\n` +
+          `💰 *Sales & Credit:*\n` +
+          `• Sold 2 rice for 50k\n` +
+          `• Sold 5 semo to Emeka on credit\n` +
+          `• Undo last sale\n\n` +
+          
+          `💸 *Debts & Payments:*\n` +
+          `• Who dey owe me?\n` +
+          `• Emeka paid 20k\n\n` +
+          
+          `📦 *Stock Management:*\n` +
+          `• Add 50 sugar (Restock)\n` +
+          `• Price of rice?\n` +
+          `• Stock list\n\n` +
+          
+          `📊 *Reports:*\n` +
+          `• How much I sell today?\n` +
+          `• Send PDF (Tycoon Only)\n\n` +
+          
+          `💎 *Tycoon Plan Features:*\n` +
+          `• 🎤 Record sales with Voice Notes\n` +
+          `• 📄 Download Professional PDF Reports\n` +
+          `• 👥 Add Staff Accounts (up to 5)\n` +
+          `• ☁️ Automatic Cloud Backup`;
+
+        await queueOutboundMessage(from, helpMsg);
+        break;
+      }
+
+     
+
+      case 'REPORT_RECENT': {
+        // Default to 5 if AI didn't catch a number, limit to max 10 for readability
+        const limit = parsed.items?.[0]?.qty || 5; 
+        const safeLimit = Math.min(Math.max(limit, 1), 10);
+
+        await queueOutboundMessage(from, `🔎 Fetching last ${safeLimit} transactions...`);
+
+        const recentTx = await Transaction.find({
+          user: user._id,
+          type: 'SALE',
+          isUndone: { $ne: true }
+        })
+        .sort({ timestamp: -1 })
+        .limit(safeLimit)
+        .lean();
+
+        if (!recentTx.length) {
+          await queueOutboundMessage(from, "You haven't recorded any sales yet.");
+          break;
+        }
+
+        let msg = `🕒 *Last ${safeLimit} Sales:*\n\n`;
+
+        recentTx.forEach((tx: any) => {
+          const d = new Date(tx.timestamp);
+          const timeStr = d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+          const dateStr = d.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
+          
+          // Format items: "Rice (2), Beans (1)"
+          const itemsStr = tx.items.map((i: any) => `${i.name} (${i.qty})`).join(', ');
+          
+          // Format Money
+          const money = `${symbol}${(tx.totalMoney || 0).toLocaleString(locale)}`;
+          const status = tx.paymentStatus === 'CREDIT' ? '🔴 CREDIT' : '✅ PAID';
+
+          msg += `• *${itemsStr}* — ${money}\n`;
+          msg += `   _${dateStr} @ ${timeStr} • ${status}_\n\n`;
+        });
+
+        await queueOutboundMessage(from, msg);
+        break;
+      }
+
       case 'UNDO_LAST_SALE': {
         const r = await undoLastSale(user._id, messageId);
         await queueOutboundMessage(from, r.message);
