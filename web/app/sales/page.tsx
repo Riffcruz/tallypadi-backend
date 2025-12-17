@@ -130,15 +130,11 @@ export default function SalesPage() {
   const fetchInventory = async (token: string) => {
     try {
       const res = await axios.get(`${API_URL}/inventory`, {
-        headers: { 
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
-      setInventory(res.data || []);
+      setInventory(res.data);
     } catch (err) {
       console.error('Failed to load inventory', err);
-      setErrorMsg('Failed to load inventory. Please refresh.');
     }
   };
 
@@ -153,22 +149,13 @@ export default function SalesPage() {
     }
 
     try {
-      const params: any = {};
-      if (dateRange.start) params.startDate = dateRange.start;
-      if (dateRange.end) params.endDate = dateRange.end;
-
       const res = await axios.get(`${API_URL}/sales`, {
-        headers: { 
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        params,
+        headers: { Authorization: `Bearer ${token}` },
+        params: { startDate: dateRange.start, endDate: dateRange.end },
       });
-      setSalesHistory(res.data || []);
-    } catch (err: any) {
+      setSalesHistory(res.data);
+    } catch (err) {
       console.error('Failed to fetch history', err);
-      setErrorMsg('Failed to load sales history. Please try again.');
-      setSalesHistory([]);
     } finally {
       setHistoryLoading(false);
     }
@@ -205,20 +192,15 @@ export default function SalesPage() {
     fetchInventory(token);
 
     axios
-      .get(`${API_URL}/dashboard`, { 
-        headers: { 
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        } 
-      })
+      .get(`${API_URL}/dashboard`, { headers: { Authorization: `Bearer ${token}` } })
       .then((res) => {
-        if (res.data?.user) {
+        if (res.data.user) {
           setUser(res.data.user);
           localStorage.setItem('tallyUser', JSON.stringify(res.data.user));
         }
       })
-      .catch((err) => {
-        console.error('Failed to fetch user data', err);
+      .catch(() => {
+        // ignore
       });
 
     // Prevent zoom on mobile
@@ -303,52 +285,29 @@ export default function SalesPage() {
     }
 
     setLoading(true);
-    setErrorMsg('');
 
     try {
-      const params: any = { format: 'pdf' };
-      if (dateRange.start) params.startDate = dateRange.start;
-      if (dateRange.end) params.endDate = dateRange.end;
-
       const response = await axios.get(`${API_URL}/sales/report`, {
-        headers: { 
-          Authorization: `Bearer ${token}`,
-          'Accept': 'application/pdf'
-        },
-        params,
+        headers: { Authorization: `Bearer ${token}` },
+        params: { format: 'pdf', startDate: dateRange.start, endDate: dateRange.end },
         responseType: 'blob',
       });
 
-      if (response.status === 200 && response.data.size > 0) {
-        const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
-        const link = document.createElement('a');
-        link.href = url;
-        link.setAttribute('download', `Sales_Report_${dateRange.start || 'start'}_${dateRange.end || 'end'}.pdf`);
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        window.URL.revokeObjectURL(url);
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `Sales_Report_${dateRange.start}_${dateRange.end}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
 
-        setSuccessMsg('Report downloaded successfully!');
-      } else {
-        throw new Error('Empty PDF response');
-      }
-    } catch (err: any) {
+      setSuccessMsg('Report downloaded!');
+    } catch (err) {
       console.error('Download failed', err);
-      
-      if (err.response?.status === 403) {
-        setErrorMsg('Access denied. Please upgrade your plan to download PDF reports.');
-      } else if (err.response?.status === 404) {
-        setErrorMsg('PDF generation service is currently unavailable.');
-      } else {
-        setErrorMsg('Failed to generate PDF. Please try again later.');
-      }
+      setErrorMsg('Failed to generate PDF. Try again.');
     } finally {
       setLoading(false);
-      setTimeout(() => {
-        setSuccessMsg('');
-        setErrorMsg('');
-      }, 3000);
+      setTimeout(() => setSuccessMsg(''), 3000);
     }
   };
 
@@ -387,11 +346,7 @@ export default function SalesPage() {
 
   const handleCheckout = async () => {
     if (!canAddSales) return showLockedModal();
-    if (cart.length === 0) {
-      setErrorMsg('Cart is empty. Add items to checkout.');
-      setTimeout(() => setErrorMsg(''), 3000);
-      return;
-    }
+    if (cart.length === 0) return;
 
     const token = localStorage.getItem('tallyToken');
     if (!token) {
@@ -400,98 +355,30 @@ export default function SalesPage() {
     }
 
     setLoading(true);
-    setErrorMsg('');
-    setSuccessMsg('');
 
     try {
-      // Check if items are still in stock
-      const stockCheckPromises = cart.map(async (item) => {
-        try {
-          const res = await axios.get(`${API_URL}/inventory/${item.id}`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          return { item, currentStock: res.data.stock || 0 };
-        } catch {
-          return { item, currentStock: 0 };
-        }
-      });
-
-      const stockResults = await Promise.all(stockCheckPromises);
-      const outOfStockItems = stockResults.filter(({ item, currentStock }) => 
-        currentStock < item.sellQty
-      );
-
-      if (outOfStockItems.length > 0) {
-        const itemNames = outOfStockItems.map(({ item }) => item.name).join(', ');
-        setErrorMsg(`Insufficient stock for: ${itemNames}`);
-        setTimeout(() => setErrorMsg(''), 5000);
-        setLoading(false);
-        return;
+      for (const item of cart) {
+        await axios.post(
+          `${API_URL}/sales`,
+          {
+            itemId: item.id,
+            quantity: item.sellQty,
+            price: item.sellPrice,
+            date: new Date().toISOString(),
+          },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
       }
 
-      // Record sales
-      const salesPromises = cart.map(async (item) => {
-        const saleData = {
-          itemId: item.id,
-          itemName: item.name,
-          quantity: item.sellQty,
-          price: item.sellPrice,
-          total: item.sellQty * item.sellPrice,
-          date: new Date().toISOString(),
-        };
-
-        return axios.post(
-          `${API_URL}/sales`,
-          saleData,
-          { 
-            headers: { 
-              Authorization: `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            } 
-          }
-        );
-      });
-
-      await Promise.all(salesPromises);
-
-      setSuccessMsg(`Successfully recorded ${cart.length} item${cart.length === 1 ? '' : 's'}!`);
+      setSuccessMsg('Sale recorded successfully!');
       setCart([]);
       setIsCartExpanded(false);
-      
-      // Refresh inventory
       fetchInventory(token);
-      
-      // Refresh history if on history tab
-      if (activeTab === 'history') {
-        fetchHistory();
-      }
-    } catch (err: any) {
-      console.error('Checkout failed', err);
-      
-      if (err.response?.status === 400) {
-        setErrorMsg('Invalid sale data. Please check quantities and prices.');
-      } else if (err.response?.status === 401) {
-        setErrorMsg('Session expired. Please login again.');
-        setTimeout(() => router.push('/login'), 2000);
-      } else if (err.response?.status === 403) {
-        setErrorMsg('You do not have permission to record sales.');
-      } else if (err.response?.status === 404) {
-        setErrorMsg('Item not found. Please refresh inventory.');
-      } else if (err.response?.status === 409) {
-        setErrorMsg('Insufficient stock for one or more items.');
-      } else if (err.response?.status === 422) {
-        setErrorMsg('Validation error. Please check your inputs.');
-      } else if (err.code === 'ERR_NETWORK') {
-        setErrorMsg('Network error. Please check your connection.');
-      } else {
-        setErrorMsg('Failed to record sale. Please try again.');
-      }
+    } catch (err) {
+      setErrorMsg('Failed to record sale.');
     } finally {
       setLoading(false);
-      setTimeout(() => {
-        setSuccessMsg('');
-        setErrorMsg('');
-      }, 5000);
+      setTimeout(() => setSuccessMsg(''), 3000);
     }
   };
 
@@ -637,10 +524,9 @@ export default function SalesPage() {
                             className="w-full pl-5 pr-2 py-1 text-sm border border-gray-200 bg-white rounded-lg focus:ring-1 focus:ring-emerald-500 outline-none text-gray-900"
                             value={item.sellPrice}
                             onChange={(e) =>
-                              updateCartItem(item.id, 'sellPrice', Math.max(0, parseInt(e.target.value) || 0))
+                              updateCartItem(item.id, 'sellPrice', parseInt(e.target.value) || 0)
                             }
                             disabled={!canAddSales || loading}
-                            min="0"
                           />
                         </div>
                       </div>
@@ -850,15 +736,6 @@ export default function SalesPage() {
           >
             {errorMsg ? <AlertCircle className="w-5 h-5" /> : <CheckCircle2 className="w-5 h-5" />}
             <p className="text-sm font-semibold">{errorMsg || successMsg}</p>
-            <button
-              onClick={() => {
-                setErrorMsg('');
-                setSuccessMsg('');
-              }}
-              className="ml-auto p-1 hover:bg-white/50 rounded-lg"
-            >
-              <X className="w-4 h-4" />
-            </button>
           </div>
         )}
 
@@ -1038,10 +915,9 @@ export default function SalesPage() {
                               className="w-12 text-center text-sm font-extrabold outline-none bg-transparent text-gray-900"
                               value={item.sellQty}
                               onChange={(e) =>
-                                updateCartItem(item.id, 'sellQty', Math.max(1, parseInt(e.target.value) || 1))
+                                updateCartItem(item.id, 'sellQty', parseInt(e.target.value) || 1)
                               }
                               disabled={!canAddSales || loading}
-                              min="1"
                             />
 
                             <button
@@ -1062,10 +938,9 @@ export default function SalesPage() {
                               className="w-full pl-5 pr-2 py-2 text-sm border border-gray-200 bg-white rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none text-gray-900"
                               value={item.sellPrice}
                               onChange={(e) =>
-                                updateCartItem(item.id, 'sellPrice', Math.max(0, parseInt(e.target.value) || 0))
+                                updateCartItem(item.id, 'sellPrice', parseInt(e.target.value) || 0)
                               }
                               disabled={!canAddSales || loading}
-                              min="0"
                             />
                           </div>
                         </div>
@@ -1153,13 +1028,10 @@ export default function SalesPage() {
 
                 <button
                   onClick={fetchHistory}
-                  disabled={historyLoading}
-                  className="px-5 py-2.5 rounded-xl font-extrabold text-sm bg-gray-900 text-white hover:bg-black active:bg-gray-800 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  className="px-5 py-2.5 rounded-xl font-extrabold text-sm bg-gray-900 text-white hover:bg-black active:bg-gray-800 transition"
                   style={{ WebkitTapHighlightColor: 'transparent' }}
                 >
-                  {historyLoading ? (
-                    <Loader2 className="animate-spin w-4 h-4" />
-                  ) : 'Filter'}
+                  Filter
                 </button>
               </div>
 
@@ -1171,7 +1043,7 @@ export default function SalesPage() {
                     : 'bg-gray-50 text-gray-400 border-gray-200 cursor-not-allowed'
                 }`}
                 title={user?.planType !== 'TYCOON' ? 'Upgrade to Tycoon to download' : 'Download PDF Report'}
-                disabled={user?.planType !== 'TYCOON' || loading || historyLoading}
+                disabled={user?.planType !== 'TYCOON' || loading}
                 style={{ WebkitTapHighlightColor: 'transparent' }}
               >
                 {loading ? <Loader2 className="animate-spin w-4 h-4" /> : <FileDown className="w-4 h-4" />}
