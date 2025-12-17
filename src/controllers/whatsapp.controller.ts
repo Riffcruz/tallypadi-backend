@@ -327,9 +327,20 @@ export const handleMessageLogic = async (
     }
 
     // --- PLAN RULES ---
-    if (isVoiceMessage && user.planType !== 'TYCOON') {
-      await queueOutboundMessage(from, '🎤 Voice messages are only available for *Tycoon Plan* users. Upgrade to use this feature!');
+    
+    // 1. IMAGE PERMISSIONS: Only TYCOON can use images (mediaId is present, but NOT voice)
+    if (mediaId && !isVoiceMessage && user.planType !== 'TYCOON') {
+      await queueOutboundMessage(from, '📷 Image scanning is only available for *Tycoon Plan* users. Upgrade to use this feature!');
       return;
+    }
+
+    // 2. AUDIO PERMISSIONS: TYCOON and OGA_BOSS can use voice
+    if (isVoiceMessage) {
+      const allowedAudioPlans = ['TYCOON', 'OGA_BOSS'];
+      if (!allowedAudioPlans.includes(user.planType)) {
+        await queueOutboundMessage(from, '🎤 Voice messages are available for *Oga Boss* and *Tycoon* plans only. Upgrade to use this feature!');
+        return;
+      }
     }
 
     // --- SUB CHECK + HISTORY ---
@@ -439,8 +450,6 @@ export const handleMessageLogic = async (
         break;
       }
 
-      // ... inside switch (parsed.intent) ...
-
       case 'HELP': {
         const helpMsg = 
           `🤖 *How to use Tallypadi*\n\n` +
@@ -462,18 +471,15 @@ export const handleMessageLogic = async (
           `• How much I sell today?\n` +
           `• Send PDF (Tycoon Only)\n\n` +
           
-          `💎 *Tycoon Plan Features:*\n` +
-          `• 🎤 Record sales with Voice Notes\n` +
-          `• 📷 Scan by image \n` +
-          `• 📄 Download Professional PDF Reports\n` +
-          `• 👥 Add Staff Accounts (up to 5 or more)\n` +
-          `• ☁️ Automatic Cloud Backup`;
+          `💎 *Premium Plans:*\n` +
+          `• 🎤 Voice Notes (Oga Boss & Tycoon)\n` +
+          `• 📷 Image Scan (Tycoon Only)\n` +
+          `• 👥 Staff Accounts (Tycoon Only)\n` +
+          `• 📄 PDF Reports (Tycoon Only)`;
 
         await queueOutboundMessage(from, helpMsg);
         break;
       }
-
-     
 
       case 'REPORT_RECENT': {
         // Default to 5 if AI didn't catch a number, limit to max 10 for readability
