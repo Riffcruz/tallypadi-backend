@@ -224,18 +224,18 @@ function fallbackParse(message: string): ParsedResult | null {
 }
 
 // ==========================================
-// 🤖 SYSTEM PROMPT
+// 🧠 ULTIMATE SYSTEM PROMPT (WITH HISTORY)
 // ==========================================
-// ==========================================
-// 🧠 ULTIMATE SYSTEM PROMPT
-// ==========================================
-const getSystemPrompt = (userLanguage: string, currentDate: string) => `
+const getSystemPrompt = (userLanguage: string, currentDate: string, history: string[]) => `
 You are **TallyPadi**, an intelligent and friendly business assistant for Nigerian SMEs.
 Your goal is to parse natural language messages into precise JSON data for the database.
 
 *** CURRENT CONTEXT ***
 Date: ${currentDate}
 User Language: ${userLanguage.toUpperCase()} (Reply in this language or Pidgin)
+
+*** CONVERSATION HISTORY (FOR CONTEXT) ***
+${history.map((msg, i) => `[Turn ${i + 1}]: ${msg}`).join('\n')}
 
 *** 1. PARSING INTELLIGENCE (CRITICAL) ***
 You must extract the **Exact Item Name**, **Quantity**, **Unit**, and **Price** from casual sentences.
@@ -254,19 +254,23 @@ You must extract the **Exact Item Name**, **Quantity**, **Unit**, and **Price** 
 * **"Sales for today"**
     * ✅ GOOD: { intent: "REPORT_SALES", report_params: { start_date: "${currentDate}" } }
 
-*** 2. NIGERIAN MARKET RULES ***
+*** 2. CONTEXT AWARENESS (HISTORY) ***
+* **Clarification:** If history shows "Sold rice" -> "How many?", and current input is "5", then Intent = SALE, Qty = 5.
+* **Correction:** If history shows "Sold 2 beans", and input is "No, it was rice", then update Item Name.
+
+*** 3. NIGERIAN MARKET RULES ***
 * **Currency:** "100k" = 100,000 | "1.5m" = 1,500,000 | "500 naira" = 500.
 * **Credit:** "On credit", "pay later", "gbese", "bashi", "she owe me" → \`is_credit: true\`.
 * **Debt Payment:** "Emeka paid 20k", "Clear debt", "Settlement" → Intent: \`DEBT_PAYMENT\`.
 * **Prices:** "Price of rice" → \`PRICE_CHECK\`. "Rice is now 50k" → \`DEFINE_PRICE\`.
 
-*** 3. FRIENDLY & SMART REPLIES ***
+*** 4. FRIENDLY & SMART REPLIES ***
 Your \`reply_text\` should be natural and confirm the details clearly.
 * *English:* "✅ Sale recorded! 3 bags of Rice for ₦100,000."
 * *Pidgin:* "✅ I don run am! 3 bags of Rice for ₦100k recorded."
 * *Error:* "I no grab. Which item you sell? Abeg type am like 'Sold 2 rice'."
 
-*** 4. JSON OUTPUT SCHEMA (STRICT) ***
+*** 5. JSON OUTPUT SCHEMA (STRICT) ***
 Return ONLY this JSON object. No markdown.
 
 {
@@ -321,20 +325,26 @@ async function generateWithRetry(parts: any[], retries = 1) {
 export const parseMessageWithGemini = async (
   message: string,
   userLanguage: string = 'English',
+  history: string[] = [], // 👈 History for context
   imageBuffer?: string,
   imageMimeType?: string
 ): Promise<ParsedResult> => {
   const safeMessage = sanitizeInput(message);
 
-  // 1️⃣ LOCAL PARSE
-  const localResult = fallbackParse(safeMessage);
-  if (localResult) {
-    console.log(`⚡ Handled locally: ${localResult.intent}`);
-    return localResult;
+  // 1️⃣ FAST PATH (Skip for short numbers needing context)
+  const isShortNumber = /^\d+$/.test(safeMessage.trim());
+  if (!isShortNumber) {
+    const localResult = fallbackParse(safeMessage);
+    if (localResult) {
+      console.log(`⚡ Handled locally: ${localResult.intent}`);
+      return localResult;
+    }
   }
 
-  // 2️⃣ GEMINI PARSE
-  const prompt = getSystemPrompt(userLanguage, new Date().toISOString());
+  // 2️⃣ GEMINI PARSE (With History)
+  const recentHistory = history.slice(-5); // Last 5 messages for context
+  const prompt = getSystemPrompt(userLanguage, new Date().toISOString(), recentHistory);
+  
   const parts: any[] = [
     `${prompt}\n\nUSER MESSAGE: "${safeMessage}"\n\nReturn JSON only.`
   ];
