@@ -4,10 +4,12 @@ export interface IUser extends Document {
   phoneNumber: string;
   email?: string;
   password?: string;
+
   registrationStage: 'EMAIL' | 'PASSWORD' | 'COMPLETED';
   businessName?: string;
   name?: string;
-  countryCode: string;
+
+  countryCode: string; // 'NG', 'US', etc.
 
   // Subscription Fields
   subscriptionStatus: 'trial' | 'active' | 'past_due' | 'cancelled' | 'suspended';
@@ -16,17 +18,14 @@ export interface IUser extends Document {
   paystackCustomerCode?: string;
   paystackPlanCode?: string;
 
-  nextSummaryAt?: Date | null;
-  lastSummaryDateKey?: string | null;
-
-  // ✅ Security Suspension Fields
-  suspendedAt?: Date | null;
-  suspensionReason?: string | null;
+  nextSummaryAt?: Date | null;        // UTC date when next summary should run
+  lastSummaryDateKey?: string | null; // YYYY-MM-DD for last summary sent (user-local day)
 
   // Plan & Staff Fields
   planType: 'OGA_BOSS' | 'TYCOON';
   role: 'OWNER' | 'STAFF';
   ownerId?: Types.ObjectId;
+
   messageHistory: string[];
 
   settings: {
@@ -37,6 +36,14 @@ export interface IUser extends Document {
     pdfReportsEnabled: boolean;
   };
 
+  // ✅ Security / Suspension
+  suspendedAt?: Date;
+  suspensionReason?: string;
+  security?: {
+    injectionStrikes: number;
+    lastInjectionAt?: Date | null;
+  };
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -44,6 +51,7 @@ export interface IUser extends Document {
 const userSchema = new Schema<IUser>(
   {
     phoneNumber: { type: String, required: true, unique: true },
+
     email: { type: String, unique: true, sparse: true },
     password: { type: String, select: false },
 
@@ -59,7 +67,6 @@ const userSchema = new Schema<IUser>(
     nextSummaryAt: { type: Date, default: null, index: true },
     lastSummaryDateKey: { type: String, default: null, index: true },
 
-    // Country Code Field
     countryCode: {
       type: String,
       default: 'NG',
@@ -73,21 +80,14 @@ const userSchema = new Schema<IUser>(
       type: String,
       enum: ['trial', 'active', 'past_due', 'cancelled', 'suspended'],
       default: 'trial',
-      index: true,
     },
-
     trialEndsAt: {
       type: Date,
       default: () => new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     },
-
-    nextBillingDate: Date,
-    paystackCustomerCode: String,
-    paystackPlanCode: String,
-
-    // ✅ Security Suspension Fields
-    suspendedAt: { type: Date, default: null, index: true },
-    suspensionReason: { type: String, default: null },
+    nextBillingDate: { type: Date },
+    paystackCustomerCode: { type: String },
+    paystackPlanCode: { type: String },
 
     planType: {
       type: String,
@@ -112,13 +112,22 @@ const userSchema = new Schema<IUser>(
       language: { type: String, default: 'English' },
       pdfReportsEnabled: { type: Boolean, default: true },
     },
+
+    // ✅ Security / Suspension
+    suspendedAt: { type: Date },
+    suspensionReason: { type: String },
+    security: {
+      injectionStrikes: { type: Number, default: 0 },
+      lastInjectionAt: { type: Date, default: null },
+    },
   },
   { timestamps: true }
 );
 
+// Helpful index for summary workers
 userSchema.index({ 'settings.dailySummaryEnabled': 1, nextSummaryAt: 1 });
 
-// Optional: useful admin queries
-userSchema.index({ subscriptionStatus: 1, suspendedAt: 1 });
+// Optional: find staff by owner quickly
+userSchema.index({ ownerId: 1, role: 1 });
 
 export const User = model<IUser>('User', userSchema);

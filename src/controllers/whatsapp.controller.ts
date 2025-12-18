@@ -456,6 +456,49 @@ function forceParseSaleFromText(text: string) {
   };
 }
 
+const STRIKE_WINDOW_MS = 24 * 60 * 60 * 1000; // 24h
+const STRIKE_SUSPEND_AT = 3;                  // 3 attempts
+
+async function handleInjectionAttemptOrRefuse(user: any, from: string, rawText: string) {
+  const score = injectionScore(rawText);
+
+  // score 0 => not injection
+  if (score <= 0) return { handled: false };
+
+  const now = new Date();
+  const last = user.security?.lastInjectionAt ? new Date(user.security.lastInjectionAt) : null;
+  const withinWindow = last ? (now.getTime() - last.getTime()) <= STRIKE_WINDOW_MS : false;
+
+  user.security = user.security || { injectionStrikes: 0, lastInjectionAt: null };
+  user.security.injectionStrikes = withinWindow ? (user.security.injectionStrikes || 0) + 1 : 1;
+  user.security.lastInjectionAt = now;
+
+  // ✅ suspend if too many attempts OR very high score
+  if (user.security.injectionStrikes >= STRIKE_SUSPEND_AT || score >= 5) {
+    user.subscriptionStatus = 'suspended';
+    user.suspendedAt = now;
+    user.suspensionReason = 'Prompt injection attempts (system prompt / developer message / override)';
+    await user.save();
+
+    await queueOutboundMessage(
+      from,
+      `🛑 Account suspended for suspicious instructions.\nReason: ${user.suspensionReason}\nIf this is a mistake, contact support.`
+    );
+
+    return { handled: true };
+  }
+
+  // ✅ refuse (do NOT call Gemini)
+  await user.save();
+  await queueOutboundMessage(
+    from,
+    `🛡️ I can’t show internal system prompts or instructions.\n\nTry:\n• Sold 5 bags of rice for 50k\n• Credits\n• Emeka paid 20k\n• Stock list\n• Sales today`
+  );
+
+  return { handled: true };
+}
+
+
 export const handleMessageLogic = async (
   from: string,
   text: string,
@@ -495,6 +538,9 @@ export const handleMessageLogic = async (
 
     // --- USER ---
     let user = await User.findOne({ phoneNumber: from });
+
+
+    
 
     const guessedCurrency = getUserCurrency({ phoneNumber: from });
     const { symbol, locale, code } = getUserCurrency(user || { phoneNumber: from });
@@ -545,6 +591,11 @@ export const handleMessageLogic = async (
       );
       return;
     }
+
+    if (user && user.registrationStage === 'COMPLETED') {
+  const inj = await handleInjectionAttemptOrRefuse(user, from, rawText);
+  if (inj.handled) return;
+}
 
     // --- REG FLOW ---
     if (user.registrationStage === 'EMAIL') {
