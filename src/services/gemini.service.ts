@@ -4,7 +4,7 @@ import { env } from '../config/env';
 const genAI = new GoogleGenerativeAI(env.geminiApiKey);
 
 const model = genAI.getGenerativeModel({
-  model: env.geminiModel, 
+  model: env.geminiModel,
   generationConfig: { responseMimeType: 'application/json' },
 });
 
@@ -32,16 +32,43 @@ export interface ParsedResult {
   discount_amount?: number | null;
   confidence_score?: number;
   needs_clarification?: boolean;
-  report_params: { 
-    start_date: string | null; 
+  report_params: {
+    start_date: string | null;
     end_date: string | null;
-    category_filter?: string | null; 
+    category_filter?: string | null;
   };
   settings_update: { key: string | null; value: string | boolean | null };
   reply_text: string;
 }
 
 const SAFE_MAX = 1000;
+
+// ==========================================
+// 🧾 STRIP WHATSAPP EXPORT LINE
+// Fixes things like:
+// [[18/12/2025, 22:54:44]] SnowTech: I sold 2 bags of rice for 100k
+// [18/12/2025, 22:54:44] SnowTech: ...
+// 18/12/2025, 22:54 - SnowTech: ...
+// ==========================================
+const stripWhatsAppExportLine = (input: string): string => {
+  if (!input) return '';
+
+  let s = input.trim();
+
+  // [[...]] -> [...]
+  s = s.replace(/^\[\[([^\]]+)\]\]\s*/, '[$1] ');
+
+  // remove leading timestamp blocks like: [dd/mm/yyyy, hh:mm(:ss)] ...
+  s = s.replace(/^\[\s*\d{1,2}\/\d{1,2}\/\d{2,4},\s*\d{1,2}:\d{2}(?::\d{2})?\s*\]\s*/i, '');
+
+  // remove leading export style: dd/mm/yyyy, hh:mm - ...
+  s = s.replace(/^\d{1,2}\/\d{1,2}\/\d{2,4},\s*\d{1,2}:\d{2}\s*-\s*/i, '');
+
+  // remove leading "Name:" (including "~H:")
+  s = s.replace(/^~?[a-z0-9 _.-]{1,40}:\s*/i, '');
+
+  return s.trim();
+};
 
 // ==========================================
 // 🧼 SANITIZE
@@ -54,6 +81,27 @@ const sanitizeInput = (input: string): string => {
   // Remove injection attempts but keep natural language
   s = s.replace(/\b(system prompt|ignore previous|developer mode)\b/gi, ' ');
   return s.replace(/\s+/g, ' ').trim();
+};
+
+// ==========================================
+// 🧩 JSON EXTRACTOR (survives extra text)
+// ==========================================
+const extractJsonObject = (text: string): string => {
+  const t = String(text || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+  const first = t.indexOf('{');
+  const last = t.lastIndexOf('}');
+  if (first === -1 || last === -1 || last <= first) return t;
+  return t.slice(first, last + 1);
+};
+
+// ==========================================
+// 📱 PHONE NORMALIZER
+// ==========================================
+const normalizePhone = (raw: any): string | undefined => {
+  if (typeof raw !== 'string') return undefined;
+  const s = sanitizeInput(raw);
+  const cleaned = s.replace(/[^\d+]/g, '');
+  return cleaned || undefined;
 };
 
 // ==========================================
@@ -86,7 +134,6 @@ const normalizeItemName = (name: string): string => {
   n = n.replace(/\b(of|the|a|an|my|your|pls|please|abeg)\b/g, ' ');
 
   // Strip container/unit words IF they appear in the name field
-  // (We do this to avoid "bags of rice" becoming name: "bags rice")
   n = n.replace(/\b(bags?|pcs?|pieces?|cartons?|packs?|sachets?|bottles?|rolls?)\b/g, ' ');
   n = n.replace(/\b(liters?|ltrs?|kg|gms?|grams?)\b/g, ' ');
 
@@ -98,7 +145,7 @@ const normalizeItemName = (name: string): string => {
     if (!protectedWords.includes(n)) n = n.slice(0, -1);
   }
 
-  return n || 'item';
+  return n || 'unknown_item';
 };
 
 // ==========================================
@@ -113,15 +160,22 @@ function safeParsedResult(p: any): ParsedResult {
   ];
 
   const intent: ParsedIntent = allowedIntents.includes(p?.intent) ? p.intent : 'UNKNOWN';
-  
+
   const items = Array.isArray(p?.items) ? p.items : [];
   const normalizedItems: ParsedItem[] = items.slice(0, 30).map((it: any) => ({
     name: typeof it?.name === 'string' ? normalizeItemName(it.name) : 'unknown_item',
     qty: Number.isFinite(Number(it?.qty)) ? Math.max(0, Number(it.qty)) : 0,
     unit_price: parseMoney(it?.unit_price),
     unit: typeof it?.unit === 'string' ? sanitizeInput(it.unit).toLowerCase() : '',
-    category: typeof it?.category === 'string' ? it.category : null
+    category: typeof it?.category === 'string' ? sanitizeInput(it.category) : null
   }));
+
+  // Force clarification if SALE but item missing/unknown
+  let needsClarification = Boolean(p?.needs_clarification);
+  if (intent === 'SALE') {
+    const hasRealItem = normalizedItems.some(i => i.qty > 0 && i.name && i.name !== 'unknown_item' && i.name !== 'item');
+    if (!hasRealItem) needsClarification = true;
+  }
 
   // Smart fallback replies based on intent
   let fallback = 'Noted.';
@@ -129,19 +183,20 @@ function safeParsedResult(p: any): ParsedResult {
     const total = parseMoney(p?.total_money);
     const i = normalizedItems[0];
     fallback = i ? `✅ Recorded: ${i.qty} ${i.name}` : '✅ Sale recorded.';
-    if (total) fallback += ` for ₦${total.toLocaleString()}`;
+    if (total != null) fallback += ` for ₦${total.toLocaleString()}`;
+    if (needsClarification) fallback = 'I got the quantity, but what exactly did you sell? (e.g., "rice", "indomie")';
   }
-  
+
   return {
     intent,
     is_credit: Boolean(p?.is_credit),
     customer_name: typeof p?.customer_name === 'string' ? sanitizeInput(p.customer_name) : undefined,
-    staffPhoneNumber: typeof p?.staffPhoneNumber === 'string' ? sanitizeInput(p.staffPhoneNumber) : undefined,
+    staffPhoneNumber: normalizePhone(p?.staffPhoneNumber),
     items: normalizedItems,
     total_money: parseMoney(p?.total_money),
     discount_amount: parseMoney(p?.discount_amount),
     confidence_score: typeof p?.confidence_score === 'number' ? p.confidence_score : 1,
-    needs_clarification: Boolean(p?.needs_clarification),
+    needs_clarification: needsClarification,
     report_params: {
       start_date: p?.report_params?.start_date || null,
       end_date: p?.report_params?.end_date || null,
@@ -159,12 +214,19 @@ function safeParsedResult(p: any): ParsedResult {
 // ⚡ REFINED LOCAL PARSER (SMARTER REGEX)
 // ==========================================
 function fallbackParse(message: string): ParsedResult | null {
-  const raw = sanitizeInput(message);
+  const raw = sanitizeInput(stripWhatsAppExportLine(message));
+
+  // 1️⃣ Skip if it's just a number (we need Gemini to use History for context)
+  if (/^\d+$/.test(raw)) return null;
+
   const m = raw.toLowerCase();
 
   // 1. HELP / MENU
   if (/\b(help|menu|commands|guide|options)\b/i.test(m)) {
-    return safeParsedResult({ intent: 'HELP', reply_text: '🤖 *TallyPadi Menu*\n1. Sales: "Sold 2 rice 5k"\n2. Stock: "Add 10 sugar"\n3. Reports: "Sales today"' });
+    return safeParsedResult({
+      intent: 'HELP',
+      reply_text: '🤖 *TallyPadi Menu*\n1. Sales: "Sold 2 rice 5k"\n2. Stock: "Add 10 sugar"\n3. Reports: "Sales today"'
+    });
   }
 
   // 2. UNDO
@@ -184,93 +246,83 @@ function fallbackParse(message: string): ParsedResult | null {
 
   // 5. SMARTER SALE REGEX
   // Handles: "I sold 3 bags of rice for 100k" OR "Sold 3 rice 100k"
-  // Group 1: Qty (digits only to be safe for local)
-  // Group 2: Unit (optional)
-  // Group 3: Item Name
-  // Group 4: Price
-  const saleRegex = /(?:i|we)?\s*\b(?:sold|sell)\b\s+(\d+(?:\.\d+)?)\s*(bags?|pcs?|cartons?|liters?|kg)?\s*(?:of)?\s+([a-z0-9\s]+?)\s+(?:for|at|price)\s+([₦$€£₵]?\s*[\d,]+(?:k|m)?)\b/i;
-  
+  const saleRegex =
+    /(?:i|we)?\s*\b(?:sold|sell)\b\s+(\d+(?:\.\d+)?)\s*(bags?|pcs?|cartons?|liters?|kg)?\s*(?:of)?\s+([a-z0-9\s]+?)\s+(?:for|at|price)\s+([₦$€£₵]?\s*[\d,]+(?:k|m)?)\b/i;
+
   const match = raw.match(saleRegex);
-  
+
   if (match) {
     const qty = parseFloat(match[1]);
-    const unit = match[2] || 'pcs'; // e.g. "bags"
-    const name = normalizeItemName(match[3]); // e.g. "rice"
-    const price = parseMoney(match[4]); // e.g. 100000
+    const unitRaw = match[2] || 'pcs';
+    const name = normalizeItemName(match[3]);
+    const price = parseMoney(match[4]);
 
-    if (name && price && name !== 'item') {
-       // Calculation for Unit Price if "at" was used, or Total if "for" was used? 
-       // For safety, we treat the number as TOTAL if it's large, or let the transaction service decide.
-       // Usually "Sold X for Y" means Y is Total.
-       
-       return safeParsedResult({
+    const unit =
+      unitRaw.toLowerCase().startsWith('bag') ? 'bag' :
+      unitRaw.toLowerCase().startsWith('carton') ? 'carton' :
+      unitRaw.toLowerCase().startsWith('liter') ? 'liter' :
+      unitRaw.toLowerCase().startsWith('kg') ? 'kg' :
+      unitRaw.toLowerCase().startsWith('pc') ? 'pcs' : unitRaw.toLowerCase();
+
+    if (name && name !== 'unknown_item' && qty > 0) {
+      return safeParsedResult({
         intent: 'SALE',
         is_credit: false,
-        items: [{ 
-          name, 
-          qty, 
-          unit: unit.toLowerCase(), 
-          unit_price: null, // Let backend calculate unit price from total
-          category: null 
+        items: [{
+          name,
+          qty,
+          unit,
+          unit_price: null,
+          category: null
         }],
         total_money: price,
-        reply_text: `✅ Recorded. Sold ${qty} ${unit} of ${name} for ₦${price.toLocaleString()}.`
+        reply_text: price != null
+          ? `✅ Recorded. Sold ${qty} ${unit} of ${name} for ₦${price.toLocaleString()}.`
+          : `✅ Recorded. Sold ${qty} ${unit} of ${name}.`
       });
     }
   }
 
-  // If Regex fails (e.g., "Sold three bags..."), return null to let Gemini handle it.
-  return null; 
+  return null;
 }
 
 // ==========================================
-// 🧠 ULTIMATE SYSTEM PROMPT (WITH HISTORY)
+// 🧠 ULTIMATE SYSTEM PROMPT (COMBINED)
 // ==========================================
 const getSystemPrompt = (userLanguage: string, currentDate: string, history: string[]) => `
-You are **TallyPadi**, an intelligent and friendly business assistant for Nigerian SMEs.
-Your goal is to parse natural language messages into precise JSON data for the database.
+You are **TallyPadi**, an intelligent business assistant.
+Current Date: ${currentDate}
+User Language: ${userLanguage.toUpperCase()}
 
-*** CURRENT CONTEXT ***
-Date: ${currentDate}
-User Language: ${userLanguage.toUpperCase()} (Reply in this language or Pidgin)
+*** STRICT LANGUAGE RULES ***
+1. If User Language is "ENGLISH": Use professional, standard English.
+   - ❌ Avoid: "My guy", "Abeg", "Wetin".
+   - ✅ Use: "Recorded", "Please clarify".
+2. If User Language is "PIDGIN" or user speaks Pidgin: Use Nigerian Pidgin.
 
-*** CONVERSATION HISTORY (FOR CONTEXT) ***
-${history.map((msg, i) => `[Turn ${i + 1}]: ${msg}`).join('\n')}
+*** CONVERSATION HISTORY (CONTEXT) ***
+${history.map((msg, i) => `[User Turn ${i + 1}]: ${msg}`).join('\n')}
 
 *** 1. PARSING INTELLIGENCE (CRITICAL) ***
-You must extract the **Exact Item Name**, **Quantity**, **Unit**, and **Price** from casual sentences.
+You must extract the **Exact Item Name**, **Quantity**, **Unit**, and **Price**.
 
-* **"I sold 3 bags of rice for 100k"**
+* "I sold 3 bags of rice for 100k"
     * ❌ BAD: { name: "bags of rice", qty: 3, unit: "pcs" }
     * ✅ GOOD: { name: "rice", qty: 3, unit: "bag", total_money: 100000 }
 
-* **"Sold 5 cartons of indomie and 2 packs of sugar"**
-    * Item 1: { name: "indomie", qty: 5, unit: "carton" }
-    * Item 2: { name: "sugar", qty: 2, unit: "pack" }
+* "Sold 5 cartons of indomie"
+    * ✅ GOOD: { name: "indomie", qty: 5, unit: "carton" }
 
-* **"Add 50 to stock"** (If previous context is unknown)
-    * ✅ GOOD: { intent: "RESTOCK", items: [{ name: "item", qty: 50 }] } (Controller will handle 'item')
-
-* **"Sales for today"**
-    * ✅ GOOD: { intent: "REPORT_SALES", report_params: { start_date: "${currentDate}" } }
-
-*** 2. CONTEXT AWARENESS (HISTORY) ***
-* **Clarification:** If history shows "Sold rice" -> "How many?", and current input is "5", then Intent = SALE, Qty = 5.
-* **Correction:** If history shows "Sold 2 beans", and input is "No, it was rice", then update Item Name.
+*** 2. CONTEXT AWARENESS ***
+* Clarification: If history shows "Sold rice" -> "How many?", and current input is "1", then Intent = SALE, Qty = 1.
+* Correction: If history shows "Sold 2 beans", and input is "No, it was rice", then update Item Name.
 
 *** 3. NIGERIAN MARKET RULES ***
-* **Currency:** "100k" = 100,000 | "1.5m" = 1,500,000 | "500 naira" = 500.
-* **Credit:** "On credit", "pay later", "gbese", "bashi", "she owe me" → \`is_credit: true\`.
-* **Debt Payment:** "Emeka paid 20k", "Clear debt", "Settlement" → Intent: \`DEBT_PAYMENT\`.
-* **Prices:** "Price of rice" → \`PRICE_CHECK\`. "Rice is now 50k" → \`DEFINE_PRICE\`.
+* Currency: "100k" = 100,000 | "1.5m" = 1,500,000 | "500 naira" = 500.
+* Credit: "On credit", "pay later", "gbese" → is_credit: true.
+* Debt Payment: "Emeka paid 20k", "Clear debt" → Intent: DEBT_PAYMENT.
 
-*** 4. FRIENDLY & SMART REPLIES ***
-Your \`reply_text\` should be natural and confirm the details clearly.
-* *English:* "✅ Sale recorded! 3 bags of Rice for ₦100,000."
-* *Pidgin:* "✅ I don run am! 3 bags of Rice for ₦100k recorded."
-* *Error:* "I no grab. Which item you sell? Abeg type am like 'Sold 2 rice'."
-
-*** 5. JSON OUTPUT SCHEMA (STRICT) ***
+*** 4. JSON OUTPUT SCHEMA (STRICT) ***
 Return ONLY this JSON object. No markdown.
 
 {
@@ -280,9 +332,9 @@ Return ONLY this JSON object. No markdown.
   "staffPhoneNumber": "string | null",
   "items": [
     {
-      "name": "string (normalized, e.g., 'rice')", 
-      "qty": number, 
-      "unit": "string (e.g., 'bag', 'pcs', 'kg')", 
+      "name": "string (normalized, e.g., 'rice')",
+      "qty": number,
+      "unit": "string (e.g., 'bag', 'pcs', 'kg')",
       "unit_price": number | null,
       "category": "string | null"
     }
@@ -302,7 +354,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('TIMEOUT')), ms);
     promise.then(value => { clearTimeout(timer); resolve(value); })
-           .catch(err => { clearTimeout(timer); reject(err); });
+      .catch(err => { clearTimeout(timer); reject(err); });
   });
 }
 
@@ -325,11 +377,13 @@ async function generateWithRetry(parts: any[], retries = 1) {
 export const parseMessageWithGemini = async (
   message: string,
   userLanguage: string = 'English',
-  history: string[] = [], // 👈 History for context
+  history: string[] = [],
   imageBuffer?: string,
   imageMimeType?: string
 ): Promise<ParsedResult> => {
-  const safeMessage = sanitizeInput(message);
+  // ✅ strip WhatsApp export noise FIRST, then sanitize
+  const stripped = stripWhatsAppExportLine(message);
+  const safeMessage = sanitizeInput(stripped);
 
   // 1️⃣ FAST PATH (Skip for short numbers needing context)
   const isShortNumber = /^\d+$/.test(safeMessage.trim());
@@ -342,9 +396,9 @@ export const parseMessageWithGemini = async (
   }
 
   // 2️⃣ GEMINI PARSE (With History)
-  const recentHistory = history.slice(-5); // Last 5 messages for context
+  const recentHistory = history.slice(-5);
   const prompt = getSystemPrompt(userLanguage, new Date().toISOString(), recentHistory);
-  
+
   const parts: any[] = [
     `${prompt}\n\nUSER MESSAGE: "${safeMessage}"\n\nReturn JSON only.`
   ];
@@ -356,7 +410,9 @@ export const parseMessageWithGemini = async (
   try {
     const result = await generateWithRetry(parts);
     const text = result.response.text();
-    const cleanJson = text.replace(/```json/g, '').replace(/```/g, '').trim();
+
+    // ✅ robust JSON extraction
+    const cleanJson = extractJsonObject(text);
     return safeParsedResult(JSON.parse(cleanJson));
   } catch (error) {
     console.error('❌ Gemini Error:', error);

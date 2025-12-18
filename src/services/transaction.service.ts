@@ -11,11 +11,37 @@ import { applyPaymentToDebts } from './debt.service';
 import { resolveDebtor, normName } from './debtor.service';
 import { Debtor } from '../models/debtor.model';
 
+// ==========================================
+// 🔧 HELPERS
+// ==========================================
 function normalizeItemName(name: string) {
   return String(name || '')
     .replace(/\s*\(.*?\)\s*$/, '') // remove "(...)" at end
     .toLowerCase()
     .trim();
+}
+
+// root normalizer to merge "bags of rice" -> "rice"
+function rootItemName(name: string) {
+  let n = normalizeItemName(name);
+
+  // strip filler words
+  n = n.replace(/\b(of|the|a|an|my|your|pls|please|abeg)\b/g, ' ');
+
+  // strip container/unit words that cause duplicates
+  n = n.replace(/\b(bags?|bag|pcs?|pieces?|cartons?|carton|packs?|pack|sachets?|sachet|bottles?|bottle|rolls?|roll)\b/g, ' ');
+  n = n.replace(/\b(liters?|ltrs?|kg|gms?|grams?)\b/g, ' ');
+
+  // cleanup spaces
+  n = n.replace(/\s+/g, ' ').trim();
+
+  // simple singularization
+  if (n.endsWith('s') && !n.endsWith('ss') && n.length > 3) {
+    const protectedWords = ['rice', 'beans', 'gas', 'flour', 'semovita', 'wheat', 'indomie', 'coke'];
+    if (!protectedWords.includes(n)) n = n.slice(0, -1);
+  }
+
+  return n || '';
 }
 
 function toNumber(v: any): number {
@@ -27,6 +53,69 @@ function toISODateForOffset(offsetMinutes: number): string {
   const now = new Date();
   const localTime = new Date(now.getTime() + offsetMinutes * 60 * 1000);
   return localTime.toISOString().split('T')[0];
+}
+
+function escapeRegex(str: string) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * ✅ SMART RESOLVER
+ * 1) exact match (normalized)
+ * 2) root match where input contains inventory name OR inventory name contains input
+ * 3) only auto-merge if EXACTLY ONE match
+ * 4) if multiple matches, return { status: 'ambiguous', options: [...] }
+ */
+async function findExistingItem(userId: Types.ObjectId, rawName: string) {
+  const clean = normalizeItemName(rawName);
+  const root = rootItemName(rawName) || clean;
+
+  // 1) exact match
+  const exact = await Inventory.findOne({ user: userId, name: clean });
+  if (exact) return { status: 'found' as const, inv: exact };
+
+  // If root is empty, stop
+  if (!root) return { status: 'none' as const, inv: null };
+
+  // 2) get candidates by root regex (limit to avoid heavy scans)
+  const rx = new RegExp(escapeRegex(root), 'i');
+  const candidates = await Inventory.find({ user: userId, name: { $regex: rx } })
+    .limit(25);
+
+  // Also check reverse containment (inventory name contained in input)
+  const inputNorm = root; // already normalized-ish
+  const matches = candidates.filter((c) => {
+    const invName = normalizeItemName(c.name);
+    return invName === inputNorm || invName.includes(inputNorm) || inputNorm.includes(invName);
+  });
+
+  // If none matched, try a broader fallback: search by clean text too (still limited)
+  if (matches.length === 0 && clean && clean !== root) {
+    const rx2 = new RegExp(escapeRegex(clean), 'i');
+    const more = await Inventory.find({ user: userId, name: { $regex: rx2 } })
+      .limit(25);
+
+    const matches2 = more.filter((c) => {
+      const invName = normalizeItemName(c.name);
+      return invName === clean || invName.includes(clean) || clean.includes(invName);
+    });
+
+    if (matches2.length === 1) return { status: 'found' as const, inv: matches2[0] };
+    if (matches2.length > 1) {
+      return { status: 'ambiguous' as const, inv: null, options: matches2.map(x => x.name) };
+    }
+    return { status: 'none' as const, inv: null, rootName: root };
+  }
+
+  // 3) decide based on match count
+  if (matches.length === 1) return { status: 'found' as const, inv: matches[0] };
+
+  if (matches.length > 1) {
+    return { status: 'ambiguous' as const, inv: null, options: matches.map(x => x.name) };
+  }
+
+  // 4) none found: return rootName so we create clean root item
+  return { status: 'none' as const, inv: null, rootName: root };
 }
 
 export const processTransaction = async (
@@ -221,7 +310,7 @@ export const processTransaction = async (
     }
 
     // =========================================================
-    // INVENTORY UPDATES + PRICE CALCULATIONS (Fix for 0 balance)
+    // INVENTORY UPDATES + PRICE CALCULATIONS
     // =========================================================
     const finalItems: any[] = [];
     let calculatedTotal = 0;
@@ -230,16 +319,38 @@ export const processTransaction = async (
       const qty = toNumber(item.qty);
       if (qty <= 0) continue;
 
-      const cleanName = normalizeItemName(item.name || 'unknown_item');
+      const inputName = String(item.name || '').trim();
+      const cleanName = normalizeItemName(inputName || 'unknown_item');
       if (!cleanName) continue;
 
-      let inv = await Inventory.findOne({ user: userId, name: cleanName });
-      
-      // If item doesn't exist, create it
+      // ✅ SMART RESOLVE (merge common roots, protect specifics)
+      const resolved = await findExistingItem(userId, cleanName);
+
+      // If ambiguous, stop and ask user (prevents bad merges / dirty inventory)
+      if (resolved.status === 'ambiguous') {
+        const options = (resolved.options || []).slice(0, 6).map((n, i) => `${i + 1}) ${n}`).join('\n');
+        parsed.reply_text =
+          `I found multiple items that match *"${cleanName}"*.\n` +
+          `Which one did you mean?\n\n${options}\n\n` +
+          `Reply with the full item name (e.g. "used tire" or "new tire").`;
+
+        await ProcessedMessage.updateOne(
+          { user: userId, messageId },
+          { $set: { status: 'DONE' } }
+        );
+        return;
+      }
+
+      let inv = resolved.status === 'found' ? (resolved as any).inv : null;
+
+      // If item doesn't exist, create it using ROOT name (clean inventory)
       if (!inv) {
+        const rootName = (resolved as any).rootName || rootItemName(cleanName) || cleanName;
+        if (!rootName) continue;
+
         inv = new Inventory({
           user: userId,
-          name: cleanName,
+          name: rootName,
           quantity: 0,
           lastUnitPrice: 0,
         });
@@ -248,7 +359,7 @@ export const processTransaction = async (
       // Determine Price: Message price > DB Last Price > 0
       let effectiveUnitPrice = 0;
       const msgPrice = item.unit_price == null ? null : toNumber(item.unit_price);
-      
+
       if (msgPrice !== null && msgPrice > 0) {
         effectiveUnitPrice = msgPrice;
         inv.lastUnitPrice = msgPrice; // Update DB with new price
@@ -280,7 +391,8 @@ export const processTransaction = async (
       calculatedTotal += lineTotal;
 
       finalItems.push({
-        name: cleanName,
+        // ✅ Name consistency: always use the official DB name
+        name: inv.name,
         qty,
         unit: (item.unit || 'pcs').toString(),
         unitPrice: effectiveUnitPrice,
@@ -291,13 +403,13 @@ export const processTransaction = async (
     // =========================================================
     // RECORD TRANSACTION
     // =========================================================
-    
-    // ✅ Logic: If parsed.total_money is missing (AI didn't catch price), use calculatedTotal
+
+    // If parsed.total_money is missing, use calculatedTotal
     let finalTotalMoney = parsed.total_money != null ? toNumber(parsed.total_money) : calculatedTotal;
 
     // Safety: If it's a SALE and total is 0, but we calculated something from DB, use that.
     if (type === 'SALE' && finalTotalMoney === 0 && calculatedTotal > 0) {
-        finalTotalMoney = calculatedTotal;
+      finalTotalMoney = calculatedTotal;
     }
 
     const paymentStatus =
@@ -305,7 +417,7 @@ export const processTransaction = async (
 
     const isCredit = paymentStatus === 'CREDIT';
 
-    // ✅ Set Balance correctly based on credit status
+    // ✅ Robust paid/balance logic
     const amountPaid = type === 'SALE' ? (isCredit ? 0 : finalTotalMoney) : 0;
     const balance = type === 'SALE' ? (isCredit ? finalTotalMoney : 0) : 0;
 
@@ -313,7 +425,7 @@ export const processTransaction = async (
       user: userId,
       type,
       paymentStatus,
-      items: finalItems, // Use finalItems with prices
+      items: finalItems,
       totalMoney: finalTotalMoney,
 
       debtorId: isCreditSale ? debtorId : null,
@@ -321,7 +433,7 @@ export const processTransaction = async (
       customerKey: isCreditSale ? customerKey : null,
 
       amountPaid,
-      balance, // Correct balance (not 0)
+      balance,
       settledAt: type === 'SALE' ? (isCredit ? null : now) : null,
 
       messageId,
