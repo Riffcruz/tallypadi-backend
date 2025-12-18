@@ -207,7 +207,12 @@ export default function DashboardPage() {
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                   <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} />
                   <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} />
-                  <Tooltip formatter={(value: any) => formatCurrency(value, currencyCode, userLocale)} />
+                  <Tooltip 
+  cursor={{fill: '#f1f5f9', radius: 8}}
+  contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)'}}
+  // ✅ This is the line that was failing
+  formatter={(val: any) => [formatCurrency(Number(val) || 0, currencyCode, userLocale), 'Sales']}
+/>
                   <Bar dataKey="sales" fill="#10b981" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
