@@ -238,8 +238,8 @@ export default function DashboardPage() {
                  <Tooltip 
   cursor={{fill: '#f1f5f9', radius: 8}}
   contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)'}}
-  // ✅ Fix: Allow 'any' type and handle undefined with a fallback to 0
-  formatter={(val: any) => [formatCurrency(Number(val) || 0, currencyCode, userLocale), 'Sales']}
+
+    formatter={(val: any) => [formatCurrency(Number(val) || 0, currencyCode, userLocale), 'Sales']}
 />
                   <Bar dataKey="sales" fill="#10b981" radius={[8, 8, 8, 8]} barSize={32} />
                 </BarChart>
