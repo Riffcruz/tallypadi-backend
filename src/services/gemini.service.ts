@@ -408,7 +408,7 @@ function allowlistParsed(parsed: any) {
 }
 
 // ===============================
-// 🧠 INTELLIGENT FALLBACK PARSER FOR SALE
+// 🧠 SIMPLE PARSER FOR QUICK DETECTION
 // ===============================
 function parseMoneyLoose(moneyText: string): number | null {
   if (!moneyText) return null;
@@ -441,195 +441,127 @@ function parseMoneyLoose(moneyText: string): number | null {
 }
 
 /**
- * Intelligent parser for sales with flexible patterns and word number support
+ * SIMPLE parser that just detects if it might be a sale
+ * Returns null for anything it doesn't confidently understand
+ * Gemini will handle everything else
  */
-function forceParseSaleFromText(text: string) {
+function tryQuickParse(text: string) {
   const raw = cleanTextForSecurity(text);
   const low = raw.toLowerCase();
   
-  // First check if this looks like a sale
-  const saleIndicators = /\b(sold|sell|comot|selam|sale|vending|selling|bought from me|customer bought|purchased from me|took|collected|vent|vnt)\b/i;
-  if (!saleIndicators.test(low)) {
-    return null; // Not a sale
-  }
-
-  // Multiple patterns for different formats
-  const patterns = [
-    // Pattern 1: Full sale with customer
-    /\b(sold|sell|comot|sale)\s+(?:me\s+)?(\d+(?:\.\d+)?|\w+)\s*(bags?|packs?|pcs?|pieces?|sachets?|cartons?|bottles?|liters?|litres?|kgs?|kilos?|units?)?\s*(?:of\s+)?([^.!?]+?)\s+(?:to|for|give|gave)\s+([^.!?]{1,40})\s+(?:for|at|@)\s+([₦$€£₵]?\s*[\d,.]+(?:\.\d+)?\s*(?:k|m|thousand)?)\s*(?:on\s+credit|credit|owe|owing|i\s+go\s+pay\s+later)?/i,
+  // VERY SIMPLE patterns - only for crystal clear cases
+  const simplePatterns = [
+    // Clear sale pattern: "sold X bags of rice for Yk"
+    /^sold\s+(\d+)\s+bags?\s+(?:of\s+)?([a-z]+)\s+for\s+(\d+)k$/i,
     
-    // Pattern 2: Sale without customer but with amount
-    /\b(sold|sell|comot)\s+(?:me\s+)?(\d+(?:\.\d+)?|\w+)\s*(bags?|packs?|pcs?)?\s*(?:of\s+)?([^.!?]+?)\s+(?:for|at|@)\s+([₦$€£₵]?\s*[\d,.]+(?:\.\d+)?\s*(?:k|m|thousand)?)\s*(?:on\s+credit|credit)?/i,
+    // Clear sale with customer: "sold X rice to name for Yk"
+    /^sold\s+(\d+)\s+([a-z]+)\s+to\s+([a-z]+)\s+for\s+(\d+)k$/i,
     
-    // Pattern 3: Generic sale pattern
-    /\b(sold|sell)\s+(\d+(?:\.\d+)?|\w+)\s+(?:of\s+)?([^.!?]+?)\s+for\s+([\d,.]+(?:\.\d+)?\s*(?:k|m)?)/i,
+    // Clear credit payment: "name paid Xk"
+    /^([a-z]+)\s+paid\s+(\d+)k$/i,
     
-    // Pattern 4: Pidgin format
-    /\b(comot|selam|vent)\s+(\d+)\s+([^.!?]+?)\s+(?:for|na)\s+([\d,.]+(?:\.\d+)?k?)/i,
-    
-    // Pattern 5: Minimal pattern (just quantity and amount)
-    /\b(sold|sell)\s+(\d+(?:\.\d+)?)\s+for\s+([\d,.]+(?:\.\d+)?\s*k?)/i,
-    
-    // Pattern 6: Very flexible capture
-    /\b(sold|sell|comot)\s+(?:me\s+)?(\d+(?:\.\d+)?|\w+)\s*(bags?|packs?)?\s*(?:of\s+)?([^.!?]+?)\s+(?:for|at)\s+([\d,.kKmM]+)/i
+    // Very clear stock: "add X rice"
+    /^add\s+(\d+)\s+([a-z]+)$/i,
   ];
-
-  let match = null;
-  let patternIndex = -1;
-
-  // Try all patterns
-  for (let i = 0; i < patterns.length; i++) {
-    match = raw.match(patterns[i]);
+  
+  for (const pattern of simplePatterns) {
+    const match = raw.match(pattern);
     if (match) {
-      patternIndex = i;
-      break;
-    }
-  }
-
-  if (!match) {
-    // Couldn't parse with any pattern
-    return null;
-  }
-
-  // Helper function to parse quantity (including word numbers)
-  function parseQuantity(input: string): number {
-    const wordMap: Record<string, number> = {
-      'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5, 'six': 6, 'seven': 7,
-      'eight': 8, 'nine': 9, 'ten': 10, 'eleven': 11, 'twelve': 12, 'thirteen': 13,
-      'fourteen': 14, 'fifteen': 15, 'sixteen': 16, 'seventeen': 17, 'eighteen': 18,
-      'nineteen': 19, 'twenty': 20, 'thirty': 30, 'forty': 40, 'fifty': 50,
-      'sixty': 60, 'seventy': 70, 'eighty': 80, 'ninety': 90,
-      'a': 1, 'an': 1, 'single': 1, 'double': 2, 'triple': 3, 'couple': 2
-    };
-    
-    // Try direct number first
-    const num = parseFloat(input);
-    if (!isNaN(num)) return num;
-    
-    // Try word number
-    const lower = input.toLowerCase();
-    if (wordMap[lower] !== undefined) return wordMap[lower];
-    
-    // Try compound numbers
-    if (lower.includes('-')) {
-      const parts = lower.split('-');
-      let sum = 0;
-      for (const part of parts) {
-        if (wordMap[part]) sum += wordMap[part];
+      // For pattern 1: sold X bags of rice for Yk
+      if (pattern.toString().includes('bags?')) {
+        const qty = parseInt(match[1]);
+        const item = match[2];
+        const amount = parseInt(match[3]) * 1000;
+        
+        return {
+          intent: 'SALE' as const,
+          is_credit: false,
+          customer_name: null,
+          staffPhoneNumber: null,
+          items: [{
+            name: item.toLowerCase(),
+            qty: qty,
+            unit: 'bag',
+            unit_price: amount / qty
+          }],
+          total_money: amount,
+          report_params: { start_date: null, end_date: null },
+          settings_update: { key: null, value: null },
+          reply_text: `✅ Sale recorded: ${qty} bags of ${item} for ₦${amount.toLocaleString()}`
+        };
       }
-      if (sum > 0) return sum;
+      
+      // For pattern 2: sold X rice to name for Yk
+      if (pattern.toString().includes('to\\s+([a-z]+)')) {
+        const qty = parseInt(match[1]);
+        const item = match[2];
+        const customer = match[3];
+        const amount = parseInt(match[4]) * 1000;
+        
+        return {
+          intent: 'SALE' as const,
+          is_credit: false,
+          customer_name: customer,
+          staffPhoneNumber: null,
+          items: [{
+            name: item.toLowerCase(),
+            qty: qty,
+            unit: 'pcs',
+            unit_price: amount / qty
+          }],
+          total_money: amount,
+          report_params: { start_date: null, end_date: null },
+          settings_update: { key: null, value: null },
+          reply_text: `✅ Sale recorded: ${qty} ${item} to ${customer} for ₦${amount.toLocaleString()}`
+        };
+      }
+      
+      // For pattern 3: name paid Xk (debt payment)
+      if (pattern.toString().includes('paid')) {
+        const customer = match[1];
+        const amount = parseInt(match[2]) * 1000;
+        
+        return {
+          intent: 'DEBT_PAYMENT' as const,
+          is_credit: false,
+          customer_name: customer,
+          staffPhoneNumber: null,
+          items: [],
+          total_money: amount,
+          report_params: { start_date: null, end_date: null },
+          settings_update: { key: null, value: null },
+          reply_text: `✅ Payment recorded: ${customer} paid ₦${amount.toLocaleString()}`
+        };
+      }
+      
+      // For pattern 4: add X rice (restock)
+      if (pattern.toString().includes('^add\\s+')) {
+        const qty = parseInt(match[1]);
+        const item = match[2];
+        
+        return {
+          intent: 'RESTOCK' as const,
+          is_credit: false,
+          customer_name: null,
+          staffPhoneNumber: null,
+          items: [{
+            name: item.toLowerCase(),
+            qty: qty,
+            unit: 'pcs',
+            unit_price: null
+          }],
+          total_money: null,
+          report_params: { start_date: null, end_date: null },
+          settings_update: { key: null, value: null },
+          reply_text: `✅ Restocked: ${qty} ${item} added to inventory`
+        };
+      }
     }
-    
-    return 0;
   }
-
-  // Extract data based on pattern
-  let qty: number = 0;
-  let unit = 'pcs';
-  let item = '';
-  let customer: string | null = null;
-  let total: number | null = null;
-  let isCredit = false;
-
-  switch (patternIndex) {
-    case 0: // Full pattern with customer
-      qty = parseQuantity(match[2]);
-      unit = (match[3] || '').toLowerCase().trim() || 'bag';
-      item = (match[4] || '').trim();
-      customer = (match[5] || '').trim();
-      total = parseMoneyLoose(match[6] || '');
-      isCredit = /\b(on\s+credit|credit|owe|owing|i\s+go\s+pay\s+later)\b/.test(low);
-      break;
-      
-    case 1: // Sale without customer
-    case 2:
-      qty = parseQuantity(match[2]);
-      unit = (match[3] || '').toLowerCase().trim() || 'bag';
-      item = (match[4] || '').trim();
-      total = parseMoneyLoose(match[5] || '');
-      isCredit = /\bcredit\b/.test(low);
-      break;
-      
-    case 3: // Pidgin format
-      qty = parseQuantity(match[2]);
-      item = (match[3] || '').trim();
-      total = parseMoneyLoose(match[4] || '');
-      isCredit = /\bcredit\b/.test(low);
-      break;
-      
-    case 4: // Minimal pattern
-      qty = parseQuantity(match[2]);
-      item = 'item'; // Generic, will be handled by AI
-      total = parseMoneyLoose(match[3] || '');
-      break;
-      
-    case 5: // Flexible capture
-      qty = parseQuantity(match[2]);
-      unit = (match[3] || '').toLowerCase().trim() || 'bag';
-      item = (match[4] || '').trim();
-      total = parseMoneyLoose(match[5] || '');
-      isCredit = /\bcredit\b/.test(low);
-      break;
-      
-    default:
-      return null;
-  }
-
-  // Clean up item name
-  const cleanItem = item
-    .replace(/\bfor\s+[\d,.kKmM]+\b/i, '') // Remove "for 20k"
-    .replace(/\bto\s+[^.!?]+\b/i, '') // Remove "to customer"
-    .replace(/\bon\s+credit\b/i, '') // Remove "on credit"
-    .trim();
-
-  // Check if item was captured properly
-  const finalItem = cleanItem || 'item';
-  const isGenericItem = finalItem === 'item' || finalItem === 'unknown' || finalItem.length < 2;
-
-  // Generate reply text
-  let replyText = '';
-  if (isGenericItem) {
-    // Let Gemini handle the item name
-    replyText = `I recorded a sale for ₦${total?.toLocaleString() || 'amount'}. `;
-    if (customer) replyText += `Customer: ${customer}. `;
-    if (isCredit) replyText += `(Credit sale). `;
-    replyText += `What item was sold?`;
-    
-    return {
-      intent: 'UNKNOWN' as const,
-      is_credit: isCredit,
-      customer_name: customer || null,
-      staffPhoneNumber: null,
-      items: [],
-      total_money: total,
-      report_params: { start_date: null, end_date: null },
-      settings_update: { key: null, value: null },
-      reply_text: replyText
-    };
-  } else {
-    // We have enough info for a proper SALE intent
-    replyText = `✅ Sale recorded: ${qty} ${unit}(s) of ${finalItem}`;
-    if (customer) replyText += ` to ${customer}`;
-    if (total) replyText += ` for ₦${total.toLocaleString()}`;
-    if (isCredit) replyText += ` (Credit)`;
-    
-    return {
-      intent: 'SALE' as const,
-      is_credit: isCredit,
-      customer_name: isCredit ? customer : customer || null,
-      staffPhoneNumber: null,
-      items: [{
-        name: finalItem.toLowerCase().trim(),
-        qty: qty || 1,
-        unit: unit,
-        unit_price: total && qty ? total / qty : null
-      }],
-      total_money: total,
-      report_params: { start_date: null, end_date: null },
-      settings_update: { key: null, value: null },
-      reply_text: replyText
-    };
-  }
+  
+  // Return null for anything not perfectly matched
+  // This ensures Gemini handles complex or ambiguous cases
+  return null;
 }
 
 const STRIKE_WINDOW_MS = 24 * 60 * 60 * 1000; // 24h
@@ -887,18 +819,24 @@ export const handleMessageLogic = async (
       return;
     }
 
-    // --- AI PARSE ---
+    // --- INTELLIGENT PARSING: Try quick parse first, then Gemini for everything else ---
     const currentLang = user.settings?.language || 'English';
-    let parsed: any = await parseMessageWithGemini(rawText, currentLang, imageBuffer, imageMime);
+    let parsed: any = null;
+
+    // First, try our VERY SIMPLE parser for crystal clear cases
+    // This only catches patterns like "sold 2 rice for 20k" or "john paid 5k"
+    parsed = tryQuickParse(rawText);
+
+    // If quick parser didn't understand, send to Gemini
+    if (!parsed) {
+      console.log(`🤖 Sending to Gemini for intelligent parsing: "${rawText}"`);
+      parsed = await parseMessageWithGemini(rawText, currentLang, imageBuffer, imageMime);
+    } else {
+      console.log(`⚡ Quick parse successful for: "${rawText}"`);
+    }
 
     // ✅ SERVER-SIDE ALLOWLIST: model cannot invent ops/keys/params
     parsed = allowlistParsed(parsed);
-
-    // ✅ HARD SAFETY: if AI returns REPORT_DEBTS for a transaction sentence, force SALE parse
-    if (parsed?.intent === 'REPORT_DEBTS' && looksLikeTxn) {
-      const forced = forceParseSaleFromText(rawText);
-      if (forced) parsed = forced;
-    }
 
     // --- DATE PARSING ---
     let startDate: Date | undefined;
