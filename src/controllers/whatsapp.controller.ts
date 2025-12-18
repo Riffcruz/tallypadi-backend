@@ -165,46 +165,46 @@ export const handleWebhook = async (req: Request, res: Response) => {
 };
 
 // ✅ debtors list helper (supports old CREDIT docs + new balance docs)
+// ✅ Smarter Debt Summary using Aggregation
 const buildDebtSummary = async (userId: any, symbol: string, locale: string) => {
-  const debtSales = await Transaction.find({
-    user: userId,
-    type: 'SALE',
-    isUndone: { $ne: true },
-    $or: [{ paymentStatus: 'CREDIT' }, { balance: { $gt: 0 } }],
-  })
-    .sort({ timestamp: -1 })
-    .limit(2000)
-    .lean();
+  const summary = await Transaction.aggregate([
+    { 
+      $match: { 
+        user: userId, 
+        isUndone: { $ne: true },
+        // Look for both Sales (Debt creators) and Payments (Debt reducers)
+        $or: [
+          { type: 'SALE', paymentStatus: 'CREDIT' },
+          { type: 'DEBT_PAYMENT' }
+        ]
+      } 
+    },
+    {
+      $group: {
+        _id: "$debtor", // Group by the debtor ID
+        name: { $first: "$customerName" },
+        totalOwed: {
+          $sum: {
+            $cond: [
+              { $eq: ["$type", "DEBT_PAYMENT"] },
+              { $multiply: ["$amountPaid", -1] }, // Subtract payments
+              "$totalMoney"                       // Add credit sales
+            ]
+          }
+        }
+      }
+    },
+    { $match: { totalOwed: { $gt: 0 } } }, // Only show people who still owe money
+    { $sort: { totalOwed: -1 } }
+  ]);
 
-  if (!debtSales.length) return `✅ Nobody dey owe you.`;
+  if (!summary.length) return `✅ Nobody dey owe you. Everyone has cleared their tab.`;
 
-  const byName: Record<string, number> = {};
-
-  for (const t of debtSales as any[]) {
-    const name = String(t.customerName || 'Unknown').trim() || 'Unknown';
-
-    // ✅ prefer balance if present, else fallback totalMoney - amountPaid
-    let outstanding = 0;
-    if (typeof t.balance === 'number') {
-      outstanding = Number(t.balance || 0);
-    } else {
-      const total = Number(t.totalMoney || 0);
-      const paid = Number(t.amountPaid || 0);
-      outstanding = Math.max(total - paid, 0);
-    }
-
-    if (outstanding <= 0) continue;
-    byName[name] = (byName[name] || 0) + outstanding;
-  }
-
-  const entries = Object.entries(byName).sort((a, b) => b[1] - a[1]);
-  if (!entries.length) return `✅ Nobody dey owe you.`;
-
-  const lines = entries
+  const lines = summary
     .slice(0, 30)
-    .map(([n, v]) => `• *${n}* — ${symbol}${v.toLocaleString(locale)}`);
+    .map(s => `• *${s.name || 'Unknown'}* — ${symbol}${s.totalOwed.toLocaleString(locale)}`);
 
-  return `📌 *Debtors List*\n\n${lines.join('\n')}\n\nReply like: *Emeka paid 20000* to record payment.`;
+  return `📌 *Debtors List*\n\n${lines.join('\n')}\n\nReply like: *John paid 2000* to record a payment.`;
 };
 
 // 3) BACKGROUND PROCESSOR (called by Worker)
