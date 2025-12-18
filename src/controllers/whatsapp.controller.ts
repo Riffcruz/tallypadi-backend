@@ -9,7 +9,6 @@ import { DeletedItem } from '../models/deletedItem.model';
 import { AdminSettings } from '../models/adminSettings.model';
 import { Transaction } from '../models/transaction.model';
 
-import { parseMessageWithGemini } from '../services/gemini.service';
 import { processTransaction } from '../services/transaction.service';
 import {
   getDailySummary,
@@ -22,6 +21,10 @@ import { checkSubscriptionStatus } from '../services/billing.service';
 
 import { messageQueue, queueOutboundMessage } from '../services/queue.service';
 import { undoLastSale } from '../services/undo.service';
+
+// Import the gemini service - make sure it's exported from gemini.service.ts
+// The function should be exported like: export const parseMessageWithGemini = async (...)
+// You'll need to fix the export in your gemini.service.ts first
 
 // 🌍 CURRENCY CONFIGURATION
 const COUNTRY_CURRENCIES: Record<string, { symbol: string; code: string; locale: string }> = {
@@ -452,16 +455,22 @@ function tryQuickParse(text: string) {
   // VERY SIMPLE patterns - only for crystal clear cases
   const simplePatterns = [
     // Clear sale pattern: "sold X bags of rice for Yk"
-    /^sold\s+(\d+)\s+bags?\s+(?:of\s+)?([a-z]+)\s+for\s+(\d+)k$/i,
+    /^sold\s+(\d+)\s+bags?\s+(?:of\s+)?([a-z\s]+?)\s+for\s+(\d+)k$/i,
     
     // Clear sale with customer: "sold X rice to name for Yk"
-    /^sold\s+(\d+)\s+([a-z]+)\s+to\s+([a-z]+)\s+for\s+(\d+)k$/i,
+    /^sold\s+(\d+)\s+([a-z\s]+?)\s+to\s+([a-z\s]+?)\s+for\s+(\d+)k$/i,
     
     // Clear credit payment: "name paid Xk"
-    /^([a-z]+)\s+paid\s+(\d+)k$/i,
+    /^([a-z\s]+?)\s+paid\s+(\d+)k$/i,
     
     // Very clear stock: "add X rice"
-    /^add\s+(\d+)\s+([a-z]+)$/i,
+    /^add\s+(\d+)\s+([a-z\s]+?)$/i,
+    
+    // Simple debt check: "credits" or "debt"
+    /^(credits?|debt|debtors?|who\s+owes|who\s+dey\s+owe)$/i,
+    
+    // Simple undo: "undo"
+    /^(undo|undo\s+last|undo\s+last\s+sale)$/i,
   ];
   
   for (const pattern of simplePatterns) {
@@ -470,7 +479,7 @@ function tryQuickParse(text: string) {
       // For pattern 1: sold X bags of rice for Yk
       if (pattern.toString().includes('bags?')) {
         const qty = parseInt(match[1]);
-        const item = match[2];
+        const item = match[2].trim();
         const amount = parseInt(match[3]) * 1000;
         
         return {
@@ -492,10 +501,10 @@ function tryQuickParse(text: string) {
       }
       
       // For pattern 2: sold X rice to name for Yk
-      if (pattern.toString().includes('to\\s+([a-z]+)')) {
+      if (pattern.toString().includes('to\\s+([a-z\\s]+?)')) {
         const qty = parseInt(match[1]);
-        const item = match[2];
-        const customer = match[3];
+        const item = match[2].trim();
+        const customer = match[3].trim();
         const amount = parseInt(match[4]) * 1000;
         
         return {
@@ -518,7 +527,7 @@ function tryQuickParse(text: string) {
       
       // For pattern 3: name paid Xk (debt payment)
       if (pattern.toString().includes('paid')) {
-        const customer = match[1];
+        const customer = match[1].trim();
         const amount = parseInt(match[2]) * 1000;
         
         return {
@@ -537,7 +546,7 @@ function tryQuickParse(text: string) {
       // For pattern 4: add X rice (restock)
       if (pattern.toString().includes('^add\\s+')) {
         const qty = parseInt(match[1]);
-        const item = match[2];
+        const item = match[2].trim();
         
         return {
           intent: 'RESTOCK' as const,
@@ -555,6 +564,18 @@ function tryQuickParse(text: string) {
           settings_update: { key: null, value: null },
           reply_text: `✅ Restocked: ${qty} ${item} added to inventory`
         };
+      }
+      
+      // For pattern 5: credits/debt (will be handled in main logic)
+      if (pattern.toString().includes('credits?|debt|debtors?')) {
+        // Return null so main logic handles it
+        return null;
+      }
+      
+      // For pattern 6: undo (will be handled in main logic)
+      if (pattern.toString().includes('undo')) {
+        // Return null so main logic handles it
+        return null;
       }
     }
   }
@@ -830,6 +851,9 @@ export const handleMessageLogic = async (
     // If quick parser didn't understand, send to Gemini
     if (!parsed) {
       console.log(`🤖 Sending to Gemini for intelligent parsing: "${rawText}"`);
+      
+      // Dynamically import the gemini service to avoid circular dependency
+      const { parseMessageWithGemini } = await import('../services/gemini.service');
       parsed = await parseMessageWithGemini(rawText, currentLang, imageBuffer, imageMime);
     } else {
       console.log(`⚡ Quick parse successful for: "${rawText}"`);
