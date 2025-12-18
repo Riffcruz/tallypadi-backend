@@ -235,12 +235,12 @@ export default function DashboardPage() {
   // ✅ Fix: Add ': number' type to val
   tickFormatter={(val: number) => (val >= 1000 ? `${val / 1000}k` : val.toString())} 
 />
-                  <Tooltip 
-                    cursor={{fill: '#f1f5f9', radius: 8}}
-                    contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)'}}
-                   
-                    formatter={(val: any) => [formatCurrency(Number(val) || 0, currencyCode, userLocale), 'Sales']}
-                  />
+                 <Tooltip 
+  cursor={{fill: '#f1f5f9', radius: 8}}
+  contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)'}}
+  // ✅ Fix: Allow 'any' type and handle undefined with a fallback to 0
+  formatter={(val: any) => [formatCurrency(Number(val) || 0, currencyCode, userLocale), 'Sales']}
+/>
                   <Bar dataKey="sales" fill="#10b981" radius={[8, 8, 8, 8]} barSize={32} />
                 </BarChart>
               </ResponsiveContainer>
