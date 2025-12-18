@@ -62,6 +62,97 @@ function normalizeName(name: string) {
     .trim();
 }
 
+/* =========================================================
+   ✅ NEW: Controller-level safety parsers (backup)
+   ========================================================= */
+
+const parseMoney = (raw: any): number | null => {
+  if (raw == null) return null;
+  if (typeof raw === 'number') return Number.isFinite(raw) && raw >= 0 ? raw : null;
+
+  const s = String(raw).toLowerCase().replace(/\s+/g, '').replace(/,/g, '');
+  const mult = s.includes('m') ? 1_000_000 : s.includes('k') ? 1_000 : 1;
+  const num = parseFloat(s.replace(/[^\d.]/g, ''));
+  if (Number.isNaN(num)) return null;
+
+  const v = num * mult;
+  return Number.isFinite(v) && v >= 0 ? v : null;
+};
+
+const normalizeItemName = (name: string) => {
+  const n = String(name || '').toLowerCase().trim();
+  if (!n) return 'item';
+  // very light normalization (your gemini.service does deeper)
+  return n
+    .replace(/\b(of|the|a|an)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+};
+
+const parseQtyUnitItem = (text: string): { qty: number; unit: string; name: string } | null => {
+  const t = String(text || '').trim();
+
+  // supports: 200 liters kerosene, 5 bags rice, 2 kg beans
+  const m = t.match(
+    /^(\d+(?:\.\d+)?)\s*(liters?|litres?|ltrs?|ltr|l|kg|kgs?|g|grams?|bags?|pcs?|pieces?|cartons?|packs?|bottles?|rolls?|sachets?)?\s+(.+)$/i
+  );
+  if (!m) return null;
+
+  const qty = Number(m[1]);
+  if (!Number.isFinite(qty) || qty <= 0) return null;
+
+  const unit = m[2] ? String(m[2]).toLowerCase() : '';
+  const name = normalizeItemName(m[3]);
+
+  return { qty, unit, name };
+};
+
+const forceParseSaleFromText = (text: string) => {
+  const raw = String(text || '').trim();
+  const low = raw.toLowerCase();
+
+  if (!/\b(sold|sell|comot)\b/.test(low)) return null;
+
+  let rest = raw.replace(/\b(sold|sell|comot)\b/i, '').trim();
+
+  const is_credit = /\b(on\s+credit|credit|owe|owing|later|pay\s+small\s+small)\b/i.test(rest);
+
+  // amount
+  let total_money: number | null = null;
+  const moneyMatch = rest.match(/\b(for|@|at)\s+([₦$€£₵]?\s*[\d,]+(?:\.\d+)?\s*(?:k|m)?)\b/i);
+  if (moneyMatch) {
+    total_money = parseMoney(moneyMatch[2]);
+    rest = rest.replace(moneyMatch[0], '').trim();
+  }
+
+  // customer
+  let customer_name: string | undefined;
+  const toMatch = rest.match(/\bto\s+([a-zA-Z][a-zA-Z0-9\s]{0,30})\b/i);
+  if (toMatch) {
+    customer_name = toMatch[1].trim();
+    rest = rest.replace(toMatch[0], '').trim();
+  }
+
+  // strip credit words
+  rest = rest.replace(/\b(on\s+credit|credit|owe|owing|later)\b/gi, '').trim();
+
+  const q = parseQtyUnitItem(rest);
+  if (!q) return null;
+
+  return {
+    intent: 'SALE',
+    is_credit,
+    customer_name: is_credit ? customer_name : undefined,
+    items: [{ name: q.name, qty: q.qty, unit: q.unit, unit_price: null }],
+    total_money,
+    reply_text: is_credit
+      ? `✅ Recorded as credit sale to ${customer_name || 'customer'}${total_money != null ? ` for ${total_money}` : ''}.`
+      : `✅ Recorded. Sold ${q.qty} ${q.name}${total_money != null ? ` for ${total_money}` : ''}.`,
+  };
+};
+
+/* ========================================================= */
+
 // HELPER: Fetch Image Data from Meta
 const getMediaBuffer = async (
   mediaId: string
@@ -159,7 +250,6 @@ export const handleWebhook = async (req: Request, res: Response) => {
       .catch((e) => console.error('❌ Failed to queue message:', e));
   } catch (err) {
     console.error('❌ Error in webhook receiver:', err);
-    // still ACK 200 to prevent Meta retry storms
     return res.sendStatus(200);
   }
 };
@@ -176,14 +266,13 @@ const buildDebtSummary = async (userId: any, symbol: string, locale: string) => 
     .limit(2000)
     .lean();
 
-  if (!debtSales.length) return `✅ Nobody dey owe you.`;
+  if (!debtSales.length) return `✅ Nobody dey owe you. Everyone has cleared their tab.`;
 
   const byName: Record<string, number> = {};
 
   for (const t of debtSales as any[]) {
     const name = String(t.customerName || 'Unknown').trim() || 'Unknown';
 
-    // ✅ prefer balance if present, else fallback totalMoney - amountPaid
     let outstanding = 0;
     if (typeof t.balance === 'number') {
       outstanding = Number(t.balance || 0);
@@ -198,7 +287,7 @@ const buildDebtSummary = async (userId: any, symbol: string, locale: string) => 
   }
 
   const entries = Object.entries(byName).sort((a, b) => b[1] - a[1]);
-  if (!entries.length) return `✅ Nobody dey owe you.`;
+  if (!entries.length) return `✅ Nobody dey owe you. Everyone has cleared their tab.`;
 
   const lines = entries
     .slice(0, 30)
@@ -327,14 +416,11 @@ export const handleMessageLogic = async (
     }
 
     // --- PLAN RULES ---
-    
-    // 1. IMAGE PERMISSIONS: Only TYCOON can use images (mediaId is present, but NOT voice)
     if (mediaId && !isVoiceMessage && user.planType !== 'TYCOON') {
       await queueOutboundMessage(from, '📷 Image scanning is only available for *Tycoon Plan* users. Upgrade to use this feature!');
       return;
     }
 
-    // 2. AUDIO PERMISSIONS: TYCOON and OGA_BOSS can use voice
     if (isVoiceMessage) {
       const allowedAudioPlans = ['TYCOON', 'OGA_BOSS'];
       if (!allowedAudioPlans.includes(user.planType)) {
@@ -357,15 +443,26 @@ export const handleMessageLogic = async (
     // ✅ QUICK COMMANDS (no Gemini)
     const low = (text || '').toLowerCase().trim();
 
-    // ✅ 1) Debt list
+    const looksLikeTxn =
+      /\b(sold|sell|comot|add|restock|set\s+stock|set\s+price|price\s+of|delete|remove)\b/.test(low);
+
+    // ✅ 1) Debt list (NOW supports "credit/credits", but will NEVER run for transaction sentences)
     const isDebtCmd =
-      low === 'debt' ||
-      low.includes('debtors') ||
-      /\b(debt|debts|debtor|debtors|owing|owes|owe|gbese|bashi|ugwo)\b/.test(low) ||
-      low.includes('dey owe') ||
-      low.includes('who dey owe') ||
-      low.includes('who is owing') ||
-      low.includes('who owes');
+      !looksLikeTxn &&
+      (
+        low === 'credit' ||
+        low === 'credits' ||
+        low.includes('credit list') ||
+        low.includes('credits list') ||
+        low.includes('all credits') ||
+        low === 'debt' ||
+        low.includes('debtors') ||
+        /\b(debt|debts|debtor|debtors|owing|owes|owe|gbese|bashi|ugwo|tab)\b/.test(low) ||
+        low.includes('dey owe') ||
+        low.includes('who dey owe') ||
+        low.includes('who is owing') ||
+        low.includes('who owes')
+      );
 
     const isPaymentPhrase = /\b(paid|pay|payment|settle|settled|i paid|don pay)\b/.test(low);
 
@@ -391,7 +488,13 @@ export const handleMessageLogic = async (
 
     // --- AI PARSE ---
     const currentLang = user.settings?.language || 'English';
-    const parsed: any = await parseMessageWithGemini(text, currentLang, imageBuffer, imageMime);
+    let parsed: any = await parseMessageWithGemini(text, currentLang, imageBuffer, imageMime);
+
+    // ✅ HARD SAFETY: if AI mistakenly returns REPORT_DEBTS for a transaction sentence, force SALE parse
+    if (parsed?.intent === 'REPORT_DEBTS' && looksLikeTxn) {
+      const forced = forceParseSaleFromText(text);
+      if (forced) parsed = forced;
+    }
 
     // --- DATE PARSING ---
     let startDate: Date | undefined;
@@ -451,26 +554,23 @@ export const handleMessageLogic = async (
       }
 
       case 'HELP': {
-        const helpMsg = 
+        const helpMsg =
           `🤖 *How to use Tallypadi*\n\n` +
           `💰 *Sales & Credit:*\n` +
           `• Sold 2 rice for 50k\n` +
-          `• Sold 5 semo to Emeka on credit\n` +
+          `• Sold 200 liters kerosene to John for 20k on credit\n` +
           `• Undo last sale\n\n` +
-          
           `💸 *Debts & Payments:*\n` +
+          `• Credits\n` +
           `• Who is owing me?\n` +
           `• Emeka paid 20k\n\n` +
-          
           `📦 *Stock Management:*\n` +
           `• Add 50 sugar (Restock)\n` +
           `• Price of rice?\n` +
           `• Stock list\n\n` +
-          
           `📊 *Reports:*\n` +
           `• How much I sell today?\n` +
           `• Send PDF (Tycoon Only)\n\n` +
-          
           `💎 *Premium Plans:*\n` +
           `• 🎤 Voice Notes (Oga Boss & Tycoon)\n` +
           `• 📷 Image Scan (Tycoon Only)\n` +
@@ -482,8 +582,7 @@ export const handleMessageLogic = async (
       }
 
       case 'REPORT_RECENT': {
-        // Default to 5 if AI didn't catch a number, limit to max 10 for readability
-        const limit = parsed.items?.[0]?.qty || 5; 
+        const limit = parsed.items?.[0]?.qty || 5;
         const safeLimit = Math.min(Math.max(limit, 1), 10);
 
         await queueOutboundMessage(from, `🔎 Fetching last ${safeLimit} transactions...`);
@@ -493,9 +592,9 @@ export const handleMessageLogic = async (
           type: 'SALE',
           isUndone: { $ne: true }
         })
-        .sort({ timestamp: -1 })
-        .limit(safeLimit)
-        .lean();
+          .sort({ timestamp: -1 })
+          .limit(safeLimit)
+          .lean();
 
         if (!recentTx.length) {
           await queueOutboundMessage(from, "You haven't recorded any sales yet.");
@@ -508,11 +607,8 @@ export const handleMessageLogic = async (
           const d = new Date(tx.timestamp);
           const timeStr = d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
           const dateStr = d.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
-          
-          // Format items: "Rice (2), Beans (1)"
+
           const itemsStr = tx.items.map((i: any) => `${i.name} (${i.qty})`).join(', ');
-          
-          // Format Money
           const money = `${symbol}${(tx.totalMoney || 0).toLocaleString(locale)}`;
           const status = tx.paymentStatus === 'CREDIT' ? '🔴 CREDIT' : '✅ PAID';
 
@@ -560,8 +656,6 @@ export const handleMessageLogic = async (
 
       case 'DEBT_PAYMENT': {
         await processTransaction(user._id as any, parsed, messageId);
-
-        // ✅ IMPORTANT: use parsed.reply_text (so you see applied/remaining/cleared)
         await queueOutboundMessage(from, parsed.reply_text || '✅ Payment recorded.');
         break;
       }
