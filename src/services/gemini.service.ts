@@ -1,263 +1,167 @@
-import { Request, Response } from 'express';
-import bcrypt from 'bcryptjs';
-import axios from 'axios';
-
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { env } from '../config/env';
-import { User } from '../models/user.model';
-import { Inventory } from '../models/inventory.model';
-import { DeletedItem } from '../models/deletedItem.model';
-import { AdminSettings } from '../models/adminSettings.model';
-import { Transaction } from '../models/transaction.model';
 
-import { parseMessageWithGemini } from '../services/gemini.service';
-import { processTransaction } from '../services/transaction.service';
-import {
-  getDailySummary,
-  getStockReport,
-  getFullSummary,
-  getTodayTransactions
-} from '../services/report.service';
-import { generatePdfReport } from '../services/pdf.service';
-import { checkSubscriptionStatus } from '../services/billing.service';
+const genAI = new GoogleGenerativeAI(env.geminiApiKey);
 
-import { messageQueue, queueOutboundMessage } from '../services/queue.service';
-import { undoLastSale } from '../services/undo.service';
+// ✅ Enforce JSON mode to reduce markdown/codefence issues
+const model = genAI.getGenerativeModel({
+  model: env.geminiModel,
+  generationConfig: { responseMimeType: 'application/json' as any },
+});
 
-// 🌍 CURRENCY CONFIGURATION
-const COUNTRY_CURRENCIES: Record<string, { symbol: string; code: string; locale: string }> = {
-  NG: { symbol: '₦', code: 'NGN', locale: 'en-NG' },
-  US: { symbol: '$', code: 'USD', locale: 'en-US' },
-  GB: { symbol: '£', code: 'GBP', locale: 'en-GB' },
-  EU: { symbol: '€', code: 'EUR', locale: 'en-IE' },
-  GH: { symbol: '₵', code: 'GHS', locale: 'en-GH' },
-  KE: { symbol: 'KSh', code: 'KES', locale: 'en-KE' },
-  ZA: { symbol: 'R', code: 'ZAR', locale: 'en-ZA' },
-  IN: { symbol: '₹', code: 'INR', locale: 'en-IN' },
-  CA: { symbol: 'C$', code: 'CAD', locale: 'en-CA' },
-  DEFAULT: { symbol: '₦', code: 'NGN', locale: 'en-NG' },
-};
+export type ParsedIntent =
+  | 'SALE'
+  | 'RESTOCK'
+  | 'SET_STOCK'
+  | 'DELETED_STOCK'
+  | 'DEFINE_PRICE'
+  | 'PRICE_CHECK'
+  | 'REPORT_SALES'
+  | 'REPORT_STOCK'
+  | 'REPORT_FULL'
+  | 'SETTINGS'
+  | 'CHANGE_LANGUAGE'
+  | 'DEBT_PAYMENT'
+  | 'CLOSE_BOOK'
+  | 'ADD_STAFF'
+  | 'DOWNLOAD_REPORT'
+  | 'UNDO_LAST_SALE'
+  | 'REPORT_DEBTS'
+  | 'REPORT_RECENT'
+  | 'HELP'
+  | 'UNKNOWN';
 
-const getUserCurrency = (user: any) => {
-  let countryCode = user?.countryCode;
-
-  // Guess from phone prefix if missing
-  if (!countryCode && user?.phoneNumber) {
-    const phone = String(user.phoneNumber).replace('+', '');
-    if (phone.startsWith('234')) countryCode = 'NG';
-    else if (phone.startsWith('1')) countryCode = 'US';
-    else if (phone.startsWith('44')) countryCode = 'GB';
-    else if (phone.startsWith('233')) countryCode = 'GH';
-    else if (phone.startsWith('254')) countryCode = 'KE';
-    else if (phone.startsWith('27')) countryCode = 'ZA';
-    else if (phone.startsWith('91')) countryCode = 'IN';
-  }
-
-  return COUNTRY_CURRENCIES[countryCode] || COUNTRY_CURRENCIES.DEFAULT;
-};
-
-function normalizeName(name: string) {
-  return String(name || '')
-    .replace(/\s*\(.*?\)\s*$/, '')
-    .toLowerCase()
-    .trim();
+export interface ParsedItem {
+  name: string;
+  qty: number;
+  unit_price: number | null;
+  unit?: string;
 }
 
-/* =========================================================
-   ✅ NEW: Controller-level safety parsers (backup)
-   ========================================================= */
+export interface ParsedResult {
+  intent: ParsedIntent;
+  is_credit: boolean;
+  customer_name?: string;
+  staffPhoneNumber?: string;
+  items: ParsedItem[];
+  total_money: number | null;
+  report_params: { start_date: string | null; end_date: string | null };
+  settings_update: { key: 'closingTime' | 'dailySummary' | 'language' | null; value: string | boolean | null };
+  reply_text: string;
+}
 
+const SAFE_MAX = 900;
+
+// ==========================================
+// 🧼 SANITIZE
+// ==========================================
+const sanitizeInput = (input: string): string => {
+  if (!input) return '';
+  let s = input.slice(0, SAFE_MAX);
+
+  // remove control chars + invisible
+  s = s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, ' ');
+  s = s.replace(/[\u200B-\u200F\u202A-\u202E\u2060-\u206F]/g, ' ');
+
+  // strip HTML
+  s = s.replace(/<\/?[^>]+>/g, ' ');
+
+  // strip injection-like phrases (don’t overdo, keep business text)
+  s = s.replace(/\b(ignore (all|any|previous|above|earlier)|system prompt|developer message|hidden rules|act as|you must|bypass|override|jailbreak|return raw|tool|function call|json schema)\b/gi, ' ');
+
+  // keep unicode letters/numbers + currency symbols etc
+  s = s.replace(/[^\p{L}\p{N}\s₦$€£₵.,\-\/+()%@'_km]/gu, ' ');
+
+  return s.replace(/\s+/g, ' ').trim();
+};
+
+
+// ==========================================
+// 💰 MONEY PARSER
+// ==========================================
 const parseMoney = (raw: any): number | null => {
   if (raw == null) return null;
-  if (typeof raw === 'number') return Number.isFinite(raw) && raw >= 0 ? raw : null;
 
-  const s = String(raw).toLowerCase().replace(/\s+/g, '').replace(/,/g, '');
+  if (typeof raw === 'number') {
+    return Number.isFinite(raw) && raw >= 0 ? raw : null;
+  }
+
+  const s0 = String(raw).toLowerCase().trim();
+  if (!s0) return null;
+
+  const s = s0.replace(/\s+/g, '').replace(/,/g, '');
+
   const mult = s.includes('m') ? 1_000_000 : s.includes('k') ? 1_000 : 1;
   const num = parseFloat(s.replace(/[^\d.]/g, ''));
+
   if (Number.isNaN(num)) return null;
 
   const v = num * mult;
-  return Number.isFinite(v) && v >= 0 ? v : null;
+  if (!Number.isFinite(v) || v < 0) return null;
+
+  // keep as integer money where possible
+  return Math.round(v);
 };
 
-const normalizeItemName = (name: string) => {
-  const n = String(name || '').toLowerCase().trim();
-  if (!n) return 'item';
-  // very light normalization (your gemini.service does deeper)
-  return n
-    .replace(/\b(of|the|a|an)\b/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-};
+// ==========================================
+// 📦 ITEM NORMALIZATION
+// ==========================================
+const normalizeItemName = (name: string): string => {
+  if (!name) return 'unknown_item';
+  let n = sanitizeInput(name).toLowerCase();
 
-const parseQtyUnitItem = (text: string): { qty: number; unit: string; name: string } | null => {
-  const t = String(text || '').trim();
-
-  // supports: 200 liters kerosene, 5 bags rice, 2 kg beans
-  const m = t.match(
-    /^(\d+(?:\.\d+)?)\s*(liters?|litres?|ltrs?|ltr|l|kg|kgs?|g|grams?|bags?|pcs?|pieces?|cartons?|packs?|bottles?|rolls?|sachets?)?\s+(.+)$/i
+  // remove filler words (keep core product name)
+  n = n.replace(
+    /\b(of|the|a|an|my|your|their|this|that|pls|please|abeg)\b/g,
+    ' '
   );
-  if (!m) return null;
 
-  const qty = Number(m[1]);
-  if (!Number.isFinite(qty) || qty <= 0) return null;
+  // remove common container words but keep product
+  n = n.replace(
+    /\b(bags?|bag|pcs?|piece|pieces|cartons?|carton|packs?|pack|sachets?|rolls?|bottles?|bottle|plates?|cups?)\b/g,
+    ' '
+  );
 
-  const unit = m[2] ? String(m[2]).toLowerCase() : '';
-  const name = normalizeItemName(m[3]);
+  // remove common unit words (unit will be extracted separately)
+  n = n.replace(
+    /\b(liters?|litres?|ltrs?|ltr|ml|cl|kg|kgs|g|grams?|tonnes?|tons?|yards?|mtrs?|meters?|metres?)\b/g,
+    ' '
+  );
 
-  return { qty, unit, name };
-};
+  n = n.replace(/\s+/g, ' ').trim();
 
-/* ========================================================= */
-
-// HELPER: Fetch Image Data from Meta
-const getMediaBuffer = async (
-  mediaId: string
-): Promise<{ data: string; mimeType: string } | null> => {
-  try {
-    const urlRes = await axios.get(`https://graph.facebook.com/v21.0/${mediaId}`, {
-      headers: { Authorization: `Bearer ${env.whatsappToken}` },
-    });
-
-    const mediaUrl = urlRes.data.url;
-
-    const mediaRes = await axios.get(mediaUrl, {
-      headers: { Authorization: `Bearer ${env.whatsappToken}` },
-      responseType: 'arraybuffer',
-    });
-
-    const base64Data = Buffer.from(mediaRes.data).toString('base64');
-    return { data: base64Data, mimeType: mediaRes.headers['content-type'] };
-  } catch (error) {
-    console.error('❌ Failed to download media:', error);
-    return null;
-  }
-};
-
-// 1) VERIFY WEBHOOK (Meta)
-export const verifyWebhook = (req: Request, res: Response) => {
-  const mode = req.query['hub.mode'];
-  const token = req.query['hub.verify_token'];
-  const challenge = req.query['hub.challenge'];
-
-  if (mode === 'subscribe' && token === env.webhookVerifyToken) {
-    console.log('✅ Webhook verified successfully');
-    return res.status(200).send(challenge);
+  // plural -> singular (light rules)
+  if (n.endsWith('ies') && n.length > 4) n = n.slice(0, -3) + 'y';
+  else if (n.endsWith('s') && n.length > 3 && !n.endsWith('ss')) {
+    const noTouch = new Set(['rice', 'beans', 'gas', 'couscous']);
+    if (!noTouch.has(n)) n = n.slice(0, -1);
   }
 
-  return res.sendStatus(403);
+  return n || 'item';
 };
 
-// 2) FAST RECEIVER (ACK 200 ASAP + queue job)
-export const handleWebhook = async (req: Request, res: Response) => {
-  try {
-    const body = req.body;
+const extractUnit = (text: string): string => {
+  const m = sanitizeInput(text).toLowerCase();
+  // capture common units
+  const unitMatch = m.match(/\b(liters?|litres?|ltrs?|ltr|kg|kgs|g|grams?|bags?|cartons?|pcs?|pieces?)\b/);
+  if (!unitMatch) return '';
+  const u = unitMatch[1];
 
-    if (!body.object || !body.entry?.[0]?.changes?.[0]?.value?.messages?.[0]) {
-      return res.sendStatus(200);
-    }
+  // normalize
+  if (u.startsWith('liter') || u.startsWith('litre') || u.startsWith('ltr') || u.startsWith('ltrs')) return 'liters';
+  if (u.startsWith('kg')) return 'kg';
+  if (u.startsWith('gram') || u === 'g') return 'g';
+  if (u.startsWith('bag')) return 'bag';
+  if (u.startsWith('carton')) return 'carton';
+  if (u.startsWith('pc') || u.startsWith('piece')) return 'pcs';
 
-    const value = body.entry[0].changes[0].value;
-    const msg = value.messages[0];
-
-    const from: string = msg.from;
-    const messageId: string = msg.id;
-
-    // profile name
-    const profileName: string | undefined = value.contacts?.[0]?.profile?.name;
-
-    let text = '';
-    let mediaId: string | undefined;
-    let isVoiceMessage = false;
-
-    switch (msg.type) {
-      case 'text':
-        text = msg.text.body;
-        break;
-
-      case 'image':
-        text = msg.image.caption || 'Analyze this image';
-        mediaId = msg.image.id;
-        break;
-
-      case 'audio':
-        text = 'Analyze this audio';
-        mediaId = msg.audio.id;
-        isVoiceMessage = true;
-        break;
-
-      default:
-        console.log(`Unsupported message type: ${msg.type}`);
-        return res.sendStatus(200);
-    }
-
-    if (!text && !mediaId) return res.sendStatus(200);
-
-    // ✅ ACK META IMMEDIATELY (avoid retries)
-    res.sendStatus(200);
-
-    // ✅ QUEUE (dedupe by messageId)
-    void messageQueue
-      .add(
-        'process-message',
-        { from, text, messageId, mediaId, isVoiceMessage, profileName },
-        { jobId: messageId }
-      )
-      .then(() => console.log(`📥 Queued message from ${from}`))
-      .catch((e) => console.error('❌ Failed to queue message:', e));
-  } catch (err) {
-    console.error('❌ Error in webhook receiver:', err);
-    return res.sendStatus(200);
-  }
+  return u;
 };
 
-// ✅ debtors list helper (supports old CREDIT docs + new balance docs)
-const buildDebtSummary = async (userId: any, symbol: string, locale: string) => {
-  const debtSales = await Transaction.find({
-    user: userId,
-    type: 'SALE',
-    isUndone: { $ne: true },
-    $or: [{ paymentStatus: 'CREDIT' }, { balance: { $gt: 0 } }],
-  })
-    .sort({ timestamp: -1 })
-    .limit(2000)
-    .lean();
-
-  if (!debtSales.length) return `✅ Nobody dey owe you. Everyone has cleared their tab.`;
-
-  const byName: Record<string, number> = {};
-
-  for (const t of debtSales as any[]) {
-    const name = String(t.customerName || 'Unknown').trim() || 'Unknown';
-
-    let outstanding = 0;
-    if (typeof t.balance === 'number') {
-      outstanding = Number(t.balance || 0);
-    } else {
-      const total = Number(t.totalMoney || 0);
-      const paid = Number(t.amountPaid || 0);
-      outstanding = Math.max(total - paid, 0);
-    }
-
-    if (outstanding <= 0) continue;
-    byName[name] = (byName[name] || 0) + outstanding;
-  }
-
-  const entries = Object.entries(byName).sort((a, b) => b[1] - a[1]);
-  if (!entries.length) return `✅ Nobody dey owe you. Everyone has cleared their tab.`;
-
-  const lines = entries
-    .slice(0, 30)
-    .map(([n, v]) => `• *${n}* — ${symbol}${v.toLocaleString(locale)}`);
-
-  return `📌 *Debtors List*\n\n${lines.join('\n')}\n\nReply like: *Emeka paid 20000* to record payment.`;
-};
-
-// 3) BACKGROUND PROCESSOR (called by Worker)
-// ===============================
-// 🔐 SECURITY / ALLOWLIST HELPERS
-// ===============================
-
-const ALLOWED_INTENTS = new Set([
+// ==========================================
+// ✅ SAFE RESULT NORMALIZER
+// ==========================================
+const allowedIntents: ParsedIntent[] = [
   'SALE',
   'RESTOCK',
   'SET_STOCK',
@@ -278,963 +182,559 @@ const ALLOWED_INTENTS = new Set([
   'REPORT_RECENT',
   'HELP',
   'UNKNOWN',
-]);
+];
 
-const ALLOWED_SETTINGS_KEYS = new Set(['closingTime', 'dailySummary', 'language']);
-const SAFE_TEXT_MAX = 900;
+function safeParsedResult(p: any): ParsedResult {
+  const intent: ParsedIntent = allowedIntents.includes(p?.intent) ? p.intent : 'UNKNOWN';
 
-function cleanTextForSecurity(input: string) {
-  let s = String(input || '').slice(0, SAFE_TEXT_MAX);
-  s = s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, ' ');
-  s = s.replace(/[\u200B-\u200F\u202A-\u202E\u2060-\u206F]/g, ' ');
-  return s.replace(/\s+/g, ' ').trim();
-}
+  const items = Array.isArray(p?.items) ? p.items : [];
+  const normalizedItems: ParsedItem[] = items.slice(0, 30).map((it: any) => {
+    const name = typeof it?.name === 'string' ? normalizeItemName(it.name) : 'unknown_item';
 
-function looksLikeTxnSentence(low: string) {
-  return /\b(sold|sell|comot|add|restock|set\s+stock|set\s+price|price\s+of|delete|remove|owe|credit|on\s+credit|vent|vnt|selam|customer bought|purchased from me|took|collected)\b/.test(
-    low
-  );
-}
+    // qty rules: price check & define price should never deduct stock
+    const qty =
+      intent === 'DEFINE_PRICE' || intent === 'PRICE_CHECK'
+        ? 0
+        : Number(it?.qty) > 0
+        ? Number(it.qty)
+        : 0;
 
-/**
- * "lots of injection-like phrases" → score based
- * Only suspend if it looks clearly malicious
- */
-function injectionScore(raw: string) {
-  const s = cleanTextForSecurity(raw).toLowerCase();
+    const unit = typeof it?.unit === 'string' ? sanitizeInput(it.unit).toLowerCase() : '';
 
-  const patterns: RegExp[] = [
-    /\bignore\b/,
-    /\bdisregard\b/,
-    /\bbypass\b/,
-    /\boverride\b/,
-    /\bdeveloper\s+message\b/,
-    /\bsystem\s+prompt\b/,
-    /\bprevious\s+instructions\b/,
-    /\bact\s+as\b/,
-    /\byou\s+must\b/,
-    /\breturn\s+raw\b/,
-    /\btool\b/,
-    /\bfunction\s+call\b/,
-    /\bjson\s+schema\b/,
-    /\bchange\s+schema\b/,
-    /\bdo\s+anything\b/,
-    /\bjailbreak\b/,
-  ];
-
-  let hits = 0;
-  for (const re of patterns) if (re.test(s)) hits++;
-
-  // Boost score if user is clearly trying to force huge/insane values
-  if (/\b\d{9,}\b/.test(s)) hits += 2; // 9+ digit numbers
-  if (/(rrule|dtstart|BEGIN:VEVENT|END:VEVENT)/i.test(s)) hits += 2; // random injection vectors
-  return hits;
-}
-
-async function suspendUser(userId: any, reason: string) {
-  await User.updateOne(
-    { _id: userId },
-    {
-      $set: {
-        subscriptionStatus: 'suspended',
-        suspendedAt: new Date(),
-        suspensionReason: reason,
-      },
-    }
-  );
-}
-
-// ===============================
-// ✅ MODEL OUTPUT ALLOWLIST GUARD
-// ===============================
-function allowlistParsed(parsed: any) {
-  const safe: any = { ...parsed };
-
-  // intent allowlist
-  if (!ALLOWED_INTENTS.has(safe?.intent)) safe.intent = 'UNKNOWN';
-
-  // settings key allowlist
-  if (!ALLOWED_SETTINGS_KEYS.has(safe?.settings_update?.key)) {
-    safe.settings_update = { key: null, value: null };
-  }
-
-  // report params allowlist (only start_date/end_date)
-  if (!safe.report_params || typeof safe.report_params !== 'object') {
-    safe.report_params = { start_date: null, end_date: null };
-  } else {
-    const s = safe.report_params.start_date;
-    const e = safe.report_params.end_date;
-
-    safe.report_params = {
-      start_date: typeof s === 'string' ? s : null,
-      end_date: typeof e === 'string' ? e : null,
+    return {
+      name,
+      qty,
+      unit_price: parseMoney(it?.unit_price),
+      unit,
     };
-  }
+  });
 
-  // items sanity
-  safe.items = Array.isArray(safe.items) ? safe.items.slice(0, 30) : [];
-  safe.items = safe.items.map((it: any) => ({
-    name: String(it?.name || '').toLowerCase().trim().slice(0, 60) || 'unknown_item',
-    qty: Number.isFinite(Number(it?.qty)) ? Math.max(0, Math.min(Number(it?.qty), 1_000_000)) : 0,
-    unit: String(it?.unit || '').toLowerCase().trim().slice(0, 20),
-    unit_price:
-      it?.unit_price == null
-        ? null
-        : Number.isFinite(Number(it?.unit_price))
-        ? Math.max(0, Math.min(Number(it?.unit_price), 1_000_000_000_000))
-        : null,
-  }));
+  const totalMoney = parseMoney(p?.total_money);
 
-  // money sanity
-  safe.total_money =
-    safe.total_money == null
-      ? null
-      : Number.isFinite(Number(safe.total_money))
-      ? Math.max(0, Math.min(Number(safe.total_money), 1_000_000_000_000))
-      : null;
+  // fallback reply if AI reply missing
+  let fallbackReply = 'Noted.';
+  if (intent === 'HELP') fallbackReply = 'Type: "Sold 2 rice 5000" or "Credits" or "Emeka paid 5k".';
+  if (intent === 'REPORT_DEBTS') fallbackReply = '📌 Debtors List';
+  if (intent === 'DEBT_PAYMENT') fallbackReply = `✅ Payment recorded.`;
+  if (intent === 'SALE') fallbackReply = `✅ Recorded.`;
+  if (intent === 'RESTOCK') fallbackReply = `✅ Stock updated.`;
 
-  // booleans
-  safe.is_credit = Boolean(safe.is_credit);
-
-  // strings
-  safe.customer_name = typeof safe.customer_name === 'string' ? safe.customer_name.trim() : safe.customer_name;
-  safe.staffPhoneNumber =
-    typeof safe.staffPhoneNumber === 'string' ? safe.staffPhoneNumber.trim() : safe.staffPhoneNumber;
-
-  // reply text clamp
-  safe.reply_text = typeof safe.reply_text === 'string' ? safe.reply_text.slice(0, 400) : 'Noted.';
-
-  return safe;
+  return {
+    intent,
+    is_credit: Boolean(p?.is_credit),
+    customer_name: typeof p?.customer_name === 'string' ? sanitizeInput(p.customer_name) : undefined,
+    staffPhoneNumber: typeof p?.staffPhoneNumber === 'string' ? sanitizeInput(p.staffPhoneNumber) : undefined,
+    items: normalizedItems,
+    total_money: totalMoney,
+    report_params: {
+      start_date: typeof p?.report_params?.start_date === 'string' ? p.report_params.start_date : null,
+      end_date: typeof p?.report_params?.end_date === 'string' ? p.report_params.end_date : null,
+    },
+    settings_update: {
+      key:
+        p?.settings_update?.key && ['closingTime', 'dailySummary', 'language'].includes(p.settings_update.key)
+          ? p.settings_update.key
+          : null,
+      value: p?.settings_update?.value ?? null,
+    },
+    reply_text:
+      typeof p?.reply_text === 'string' && p.reply_text.trim().length > 2 ? p.reply_text.trim() : fallbackReply,
+  };
 }
 
-// ===============================
-// 🧠 SIMPLE PARSER FOR QUICK DETECTION
-// ===============================
-function parseMoneyLoose(moneyText: string): number | null {
-  if (!moneyText) return null;
-  
-  // Clean the text
-  let text = moneyText.toLowerCase().trim();
-  
-  // Remove currency symbols and commas
-  text = text.replace(/[₦$€£₵,]/g, '');
-  
-  // Handle Nigerian shorthand
-  if (text.includes('k')) {
-    const num = parseFloat(text.replace('k', '')) * 1000;
-    return isNaN(num) ? null : Math.round(num);
-  }
-  
-  if (text.includes('m')) {
-    const num = parseFloat(text.replace('m', '')) * 1000000;
-    return isNaN(num) ? null : Math.round(num);
-  }
-  
-  if (text.includes('thousand')) {
-    const num = parseFloat(text.replace('thousand', '')) * 1000;
-    return isNaN(num) ? null : Math.round(num);
-  }
-  
-  // Try direct parse
-  const num = parseFloat(text);
-  return isNaN(num) ? null : Math.round(num);
+// ==========================================
+// ⚡ FAST LOCAL FALLBACK PARSER (NOT STRICT)
+// ==========================================
+function looksLikeHelp(m: string) {
+  return /\b(help|menu|commands|how|how to|use|guide|wetin you fit do)\b/i.test(m);
 }
 
-/**
- * SIMPLE parser that just detects if it might be a sale
- * Returns null for anything it doesn't confidently understand
- * Gemini will handle everything else
- */
-function tryQuickParse(text: string) {
-  const raw = cleanTextForSecurity(text);
-  const low = raw.toLowerCase();
-  
-  // VERY SIMPLE patterns - only for crystal clear cases
-  const simplePatterns = [
-    // Clear sale pattern: "sold X bags of rice for Yk"
-    /^sold\s+(\d+)\s+bags?\s+(?:of\s+)?([a-z]+)\s+for\s+(\d+)k$/i,
-    
-    // Clear sale with customer: "sold X rice to name for Yk"
-    /^sold\s+(\d+)\s+([a-z]+)\s+to\s+([a-z]+)\s+for\s+(\d+)k$/i,
-    
-    // Clear credit payment: "name paid Xk"
-    /^([a-z]+)\s+paid\s+(\d+)k$/i,
-    
-    // Very clear stock: "add X rice"
-    /^add\s+(\d+)\s+([a-z]+)$/i,
-  ];
-  
-  for (const pattern of simplePatterns) {
-    const match = raw.match(pattern);
-    if (match) {
-      // For pattern 1: sold X bags of rice for Yk
-      if (pattern.toString().includes('bags?')) {
-        const qty = parseInt(match[1]);
-        const item = match[2];
-        const amount = parseInt(match[3]) * 1000;
-        
-        return {
-          intent: 'SALE' as const,
-          is_credit: false,
-          customer_name: null,
-          staffPhoneNumber: null,
-          items: [{
-            name: item.toLowerCase(),
-            qty: qty,
-            unit: 'bag',
-            unit_price: amount / qty
-          }],
-          total_money: amount,
-          report_params: { start_date: null, end_date: null },
-          settings_update: { key: null, value: null },
-          reply_text: `✅ Sale recorded: ${qty} bags of ${item} for ₦${amount.toLocaleString()}`
-        };
-      }
-      
-      // For pattern 2: sold X rice to name for Yk
-      if (pattern.toString().includes('to\\s+([a-z]+)')) {
-        const qty = parseInt(match[1]);
-        const item = match[2];
-        const customer = match[3];
-        const amount = parseInt(match[4]) * 1000;
-        
-        return {
-          intent: 'SALE' as const,
-          is_credit: false,
-          customer_name: customer,
-          staffPhoneNumber: null,
-          items: [{
-            name: item.toLowerCase(),
-            qty: qty,
-            unit: 'pcs',
-            unit_price: amount / qty
-          }],
-          total_money: amount,
-          report_params: { start_date: null, end_date: null },
-          settings_update: { key: null, value: null },
-          reply_text: `✅ Sale recorded: ${qty} ${item} to ${customer} for ₦${amount.toLocaleString()}`
-        };
-      }
-      
-      // For pattern 3: name paid Xk (debt payment)
-      if (pattern.toString().includes('paid')) {
-        const customer = match[1];
-        const amount = parseInt(match[2]) * 1000;
-        
-        return {
-          intent: 'DEBT_PAYMENT' as const,
-          is_credit: false,
-          customer_name: customer,
-          staffPhoneNumber: null,
-          items: [],
-          total_money: amount,
-          report_params: { start_date: null, end_date: null },
-          settings_update: { key: null, value: null },
-          reply_text: `✅ Payment recorded: ${customer} paid ₦${amount.toLocaleString()}`
-        };
-      }
-      
-      // For pattern 4: add X rice (restock)
-      if (pattern.toString().includes('^add\\s+')) {
-        const qty = parseInt(match[1]);
-        const item = match[2];
-        
-        return {
-          intent: 'RESTOCK' as const,
-          is_credit: false,
-          customer_name: null,
-          staffPhoneNumber: null,
-          items: [{
-            name: item.toLowerCase(),
-            qty: qty,
-            unit: 'pcs',
-            unit_price: null
-          }],
-          total_money: null,
-          report_params: { start_date: null, end_date: null },
-          settings_update: { key: null, value: null },
-          reply_text: `✅ Restocked: ${qty} ${item} added to inventory`
-        };
-      }
+function looksLikeUndo(m: string) {
+  return /\b(undo|reverse|revert|cancel last|rollback|remove last|delete last)\b/i.test(m);
+}
+
+function looksLikeDebts(m: string) {
+  return /\b(credit|credits|debt|debts|debtors|owing|owes|who dey owe|who owes|gbese|bashi|ugwo)\b/i.test(m);
+}
+
+function looksLikeDownload(m: string) {
+  return /\b(pdf|download report|send report|export)\b/i.test(m);
+}
+
+function looksLikeRecent(m: string) {
+  return /\b(last\s+\d+|recent|last sales|recent sales|last transactions|recent transactions)\b/i.test(m);
+}
+
+function fallbackParse(message: string): ParsedResult | null {
+  const raw = sanitizeInput(message);
+  const m = raw.toLowerCase();
+
+  // HELP
+  if (looksLikeHelp(m)) {
+    return safeParsedResult({ intent: 'HELP', reply_text: '🤖 Help' });
+  }
+
+  // UNDO
+  if (looksLikeUndo(m)) {
+    return safeParsedResult({ intent: 'UNDO_LAST_SALE', reply_text: 'Okay ✅ I will undo your last sale.' });
+  }
+
+  // DOWNLOAD
+  if (looksLikeDownload(m)) {
+    return safeParsedResult({ intent: 'DOWNLOAD_REPORT', reply_text: '📄 Generating report...' });
+  }
+
+  // DEBTS LIST
+  if (looksLikeDebts(m) && !/\bpaid|pay|settle|payment|i paid|don pay\b/i.test(m)) {
+    return safeParsedResult({ intent: 'REPORT_DEBTS', reply_text: '📌 Debtors List' });
+  }
+
+  // RECENT (default 5)
+  if (looksLikeRecent(m)) {
+    const nMatch = m.match(/\b(last|recent)\s+(\d+)\b/i);
+    const n = nMatch ? Math.min(Math.max(Number(nMatch[2]), 1), 10) : 5;
+    return safeParsedResult({
+      intent: 'REPORT_RECENT',
+      items: [{ name: 'recent', qty: n, unit_price: null, unit: '' }],
+      reply_text: `🕒 Fetching last ${n} sales...`,
+    });
+  }
+
+  // DEBT PAYMENT: "John paid 20k" / "John pay 20k" / "I collected 2k from John"
+  const pay1 = raw.match(
+    /\b([a-zA-Z][a-zA-Z0-9\s]{0,25})\s+(paid|pay|has\s+paid|don\s+pay|settled|settle)\s+([₦$€£₵]?\s*[\d,]+(?:\.\d+)?\s*(?:k|m)?)\b/i
+  );
+  if (pay1) {
+    const customer_name = sanitizeInput(pay1[1]).trim();
+    const total_money = parseMoney(pay1[3]);
+    if (customer_name && total_money != null) {
+      return safeParsedResult({
+        intent: 'DEBT_PAYMENT',
+        customer_name,
+        total_money,
+        reply_text: `✅ Payment recorded for ${customer_name}.`,
+      });
     }
   }
-  
-  // Return null for anything not perfectly matched
-  // This ensures Gemini handles complex or ambiguous cases
+
+  const pay2 = raw.match(
+    /\b(i\s+collected|collect|received|i\s+receive|got)\s+([₦$€£₵]?\s*[\d,]+(?:\.\d+)?\s*(?:k|m)?)\s+(from)\s+([a-zA-Z][a-zA-Z0-9\s]{0,25})\b/i
+  );
+  if (pay2) {
+    const total_money = parseMoney(pay2[2]);
+    const customer_name = sanitizeInput(pay2[4]).trim();
+    if (customer_name && total_money != null) {
+      return safeParsedResult({
+        intent: 'DEBT_PAYMENT',
+        customer_name,
+        total_money,
+        reply_text: `✅ Payment recorded for ${customer_name}.`,
+      });
+    }
+  }
+
+  // DEFINE PRICE: "rice is 5k" / "set price of beans to 2000"
+  const priceMatch = raw.match(
+    /(?:price\s+of\s+|set\s+price\s+for\s+|update\s+price\s+for\s+|set\s+)?(.+?)\s+(?:is|to|now|at)\s+([₦$€£₵]?\s*[\d,]+(?:\.\d+)?\s*(?:k|m)?)\b/i
+  );
+  if (priceMatch && !/\b(sold|sell|comot|restock|add|paid|pay)\b/i.test(raw)) {
+    const itemName = normalizeItemName(priceMatch[1]);
+    const unit_price = parseMoney(priceMatch[2]);
+    if (itemName && unit_price != null) {
+      return safeParsedResult({
+        intent: 'DEFINE_PRICE',
+        items: [{ name: itemName, qty: 0, unit_price, unit: '' }],
+        reply_text: `✅ Price updated for ${itemName}.`,
+      });
+    }
+  }
+
+  // DELETE STOCK: "delete rice"
+  const delMatch = raw.match(/\b(delete|remove|clear)\s+(.+)\b/i);
+  if (delMatch && !/\b(last|sale|transaction)\b/i.test(raw)) {
+    const itemName = normalizeItemName(delMatch[2]);
+    if (itemName) {
+      return safeParsedResult({
+        intent: 'DELETED_STOCK',
+        items: [{ name: itemName, qty: 0, unit_price: null, unit: '' }],
+        reply_text: `🗑️ Deleting ${itemName}...`,
+      });
+    }
+  }
+
+  // SALE (CREDIT or PAID)
+  // handles: "Sold 200 liters kerosene to john for 20k on credit"
+  // handles: "sold 2 rice for 5000"
+  const saleMatch = raw.match(
+    /\b(sold|sell|comot)\s+(\d+(?:\.\d+)?)\s*([a-zA-Z]+)?\s+(.+?)(?:\s+to\s+([a-zA-Z][a-zA-Z0-9\s]{0,25}))?(?:\s+(?:for|@|at)\s+([₦$€£₵]?\s*[\d,]+(?:\.\d+)?\s*(?:k|m)?))?(?:\s+(on\s+credit|credit|owe|owing|later))?\b/i
+  );
+
+  if (saleMatch) {
+    const qty = Math.max(Number(saleMatch[2] || 0), 0);
+    const unitCandidate = saleMatch[3] || '';
+    const itemRaw = saleMatch[4] || '';
+    const customerRaw = saleMatch[5] || '';
+    const moneyRaw = saleMatch[6] || '';
+    const creditFlag = saleMatch[7] || '';
+
+    const unit = unitCandidate ? extractUnit(unitCandidate) : extractUnit(raw);
+    const name = normalizeItemName(itemRaw);
+    const total_money = parseMoney(moneyRaw);
+
+    const is_credit =
+      /\bcredit|owe|owing|later\b/i.test(raw) || /\bon\s+credit\b/i.test(String(creditFlag)) ? true : false;
+
+    const customer_name = customerRaw ? sanitizeInput(customerRaw).trim() : undefined;
+
+    return safeParsedResult({
+      intent: 'SALE',
+      is_credit,
+      customer_name,
+      items: [{ name, qty: Number.isFinite(qty) ? qty : 0, unit, unit_price: null }],
+      total_money,
+      reply_text: is_credit
+        ? `✅ Recorded as credit sale${customer_name ? ` to ${customer_name}` : ''}.`
+        : `✅ Recorded. Sold ${qty} ${name}.`,
+    });
+  }
+
+  // RESTOCK: "add 50 sugar" / "restock 20 bags rice"
+  const addMatch = raw.match(/\b(add|restock)\s+(\d+(?:\.\d+)?)\s*([a-zA-Z]+)?\s+(.+)\b/i);
+  if (addMatch) {
+    const qty = Math.max(Number(addMatch[2] || 0), 0);
+    const unit = addMatch[3] ? extractUnit(addMatch[3]) : extractUnit(raw);
+    const name = normalizeItemName(addMatch[4] || '');
+    return safeParsedResult({
+      intent: 'RESTOCK',
+      is_credit: false,
+      items: [{ name, qty, unit, unit_price: null }],
+      total_money: null,
+      reply_text: `✅ Stock updated. Added ${qty} ${name}.`,
+    });
+  }
+
+  // QUICK REPORT WORDS (not strict)
+  if (/\b(sales|report|summary|how market|how far|profit)\b/i.test(raw)) {
+    return safeParsedResult({ intent: 'REPORT_FULL', reply_text: '📊 Generating report...' });
+  }
+  if (/\b(stock|inventory|what remains|balance)\b/i.test(raw)) {
+    return safeParsedResult({ intent: 'REPORT_STOCK', reply_text: '📦 Checking inventory...' });
+  }
+
   return null;
 }
 
-const STRIKE_WINDOW_MS = 24 * 60 * 60 * 1000; // 24h
-const STRIKE_SUSPEND_AT = 3;                  // 3 attempts
+// ==========================================
+// 🤖 SYSTEM PROMPT (NOT TOO STRICT)
+// ==========================================
+// 🟢 FIX: Clean Template Literal (Easier for AI to read)
+const getSystemPrompt = (userLanguage: string, currentDate: string) => `
+You are "TallyPadi", a smart Nigerian Business Assistant with advanced natural language understanding.
 
-async function handleInjectionAttemptOrRefuse(user: any, from: string, rawText: string) {
-  const score = injectionScore(rawText);
+*** CONTEXT ***
+Current Date & Time: ${currentDate}
+Today's weekday: ${new Date(currentDate).toLocaleDateString('en-US', {weekday: 'long'})}
+This month: ${new Date(currentDate).toLocaleDateString('en-US', {month: 'long'})}
 
-  // score 0 => not injection
-  if (score <= 0) return { handled: false };
+*** STRICT LANGUAGE PROTOCOL ***
+The user's preferred language is: **${String(userLanguage || 'English').toUpperCase()}**.
+You MUST reply in **${userLanguage || 'English'}**.
+- If ${userLanguage} is "English", use professional, clear English.
+- If ${userLanguage} is "Pidgin", use Nigerian Pidgin (e.g. "No wahala", "I don run am", "How body?").
+- If ${userLanguage} is "Hausa/Yoruba/Igbo", use that language with appropriate business terminology.
 
-  const now = new Date();
-  const last = user.security?.lastInjectionAt ? new Date(user.security.lastInjectionAt) : null;
-  const withinWindow = last ? (now.getTime() - last.getTime()) <= STRIKE_WINDOW_MS : false;
+*** ADVANCED TEXT PATTERN RECOGNITION ***
+You must recognize these patterns intelligently:
 
-  user.security = user.security || { injectionStrikes: 0, lastInjectionAt: null };
-  user.security.injectionStrikes = withinWindow ? (user.security.injectionStrikes || 0) + 1 : 1;
-  user.security.lastInjectionAt = now;
+1. **NUMBER VARIATIONS:**
+   - "two bags" = "2 bags" = "2bags" = "2-bags" → qty: 2
+   - "twenty thousand" = "20,000" = "20k" = "20K" → 20000
+   - "1.5k" = "1,500" = "one thousand five hundred" → 1500
+   - "10k5" = "10,500" = "ten thousand five hundred" → 10500
+   - "100k" = 100,000, "1.2m" = 1,200,000, "500" = 500
 
-  // ✅ suspend if too many attempts OR very high score
-  if (user.security.injectionStrikes >= STRIKE_SUSPEND_AT || score >= 5) {
-    user.subscriptionStatus = 'suspended';
-    user.suspendedAt = now;
-    user.suspensionReason = 'Prompt injection attempts (system prompt / developer message / override)';
-    await user.save();
+2. **PRODUCT NAME NORMALIZATION:**
+   - "rice" = "Rice" = "RICE" → "rice"
+   - "plantain" = "plantaing" = "plantin" = "dodo" → "plantain"
+   - "tomatoes" = "tomatos" = "tomato" → "tomato"
+   - "indomie" = "indomie noodles" = "indomie pack" → "indomie"
+   - "garri" = "gari" = "eba" → "garri"
+   - "groundnut oil" = "groundnut" = "gnut oil" → "groundnut oil"
+   - "coke" = "coca-cola" = "coca cola" → "coca-cola"
 
-    await queueOutboundMessage(
-      from,
-      `🛑 Account suspended for suspicious instructions.\nReason: ${user.suspensionReason}\nIf this is a mistake, contact support.`
-    );
+3. **UNIT INTELLIGENCE:**
+   - "2 bags of rice" → name: "rice", qty: 2, unit: "bag"
+   - "5 cartons of milk" → name: "milk", qty: 5, unit: "carton"
+   - "10 pieces of chicken" → name: "chicken", qty: 10, unit: "piece"
+   - "3 sachets of water" → name: "water", qty: 3, unit: "sachet"
+   - "500ml of oil" → name: "oil", qty: 500, unit: "ml"
+   - "1 dozen eggs" → name: "eggs", qty: 12, unit: "piece"
+   - "half bag of rice" → name: "rice", qty: 0.5, unit: "bag"
 
-    return { handled: true };
-  }
+*** CONTEXTUAL UNDERSTANDING ***
+1. **IMPLIED PRODUCTS:**
+   - If previous messages mentioned "rice" and user says "Sell 2 more" → assume rice
+   - If market context suggests (e.g., "Sold at Mile 12 market") → use common products in that market
 
-  // ✅ refuse (do NOT call Gemini)
-  await user.save();
-  await queueOutboundMessage(
-    from,
-    `🛡️ I can't show internal system prompts or instructions.\n\nTry:\n• Sold 5 bags of rice for 50k\n• Credits\n• Emeka paid 20k\n• Stock list\n• Sales today`
-  );
+2. **TIME REFERENCES:**
+   - "today" = current date
+   - "yesterday" = previous day
+   - "last week" = previous week
+   - "this month" = current month
+   - "on Monday" = most recent Monday
 
-  return { handled: true };
+3. **CUSTOMER RECOGNITION:**
+   - "Mama Chinedu" = customer_name: "Mama Chinedu"
+   - "Broda J" = customer_name: "Broda J"
+   - "that woman from yesterday" → if you have context, use it
+   - "the mechanic" → customer_name: "the mechanic"
+
+*** ENHANCED SHORT COMMANDS ***
+Add these to existing short commands:
+- "bal" = "balance" → REPORT_STOCK
+- "summary" = "sum" → REPORT_FULL
+- "debt list" → REPORT_DEBTS
+- "owe me" → REPORT_DEBTS
+- "money" → REPORT_SALES
+- "whats left" → REPORT_STOCK
+- "price of" → PRICE_CHECK
+- "cost of" → PRICE_CHECK
+- "how much for" → PRICE_CHECK
+- "add staff" → ADD_STAFF
+- "new staff" → ADD_STAFF
+- "remove staff" → (needs clarification)
+- "close today" → CLOSE_BOOK
+- "end day" → CLOSE_BOOK
+- "undo" → UNDO_LAST_SALE
+- "cancel last" → UNDO_LAST_SALE
+- "make pdf" → DOWNLOAD_REPORT
+- "send report" → DOWNLOAD_REPORT
+
+*** ENHANCED IMAGE INTELLIGENCE ***
+When analyzing images:
+
+1. **RECEIPT PARSING:**
+   - Look for: ITEM, QTY, PRICE, TOTAL patterns
+   - Nigerian receipt formats: "Mtn 5000", "Airtime 1k", "Data 2GB 1500"
+   - Market receipts: "Rice 5kg @ 5000"
+
+2. **BARCODE/QR SCANNING:**
+   - If barcode detected, try to match with known products
+   - QR codes might contain product info or prices
+
+3. **PACKAGING RECOGNITION:**
+   - Nigerian brands: "Dangote", "Golden Penny", "Honeywell", "Mama's Pride"
+   - Standard package sizes: "50kg", "25kg", "10kg", "5kg", "1kg"
+
+4. **PRICE TAG FORMATS:**
+   - "₦1,500" → 1500
+   - "N500" → 500
+   - "5k" → 5000
+   - "10k each" → unit_price: 10000
+
+*** BUSINESS LOGIC ENHANCEMENTS ***
+
+1. **CREDIT TRANSACTION PATTERNS:**
+   - "on credit" → is_credit: true
+   - "she will pay later" → is_credit: true
+   - "collect money tomorrow" → is_credit: true
+   - "I go pay you Friday" → is_credit: true
+
+2. **PAYMENT RECOGNITION:**
+   - "John paid 20k" → DEBT_PAYMENT
+   - "Collected 5000 from Mama B" → DEBT_PAYMENT
+   - "Settlement from Emeka" → DEBT_PAYMENT
+
+3. **BULK TRANSACTIONS:**
+   - "Wholesale price" → tag as wholesale
+   - "Bought for shop" → likely RESTOCK
+   - "Supply to restaurant" → likely SALE with customer
+
+4. **DISCOUNT RECOGNITION:**
+   - "minus 500" → discount amount
+   - "10% off" → percentage discount
+   - "I give you 15k instead of 20k" → total_money: 15000
+
+*** MULTI-ITEM TRANSACTION PARSING ***
+Example: "Sold 2 bags rice at 25k, 5 cartons milk at 3k, and 10 sachets water at 50 naira"
+→ Extract 3 items with their respective quantities and prices
+
+*** STOCK MANAGEMENT INTELLIGENCE ***
+1. **AUTO-UNIT CONVERSION:**
+   - If user says "sold 1 bag of 50kg rice" → name: "rice", qty: 50, unit: "kg"
+   - "bought 10 bottles of 75cl oil" → name: "oil", qty: 7.5, unit: "litre" (converted)
+
+2. **PRODUCT CATEGORIES:**
+   - Grains: rice, beans, maize, millet
+   - Tubers: yam, potato, cassava
+   - Liquids: oil, water, fuel, kerosene
+   - Packaged: indomie, biscuits, sweets
+
+*** ERROR HANDLING & CLARIFICATION ***
+If uncertain, set intent to UNKNOWN and ask clarifying questions in reply_text:
+- "Which product specifically?"
+- "At what price per unit?"
+- "Is this on credit?"
+- "When did this transaction happen?"
+
+*** CULTURAL CONTEXT ***
+Understand Nigerian business practices:
+- "Market price" = current fluctuating price
+- "Factory price" = wholesale price
+- "Customer price" = retail price
+- "On the road" = transport/shipping included
+- "Give me balance" = give me change
+
+*** ADVANCED INTENT DETECTION EXAMPLES ***
+- "How market today?" → REPORT_SALES
+- "Wetin remain?" → REPORT_STOCK
+- "Who never pay?" → REPORT_DEBTS
+- "Add 5 to rice" → RESTOCK
+- "Rice finish" → REPORT_STOCK (with alert)
+- "Change price of beans to 1k" → DEFINE_PRICE
+- "Make I see yesterday sales" → REPORT_SALES with date filter
+- "Total for this week" → REPORT_FULL with weekly range
+- "My brother bought 2 phones on credit" → SALE with customer_name: "my brother", is_credit: true
+- "Mama Nkechi just paid" → DEBT_PAYMENT
+
+*** RESPONSE ENHANCEMENT ***
+Your reply_text should:
+1. Acknowledge the action taken
+2. Summarize key details
+3. Ask for confirmation if needed
+4. Use appropriate cultural phrases
+5. Include emojis when natural (💰, 📊, 📈, ✅, ❌)
+6. Suggest next actions when helpful
+
+Return ONLY JSON. No markdown, no additional text.
+
+<schema>
+{
+  "intent": "SALE|RESTOCK|SET_STOCK|DELETED_STOCK|DEFINE_PRICE|PRICE_CHECK|REPORT_SALES|REPORT_STOCK|REPORT_FULL|REPORT_DEBTS|REPORT_RECENT|DEBT_PAYMENT|CLOSE_BOOK|ADD_STAFF|DOWNLOAD_REPORT|UNDO_LAST_SALE|SETTINGS|CHANGE_LANGUAGE|HELP|UNKNOWN",
+  "is_credit": boolean,
+  "customer_name": "string | null",
+  "staffPhoneNumber": "string | null",
+  "items": [
+    { 
+      "name": "string (normalized, lowercase)", 
+      "qty": number, 
+      "unit": "string", 
+      "unit_price": number | null,
+      "category": "grains|liquids|tubers|packaged|electronics|others" | null
+    }
+  ],
+  "total_money": number | null,
+  "discount_amount": number | null,
+  "transaction_date": "ISOString | null", // if different from current
+  "report_params": { 
+    "start_date": "ISOString | null", 
+    "end_date": "ISOString | null",
+    "category_filter": "string | null",
+    "customer_filter": "string | null"
+  },
+  "settings_update": { 
+    "key": "closingTime" | "dailySummary" | "language" | "currency" | "taxRate" | null, 
+    "value": "string|boolean|number|null" 
+  },
+  "confidence_score": number, // 0-1 scale
+  "needs_clarification": boolean,
+  "reply_text": "string"
+}
+</schema>
+`;
+
+
+// ==========================================
+// ⏱️ TIMEOUT + RETRY
+// ==========================================
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`Gemini timeout after ${ms}ms`)), ms);
+    p.then((v) => {
+      clearTimeout(t);
+      resolve(v);
+    }).catch((e) => {
+      clearTimeout(t);
+      reject(e);
+    });
+  });
 }
 
-
-export const handleMessageLogic = async (
-  from: string,
-  text: string,
-  messageId: string,
-  mediaId?: string,
-  isVoiceMessage?: boolean,
-  profileName?: string
-) => {
+async function geminiWithRetry(parts: any[]) {
   try {
-    const rawText = cleanTextForSecurity(text);
-    const low = rawText.toLowerCase().trim();
+    return await withTimeout(model.generateContent(parts), 25000);
+  } catch (e: any) {
+    const msg = String(e?.message || '');
+    const status = e?.status;
 
-    console.log(`⚡ Processing Logic for ${from}: "${rawText}"`);
+    // don't retry rate limit
+    if (status === 429 || msg.includes('429')) throw e;
 
-    // --- GLOBAL SETTINGS (safe fallback) ---
-    let MAX_HISTORY = 5;
-    let MAX_STAFF = 5;
-    try {
-      const globalSettings = await AdminSettings.findOne().lean();
-      MAX_HISTORY = globalSettings?.limits?.maxMessageHistory || 5;
-      MAX_STAFF = globalSettings?.limits?.maxStaffAccounts || 5;
-    } catch {
-      console.warn('⚠️ AdminSettings not reachable, using defaults.');
-    }
+    const transient =
+      msg.includes('timeout') ||
+      msg.includes('ETIMEDOUT') ||
+      msg.includes('ECONNRESET') ||
+      msg.includes('ENOTFOUND') ||
+      (status >= 500 && status < 600);
 
-    // --- MEDIA ---
-    let imageBuffer: string | undefined;
-    let imageMime: string | undefined;
+    if (!transient) throw e;
 
-    if (mediaId) {
-      const media = await getMediaBuffer(mediaId);
-      if (media) {
-        imageBuffer = media.data;
-        imageMime = media.mimeType;
-      }
-    }
+    // retry once
+    return await withTimeout(model.generateContent(parts), 25000);
+  }
+}
 
-    // --- USER ---
-    let user = await User.findOne({ phoneNumber: from });
+// ==========================================
+// 🚀 MAIN EXPORT
+// ==========================================
+export const parseMessageWithGemini = async (
+  message: string,
+  userLanguage: string = 'English',
+  imageBuffer?: string,
+  imageMimeType?: string
+): Promise<ParsedResult> => {
+  const safeMessage = sanitizeInput(message);
+  const isoDate = new Date().toISOString();
 
-    const guessedCurrency = getUserCurrency({ phoneNumber: from });
-    const { symbol, locale, code } = getUserCurrency(user || { phoneNumber: from });
+  // ✅ Fast local parse first (handles bad English / pidgin / short commands)
+  const local = fallbackParse(safeMessage);
+  if (local) return local;
 
-    // ✅ Create user on first contact
-    if (!user) {
-      const initialShopName = profileName || 'My Shop';
+  const systemInstruction = getSystemPrompt(userLanguage, isoDate);
 
-      user = await User.create({
-        phoneNumber: from,
-        businessName: initialShopName,
-        name: profileName,
-        countryCode:
-          guessedCurrency.code === 'NGN'
-            ? 'NG'
-            : guessedCurrency.code === 'USD'
-            ? 'US'
-            : guessedCurrency.code === 'GBP'
-            ? 'GB'
-            : 'NG',
-        registrationStage: 'EMAIL',
-        settings: {
-          dailySummaryEnabled: false,
-          closingTime: '20:00',
-          utcOffsetMinutes: 60,
-          language: 'English',
-          pdfReportsEnabled: false,
-        },
-        messageHistory: [],
+  const parts: any[] = [
+    `${systemInstruction}\n\n<user_message>${JSON.stringify({ text: safeMessage })}</user_message>\nReturn ONLY a single JSON object.`,
+  ];
+
+  if (imageBuffer && imageMimeType) {
+    parts.push({ inlineData: { data: imageBuffer, mimeType: imageMimeType } });
+  }
+
+  try {
+    const result = await geminiWithRetry(parts);
+    const text = result.response.text().trim();
+
+    // handle accidental codefences
+    const cleaned = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+
+    const parsed = JSON.parse(cleaned);
+    return safeParsedResult(parsed);
+  } catch (err: any) {
+    // ✅ fallback retry (again) in case Gemini failed
+    const retry = fallbackParse(safeMessage);
+    if (retry) return retry;
+
+    if (err?.status === 429 || String(err?.message || '').includes('429')) {
+      return safeParsedResult({
+        intent: 'UNKNOWN',
+        reply_text: 'Too many requests right now. Abeg wait small and try again.',
       });
-
-      const shopNote = profileName
-        ? `I use your WhatsApp name (*${profileName}*) as your shop name.`
-        : `I set your shop name to *"${user.businessName}"*`;
-
-      await queueOutboundMessage(
-        from,
-        `Welcome to *Tallypadi*, ${profileName || 'Friend'}! 👋\n\n${shopNote}\n\nTo start, reply with your *EMAIL ADDRESS* (for account recovery).`
-      );
-      return;
     }
 
-    // ✅ If already suspended, block immediately
-    if (user.subscriptionStatus === 'suspended') {
-      await queueOutboundMessage(
-        from,
-        `🛑 Your account has been suspended.\nReason: ${user.suspensionReason || 'Security policy'}`
-      );
-      return;
-    }
-
-    if (user && user.registrationStage === 'COMPLETED') {
-      const inj = await handleInjectionAttemptOrRefuse(user, from, rawText);
-      if (inj.handled) return;
-    }
-
-    // --- REG FLOW ---
-    if (user.registrationStage === 'EMAIL') {
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(rawText)) {
-        await queueOutboundMessage(from, '❌ Invalid email format. Please enter a valid email address.');
-        return;
-      }
-
-      const existingUser = await User.findOne({ email: rawText });
-      if (existingUser) {
-        await queueOutboundMessage(from, 'This email is already registered. Please use a different email.');
-        return;
-      }
-
-      user.email = rawText;
-      user.registrationStage = 'PASSWORD';
-      await user.save();
-
-      await queueOutboundMessage(
-        from,
-        `✅ Email Saved! Now reply with a *SECRET PASSWORD* (min 8 chars).\n\nLogin: https://tallypadi.com/login`
-      );
-      return;
-    }
-
-    if (user.registrationStage === 'PASSWORD') {
-      if (rawText.length < 8) {
-        await queueOutboundMessage(from, '❌ Password too short. Please use at least 8 characters.');
-        return;
-      }
-
-      const salt = await bcrypt.genSalt(10);
-      user.password = await bcrypt.hash(rawText, salt);
-      user.registrationStage = 'COMPLETED';
-      await user.save();
-
-      await queueOutboundMessage(from, `✅ Password Saved!\n\nTry: *I sold 2 bags of rice for ${symbol}50k*`);
-      return;
-    }
-
-    // ✅ SECURITY: detect injection-like messages (only after COMPLETED)
-    const score = injectionScore(rawText);
-    if (score >= 5) {
-      await suspendUser(user._id, 'Prompt injection / unsafe instruction attempt');
-      await queueOutboundMessage(
-        from,
-        `🛑 Your account has been suspended for suspicious instructions.\nIf this is a mistake, contact support.`
-      );
-      return;
-    }
-
-    // --- PLAN RULES ---
-    if (mediaId && !isVoiceMessage && user.planType !== 'TYCOON') {
-      await queueOutboundMessage(from, '📷 Image scanning is only available for *Tycoon Plan* users. Upgrade to use this feature!');
-      return;
-    }
-
-    if (isVoiceMessage) {
-      const allowedAudioPlans = ['TYCOON', 'OGA_BOSS'];
-      if (!allowedAudioPlans.includes(user.planType)) {
-        await queueOutboundMessage(from, '🎤 Voice messages are available for *Oga Boss* and *Tycoon* plans only. Upgrade to use this feature!');
-        return;
-      }
-    }
-
-    // --- SUB CHECK + HISTORY ---
-    if (user.registrationStage === 'COMPLETED') {
-      const isAllowed = await checkSubscriptionStatus(user);
-      if (!isAllowed) return;
-
-      user.messageHistory = user.messageHistory || [];
-      if (user.messageHistory.length >= MAX_HISTORY) user.messageHistory.shift();
-      user.messageHistory.push(rawText);
-      await user.save();
-    }
-
-    // ✅ QUICK COMMANDS (no Gemini)
-    const looksLikeTxn = looksLikeTxnSentence(low);
-
-    // ✅ Debt list command (will NEVER trigger for transaction sentences)
-    const isDebtCmd =
-      !looksLikeTxn &&
-      (low === 'credit' ||
-        low === 'credits' ||
-        low.includes('credit list') ||
-        low.includes('credits list') ||
-        low.includes('all credits') ||
-        low === 'debt' ||
-        low.includes('debtors') ||
-        /\b(debt|debts|debtor|debtors|owing|owes|owe|gbese|bashi|ugwo|tab)\b/.test(low) ||
-        low.includes('dey owe') ||
-        low.includes('who dey owe') ||
-        low.includes('who is owing') ||
-        low.includes('who owes'));
-
-    const isPaymentPhrase = /\b(paid|pay|payment|settle|settled|i paid|don pay)\b/.test(low);
-
-    if (isDebtCmd && !isPaymentPhrase) {
-      const msg = await buildDebtSummary(user._id, symbol, locale);
-      await queueOutboundMessage(from, msg);
-      return;
-    }
-
-    // ✅ Undo (quick)
-    const isUndoCmd =
-      low === 'undo' ||
-      low === 'undo last' ||
-      low === 'undo last sale' ||
-      low === 'cancel last sale' ||
-      low === 'reverse last sale';
-
-    if (isUndoCmd) {
-      const r = await undoLastSale(user._id, messageId);
-      await queueOutboundMessage(from, r.message);
-      return;
-    }
-
-    // --- INTELLIGENT PARSING: Try quick parse first, then Gemini for everything else ---
-    const currentLang = user.settings?.language || 'English';
-    let parsed: any = null;
-
-    // First, try our VERY SIMPLE parser for crystal clear cases
-    // This only catches patterns like "sold 2 rice for 20k" or "john paid 5k"
-    parsed = tryQuickParse(rawText);
-
-    // If quick parser didn't understand, send to Gemini
-    if (!parsed) {
-      console.log(`🤖 Sending to Gemini for intelligent parsing: "${rawText}"`);
-      parsed = await parseMessageWithGemini(rawText, currentLang, imageBuffer, imageMime);
-    } else {
-      console.log(`⚡ Quick parse successful for: "${rawText}"`);
-    }
-
-    // ✅ SERVER-SIDE ALLOWLIST: model cannot invent ops/keys/params
-    parsed = allowlistParsed(parsed);
-
-    // --- DATE PARSING ---
-    let startDate: Date | undefined;
-    let endDate: Date | undefined;
-    let dateLabel = "Today's";
-
-    if (parsed?.report_params?.start_date) {
-      startDate = new Date(parsed.report_params.start_date);
-      if (parsed.report_params.end_date) endDate = new Date(parsed.report_params.end_date);
-      else {
-        endDate = new Date(startDate);
-        endDate.setHours(23, 59, 59, 999);
-      }
-
-      const today = new Date();
-      const yesterday = new Date();
-      yesterday.setDate(today.getDate() - 1);
-
-      if (startDate.toDateString() === today.toDateString()) dateLabel = "Today's";
-      else if (startDate.toDateString() === yesterday.toDateString()) dateLabel = "Yesterday's";
-      else {
-        const diffDays = Math.ceil(Math.abs(endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
-        if (diffDays > 20) dateLabel = 'Monthly';
-        else if (diffDays > 1) dateLabel = 'Weekly';
-        else dateLabel = startDate.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
-      }
-    }
-
-    // Close book behavior
-    if (parsed?.intent === 'CLOSE_BOOK') {
-      const currentHour = new Date().getHours();
-      if (currentHour < 12) {
-        const y = new Date();
-        y.setDate(y.getDate() - 1);
-        y.setHours(0, 0, 0, 0);
-
-        const yEnd = new Date(y);
-        yEnd.setHours(23, 59, 59, 999);
-
-        startDate = y;
-        endDate = yEnd;
-        dateLabel = "Yesterday's (Closed)";
-        await queueOutboundMessage(from, '💡 You reply late! I will close the book for *Yesterday*.');
-      }
-      parsed.intent = 'REPORT_FULL';
-    }
-
-    // --- ROUTING ---
-    switch (parsed.intent) {
-      case 'SALE':
-      case 'RESTOCK':
-      case 'SET_STOCK':
-      case 'DEFINE_PRICE': {
-        await processTransaction(user._id as any, parsed, messageId);
-        await queueOutboundMessage(from, parsed.reply_text || '✅ Done.');
-        break;
-      }
-
-      case 'HELP': {
-        const helpMsg =
-          `🤖 *How to use Tallypadi*\n\n` +
-          `💰 *Sales & Credit:*\n` +
-          `• Sold 2 rice for 50k\n` +
-          `• Sold 200 liters kerosene to John for 20k on credit\n` +
-          `• Undo last sale\n\n` +
-          `💸 *Debts & Payments:*\n` +
-          `• Credits\n` +
-          `• Who is owing me?\n` +
-          `• Emeka paid 20k\n\n` +
-          `📦 *Stock Management:*\n` +
-          `• Add 50 sugar (Restock)\n` +
-          `• Price of rice?\n` +
-          `• Stock list\n\n` +
-          `📊 *Reports:*\n` +
-          `• How much I sell today?\n` +
-          `• Send PDF (Tycoon Only)\n\n` +
-          `💎 *Premium Plans:*\n` +
-          `• 🎤 Voice Notes (Oga Boss & Tycoon)\n` +
-          `• 📷 Image Scan (Tycoon Only)\n` +
-          `• 👥 Staff Accounts (Tycoon Only)\n` +
-          `• 📄 PDF Reports (Tycoon Only)`;
-
-        await queueOutboundMessage(from, helpMsg);
-        break;
-      }
-
-      case 'REPORT_DEBTS': {
-        const msg = await buildDebtSummary(user._id, symbol, locale);
-        await queueOutboundMessage(from, msg);
-        break;
-      }
-
-      case 'REPORT_RECENT': {
-        const limit = parsed.items?.[0]?.qty || 5;
-        const safeLimit = Math.min(Math.max(limit, 1), 10);
-
-        await queueOutboundMessage(from, `🔎 Fetching last ${safeLimit} transactions...`);
-
-        const recentTx = await Transaction.find({
-          user: user._id,
-          type: 'SALE',
-          isUndone: { $ne: true },
-        })
-          .sort({ timestamp: -1 })
-          .limit(safeLimit)
-          .lean();
-
-        if (!recentTx.length) {
-          await queueOutboundMessage(from, "You haven't recorded any sales yet.");
-          break;
-        }
-
-        let msg = `🕒 *Last ${safeLimit} Sales:*\n\n`;
-        recentTx.forEach((tx: any) => {
-          const d = new Date(tx.timestamp);
-          const timeStr = d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
-          const dateStr = d.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
-
-          const itemsStr = tx.items.map((i: any) => `${i.name} (${i.qty})`).join(', ');
-          const money = `${symbol}${(tx.totalMoney || 0).toLocaleString(locale)}`;
-          const status = tx.paymentStatus === 'CREDIT' ? '🔴 CREDIT' : '✅ PAID';
-
-          msg += `• *${itemsStr}* — ${money}\n`;
-          msg += `   _${dateStr} @ ${timeStr} • ${status}_\n\n`;
-        });
-
-        await queueOutboundMessage(from, msg);
-        break;
-      }
-
-      case 'UNDO_LAST_SALE': {
-        const r = await undoLastSale(user._id, messageId);
-        await queueOutboundMessage(from, r.message);
-        break;
-      }
-
-      case 'DELETED_STOCK': {
-        const itemToDelete = parsed.items?.[0]?.name?.toLowerCase();
-        if (!itemToDelete) {
-          await queueOutboundMessage(from, "Which item you wan delete? (e.g. 'Delete Rice')");
-          break;
-        }
-
-        const item = await Inventory.findOne({
-          user: user._id,
-          name: { $regex: itemToDelete, $options: 'i' },
-        });
-
-        if (item) {
-          await new DeletedItem({ user: user._id, name: item.name, quantity: item.quantity }).save();
-          await Inventory.deleteOne({ _id: item._id });
-          await queueOutboundMessage(from, `🗑️ Deleted *${item.name}* from your stock.`);
-        } else {
-          await queueOutboundMessage(from, `I no see "${itemToDelete}" inside your shop list o.`);
-        }
-        break;
-      }
-
-      case 'DEBT_PAYMENT': {
-        await processTransaction(user._id as any, parsed, messageId);
-        await queueOutboundMessage(from, parsed.reply_text || '✅ Payment recorded.');
-        break;
-      }
-
-      case 'PRICE_CHECK': {
-        const itemQuery = parsed.items?.[0]?.name?.toLowerCase();
-        if (!itemQuery) {
-          await queueOutboundMessage(from, "Which item price you wan check? (e.g. 'Price of Rice')");
-          break;
-        }
-
-        const item = await Inventory.findOne({
-          user: user._id,
-          name: { $regex: itemQuery, $options: 'i' },
-        });
-
-        if (!item) {
-          await queueOutboundMessage(from, `I no see "${itemQuery}" inside your shop list o.`);
-          break;
-        }
-
-        const priceFmt =
-          item.lastUnitPrice > 0 ? `${symbol}${item.lastUnitPrice.toLocaleString(locale)}` : 'Not set yet';
-
-        await queueOutboundMessage(
-          from,
-          `🏷️ *Price Check: ${item.name.toUpperCase()}*\n\n💰 Last recorded price: *${priceFmt}*\n📦 Stock Level: *${item.quantity}*`
-        );
-        break;
-      }
-
-      case 'REPORT_SALES': {
-        await queueOutboundMessage(from, `Calculating ${dateLabel.toLowerCase()} report... ⏳`);
-
-        const summary = await getDailySummary(user._id as any, startDate, endDate);
-        const totalFormatted = summary.totalRevenue.toLocaleString(locale, {
-          style: 'currency',
-          currency: code,
-          maximumFractionDigits: 0,
-        });
-
-        const transactions = await getTodayTransactions(user._id as any, startDate, endDate);
-
-        let salesMsg = `📅 *${dateLabel} Sales Breakdown*\n\n`;
-
-        if (transactions.length > 0) {
-          transactions.forEach((tx: any) => {
-            const d = new Date(tx.timestamp);
-            const hh = String(d.getHours()).padStart(2, '0');
-            const mm = String(d.getMinutes()).padStart(2, '0');
-            const timeStr = `${hh}:${mm}`;
-
-            tx.items.forEach((it: any) => {
-              const itemTotal = it.total ? `${symbol}${Number(it.total).toLocaleString(locale)}` : '(No Price)';
-              const unitLabel = it.unit ? ` ${it.unit}` : '';
-              salesMsg += `🕒 ${timeStr} • ${it.name} (${it.qty}${unitLabel}) - ${itemTotal}\n`;
-            });
-          });
-        } else {
-          salesMsg += `_No sales recorded for ${dateLabel.toLowerCase()}._\n`;
-        }
-
-        salesMsg += `\n💰 *Total Money:* ${totalFormatted}\n`;
-        salesMsg += `📉 *Total Transactions:* ${transactions.length}`;
-
-        await queueOutboundMessage(from, salesMsg);
-
-        if (user.planType === 'TYCOON') {
-          try {
-            const pdfFileName = await generatePdfReport(user._id as any, 'SALES', dateLabel, startDate, endDate);
-            await queueOutboundMessage(from, `✨ Download PDF: https://tallypadi.com/reports/${pdfFileName}`);
-            await queueOutboundMessage(from, `Link expires in 24 hours.`);
-          } catch (e) {
-            console.error('❌ PDF error:', e);
-          }
-        }
-        break;
-      }
-
-      case 'REPORT_STOCK': {
-        await queueOutboundMessage(from, 'Checking inventory... 📦');
-
-        const targetItem = parsed.items?.length ? parsed.items[0].name : null;
-        const stockList = await getStockReport(user._id as any, targetItem);
-
-        if (!stockList.length) {
-          await queueOutboundMessage(from, 'Your inventory is empty or item not found.');
-          break;
-        }
-
-        let stockMsg = `📦 *Current Stock Balance*\n\n`;
-        let hasNegative = false;
-
-        stockList.forEach((it: any) => {
-          if (it.quantity < 0) {
-            hasNegative = true;
-            stockMsg += `• ${it.name}: ⚠️ *${Math.abs(it.quantity)}* (Oversold/Not Recorded)\n`;
-          } else {
-            stockMsg += `• ${it.name}: *${it.quantity}* remaining\n`;
-          }
-        });
-
-        if (hasNegative) stockMsg += `\n_Note: Some items show negative. Update me when you restock._`;
-
-        await queueOutboundMessage(from, stockMsg);
-        break;
-      }
-
-      case 'REPORT_FULL': {
-        await queueOutboundMessage(from, 'Generating comprehensive report... 📋');
-
-        const fullData = await getFullSummary(user._id as any, startDate, endDate);
-        const revenueSummary = await getDailySummary(user._id as any, startDate, endDate);
-
-        let fullMsg = `📋 *${dateLabel} Business Summary*\n\n`;
-        fullMsg += `💰 *Revenue:* ${symbol}${revenueSummary.totalRevenue.toLocaleString(locale)}\n`;
-        fullMsg += `📉 *Items Sold:* ${revenueSummary.items.length}\n\n`;
-
-        if (!fullData.length) {
-          fullMsg += `_No data found for this period._`;
-        } else {
-          fullMsg += `*Inventory Status:*\n\n`;
-          fullData.forEach((it: any) => {
-            const unit = it.unit || 'units';
-            fullMsg += `🔹 *${String(it.name).toUpperCase()}*\n`;
-            if (it.soldPaid > 0) fullMsg += `   • Sold (Paid): ${it.soldPaid} ${unit}\n`;
-            if (it.soldCredit > 0) fullMsg += `   • Sold (Credit): ${it.soldCredit} ${unit} ⚠️\n`;
-            fullMsg += `   • Stock Left: ${it.stock < 0 ? 0 : it.stock} ${unit}\n`;
-            if (it.stock < 0) fullMsg += `   • ⚠️ System shows -${Math.abs(it.stock)} (please update stock)\n`;
-            if (it.revenue > 0) fullMsg += `   • Revenue: ${symbol}${it.revenue.toLocaleString(locale)}\n`;
-            fullMsg += `\n`;
-          });
-          fullMsg += `_End of Report_`;
-        }
-
-        await queueOutboundMessage(from, fullMsg);
-
-        if (user.planType === 'TYCOON') {
-          try {
-            const pdfFileName = await generatePdfReport(user._id as any, 'FULL', dateLabel, startDate, endDate);
-            await queueOutboundMessage(from, `✨ Download PDF: https://tallypadi.com/reports/${pdfFileName}`);
-            await queueOutboundMessage(from, `Link expires in 24 hours.`);
-          } catch (e) {
-            console.error('❌ PDF error:', e);
-          }
-        }
-        break;
-      }
-
-      case 'CHANGE_LANGUAGE': {
-        if (parsed?.settings_update?.key === 'language' && parsed.settings_update.value) {
-          user.settings.language = String(parsed.settings_update.value);
-          await user.save();
-          await queueOutboundMessage(from, parsed.reply_text || `Language changed to ${parsed.settings_update.value}`);
-        } else {
-          await queueOutboundMessage(from, parsed.reply_text || 'Okay.');
-        }
-        break;
-      }
-
-      case 'SETTINGS': {
-        if (parsed?.settings_update?.key === 'closingTime' && parsed.settings_update.value) {
-          user.settings.closingTime = String(parsed.settings_update.value);
-          await user.save();
-          await queueOutboundMessage(from, `✅ Done! Closing time set to ${user.settings.closingTime}.`);
-        } else {
-          await queueOutboundMessage(from, parsed.reply_text || 'Okay.');
-        }
-        break;
-      }
-
-      case 'ADD_STAFF': {
-        if (user.planType !== 'TYCOON') {
-          await queueOutboundMessage(from, '🛑 Staff accounts are for *Tycoon Plan* users only.');
-          break;
-        }
-
-        const staffPhoneNumber = parsed.staffPhoneNumber;
-        if (!staffPhoneNumber) {
-          await queueOutboundMessage(from, 'Please provide the phone number of the staff you want to add.');
-          break;
-        }
-
-        const staffCount = await User.countDocuments({ ownerId: user._id });
-        if (staffCount >= MAX_STAFF) {
-          await queueOutboundMessage(from, `You have reached the maximum staff limit (${MAX_STAFF}).`);
-          break;
-        }
-
-        const existingStaff = await User.findOne({ phoneNumber: staffPhoneNumber });
-        if (existingStaff) {
-          await queueOutboundMessage(from, 'This user is already registered on Tallypadi.');
-          break;
-        }
-
-        const newStaff = await User.create({
-          phoneNumber: staffPhoneNumber,
-          role: 'STAFF',
-          ownerId: user._id,
-          planType: 'TYCOON',
-          registrationStage: 'COMPLETED',
-        });
-
-        await queueOutboundMessage(from, `✅ Added ${newStaff.phoneNumber} as your staff.`);
-        await queueOutboundMessage(
-          newStaff.phoneNumber,
-          `🔔 You have been added as a staff by ${user.phoneNumber}. You can now record sales for their shop.`
-        );
-        break;
-      }
-
-      case 'DOWNLOAD_REPORT': {
-        if (user.planType !== 'TYCOON') {
-          await queueOutboundMessage(from, '📄 PDF reports are a *Tycoon Plan* feature. Upgrade to unlock it.');
-          break;
-        }
-
-        await queueOutboundMessage(from, 'Generating your PDF report... 📄');
-
-        try {
-          const pdfFileName = await generatePdfReport(user._id as any, 'FULL', dateLabel, startDate, endDate);
-          await queueOutboundMessage(from, `✅ PDF ready: https://tallypadi.com/reports/${pdfFileName}`);
-          await queueOutboundMessage(from, `Link expires in 24 hours.`);
-        } catch (e) {
-          console.error('❌ PDF error:', e);
-          await queueOutboundMessage(from, 'Sorry, error while generating PDF. Try again later.');
-        }
-        break;
-      }
-
-      case 'UNKNOWN':
-      default: {
-        await queueOutboundMessage(from, parsed.reply_text || 'Noted.');
-        break;
-      }
-    }
-  } catch (err) {
-    console.error('❌ Error processing message logic:', err);
-    throw err; // ✅ let BullMQ retry
+    console.error('❌ Gemini Parse Error:', err);
+    return safeParsedResult({
+      intent: 'UNKNOWN',
+      reply_text: 'Network fluctuate small. Abeg type that again.',
+    });
   }
 };

@@ -107,8 +107,6 @@ const parseQtyUnitItem = (text: string): { qty: number; unit: string; name: stri
   return { qty, unit, name };
 };
 
-
-
 /* ========================================================= */
 
 // HELPER: Fetch Image Data from Meta
@@ -293,7 +291,7 @@ function cleanTextForSecurity(input: string) {
 }
 
 function looksLikeTxnSentence(low: string) {
-  return /\b(sold|sell|comot|add|restock|set\s+stock|set\s+price|price\s+of|delete|remove|owe|credit|on\s+credit)\b/.test(
+  return /\b(sold|sell|comot|add|restock|set\s+stock|set\s+price|price\s+of|delete|remove|owe|credit|on\s+credit|vent|vnt|selam|customer bought|purchased from me|took|collected)\b/.test(
     low
   );
 }
@@ -410,50 +408,160 @@ function allowlistParsed(parsed: any) {
 }
 
 // ===============================
-// 🧠 HARD FALLBACK PARSER FOR SALE
+// 🧠 SIMPLE PARSER FOR QUICK DETECTION
 // ===============================
-function parseMoneyLoose(raw: string): number | null {
-  if (!raw) return null;
-  const s = raw.toLowerCase().replace(/,/g, '').replace(/\s+/g, '');
-  const mult = s.includes('m') ? 1_000_000 : s.includes('k') ? 1_000 : 1;
-  const num = parseFloat(s.replace(/[^\d.]/g, ''));
-  if (Number.isNaN(num)) return null;
-  const v = num * mult;
-  return Number.isFinite(v) && v >= 0 ? v : null;
+function parseMoneyLoose(moneyText: string): number | null {
+  if (!moneyText) return null;
+  
+  // Clean the text
+  let text = moneyText.toLowerCase().trim();
+  
+  // Remove currency symbols and commas
+  text = text.replace(/[₦$€£₵,]/g, '');
+  
+  // Handle Nigerian shorthand
+  if (text.includes('k')) {
+    const num = parseFloat(text.replace('k', '')) * 1000;
+    return isNaN(num) ? null : Math.round(num);
+  }
+  
+  if (text.includes('m')) {
+    const num = parseFloat(text.replace('m', '')) * 1000000;
+    return isNaN(num) ? null : Math.round(num);
+  }
+  
+  if (text.includes('thousand')) {
+    const num = parseFloat(text.replace('thousand', '')) * 1000;
+    return isNaN(num) ? null : Math.round(num);
+  }
+  
+  // Try direct parse
+  const num = parseFloat(text);
+  return isNaN(num) ? null : Math.round(num);
 }
 
 /**
- * Force parse a SALE from sentence like:
- * "Sold 200 liters kerosene to john for 20k on credit"
+ * SIMPLE parser that just detects if it might be a sale
+ * Returns null for anything it doesn't confidently understand
+ * Gemini will handle everything else
  */
-function forceParseSaleFromText(text: string) {
+function tryQuickParse(text: string) {
   const raw = cleanTextForSecurity(text);
   const low = raw.toLowerCase();
-
-  const re =
-    /\b(sold|sell|comot)\s+(\d+(?:\.\d+)?)\s*(liters|litres|ltr|ltrs|kg|kgs|bags?|packs?|pcs?|pieces?)?\s*([a-z0-9\s\-]+?)\s+to\s+([a-z0-9\s\-]{1,30})\s+for\s+([₦$€£₵]?\s*[\d,]+(?:\.\d+)?\s*(?:k|m)?)\s*(?:on\s+credit|credit|owe|owing)?/i;
-
-  const m = raw.match(re);
-  if (!m) return null;
-
-  const qty = Number(m[2]);
-  const unit = (m[3] || '').toLowerCase().trim();
-  const item = (m[4] || '').trim();
-  const customer = (m[5] || '').trim();
-  const total = parseMoneyLoose(m[6] || '');
-
-  const isCredit = /\b(on\s+credit|credit|owe|owing)\b/.test(low);
-
-  return {
-    intent: 'SALE',
-    is_credit: isCredit,
-    customer_name: isCredit ? customer : null,
-    items: [{ name: item.toLowerCase(), qty: Number.isFinite(qty) ? qty : 0, unit, unit_price: null }],
-    total_money: total,
-    report_params: { start_date: null, end_date: null },
-    settings_update: { key: null, value: null },
-    reply_text: isCredit ? `✅ Recorded as credit sale to ${customer}.` : `✅ Recorded. Sold ${qty} ${item}.`,
-  };
+  
+  // VERY SIMPLE patterns - only for crystal clear cases
+  const simplePatterns = [
+    // Clear sale pattern: "sold X bags of rice for Yk"
+    /^sold\s+(\d+)\s+bags?\s+(?:of\s+)?([a-z]+)\s+for\s+(\d+)k$/i,
+    
+    // Clear sale with customer: "sold X rice to name for Yk"
+    /^sold\s+(\d+)\s+([a-z]+)\s+to\s+([a-z]+)\s+for\s+(\d+)k$/i,
+    
+    // Clear credit payment: "name paid Xk"
+    /^([a-z]+)\s+paid\s+(\d+)k$/i,
+    
+    // Very clear stock: "add X rice"
+    /^add\s+(\d+)\s+([a-z]+)$/i,
+  ];
+  
+  for (const pattern of simplePatterns) {
+    const match = raw.match(pattern);
+    if (match) {
+      // For pattern 1: sold X bags of rice for Yk
+      if (pattern.toString().includes('bags?')) {
+        const qty = parseInt(match[1]);
+        const item = match[2];
+        const amount = parseInt(match[3]) * 1000;
+        
+        return {
+          intent: 'SALE' as const,
+          is_credit: false,
+          customer_name: null,
+          staffPhoneNumber: null,
+          items: [{
+            name: item.toLowerCase(),
+            qty: qty,
+            unit: 'bag',
+            unit_price: amount / qty
+          }],
+          total_money: amount,
+          report_params: { start_date: null, end_date: null },
+          settings_update: { key: null, value: null },
+          reply_text: `✅ Sale recorded: ${qty} bags of ${item} for ₦${amount.toLocaleString()}`
+        };
+      }
+      
+      // For pattern 2: sold X rice to name for Yk
+      if (pattern.toString().includes('to\\s+([a-z]+)')) {
+        const qty = parseInt(match[1]);
+        const item = match[2];
+        const customer = match[3];
+        const amount = parseInt(match[4]) * 1000;
+        
+        return {
+          intent: 'SALE' as const,
+          is_credit: false,
+          customer_name: customer,
+          staffPhoneNumber: null,
+          items: [{
+            name: item.toLowerCase(),
+            qty: qty,
+            unit: 'pcs',
+            unit_price: amount / qty
+          }],
+          total_money: amount,
+          report_params: { start_date: null, end_date: null },
+          settings_update: { key: null, value: null },
+          reply_text: `✅ Sale recorded: ${qty} ${item} to ${customer} for ₦${amount.toLocaleString()}`
+        };
+      }
+      
+      // For pattern 3: name paid Xk (debt payment)
+      if (pattern.toString().includes('paid')) {
+        const customer = match[1];
+        const amount = parseInt(match[2]) * 1000;
+        
+        return {
+          intent: 'DEBT_PAYMENT' as const,
+          is_credit: false,
+          customer_name: customer,
+          staffPhoneNumber: null,
+          items: [],
+          total_money: amount,
+          report_params: { start_date: null, end_date: null },
+          settings_update: { key: null, value: null },
+          reply_text: `✅ Payment recorded: ${customer} paid ₦${amount.toLocaleString()}`
+        };
+      }
+      
+      // For pattern 4: add X rice (restock)
+      if (pattern.toString().includes('^add\\s+')) {
+        const qty = parseInt(match[1]);
+        const item = match[2];
+        
+        return {
+          intent: 'RESTOCK' as const,
+          is_credit: false,
+          customer_name: null,
+          staffPhoneNumber: null,
+          items: [{
+            name: item.toLowerCase(),
+            qty: qty,
+            unit: 'pcs',
+            unit_price: null
+          }],
+          total_money: null,
+          report_params: { start_date: null, end_date: null },
+          settings_update: { key: null, value: null },
+          reply_text: `✅ Restocked: ${qty} ${item} added to inventory`
+        };
+      }
+    }
+  }
+  
+  // Return null for anything not perfectly matched
+  // This ensures Gemini handles complex or ambiguous cases
+  return null;
 }
 
 const STRIKE_WINDOW_MS = 24 * 60 * 60 * 1000; // 24h
@@ -492,7 +600,7 @@ async function handleInjectionAttemptOrRefuse(user: any, from: string, rawText: 
   await user.save();
   await queueOutboundMessage(
     from,
-    `🛡️ I can’t show internal system prompts or instructions.\n\nTry:\n• Sold 5 bags of rice for 50k\n• Credits\n• Emeka paid 20k\n• Stock list\n• Sales today`
+    `🛡️ I can't show internal system prompts or instructions.\n\nTry:\n• Sold 5 bags of rice for 50k\n• Credits\n• Emeka paid 20k\n• Stock list\n• Sales today`
   );
 
   return { handled: true };
@@ -538,9 +646,6 @@ export const handleMessageLogic = async (
 
     // --- USER ---
     let user = await User.findOne({ phoneNumber: from });
-
-
-    
 
     const guessedCurrency = getUserCurrency({ phoneNumber: from });
     const { symbol, locale, code } = getUserCurrency(user || { phoneNumber: from });
@@ -593,9 +698,9 @@ export const handleMessageLogic = async (
     }
 
     if (user && user.registrationStage === 'COMPLETED') {
-  const inj = await handleInjectionAttemptOrRefuse(user, from, rawText);
-  if (inj.handled) return;
-}
+      const inj = await handleInjectionAttemptOrRefuse(user, from, rawText);
+      if (inj.handled) return;
+    }
 
     // --- REG FLOW ---
     if (user.registrationStage === 'EMAIL') {
@@ -714,18 +819,24 @@ export const handleMessageLogic = async (
       return;
     }
 
-    // --- AI PARSE ---
+    // --- INTELLIGENT PARSING: Try quick parse first, then Gemini for everything else ---
     const currentLang = user.settings?.language || 'English';
-    let parsed: any = await parseMessageWithGemini(rawText, currentLang, imageBuffer, imageMime);
+    let parsed: any = null;
+
+    // First, try our VERY SIMPLE parser for crystal clear cases
+    // This only catches patterns like "sold 2 rice for 20k" or "john paid 5k"
+    parsed = tryQuickParse(rawText);
+
+    // If quick parser didn't understand, send to Gemini
+    if (!parsed) {
+      console.log(`🤖 Sending to Gemini for intelligent parsing: "${rawText}"`);
+      parsed = await parseMessageWithGemini(rawText, currentLang, imageBuffer, imageMime);
+    } else {
+      console.log(`⚡ Quick parse successful for: "${rawText}"`);
+    }
 
     // ✅ SERVER-SIDE ALLOWLIST: model cannot invent ops/keys/params
     parsed = allowlistParsed(parsed);
-
-    // ✅ HARD SAFETY: if AI returns REPORT_DEBTS for a transaction sentence, force SALE parse
-    if (parsed?.intent === 'REPORT_DEBTS' && looksLikeTxn) {
-      const forced = forceParseSaleFromText(rawText);
-      if (forced) parsed = forced;
-    }
 
     // --- DATE PARSING ---
     let startDate: Date | undefined;
@@ -1127,6 +1238,3 @@ export const handleMessageLogic = async (
     throw err; // ✅ let BullMQ retry
   }
 };
-
-
-
