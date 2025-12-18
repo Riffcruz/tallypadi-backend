@@ -3,20 +3,50 @@ import { Transaction } from '../models/transaction.model';
 import { Inventory } from '../models/inventory.model';
 import { User } from '../models/user.model';
 
-export const getDashboardData = async (req: Request, res: Response) => {
+// --- HELPER: Map Country Code to Currency & Locale ---
+const getCurrencyConfig = (countryCode: string = 'NG') => {
+  const map: Record<string, { code: string; locale: string }> = {
+    'NG': { code: 'NGN', locale: 'en-NG' }, // Nigeria
+    'US': { code: 'USD', locale: 'en-US' }, // USA
+    'GB': { code: 'GBP', locale: 'en-GB' }, // UK
+    'GH': { code: 'GHS', locale: 'en-GH' }, // Ghana
+    'KE': { code: 'KES', locale: 'en-KE' }, // Kenya
+    'ZA': { code: 'ZAR', locale: 'en-ZA' }, // South Africa
+    'EU': { code: 'EUR', locale: 'en-IE' }, // Europe
+    // Add others as needed
+  };
+
+  // Default to Nigeria if code is missing or unknown
+  return map[countryCode.toUpperCase()] || map['NG'];
+};
+
+export const getDashboardData = async (req: Request | any, res: Response) => {
   try {
-    // 1) Mock auth (replace with req.user.id later)
-    const user = await User.findOne();
-    if (!user) {
-      return res.status(404).json({ error: "No user found. Please chat with the bot first!" });
+    // ✅ FIX 1: USE REAL AUTH
+    // Assuming your auth middleware attaches the user ID to req.user.id or req.userId
+    // If you are testing without a frontend token, you might need to temporarily hardcode the US User ID here.
+    const userId = req.user?.id || req.user?._id || req.userId;
+    
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized. Please login." });
     }
+
+    const user = await User.findById(userId);
+    
+    if (!user) {
+      return res.status(404).json({ error: "User account not found." });
+    }
+
+    // ✅ FIX 2: GET CURRENCY DETAILS
+    const { code: currencyCode, locale } = getCurrencyConfig(user.countryCode);
 
     // 2) Inventory
     const inventoryDocs = await Inventory.find({ user: user._id });
     const inventory = inventoryDocs.map(doc => ({
       name: doc.name,
       quantity: doc.quantity,
-      lastUnitPrice: doc.lastUnitPrice || 0, // ✅ match your dashboard reducer
+      lastUnitPrice: doc.lastUnitPrice || 0,
+      // Optional: Add price formatted string if needed, but frontend handles it now
     }));
 
     // 3) Recent transactions
@@ -26,11 +56,11 @@ export const getDashboardData = async (req: Request, res: Response) => {
 
     const transactions = transactionDocs.map(t => ({
       id: t._id,
-      type: t.type, // 'SALE' | 'RESTOCK'
+      type: t.type,
       item: t.items.map(i => i.name).join(', '),
       qty: t.items.reduce((acc, i) => acc + i.qty, 0),
       amount: t.totalMoney || 0,
-      date: t.timestamp.toISOString(), // ✅ full timestamp for date + time in UI
+      date: t.timestamp.toISOString(),
     }));
 
     // 4) Stats
@@ -45,7 +75,7 @@ export const getDashboardData = async (req: Request, res: Response) => {
       { $group: { _id: null, total: { $sum: '$items.qty' } } },
     ]);
 
-    // 5) Sales chart (Mon..Sun) last 7 days
+    // 5) Sales chart
     const start = new Date();
     start.setDate(start.getDate() - 6);
     start.setHours(0, 0, 0, 0);
@@ -60,7 +90,7 @@ export const getDashboardData = async (req: Request, res: Response) => {
       },
       {
         $group: {
-          _id: { $dayOfWeek: '$timestamp' }, // 1=Sun ... 7=Sat
+          _id: { $dayOfWeek: '$timestamp' },
           sales: { $sum: '$totalMoney' },
         },
       },
@@ -68,13 +98,7 @@ export const getDashboardData = async (req: Request, res: Response) => {
 
     const map: Record<string, number> = { Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0, Sat: 0, Sun: 0 };
     const dowToName: Record<number, keyof typeof map> = {
-      1: 'Sun',
-      2: 'Mon',
-      3: 'Tue',
-      4: 'Wed',
-      5: 'Thu',
-      6: 'Fri',
-      7: 'Sat',
+      1: 'Sun', 2: 'Mon', 3: 'Tue', 4: 'Wed', 5: 'Thu', 6: 'Fri', 7: 'Sat',
     };
 
     for (const row of salesByDow) {
@@ -87,26 +111,31 @@ export const getDashboardData = async (req: Request, res: Response) => {
       sales: map[day],
     }));
 
-    // 6) Response (✅ matches TSX)
+    // 6) Response
     return res.json({
       user: {
         name: user.name || 'Shop Owner',
         shopName: user.businessName || 'My Store',
         initials: user.businessName ? user.businessName.slice(0, 2).toUpperCase() : 'IO',
         planType: user.planType,
-        subscriptionStatus: user.subscriptionStatus, // ✅ for gating
-        trialEndsAt: user.trialEndsAt,               // ✅ for gating
+        subscriptionStatus: user.subscriptionStatus,
+        trialEndsAt: user.trialEndsAt,
         nextBillingDate: user.nextBillingDate || null,
         settings: user.settings,
+        
+        // ✅ NEW FIELDS SENT TO FRONTEND
+        countryCode: user.countryCode, // e.g., 'US'
+        currencyCode: currencyCode,    // e.g., 'USD'
+        locale: locale                 // e.g., 'en-US'
       },
       stats: {
         revenue: totalRevenueAgg[0]?.total || 0,
         itemsSold: totalItemsSoldAgg[0]?.total || 0,
-        stockValue: 0,
+        stockValue: 0, // You can calculate this from inventory loop if desired
       },
       inventory,
       transactions,
-      salesChart, // ✅ your dashboard TSX checks this first
+      salesChart,
     });
   } catch (error) {
     console.error('Dashboard Error:', error);
