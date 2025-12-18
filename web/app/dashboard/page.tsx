@@ -10,8 +10,6 @@ import {
   ShoppingBag,
   Menu,
   Bell,
-  Smartphone,
-  X,
   ArrowUpRight,
   Calendar,
   TrendingUp,
@@ -45,11 +43,11 @@ interface TransactionRow {
   item: string;
   qty: number;
   amount: number;
-  date: string; // ISO string
+  date: string;
 }
 
 interface ChartDataPoint {
-  day: string; // Mon..Sun
+  day: string;
   sales: number;
 }
 
@@ -58,10 +56,10 @@ interface DashboardUser {
   shopName?: string;
   initials?: string;
   planType?: 'OGA_BOSS' | 'TYCOON';
-  subscriptionStatus?: 'trial' | 'active' | 'past_due' | 'cancelled' | 'suspended';
-  trialEndsAt?: string | Date;
-  nextBillingDate?: string | Date | null;
-  settings?: any;
+  // ✅ NEW: Expect currency details from backend
+  currencyCode?: string;   // e.g., 'USD', 'NGN', 'GBP'
+  countryCode?: string;    // e.g., 'US', 'NG'
+  locale?: string;         // e.g., 'en-US', 'en-NG'
 }
 
 interface DashboardResponse {
@@ -74,19 +72,18 @@ interface DashboardResponse {
   inventory?: InventoryItem[];
   transactions?: TransactionRow[];
   salesChart?: ChartDataPoint[];
-  // Backward compat if your API still returns these:
   graphData?: { name: string; sales: number }[];
-  salesChartLegacy?: ChartDataPoint[];
 }
 
-// --- HELPERS ---
-const formatNaira = (amount: number) => {
+// --- DYNAMIC FORMATTER ---
+const formatCurrency = (amount: number, currencyCode = 'NGN', locale = 'en-NG') => {
   const safe = Number(amount);
-  if (!Number.isFinite(safe)) return '₦0';
-  return new Intl.NumberFormat('en-NG', {
+  if (!Number.isFinite(safe)) return new Intl.NumberFormat(locale, { style: 'currency', currency: currencyCode }).format(0);
+  
+  return new Intl.NumberFormat(locale, {
     style: 'currency',
-    currency: 'NGN',
-    maximumFractionDigits: 0,
+    currency: currencyCode,
+    maximumFractionDigits: 0, // Remove decimals for cleaner look
   }).format(safe);
 };
 
@@ -113,12 +110,12 @@ const StatCard: React.FC<StatCardProps> = ({ title, value, icon: Icon, bgClass, 
       <div className={`p-3 rounded-xl ${bgClass} ${iconColor}`}>
         <Icon className="w-6 h-6" />
       </div>
-      {trend ? (
+      {trend && (
         <div className="flex items-center gap-1 px-2.5 py-1 bg-green-50 rounded-full text-green-700 text-xs font-bold whitespace-nowrap">
           <TrendingUp className="w-3 h-3" />
           <span>{trend}</span>
         </div>
-      ) : null}
+      )}
     </div>
     <div className="min-w-0">
       <p className="text-gray-500 text-sm font-medium mb-1">{title}</p>
@@ -133,11 +130,6 @@ const StatCard: React.FC<StatCardProps> = ({ title, value, icon: Icon, bgClass, 
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
-
-  // PWA Install
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [showInstallBtn, setShowInstallBtn] = useState(false);
-
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const router = useRouter();
 
@@ -158,34 +150,16 @@ export default function DashboardPage() {
         console.error('Dashboard Fetch Error:', err);
         setLoading(false);
       });
-
-    // PWA install prompt
-    const handleBeforeInstallPrompt = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e as any);
-      setShowInstallBtn(true);
-    };
-
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-
-    return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    };
   }, [router]);
 
+  // ✅ DERIVE USER SETTINGS (Default to NG if missing, but respects user profile now)
+  const currencyCode = data?.user?.currencyCode || 'NGN';
+  const userLocale = data?.user?.locale || 'en-NG'; // Should be 'en-US' for US users
+
   const chartData: ChartDataPoint[] = useMemo(() => {
-    // Preferred: API provides salesChart [{day, sales}]
     if (data?.salesChart && Array.isArray(data.salesChart)) return data.salesChart;
-
-    // Backward compatibility: if API still returns graphData [{name, sales}] (name might be day number)
-    if (data?.graphData && Array.isArray(data.graphData)) {
-      return data.graphData.map((g) => ({
-        day: String(g.name),
-        sales: Number(g.sales) || 0,
-      }));
-    }
-
-    // Fallback: derive from transactions
+    
+    // Fallback logic
     if (data?.transactions && Array.isArray(data.transactions)) {
       const daysMap: Record<string, number> = { Sun: 0, Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0, Sat: 0 };
       const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -199,31 +173,11 @@ export default function DashboardPage() {
           }
         }
       });
-
       const ordered = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
       return ordered.map((day) => ({ day, sales: daysMap[day] || 0 }));
     }
-
-    // Default empty
-    return [
-      { day: 'Mon', sales: 0 },
-      { day: 'Tue', sales: 0 },
-      { day: 'Wed', sales: 0 },
-      { day: 'Thu', sales: 0 },
-      { day: 'Fri', sales: 0 },
-      { day: 'Sat', sales: 0 },
-      { day: 'Sun', sales: 0 },
-    ];
+    return [];
   }, [data]);
-
-  const handleInstallClick = () => {
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    deferredPrompt.userChoice.then((choiceResult: { outcome: string }) => {
-      if (choiceResult.outcome === 'accepted') setShowInstallBtn(false);
-      setDeferredPrompt(null);
-    });
-  };
 
   if (loading) {
     return (
@@ -238,12 +192,10 @@ export default function DashboardPage() {
 
   const totalRevenue = Number(data?.stats?.revenue || 0);
   const itemsSold = Number(data?.stats?.itemsSold || 0);
-
   const inventory = Array.isArray(data?.inventory) ? data!.inventory! : [];
   const transactions = Array.isArray(data?.transactions) ? data!.transactions! : [];
 
-  const stockValue =
-    inventory.reduce((acc, curr) => {
+  const stockValue = inventory.reduce((acc, curr) => {
       const qty = Number(curr.quantity ?? curr.stock ?? 0);
       const unitPrice = Number(curr.price ?? curr.lastUnitPrice ?? 0);
       return acc + qty * unitPrice;
@@ -260,11 +212,9 @@ export default function DashboardPage() {
       )}
 
       {/* Sidebar */}
-      <div
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 transform transition-transform duration-300 ease-in-out md:translate-x-0 ${
+      <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 transform transition-transform duration-300 ease-in-out md:translate-x-0 ${
           isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
-      >
+        }`}>
         <Sidebar />
       </div>
 
@@ -288,7 +238,8 @@ export default function DashboardPage() {
               <p className="text-gray-500 text-sm mt-1 flex items-center gap-2 min-w-0">
                 <Calendar className="w-4 h-4 shrink-0" />
                 <span className="truncate">
-                  {new Date().toLocaleDateString('en-NG', {
+                  {/* ✅ FIX: Dynamic Date Locale */}
+                  {new Date().toLocaleDateString(userLocale, {
                     weekday: 'long',
                     day: 'numeric',
                     month: 'long',
@@ -314,15 +265,15 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <StatCard
               title="Total Money Made"
-              value={formatNaira(totalRevenue)}
+              value={formatCurrency(totalRevenue, currencyCode, userLocale)} // ✅ Dynamic
               icon={Wallet}
               bgClass="bg-green-50"
               iconColor="text-green-600"
               trend="Going Up"
             />
             <StatCard
-              title="Total Value of Goods in Stock"
-              value={formatNaira(stockValue)}
+              title="Total Value of Goods"
+              value={formatCurrency(stockValue, currencyCode, userLocale)} // ✅ Dynamic
               icon={Coins}
               bgClass="bg-blue-50"
               iconColor="text-blue-600"
@@ -343,15 +294,9 @@ export default function DashboardPage() {
             {/* Sales Bar Chart */}
             <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col h-80">
               <div className="flex justify-between items-center mb-4">
-                <div>
-                  <h3 className="font-bold text-lg text-gray-800">Sales Overview</h3>
-                </div>
-                <div className="flex items-center gap-2 text-xs font-medium text-gray-500 bg-gray-50 px-3 py-1.5 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
-                  Weekly <ChevronDown className="w-3 h-3" />
-                </div>
+                <h3 className="font-bold text-lg text-gray-800">Sales Overview</h3>
               </div>
 
-              {/* ✅ FIX: remove -ml-4, prevent overflow */}
               <div className="flex-1 w-full overflow-hidden">
                 {chartData.reduce((a, b) => a + (Number(b.sales) || 0), 0) > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
@@ -378,7 +323,7 @@ export default function DashboardPage() {
                           boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
                           padding: '12px',
                         }}
-                        formatter={(value: any) => [formatNaira(Number(value) || 0), 'Sales']}
+                        formatter={(value: any) => [formatCurrency(Number(value) || 0, currencyCode, userLocale), 'Sales']} // ✅ Dynamic
                       />
                       <Bar dataKey="sales" radius={[6, 6, 6, 6]}>
                         {chartData.map((entry, index) => (
@@ -423,11 +368,7 @@ export default function DashboardPage() {
                           {item.name}
                         </p>
                         <p className="text-[10px] text-gray-500">
-                          {(Number(item.quantity ?? item.stock ?? 0) < 5) ? (
-                            <span className="text-red-500">Low Stock</span>
-                          ) : (
-                            'In Stock'
-                          )}
+                          {(Number(item.quantity ?? item.stock ?? 0) < 5) ? <span className="text-red-500">Low Stock</span> : 'In Stock'}
                         </p>
                       </div>
                     </div>
@@ -436,17 +377,11 @@ export default function DashboardPage() {
                         {Number(item.quantity ?? item.stock ?? 0)}
                       </p>
                       <p className="text-[10px] text-gray-500">
-                        {formatNaira(Number(item.price ?? item.lastUnitPrice ?? 0))}
+                        {formatCurrency(Number(item.price ?? item.lastUnitPrice ?? 0), currencyCode, userLocale)} {/* ✅ Dynamic */}
                       </p>
                     </div>
                   </div>
                 ))}
-
-                {inventory.length === 0 && (
-                  <div className="h-full flex flex-col items-center justify-center text-gray-400">
-                    <p className="text-sm">No inventory data.</p>
-                  </div>
-                )}
               </div>
             </div>
           </div>
@@ -486,73 +421,37 @@ export default function DashboardPage() {
                         </td>
 
                         <td className="px-6 py-4 text-gray-500 whitespace-nowrap text-center text-xs">
+                          {/* ✅ FIX: Dynamic Date Locale */}
                           {safeDate
-                            ? safeDate.toLocaleDateString('en-NG', { month: 'short', day: 'numeric' })
+                            ? safeDate.toLocaleDateString(userLocale, { month: 'short', day: 'numeric' })
                             : '—'}
                           <span className="text-gray-300 ml-1">|</span>{' '}
-                          {safeDate ? safeDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
+                          {safeDate ? safeDate.toLocaleTimeString(userLocale, { hour: '2-digit', minute: '2-digit' }) : '—'}
                         </td>
 
                         <td className="px-6 py-4 text-center whitespace-nowrap">
-                          <span
-                            className={`px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide uppercase ${
+                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide uppercase ${
                               t.type === 'SALE'
                                 ? 'bg-green-50 text-green-700 border border-green-100'
                                 : 'bg-blue-50 text-blue-700 border border-blue-100'
-                            }`}
-                          >
+                            }`}>
                             {t.type}
                           </span>
                         </td>
 
                         <td className="px-6 py-4 text-right font-bold text-gray-900 whitespace-nowrap">
                           {t.type === 'SALE' ? '+' : ''}
-                          {formatNaira(Number(t.amount) || 0)}
+                          {formatCurrency(Number(t.amount) || 0, currencyCode, userLocale)} {/* ✅ Dynamic */}
                         </td>
                       </tr>
                     );
                   })}
-
-                  {transactions.length === 0 && (
-                    <tr>
-                      <td colSpan={4} className="px-6 py-12 text-center text-gray-400">
-                        <p>No recent transactions.</p>
-                      </td>
-                    </tr>
-                  )}
                 </tbody>
               </table>
             </div>
           </div>
         </div>
       </main>
-
-      {/* PWA Install Button */}
-      {/* {showInstallBtn && (
-        <div className="fixed bottom-6 right-6 z-50 animate-in fade-in slide-in-from-bottom-4 duration-500">
-          <div className="relative group">
-            <button
-              onClick={() => setShowInstallBtn(false)}
-              className="absolute -top-3 -right-3 bg-white text-gray-400 hover:text-gray-600 rounded-full p-1 shadow-md border border-gray-100 opacity-0 group-hover:opacity-100 transition-all z-10"
-            >
-              <X className="w-4 h-4" />
-            </button>
-
-            <button
-              onClick={handleInstallClick}
-              className="flex items-center gap-3 bg-gray-900 text-white px-5 py-3.5 rounded-2xl shadow-xl hover:bg-gray-800 hover:scale-105 transition-all duration-300 border border-gray-700/50"
-            >
-              <div className="p-1.5 bg-gray-700 rounded-lg">
-                <Smartphone className="w-5 h-5 text-green-400" />
-              </div>
-              <div className="text-left">
-                <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Get the App</p>
-                <p className="text-sm font-bold text-white">Install TallyPadi</p>
-              </div>
-            </button>
-          </div>
-        </div>
-      )} */}
     </div>
   );
 }
