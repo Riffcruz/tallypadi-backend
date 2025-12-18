@@ -1,69 +1,86 @@
 import { Request, Response } from 'express';
-import { Debtor } from '../models/debtor.model'; // Adjust path to your model
+import { Debtor } from '../models/debtor.model';
 import { Transaction } from '../models/transaction.model';
 import mongoose from 'mongoose';
 
-// ... (getDebtors, createDebtor, updateDebtor, deleteDebtor remain the same) ...
-
-
-// 1. GET ALL DEBTORS (With calculated debt total)
+// 1. GET ALL DEBTORS (Now includes 'lastItems')
 export const getDebtors = async (req: Request | any, res: Response) => {
   try {
     const userId = req.user?.id;
-    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
-
-    // Aggregation: Join Debtors with Transactions to sum outstanding debt
     const debtors = await Debtor.aggregate([
       { $match: { user: new mongoose.Types.ObjectId(userId) } },
+      // Join Transactions to get financial summary
       {
         $lookup: {
-          from: 'transactions', // Ensure your collection name is 'transactions'
+          from: 'transactions',
           let: { debtorId: '$_id' },
           pipeline: [
-            {
-              $match: {
-                $expr: {
-                  $and: [
-                    { $eq: ['$debtor', '$$debtorId'] }, // Match debtor ID
-                    { $eq: ['$isUndone', false] }       // Exclude undone
-                  ]
-                }
-              }
+            { 
+              $match: { 
+                $expr: { 
+                  $and: [ 
+                    { $eq: ['$debtor', '$$debtorId'] }, 
+                    { $eq: ['$isUndone', false] } 
+                  ] 
+                } 
+              } 
             },
-            {
-              $group: {
-                _id: null,
-                // Sales on Credit (Positive Debt)
-                creditTotal: {
-                  $sum: {
-                    $cond: [{ $eq: ['$paymentStatus', 'CREDIT'] }, '$totalMoney', 0]
-                  }
-                },
-                // Payments (Negative Debt)
-                paymentTotal: {
-                  $sum: {
-                    $cond: [{ $eq: ['$type', 'DEBT_PAYMENT'] }, '$amountPaid', 0]
-                  }
-                }
-              }
-            }
+            { $sort: { timestamp: -1 } } // Sort by newest first
           ],
-          as: 'financials'
+          as: 'history'
         }
       },
       {
         $addFields: {
-          // Calculate balance: (Credit Sales) - (Payments)
+          // Calculate Total Debt
           totalDebt: {
-            $subtract: [
-              { $ifNull: [{ $arrayElemAt: ['$financials.creditTotal', 0] }, 0] },
-              { $ifNull: [{ $arrayElemAt: ['$financials.paymentTotal', 0] }, 0] }
+            $reduce: {
+              input: '$history',
+              initialValue: 0,
+              in: {
+                $cond: [
+                  { $eq: ['$$this.type', 'DEBT_PAYMENT'] },
+                  { $subtract: ['$$value', '$$this.amountPaid'] }, // Subtract payments
+                  { $add: ['$$value', '$$this.totalMoney'] }       // Add sales/opening balances
+                ]
+              }
+            }
+          },
+          // Get Last Purchase Info
+          lastSale: {
+            $arrayElemAt: [
+              { 
+                $filter: { 
+                  input: '$history', 
+                  as: 'tx', 
+                  cond: { $ne: ['$$tx.type', 'DEBT_PAYMENT'] } // Ignore payments, look for sales
+                } 
+              }, 
+              0 
             ]
           }
         }
       },
-      { $project: { financials: 0 } }, // Cleanup
-      { $sort: { totalDebt: -1, updatedAt: -1 } } // Show highest debtors first
+      {
+        $addFields: {
+          // Format the product names: "Rice, Beans"
+          lastProductStr: {
+            $reduce: {
+              input: '$lastSale.items',
+              initialValue: '',
+              in: {
+                $cond: [
+                  { $eq: ['$$value', ''] },
+                  '$$this.name',
+                  { $concat: ['$$value', ', ', '$$this.name'] }
+                ]
+              }
+            }
+          }
+        }
+      },
+      { $project: { history: 0, lastSale: 0 } }, // Clean up
+      { $sort: { totalDebt: -1, updatedAt: -1 } }
     ]);
 
     res.json(debtors);
@@ -73,51 +90,16 @@ export const getDebtors = async (req: Request | any, res: Response) => {
   }
 };
 
-
-// ✅ 5. RECORD DEBT PAYMENT (Moved here)
-export const recordDebtPayment = async (req: Request | any, res: Response) => {
-  try {
-    const userId = req.user?.id;
-    const { debtorId, amount, date } = req.body;
-
-    if (!debtorId || !amount) {
-      return res.status(400).json({ error: 'Debtor ID and Amount required' });
-    }
-
-    // Verify Debtor belongs to User
-    const debtor = await Debtor.findOne({ _id: debtorId, user: userId });
-    if (!debtor) return res.status(404).json({ error: 'Debtor not found' });
-
-    // Create Payment Transaction
-    const tx = await Transaction.create({
-      user: userId,
-      type: 'DEBT_PAYMENT',
-      debtor: debtorId,
-      customerName: debtor.displayName,
-      amountPaid: Number(amount),
-      totalMoney: 0,
-      items: [],
-      paymentStatus: 'PAID',
-      date: date || new Date().toISOString(),
-      timestamp: new Date()
-    });
-
-    res.json({ success: true, transaction: tx });
-  } catch (error) {
-    console.error('Record Payment Error:', error);
-    res.status(500).json({ error: 'Failed to record payment' });
-  }
-};
-
-
-// 2. CREATE DEBTOR
+// 2. CREATE DEBTOR (Now supports Opening Balance)
 export const createDebtor = async (req: Request | any, res: Response) => {
   try {
     const userId = req.user?.id;
-    const { displayName, aliases } = req.body;
+    // ✅ Receive optional initial debt fields
+    const { displayName, aliases, initialDebt, initialProduct } = req.body;
 
     if (!displayName) return res.status(400).json({ error: 'Name is required' });
 
+    // 1. Create the Profile
     const debtor = await Debtor.create({
       user: userId,
       displayName,
@@ -125,52 +107,70 @@ export const createDebtor = async (req: Request | any, res: Response) => {
       aliases: aliases || []
     });
 
+    // 2. If Opening Balance provided, create a transaction immediately
+    if (initialDebt && Number(initialDebt) > 0) {
+      await Transaction.create({
+        user: userId,
+        type: 'SALE', // Treat as a sale to increase debt
+        paymentStatus: 'CREDIT',
+        debtor: debtor._id,
+        customerName: displayName,
+        totalMoney: Number(initialDebt),
+        // Add a "dummy" item to represent the opening balance product
+        items: [{
+          name: initialProduct || 'Opening Balance',
+          quantity: 1,
+          price: Number(initialDebt),
+          total: Number(initialDebt)
+        }],
+        date: new Date().toISOString().split('T')[0],
+        timestamp: new Date()
+      });
+    }
+
     res.json(debtor);
   } catch (error: any) {
-    if (error.code === 11000) {
-      return res.status(400).json({ error: 'Debtor with this name already exists' });
-    }
+    if (error.code === 11000) return res.status(400).json({ error: 'Debtor name already exists' });
     res.status(500).json({ error: 'Failed to create debtor' });
   }
 };
 
-// 3. UPDATE DEBTOR
+// ... (updateDebtor, deleteDebtor, recordDebtPayment remain the same) ...
 export const updateDebtor = async (req: Request | any, res: Response) => {
+  /* ... keep existing code ... */
   try {
     const userId = req.user?.id;
     const { id } = req.params;
     const { displayName, aliases } = req.body;
-
-    const debtor = await Debtor.findOneAndUpdate(
-      { _id: id, user: userId },
-      { 
-        displayName, 
-        debtorKey: displayName.toLowerCase().trim(),
-        aliases 
-      },
-      { new: true }
-    );
-
+    const debtor = await Debtor.findOneAndUpdate({ _id: id, user: userId }, { displayName, debtorKey: displayName.toLowerCase().trim(), aliases }, { new: true });
     if (!debtor) return res.status(404).json({ error: 'Debtor not found' });
     res.json(debtor);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to update debtor' });
-  }
+  } catch (error) { res.status(500).json({ error: 'Failed to update debtor' }); }
 };
 
-// 4. DELETE DEBTOR
 export const deleteDebtor = async (req: Request | any, res: Response) => {
+  /* ... keep existing code ... */
   try {
     const userId = req.user?.id;
     const { id } = req.params;
-
-    // Optional: Check if they have debt before deleting?
-    // For now, just delete the profile (transactions remain in history)
-    const result = await Debtor.deleteOne({ _id: id, user: userId });
-
-    if (result.deletedCount === 0) return res.status(404).json({ error: 'Debtor not found' });
+    await Debtor.deleteOne({ _id: id, user: userId });
     res.json({ success: true });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to delete debtor' });
-  }
+  } catch (error) { res.status(500).json({ error: 'Failed to delete debtor' }); }
+};
+
+export const recordDebtPayment = async (req: Request | any, res: Response) => {
+  /* ... keep existing code ... */
+  try {
+    const userId = req.user?.id;
+    const { debtorId, amount, date } = req.body;
+    if (!debtorId || !amount) return res.status(400).json({ error: 'Debtor ID and Amount required' });
+    const debtor = await Debtor.findOne({ _id: debtorId, user: userId });
+    if (!debtor) return res.status(404).json({ error: 'Debtor not found' });
+    const tx = await Transaction.create({
+      user: userId, type: 'DEBT_PAYMENT', debtor: debtorId, customerName: debtor.displayName,
+      amountPaid: Number(amount), totalMoney: 0, items: [], paymentStatus: 'PAID',
+      date: date || new Date().toISOString(), timestamp: new Date()
+    });
+    res.json({ success: true, transaction: tx });
+  } catch (error) { res.status(500).json({ error: 'Failed to record payment' }); }
 };

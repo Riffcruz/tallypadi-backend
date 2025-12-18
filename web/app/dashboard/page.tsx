@@ -3,7 +3,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
-import Sidebar from '../../components/Sidebar';
+// ✅ Verified sidebar import path
+import Sidebar from '../../components/Sidebar'; 
 import {
   Wallet,
   Coins,
@@ -13,7 +14,6 @@ import {
   ArrowUpRight,
   Calendar,
   TrendingUp,
-  ChevronDown,
 } from 'lucide-react';
 import {
   BarChart,
@@ -39,7 +39,7 @@ interface InventoryItem {
 
 interface TransactionRow {
   id: number | string;
-  type: 'SALE' | 'RESTOCK';
+  type: 'SALE' | 'RESTOCK' | 'DEBT_PAYMENT';
   item: string;
   qty: number;
   amount: number;
@@ -56,10 +56,8 @@ interface DashboardUser {
   shopName?: string;
   initials?: string;
   planType?: 'OGA_BOSS' | 'TYCOON';
-  // ✅ NEW: Expect currency details from backend
-  currencyCode?: string;   // e.g., 'USD', 'NGN', 'GBP'
-  countryCode?: string;    // e.g., 'US', 'NG'
-  locale?: string;         // e.g., 'en-US', 'en-NG'
+  currencyCode?: string;   
+  locale?: string;         
 }
 
 interface DashboardResponse {
@@ -67,24 +65,20 @@ interface DashboardResponse {
   stats?: {
     revenue?: number;
     itemsSold?: number;
-    stockValue?: number;
   };
   inventory?: InventoryItem[];
   transactions?: TransactionRow[];
   salesChart?: ChartDataPoint[];
-  graphData?: { name: string; sales: number }[];
 }
 
 // --- DYNAMIC FORMATTER ---
 const formatCurrency = (amount: number, currencyCode = 'NGN', locale = 'en-NG') => {
   const safe = Number(amount);
-  if (!Number.isFinite(safe)) return new Intl.NumberFormat(locale, { style: 'currency', currency: currencyCode }).format(0);
-  
   return new Intl.NumberFormat(locale, {
     style: 'currency',
     currency: currencyCode,
-    maximumFractionDigits: 0, // Remove decimals for cleaner look
-  }).format(safe);
+    maximumFractionDigits: 0,
+  }).format(Number.isFinite(safe) ? safe : 0);
 };
 
 const getGreeting = () => {
@@ -94,39 +88,25 @@ const getGreeting = () => {
   return 'Good Evening';
 };
 
-// --- COMPONENTS ---
-type StatCardProps = {
-  title: string;
-  value: React.ReactNode;
-  icon: React.ElementType;
-  bgClass: string;
-  iconColor: string;
-  trend?: string;
-};
-
-const StatCard: React.FC<StatCardProps> = ({ title, value, icon: Icon, bgClass, iconColor, trend }) => (
-  <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col justify-between h-full">
+// --- STAT CARD COMPONENT ---
+const StatCard = ({ title, value, icon: Icon, bgClass, iconColor, trend }: any) => (
+  <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all duration-200">
     <div className="flex justify-between items-start mb-4">
       <div className={`p-3 rounded-xl ${bgClass} ${iconColor}`}>
         <Icon className="w-6 h-6" />
       </div>
       {trend && (
-        <div className="flex items-center gap-1 px-2.5 py-1 bg-green-50 rounded-full text-green-700 text-xs font-bold whitespace-nowrap">
+        <div className="flex items-center gap-1 px-2.5 py-1 bg-green-50 rounded-full text-green-700 text-xs font-bold">
           <TrendingUp className="w-3 h-3" />
           <span>{trend}</span>
         </div>
       )}
     </div>
-    <div className="min-w-0">
-      <p className="text-gray-500 text-sm font-medium mb-1">{title}</p>
-      <h3 className="font-extrabold text-gray-900 tracking-tight leading-none text-3xl break-words">
-        {value}
-      </h3>
-    </div>
+    <p className="text-gray-500 text-sm font-medium mb-1">{title}</p>
+    <h3 className="font-extrabold text-gray-900 text-3xl truncate">{value}</h3>
   </div>
 );
 
-// --- MAIN DASHBOARD PAGE ---
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -152,303 +132,111 @@ export default function DashboardPage() {
       });
   }, [router]);
 
-  // ✅ DERIVE USER SETTINGS (Default to NG if missing, but respects user profile now)
   const currencyCode = data?.user?.currencyCode || 'NGN';
-  const userLocale = data?.user?.locale || 'en-NG'; // Should be 'en-US' for US users
+  const userLocale = data?.user?.locale || 'en-NG';
 
-  const chartData: ChartDataPoint[] = useMemo(() => {
-    if (data?.salesChart && Array.isArray(data.salesChart)) return data.salesChart;
-    
-    // Fallback logic
-    if (data?.transactions && Array.isArray(data.transactions)) {
-      const daysMap: Record<string, number> = { Sun: 0, Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0, Sat: 0 };
-      const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-      data.transactions.forEach((t) => {
-        if (t.type === 'SALE' && t.date) {
-          const d = new Date(t.date);
-          if (!Number.isNaN(d.getTime())) {
-            const key = dayNames[d.getDay()];
-            daysMap[key] += Number(t.amount) || 0;
-          }
-        }
-      });
-      const ordered = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-      return ordered.map((day) => ({ day, sales: daysMap[day] || 0 }));
-    }
-    return [];
-  }, [data]);
+  const inventory = data?.inventory || [];
+  const stockValue = inventory.reduce((acc, curr) => {
+    const qty = Number(curr.quantity ?? curr.stock ?? 0);
+    const price = Number(curr.price ?? curr.lastUnitPrice ?? 0);
+    return acc + (qty * price);
+  }, 0);
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-gray-50">
-        <div className="flex flex-col items-center gap-4">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-green-600" />
-          <p className="text-gray-400 text-sm font-medium animate-pulse">Loading...</p>
+      <div className="flex h-screen items-center justify-center bg-slate-50">
+        <div className="flex flex-col items-center gap-3">
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-600" />
+          <p className="text-gray-400 text-sm font-medium">Syncing your shop...</p>
         </div>
       </div>
     );
   }
 
-  const totalRevenue = Number(data?.stats?.revenue || 0);
-  const itemsSold = Number(data?.stats?.itemsSold || 0);
-  const inventory = Array.isArray(data?.inventory) ? data!.inventory! : [];
-  const transactions = Array.isArray(data?.transactions) ? data!.transactions! : [];
-
-  const stockValue = inventory.reduce((acc, curr) => {
-      const qty = Number(curr.quantity ?? curr.stock ?? 0);
-      const unitPrice = Number(curr.price ?? curr.lastUnitPrice ?? 0);
-      return acc + qty * unitPrice;
-    }, 0) || 0;
-
   return (
-    <div className="flex min-h-screen bg-slate-50 font-sans text-gray-900 relative overflow-x-hidden">
+    <div className="flex min-h-screen bg-slate-50 font-sans text-gray-900">
       {/* Mobile Sidebar Overlay */}
       {isMobileMenuOpen && (
-        <div
-          className="fixed inset-0 bg-slate-900/50 z-40 md:hidden backdrop-blur-sm transition-opacity"
-          onClick={() => setIsMobileMenuOpen(false)}
-        />
+        <div className="fixed inset-0 bg-slate-900/50 z-40 md:hidden backdrop-blur-sm" onClick={() => setIsMobileMenuOpen(false)} />
       )}
 
       {/* Sidebar */}
-      <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 transform transition-transform duration-300 ease-in-out md:translate-x-0 ${
-          isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}>
+      <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 transform transition-transform duration-300 md:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <Sidebar />
       </div>
 
       {/* Main Content */}
-      <main className="flex-1 md:ml-64 p-4 md:p-8 min-h-screen w-full max-w-[100vw] overflow-x-hidden">
+      <main className="flex-1 md:ml-64 p-4 md:p-8 w-full max-w-full overflow-x-hidden">
         {/* Header */}
         <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-          <div className="flex items-center gap-3 w-full md:w-auto min-w-0">
-            <button
-              onClick={() => setIsMobileMenuOpen(true)}
-              className="p-2 -ml-2 text-gray-600 hover:bg-white hover:shadow-sm rounded-lg md:hidden transition-all"
-            >
-              <Menu className="w-6 h-6" />
-            </button>
-
-            <div className="min-w-0">
-              <h1 className="text-2xl md:text-3xl font-bold text-gray-900 tracking-tight truncate">
-                {getGreeting()},{' '}
-                <span className="text-green-700">{data?.user?.shopName || 'Owner'}</span>
+          <div className="flex items-center gap-3">
+            <button onClick={() => setIsMobileMenuOpen(true)} className="p-2 -ml-2 text-gray-600 md:hidden"><Menu className="w-6 h-6" /></button>
+            <div>
+              <h1 className="text-2xl md:text-3xl font-black text-gray-900">
+                {getGreeting()}, <span className="text-emerald-700">{data?.user?.shopName || 'Owner'}</span>
               </h1>
-              <p className="text-gray-500 text-sm mt-1 flex items-center gap-2 min-w-0">
-                <Calendar className="w-4 h-4 shrink-0" />
-                <span className="truncate">
-                  {/* ✅ FIX: Dynamic Date Locale */}
-                  {new Date().toLocaleDateString(userLocale, {
-                    weekday: 'long',
-                    day: 'numeric',
-                    month: 'long',
-                  })}
-                </span>
+              <p className="text-gray-500 text-sm mt-1 flex items-center gap-2">
+                <Calendar className="w-4 h-4" />
+                {new Date().toLocaleDateString(userLocale, { weekday: 'long', day: 'numeric', month: 'long' })}
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-4 self-end md:self-auto">
-            <button className="p-2 bg-white rounded-full border border-gray-200 text-gray-500 hover:text-green-600 hover:border-green-200 hover:shadow-sm transition-all relative">
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-2 right-2.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white" />
-            </button>
-            <div className="h-10 w-10 bg-green-100 text-green-700 rounded-full border border-green-200 flex items-center justify-center font-bold text-sm shrink-0">
+            <div className="h-10 w-10 bg-emerald-100 text-emerald-700 rounded-full border border-emerald-200 flex items-center justify-center font-bold text-sm">
               {data?.user?.initials || 'IO'}
             </div>
           </div>
         </header>
 
-        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
-          {/* Stats Row */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <StatCard
-              title="Total Money Made"
-              value={formatCurrency(totalRevenue, currencyCode, userLocale)} // ✅ Dynamic
-              icon={Wallet}
-              bgClass="bg-green-50"
-              iconColor="text-green-600"
-              trend="Going Up"
-            />
-            <StatCard
-              title="Total Value of Goods"
-              value={formatCurrency(stockValue, currencyCode, userLocale)} // ✅ Dynamic
-              icon={Coins}
-              bgClass="bg-blue-50"
-              iconColor="text-blue-600"
-              trend="Stable"
-            />
-            <StatCard
-              title="Items Sold Today"
-              value={itemsSold}
-              icon={ShoppingBag}
-              bgClass="bg-orange-50"
-              iconColor="text-orange-600"
-              trend="Active"
-            />
-          </div>
+        {/* Stats Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <StatCard title="Money Made" value={formatCurrency(data?.stats?.revenue || 0, currencyCode, userLocale)} icon={Wallet} bgClass="bg-emerald-50" iconColor="text-emerald-600" trend="Up" />
+          <StatCard title="Stock Value" value={formatCurrency(stockValue, currencyCode, userLocale)} icon={Coins} bgClass="bg-blue-50" iconColor="text-blue-600" trend="Stable" />
+          <StatCard title="Sales Today" value={data?.stats?.itemsSold || 0} icon={ShoppingBag} bgClass="bg-orange-50" iconColor="text-orange-600" trend="Active" />
+        </div>
 
-          {/* Charts Row */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Sales Bar Chart */}
-            <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col h-80">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="font-bold text-lg text-gray-800">Sales Overview</h3>
-              </div>
-
-              <div className="flex-1 w-full overflow-hidden">
-                {chartData.reduce((a, b) => a + (Number(b.sales) || 0), 0) > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={chartData} barSize={28} margin={{ left: 6, right: 6 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                      <XAxis
-                        dataKey="day"
-                        axisLine={false}
-                        tickLine={false}
-                        tick={{ fill: '#94a3b8', fontSize: 12 }}
-                        dy={10}
-                      />
-                      <YAxis
-                        axisLine={false}
-                        tickLine={false}
-                        tick={{ fill: '#94a3b8', fontSize: 12 }}
-                        tickFormatter={(value: number) => (value >= 1000 ? `${Math.round(value / 1000)}k` : `${value}`)}
-                      />
-                      <Tooltip
-                        cursor={{ fill: '#f0fdf4', radius: 4 }}
-                        contentStyle={{
-                          borderRadius: '8px',
-                          border: 'none',
-                          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
-                          padding: '12px',
-                        }}
-                        formatter={(value: any) => [formatCurrency(Number(value) || 0, currencyCode, userLocale), 'Sales']} // ✅ Dynamic
-                      />
-                      <Bar dataKey="sales" radius={[6, 6, 6, 6]}>
-                        {chartData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={Number(entry.sales) > 0 ? '#16a34a' : '#e2e8f0'} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="h-full flex flex-col items-center justify-center text-gray-400">
-                    <Wallet className="w-8 h-8 text-gray-200 mb-2" />
-                    <p className="text-sm">No sales data recorded yet.</p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Top Items List */}
-            <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col h-80">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="font-bold text-lg text-gray-800">Top Items</h3>
-                <button
-                  onClick={() => router.push('/inventory')}
-                  className="text-xs font-semibold text-green-700 hover:bg-green-50 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
-                >
-                  View All <ArrowUpRight className="w-3 h-3" />
-                </button>
-              </div>
-
-              <div className="flex-1 overflow-y-auto pr-2 space-y-3">
-                {inventory.slice(0, 5).map((item, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100 hover:border-green-200 transition-colors"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-9 h-9 bg-white rounded-lg flex items-center justify-center border border-gray-200 font-bold text-gray-500 text-xs shadow-sm shrink-0">
-                        {String(item.name || '').substring(0, 2).toUpperCase()}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-semibold text-sm text-gray-900 capitalize truncate">
-                          {item.name}
-                        </p>
-                        <p className="text-[10px] text-gray-500">
-                          {(Number(item.quantity ?? item.stock ?? 0) < 5) ? <span className="text-red-500">Low Stock</span> : 'In Stock'}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p className="text-sm font-bold text-gray-900">
-                        {Number(item.quantity ?? item.stock ?? 0)}
-                      </p>
-                      <p className="text-[10px] text-gray-500">
-                        {formatCurrency(Number(item.price ?? item.lastUnitPrice ?? 0), currencyCode, userLocale)} {/* ✅ Dynamic */}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
+        {/* Charts & Tables Section */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Sales Chart */}
+          <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm h-80 flex flex-col">
+            <h3 className="font-bold text-lg mb-4">Weekly Performance</h3>
+            <div className="flex-1 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={data?.salesChart || []}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} />
+                  <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} />
+                  <Tooltip formatter={(value: any) => formatCurrency(value, currencyCode, userLocale)} />
+                  <Bar dataKey="sales" fill="#10b981" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
           </div>
 
-          {/* Recent Transactions Table */}
+          {/* Recent Sales List */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="p-6 border-b border-gray-50 flex justify-between items-center">
-              <h3 className="font-bold text-lg text-gray-800">Recent Transactions</h3>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm text-left min-w-[680px] md:min-w-0">
-                <thead className="bg-gray-50/50 text-gray-500 font-medium border-b border-gray-100">
-                  <tr>
-                    <th className="px-6 py-4 font-medium whitespace-nowrap">Item</th>
-                    <th className="px-6 py-4 font-medium whitespace-nowrap text-center">Date</th>
-                    <th className="px-6 py-4 font-medium text-center whitespace-nowrap">Status</th>
-                    <th className="px-6 py-4 font-medium text-right whitespace-nowrap">Amount</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {transactions.slice(0, 5).map((t) => {
-                    const d = new Date(t.date);
-                    const safeDate = Number.isNaN(d.getTime()) ? null : d;
-
-                    return (
-                      <tr key={String(t.id)} className="hover:bg-slate-50 transition-colors">
-                        <td className="px-6 py-4 font-medium text-gray-900 capitalize flex items-center gap-3 whitespace-nowrap">
-                          <div
-                            className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                              t.type === 'SALE' ? 'bg-green-50 text-green-600' : 'bg-blue-50 text-blue-600'
-                            }`}
-                          >
-                            {t.type === 'SALE' ? <ArrowUpRight className="w-4 h-4" /> : <Coins className="w-4 h-4" />}
-                          </div>
-                          <span className="truncate max-w-[260px]">{t.item}</span>
-                        </td>
-
-                        <td className="px-6 py-4 text-gray-500 whitespace-nowrap text-center text-xs">
-                          {/* ✅ FIX: Dynamic Date Locale */}
-                          {safeDate
-                            ? safeDate.toLocaleDateString(userLocale, { month: 'short', day: 'numeric' })
-                            : '—'}
-                          <span className="text-gray-300 ml-1">|</span>{' '}
-                          {safeDate ? safeDate.toLocaleTimeString(userLocale, { hour: '2-digit', minute: '2-digit' }) : '—'}
-                        </td>
-
-                        <td className="px-6 py-4 text-center whitespace-nowrap">
-                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide uppercase ${
-                              t.type === 'SALE'
-                                ? 'bg-green-50 text-green-700 border border-green-100'
-                                : 'bg-blue-50 text-blue-700 border border-blue-100'
-                            }`}>
-                            {t.type}
-                          </span>
-                        </td>
-
-                        <td className="px-6 py-4 text-right font-bold text-gray-900 whitespace-nowrap">
-                          {t.type === 'SALE' ? '+' : ''}
-                          {formatCurrency(Number(t.amount) || 0, currencyCode, userLocale)} {/* ✅ Dynamic */}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+             <div className="p-6 border-b border-gray-50 flex justify-between items-center">
+               <h3 className="font-bold text-lg">Recent Transactions</h3>
+             </div>
+             <div className="overflow-x-auto">
+               <table className="w-full text-sm text-left">
+                 <thead className="bg-gray-50 text-gray-500 uppercase text-[10px] font-bold">
+                   <tr>
+                     <th className="px-6 py-4">Item</th>
+                     <th className="px-6 py-4 text-right">Amount</th>
+                   </tr>
+                 </thead>
+                 <tbody className="divide-y divide-gray-50">
+                   {data?.transactions?.slice(0, 5).map((t, i) => (
+                     <tr key={i} className="hover:bg-slate-50 transition-colors">
+                       <td className="px-6 py-4 font-medium text-gray-900 capitalize truncate max-w-[150px]">{t.item}</td>
+                       <td className="px-6 py-4 text-right font-bold">{formatCurrency(t.amount, currencyCode, userLocale)}</td>
+                     </tr>
+                   ))}
+                 </tbody>
+               </table>
+             </div>
           </div>
         </div>
       </main>

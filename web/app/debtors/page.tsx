@@ -2,52 +2,124 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
-import Swal from 'sweetalert2';
-import { 
-  Search, Plus, User, Edit2, Trash2, 
-  Wallet, Loader2, MoreVertical, X, 
-  CheckCircle2, ArrowRight, ShieldAlert,
-  Coins, Phone
-} from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import Sidebar from '../../components/Sidebar';
+import {
+  Wallet,
+  Coins,
+  ShoppingBag,
+  Menu,
+  Bell,
+  ArrowUpRight,
+  Calendar,
+  TrendingUp,
+  ArrowRight,
+  Clock,
+  Layout
+} from 'lucide-react';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Cell,
+} from 'recharts';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 
 // --- TYPES ---
-interface Debtor {
-  _id: string;
-  displayName: string;
-  aliases: string[];
-  // These come from the backend aggregation, not the schema directly
-  totalDebt: number; 
-  lastTransactionDate?: string;
+interface InventoryItem {
+  name: string;
+  quantity?: number;
+  stock?: number;
+  price?: number;
+  lastUnitPrice?: number;
 }
 
-interface UserProfile {
-  currencyCode?: string;
-  locale?: string;
+interface TransactionRow {
+  id: number | string;
+  type: 'SALE' | 'RESTOCK' | 'DEBT_PAYMENT';
+  item: string;
+  qty: number;
+  amount: number;
+  date: string;
 }
 
-// --- COMPONENTS ---
+interface ChartDataPoint {
+  day: string;
+  sales: number;
+}
 
-export default function DebtorsPage() {
-  const router = useRouter();
-  const [debtors, setDebtors] = useState<Debtor[]>([]);
+interface DashboardResponse {
+  user?: {
+    name?: string;
+    shopName?: string;
+    initials?: string;
+    currencyCode?: string;
+    locale?: string;
+  };
+  stats?: {
+    revenue?: number;
+    itemsSold?: number;
+  };
+  inventory?: InventoryItem[];
+  transactions?: TransactionRow[];
+  salesChart?: ChartDataPoint[];
+}
+
+// --- DYNAMIC CURRENCY FORMATTER ---
+const formatCurrency = (amount: number, currencyCode = 'NGN', locale = 'en-NG') => {
+  const safe = Number(amount) || 0;
+  return new Intl.NumberFormat(locale, {
+    style: 'currency',
+    currency: currencyCode,
+    maximumFractionDigits: 0,
+  }).format(safe);
+};
+
+const getGreeting = () => {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good Morning';
+  if (hour < 18) return 'Good Afternoon';
+  return 'Good Evening';
+};
+
+// --- RESTORED STAT CARD ---
+const StatCard = ({ title, value, icon: Icon, bgClass, iconColor, trend }: any) => (
+  <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all duration-300 flex flex-col justify-between h-full relative overflow-hidden group">
+    <div className="absolute top-0 right-0 w-24 h-24 bg-gray-50 rounded-bl-[100px] -mr-10 -mt-10 transition-all group-hover:bg-emerald-50/50" />
+    
+    <div className="relative z-10">
+      <div className="flex justify-between items-start mb-4">
+        <div className={`p-3 rounded-xl ${bgClass} ${iconColor} shadow-sm`}>
+          <Icon className="w-6 h-6" />
+        </div>
+        {trend && (
+          <div className="flex items-center gap-1 px-2.5 py-1 bg-green-50 rounded-full text-green-700 text-[10px] font-bold uppercase tracking-wider">
+            <TrendingUp className="w-3 h-3" />
+            <span>{trend}</span>
+          </div>
+        )}
+      </div>
+      <div>
+        <p className="text-gray-500 text-sm font-semibold mb-1 uppercase tracking-tight">{title}</p>
+        <h3 className="font-black text-gray-900 text-3xl tracking-tight leading-none break-words">
+          {value}
+        </h3>
+      </div>
+    </div>
+  </div>
+);
+
+export default function DashboardPage() {
+  const [data, setData] = useState<DashboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [user, setUser] = useState<UserProfile | null>(null);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const router = useRouter();
 
-  // Modal States
-  const [isFormOpen, setIsFormOpen] = useState(false);
-  const [isPaymentOpen, setIsPaymentOpen] = useState(false);
-  const [selectedDebtor, setSelectedDebtor] = useState<Debtor | null>(null);
-
-  // Form Data
-  const [formData, setFormData] = useState({ displayName: '', aliases: '' });
-  const [paymentData, setPaymentData] = useState({ amount: '' });
-  const [submitting, setSubmitting] = useState(false);
-
-  // --- INITIAL LOAD ---
   useEffect(() => {
     const token = localStorage.getItem('tallyToken');
     if (!token) {
@@ -55,367 +127,271 @@ export default function DebtorsPage() {
       return;
     }
 
-    // 1. Get User Config (Currency)
-    axios.get(`${API_URL}/dashboard`, { headers: { Authorization: `Bearer ${token}` } })
-      .then(res => { if(res.data?.user) setUser(res.data.user); })
-      .catch(console.error);
-
-    fetchDebtors(token);
+    axios
+      .get(`${API_URL}/dashboard`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((res) => {
+        setData(res.data as DashboardResponse);
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.error('Dashboard Fetch Error:', err);
+        setLoading(false);
+      });
   }, [router]);
 
-  const fetchDebtors = async (token: string) => {
-    try {
-      setLoading(true);
-      // Backend should aggregate Transactions to get 'totalDebt' for each Debtor
-      const res = await axios.get(`${API_URL}/debtors`, { headers: { Authorization: `Bearer ${token}` } });
-      setDebtors(res.data);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Derived settings
+  const currencyCode = data?.user?.currencyCode || 'NGN';
+  const userLocale = data?.user?.locale || 'en-NG';
+  const inventory = data?.inventory || [];
+  
+  const stockValue = useMemo(() => {
+    return inventory.reduce((acc, curr) => {
+      const qty = Number(curr.quantity ?? curr.stock ?? 0);
+      const price = Number(curr.price ?? curr.lastUnitPrice ?? 0);
+      return acc + (qty * price);
+    }, 0);
+  }, [inventory]);
 
-  // --- ACTIONS ---
-
-  const handleDelete = async (id: string, name: string) => {
-    const result = await Swal.fire({
-      title: `Delete ${name}?`,
-      text: "This removes the name from your list. It does NOT delete their sales history.",
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonColor: '#d33',
-      cancelButtonColor: '#3085d6',
-      confirmButtonText: 'Yes, delete'
-    });
-
-    if (result.isConfirmed) {
-      const token = localStorage.getItem('tallyToken');
-      try {
-        await axios.delete(`${API_URL}/debtors/${id}`, { headers: { Authorization: `Bearer ${token}` } });
-        setDebtors(prev => prev.filter(d => d._id !== id));
-        Swal.fire('Deleted!', 'Debtor removed.', 'success');
-      } catch (error) {
-        Swal.fire('Error', 'Could not delete debtor.', 'error');
-      }
-    }
-  };
-
-  const handleSaveDebtor = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmitting(true);
-    const token = localStorage.getItem('tallyToken');
-
-    try {
-      const payload = {
-        displayName: formData.displayName,
-        aliases: formData.aliases.split(',').map(s => s.trim()).filter(Boolean)
-      };
-
-      if (selectedDebtor) {
-        // Update
-        const res = await axios.put(`${API_URL}/debtors/${selectedDebtor._id}`, payload, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        setDebtors(prev => prev.map(d => d._id === selectedDebtor._id ? { ...d, ...res.data, totalDebt: d.totalDebt } : d));
-        Swal.fire({ toast: true, icon: 'success', title: 'Updated successfully', position: 'top-end', showConfirmButton: false, timer: 3000 });
-      } else {
-        // Create
-        const res = await axios.post(`${API_URL}/debtors`, payload, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        setDebtors(prev => [ { ...res.data, totalDebt: 0 }, ...prev]);
-        Swal.fire({ toast: true, icon: 'success', title: 'Debtor added', position: 'top-end', showConfirmButton: false, timer: 3000 });
-      }
-      closeForm();
-    } catch (err) {
-      Swal.fire('Error', 'Failed to save details.', 'error');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleRecordPayment = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedDebtor) return;
-    setSubmitting(true);
-    const token = localStorage.getItem('tallyToken');
-
-    try {
-      // This hits your SALES endpoint to record a "DEBT_PAYMENT" transaction
-      await axios.post(`${API_URL}/debtors/payment`, {
-        debtorId: selectedDebtor._id,
-        amount: Number(paymentData.amount),
-        date: new Date().toISOString()
-      }, { headers: { Authorization: `Bearer ${token}` } });
-
-      // Update local state to reflect new balance
-      setDebtors(prev => prev.map(d => 
-        d._id === selectedDebtor._id 
-          ? { ...d, totalDebt: Math.max(0, d.totalDebt - Number(paymentData.amount)) } 
-          : d
-      ));
-
-      Swal.fire({ icon: 'success', title: 'Payment Recorded!', text: `New balance updated.` });
-      closePayment();
-    } catch (err) {
-      Swal.fire('Error', 'Could not record payment.', 'error');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // --- HELPERS ---
-  const formatMoney = (amount: number) => {
-    return new Intl.NumberFormat(user?.locale || 'en-NG', {
-      style: 'currency', currency: user?.currencyCode || 'NGN', maximumFractionDigits: 0
-    }).format(amount);
-  };
-
-  const openAdd = () => {
-    setSelectedDebtor(null);
-    setFormData({ displayName: '', aliases: '' });
-    setIsFormOpen(true);
-  };
-
-  const openEdit = (d: Debtor) => {
-    setSelectedDebtor(d);
-    setFormData({ displayName: d.displayName, aliases: d.aliases.join(', ') });
-    setIsFormOpen(true);
-  };
-
-  const openPayment = (d: Debtor) => {
-    setSelectedDebtor(d);
-    setPaymentData({ amount: '' });
-    setIsPaymentOpen(true);
-  };
-
-  const closeForm = () => setIsFormOpen(false);
-  const closePayment = () => setIsPaymentOpen(false);
-
-  const filtered = useMemo(() => {
-    return debtors.filter(d => 
-      d.displayName.toLowerCase().includes(search.toLowerCase()) || 
-      d.aliases.some(a => a.toLowerCase().includes(search.toLowerCase()))
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-slate-50">
+        <div className="flex flex-col items-center gap-3">
+          <div className="relative">
+            <div className="w-12 h-12 border-4 border-emerald-100 rounded-full" />
+            <div className="absolute top-0 left-0 w-12 h-12 border-4 border-emerald-600 rounded-full border-t-transparent animate-spin" />
+          </div>
+          <p className="text-gray-500 font-bold text-sm tracking-widest uppercase">Syncing Dashboard...</p>
+        </div>
+      </div>
     );
-  }, [debtors, search]);
+  }
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans text-gray-900 pb-20">
+    <div className="flex min-h-screen bg-slate-50 font-sans text-gray-900 relative overflow-x-hidden">
       
-      {/* --- HEADER --- */}
-      <div className="bg-white border-b border-gray-200 sticky top-0 z-20">
-        <div className="max-w-5xl mx-auto px-4 py-4 md:py-6">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-            <div>
-              <h1 className="text-2xl font-black text-gray-900 tracking-tight">Debtors Manager</h1>
-              <p className="text-sm text-gray-500 font-medium">
-                Track who owes you and record payments
+      {/* Sidebar Overlay */}
+      {isMobileMenuOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 z-40 md:hidden backdrop-blur-sm transition-opacity" onClick={() => setIsMobileMenuOpen(false)} />
+      )}
+
+      {/* Sidebar Container */}
+      <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 transform transition-transform duration-300 ease-in-out md:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <Sidebar />
+      </div>
+
+      {/* Main Container */}
+      <main className="flex-1 md:ml-64 p-4 md:p-8 w-full max-w-full min-h-screen overflow-x-hidden">
+        
+        {/* --- HEADER STRUCTURE --- */}
+        <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-6">
+          <div className="flex items-center gap-4 min-w-0">
+            <button onClick={() => setIsMobileMenuOpen(true)} className="p-2.5 bg-white border border-gray-200 rounded-xl md:hidden text-gray-600 shadow-sm active:scale-95 transition-transform">
+              <Menu className="w-6 h-6" />
+            </button>
+            <div className="min-w-0">
+              <h1 className="text-3xl font-black text-gray-900 tracking-tight leading-tight">
+                {getGreeting()}, <span className="text-emerald-700">{data?.user?.shopName || 'Owner'}</span>
+              </h1>
+              <p className="text-gray-500 text-sm mt-1 flex items-center gap-2 font-medium">
+                <Calendar className="w-4 h-4 text-emerald-600" />
+                {new Date().toLocaleDateString(userLocale, { weekday: 'long', day: 'numeric', month: 'long' })}
               </p>
             </div>
-            <button 
-              onClick={openAdd}
-              className="w-full md:w-auto px-5 py-3 bg-gray-900 hover:bg-black text-white font-bold rounded-xl shadow-lg shadow-gray-200 active:scale-95 transition-all flex items-center justify-center gap-2"
-            >
-              <Plus className="w-5 h-5" />
-              Add New Debtor
-            </button>
           </div>
 
-          {/* Search Bar */}
-          <div className="mt-6 relative group">
-            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-              <Search className="h-5 w-5 text-gray-400 group-focus-within:text-emerald-500 transition-colors" />
+          <div className="flex items-center gap-4 self-end md:self-auto shrink-0">
+            <button className="p-3 bg-white rounded-full border border-gray-200 text-gray-400 hover:text-emerald-600 hover:border-emerald-200 transition-all relative">
+              <Bell className="w-5 h-5" />
+              <span className="absolute top-3 right-3 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white" />
+            </button>
+            <div className="h-12 w-12 bg-emerald-100 text-emerald-700 rounded-2xl border-2 border-emerald-50 flex items-center justify-center font-black text-lg shadow-sm">
+              {data?.user?.initials || 'IO'}
             </div>
-            <input 
-              type="text" 
-              placeholder="Search by name or alias..." 
-              className="block w-full pl-11 pr-4 py-4 bg-gray-50 border border-gray-200 rounded-2xl text-base font-medium text-gray-900 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all shadow-sm"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+          </div>
+        </header>
+
+        {/* --- CONTENT STRUCTURE --- */}
+        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-6 duration-700">
+          
+          {/* 1. Stats Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <StatCard 
+              title="Total Revenue" 
+              value={formatCurrency(data?.stats?.revenue || 0, currencyCode, userLocale)} 
+              icon={Wallet} 
+              bgClass="bg-emerald-50" 
+              iconColor="text-emerald-600" 
+              trend="Performance" 
+            />
+            <StatCard 
+              title="Estimated Stock" 
+              value={formatCurrency(stockValue, currencyCode, userLocale)} 
+              icon={Coins} 
+              bgClass="bg-blue-50" 
+              iconColor="text-blue-600" 
+            />
+            <StatCard 
+              title="Items Sold Today" 
+              value={data?.stats?.itemsSold || 0} 
+              icon={ShoppingBag} 
+              bgClass="bg-orange-50" 
+              iconColor="text-orange-600" 
+              trend="Live" 
             />
           </div>
-        </div>
-      </div>
 
-      {/* --- LIST CONTENT --- */}
-      <div className="max-w-5xl mx-auto px-4 py-6">
-        {loading ? (
-          <div className="flex justify-center py-20">
-            <Loader2 className="w-10 h-10 animate-spin text-emerald-600" />
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-center opacity-60">
-            <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mb-4">
-              <User className="w-10 h-10 text-gray-400" />
+          {/* 2. Charts & Items Section */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            
+            {/* Sales Performance Card */}
+            <div className="bg-white p-6 md:p-8 rounded-3xl border border-gray-100 shadow-sm flex flex-col h-[400px]">
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                   <h3 className="font-black text-gray-900 text-xl tracking-tight">Sales Overview</h3>
+                   <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mt-1">Weekly Performance</p>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center text-gray-400">
+                   <TrendingUp className="w-5 h-5" />
+                </div>
+              </div>
+
+            <div className="flex-1 w-full mt-2">
+  <ResponsiveContainer width="100%" height="100%">
+    <BarChart data={data?.salesChart || []}>
+      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f8fafc" />
+      <XAxis 
+        dataKey="day" 
+        axisLine={false} 
+        tickLine={false} 
+        tick={{fill: '#94a3b8', fontSize: 12, fontWeight: 600}} 
+        dy={10} 
+      />
+      <YAxis 
+        axisLine={false} 
+        tickLine={false} 
+        tick={{fill: '#94a3b8', fontSize: 12, fontWeight: 600}} 
+        tickFormatter={(val: number) => val >= 1000 ? `${val/1000}k` : val} // Type val
+      />
+      <Tooltip 
+        cursor={{fill: '#f1f5f9', radius: 8}}
+        contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)'}}
+        formatter={(val: number) => [formatCurrency(val, currencyCode, userLocale), 'Sales']} // Type val
+      />
+      <Bar dataKey="sales" fill="#10b981" radius={[8, 8, 8, 8]} barSize={32} />
+    </BarChart>
+  </ResponsiveContainer>
+</div>
             </div>
-            <h3 className="text-lg font-bold text-gray-900">No debtors found</h3>
-            <p className="text-gray-500">Add people who buy on credit to track them here.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {filtered.map(debtor => (
-              <div key={debtor._id} className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm hover:shadow-md transition-all group relative overflow-hidden">
-                
-                {/* Visual Header */}
-                <div className="flex justify-between items-start mb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-100 flex items-center justify-center text-emerald-700 font-black text-lg shadow-sm">
-                      {debtor.displayName.substring(0, 2).toUpperCase()}
+
+            {/* Inventory List Card */}
+            <div className="bg-white p-6 md:p-8 rounded-3xl border border-gray-100 shadow-sm flex flex-col h-[400px]">
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                   <h3 className="font-black text-gray-900 text-xl tracking-tight">Top Inventory</h3>
+                   <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mt-1">Current Stock Status</p>
+                </div>
+                <button onClick={() => router.push('/inventory')} className="text-xs font-black text-emerald-600 hover:bg-emerald-50 px-4 py-2 rounded-xl transition-all flex items-center gap-2 border border-emerald-100">
+                  ALL <ArrowRight className="w-3 h-3" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto space-y-4 pr-1 scrollbar-thin scrollbar-thumb-gray-100">
+                {inventory.length > 0 ? (
+                  inventory.slice(0, 6).map((item, i) => (
+                    <div key={i} className="flex items-center justify-between p-4 rounded-2xl bg-gray-50/50 border border-gray-100 hover:bg-white hover:border-emerald-200 transition-all group">
+                      <div className="flex items-center gap-4 min-w-0">
+                        <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center border border-gray-200 font-black text-gray-400 text-sm shadow-sm group-hover:bg-emerald-50 group-hover:text-emerald-600 group-hover:border-emerald-100 transition-colors">
+                          {String(item.name || '').substring(0, 2).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-bold text-gray-900 capitalize truncate">{item.name}</p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className={`w-2 h-2 rounded-full ${(Number(item.quantity ?? item.stock ?? 0) < 5) ? 'bg-red-500 animate-pulse' : 'bg-emerald-500'}`} />
+                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                              {Number(item.quantity ?? item.stock ?? 0)} In Stock
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-sm font-black text-gray-900">
+                          {formatCurrency(Number(item.price ?? item.lastUnitPrice ?? 0), currencyCode, userLocale)}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="font-bold text-gray-900 text-lg leading-tight capitalize">{debtor.displayName}</h3>
-                      <p className="text-xs text-gray-500 font-medium">
-                        {debtor.aliases.length > 0 ? `Alias: ${debtor.aliases[0]}` : 'No alias'}
-                      </p>
-                    </div>
+                  ))
+                ) : (
+                  <div className="h-full flex flex-col items-center justify-center text-gray-300 gap-2">
+                    <Layout className="w-10 h-10 opacity-20" />
+                    <p className="text-xs font-bold uppercase tracking-widest">No Items Found</p>
                   </div>
-                  
-                  {/* Action Menu (Edit/Delete) */}
-                  <div className="flex gap-1">
-                    <button onClick={() => openEdit(debtor)} className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                    <button onClick={() => handleDelete(debtor._id, debtor.displayName)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Debt Amount Display */}
-                <div className="bg-gray-50 rounded-xl p-4 mb-4 flex justify-between items-center border border-gray-100">
-                  <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">Outstanding Balance</span>
-                  <span className={`text-xl font-black ${debtor.totalDebt > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-                    {formatMoney(debtor.totalDebt)}
-                  </span>
-                </div>
-
-                {/* Action Buttons */}
-                <div className="flex gap-3">
-                  <button 
-                    onClick={() => openPayment(debtor)}
-                    disabled={debtor.totalDebt <= 0}
-                    className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed text-white font-bold rounded-xl shadow-lg shadow-emerald-200 transition-all active:scale-95 flex items-center justify-center gap-2 text-sm"
-                  >
-                    {debtor.totalDebt > 0 ? (
-                      <>
-                        <Wallet className="w-4 h-4" /> Settle Debt
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle2 className="w-4 h-4" /> Cleared
-                      </>
-                    )}
-                  </button>
-                </div>
-
+                )}
               </div>
-            ))}
+            </div>
           </div>
-        )}
-      </div>
 
-      {/* --- ADD / EDIT MODAL --- */}
-      {isFormOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl animate-in zoom-in-95">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-black text-gray-900">
-                {selectedDebtor ? 'Edit Details' : 'New Debtor'}
-              </h3>
-              <button onClick={closeForm} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition"><X className="w-5 h-5"/></button>
+          {/* 3. Transactions Table Section */}
+          <div className="bg-white rounded-[32px] border border-gray-100 shadow-sm overflow-hidden">
+            <div className="p-8 border-b border-gray-50 flex justify-between items-center bg-gray-50/30">
+               <div>
+                  <h3 className="font-black text-gray-900 text-xl tracking-tight">Recent Sales</h3>
+                  <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mt-1">Latest Store Activity</p>
+               </div>
+               <button onClick={() => router.push('/sales')} className="p-3 bg-white rounded-2xl border border-gray-200 text-gray-400 hover:text-emerald-600 hover:border-emerald-200 transition-all shadow-sm">
+                  <ArrowUpRight className="w-5 h-5" />
+               </button>
             </div>
 
-            <form onSubmit={handleSaveDebtor} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Full Name</label>
-                <input 
-                  required
-                  className="w-full p-4 bg-gray-50 border border-gray-200 rounded-xl font-bold text-gray-900 focus:ring-2 focus:ring-emerald-500 outline-none"
-                  placeholder="e.g. Emeka Okafor"
-                  value={formData.displayName}
-                  onChange={e => setFormData({...formData, displayName: e.target.value})}
-                />
-              </div>
-              
-              <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Aliases / Nicknames</label>
-                <input 
-                  className="w-full p-4 bg-gray-50 border border-gray-200 rounded-xl font-medium text-gray-900 focus:ring-2 focus:ring-emerald-500 outline-none"
-                  placeholder="e.g. Mama Chinedu, Customer A"
-                  value={formData.aliases}
-                  onChange={e => setFormData({...formData, aliases: e.target.value})}
-                />
-                <p className="text-[10px] text-gray-400 mt-1">Separate multiple aliases with commas.</p>
-              </div>
-
-              <div className="pt-4">
-                <button 
-                  type="submit" 
-                  disabled={submitting}
-                  className="w-full py-4 bg-gray-900 text-white font-bold rounded-xl hover:bg-black transition flex justify-center items-center gap-2"
-                >
-                  {submitting ? <Loader2 className="animate-spin w-5 h-5"/> : (selectedDebtor ? 'Save Changes' : 'Create Debtor')}
-                </button>
-              </div>
-            </form>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left min-w-[700px]">
+                <thead className="bg-gray-50/50 text-gray-400 text-[10px] font-black uppercase tracking-[2px] border-b border-gray-100">
+                  <tr>
+                    <th className="px-8 py-5">Product Details</th>
+                    <th className="px-8 py-5 text-center">Timestamp</th>
+                    <th className="px-8 py-5 text-right">Transaction Amount</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {data?.transactions && data.transactions.length > 0 ? (
+                    data.transactions.slice(0, 5).map((t, i) => (
+                      <tr key={i} className="hover:bg-slate-50/80 transition-colors group">
+                        <td className="px-8 py-6">
+                          <div className="flex items-center gap-4">
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-sm ${
+                              t.type === 'SALE' ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-blue-600'
+                            }`}>
+                              {t.type === 'SALE' ? <ShoppingBag className="w-5 h-5" /> : <Coins className="w-5 h-5" />}
+                            </div>
+                            <span className="font-bold text-gray-900 capitalize text-sm group-hover:text-emerald-700 transition-colors truncate max-w-[250px]">{t.item}</span>
+                          </div>
+                        </td>
+                        <td className="px-8 py-6 text-center">
+                          <div className="flex flex-col items-center">
+                            <span className="text-sm font-bold text-gray-700">{new Date(t.date).toLocaleDateString(userLocale, { month: 'short', day: 'numeric' })}</span>
+                            <span className="text-[10px] font-bold text-gray-400 flex items-center gap-1 uppercase tracking-tighter">
+                              <Clock className="w-3 h-3" /> {new Date(t.date).toLocaleTimeString(userLocale, { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-8 py-6 text-right font-black text-gray-900 text-lg tabular-nums">
+                          {formatCurrency(t.amount, currencyCode, userLocale)}
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={3} className="px-8 py-20 text-center text-gray-300 font-bold uppercase tracking-widest text-xs">
+                        No transactions recorded yet
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
+
         </div>
-      )}
-
-      {/* --- PAYMENT MODAL --- */}
-      {isPaymentOpen && selectedDebtor && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl animate-in zoom-in-95">
-            <div className="text-center mb-6">
-              <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-4 text-emerald-600">
-                <Coins className="w-8 h-8" />
-              </div>
-              <h3 className="text-xl font-black text-gray-900">Record Payment</h3>
-              <p className="text-sm text-gray-500">from <span className="font-bold text-gray-800">{selectedDebtor.displayName}</span></p>
-            </div>
-
-            <div className="bg-red-50 p-3 rounded-xl mb-6 text-center border border-red-100">
-              <p className="text-xs text-red-600 font-bold uppercase">Current Debt</p>
-              <p className="text-2xl font-black text-red-700">{formatMoney(selectedDebtor.totalDebt)}</p>
-            </div>
-
-            <form onSubmit={handleRecordPayment} className="space-y-4">
-              <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">Amount</span>
-                <input 
-                  type="number"
-                  required
-                  autoFocus
-                  className="w-full pl-20 pr-4 py-4 bg-gray-50 border border-gray-200 rounded-xl font-black text-xl text-gray-900 focus:ring-2 focus:ring-emerald-500 outline-none text-right"
-                  placeholder="0.00"
-                  value={paymentData.amount}
-                  onChange={e => setPaymentData({...paymentData, amount: e.target.value})}
-                  max={selectedDebtor.totalDebt} // Prevent overpayment
-                />
-              </div>
-
-              <div className="flex gap-3 pt-2">
-                <button 
-                  type="button" 
-                  onClick={closePayment}
-                  className="flex-1 py-3 bg-white border border-gray-200 text-gray-700 font-bold rounded-xl hover:bg-gray-50 transition"
-                >
-                  Cancel
-                </button>
-                <button 
-                  type="submit" 
-                  disabled={submitting}
-                  className="flex-1 py-3 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition flex justify-center items-center gap-2 shadow-lg shadow-emerald-200"
-                >
-                  {submitting ? <Loader2 className="animate-spin w-5 h-5"/> : 'Confirm'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
+      </main>
     </div>
   );
 }
