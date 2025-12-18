@@ -175,7 +175,8 @@ export default function SalesPage() {
             </div>
           </div>
         ) : (
-          <div className="max-w-5xl mx-auto">
+          // ✅ FIX: Removed 'max-w-5xl mx-auto' so it aligns left
+          <div className="w-full animate-in fade-in slide-in-from-bottom-4 duration-500">
             <SalesHistory user={user} />
           </div>
         )}
