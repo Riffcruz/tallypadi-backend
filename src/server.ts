@@ -10,24 +10,45 @@ import crypto from 'crypto';
 import path from 'path';
 import jwt from 'jsonwebtoken';
 
+// --- ROUTERS ---
 import whatsappRouter from './routes/whatsapp.routes';
 import paymentRouter from './routes/payment.routes';
 import adminRouter from './routes/admin.routes';
 import webhookRoutes from './routes/webhook.routes';
 import healthRouter from './routes/health.routes';
 
+// --- SERVICES & CONFIG ---
 import { loginUser } from './controllers/auth.controller';
 import { startScheduler } from './services/scheduler';
 import { env } from './config/env';
+
+// --- CONTROLLERS ---
 import { getDashboardData } from './controllers/dashboard.controller';
-
-import { getInventory, getInventoryItem, addInventoryItem, updateInventoryItem } from './controllers/inventory.controller';
-
-
+import { 
+  getInventory, 
+  getInventoryItem, 
+  addInventoryItem, 
+  updateInventoryItem 
+} from './controllers/inventory.controller';
 import { updateSettings } from './controllers/settings.controller';
 import { getGlobalSettings } from './controllers/admin.controller';
-import { recordSale, getSalesHistory, generateSalesReport } from './controllers/sales.controller';
 import { getStaff, addStaff, removeStaff } from './controllers/staff.controller';
+
+// Sales Controller (Strictly Sales & Reports)
+import { 
+  recordSale, 
+  getSalesHistory, 
+  generateSalesReport 
+} from './controllers/sales.controller';
+
+// ✅ Debtor Controller (Debtor CRUD + Payments)
+import { 
+  getDebtors, 
+  createDebtor, 
+  updateDebtor, 
+  deleteDebtor,
+  recordDebtPayment 
+} from './controllers/debtor.controller';
 
 dotenv.config();
 
@@ -46,13 +67,14 @@ const corsOptions: cors.CorsOptions = {
 app.use(cors(corsOptions));
 app.options(/.*/, cors(corsOptions));
 
+// Logging
 app.use((req, _res, next) => {
   console.log(`📨 ${req.method} ${req.originalUrl} from ${req.ip}`);
   next();
 });
 
 // ==========================================
-// 🔐 WEBHOOK SIGNATURE
+// 🔐 WEBHOOK SIGNATURE VERIFICATION
 // ==========================================
 const verifySignature = (req: any, _res: any, buf: Buffer) => {
   if (!req.originalUrl.startsWith('/api/whatsapp') || req.method !== 'POST') return;
@@ -83,7 +105,7 @@ const verifySignature = (req: any, _res: any, buf: Buffer) => {
 app.use(express.json({ limit: '1mb', verify: verifySignature }));
 
 // ==========================================
-// 🚦 RATE LIMIT
+// 🚦 RATE LIMITER
 // ==========================================
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -94,6 +116,7 @@ const apiLimiter = rateLimit({
 });
 
 app.use('/api', (req, res, next) => {
+  // Skip rate limit for webhooks
   if (req.originalUrl.startsWith('/api/whatsapp') || req.originalUrl.startsWith('/api/webhook')) {
     return next();
   }
@@ -101,7 +124,7 @@ app.use('/api', (req, res, next) => {
 });
 
 // ==========================================
-// ✅ WEBHOOK ROUTES FIRST
+// ✅ WEBHOOK ROUTES (No Auth Required)
 // ==========================================
 app.use(
   '/api/whatsapp',
@@ -118,7 +141,7 @@ app.use(
 app.use('/api/webhook', webhookRoutes);
 
 // ==========================================
-// 🧼 SANITIZE AFTER WEBHOOKS
+// 🧼 SECURITY SANITIZATION
 // ==========================================
 app.use(xss());
 
@@ -129,7 +152,7 @@ app.use((req, _res, next) => {
 });
 
 // ==========================================
-// ✅ AUTH MIDDLEWARE (JWT)
+// 🛡️ AUTH MIDDLEWARE
 // ==========================================
 const authRequired = (req: any, res: any, next: any) => {
   const auth = req.headers.authorization || '';
@@ -141,7 +164,6 @@ const authRequired = (req: any, res: any, next: any) => {
   const secret = process.env.JWT_SECRET || (env as any).jwtSecret;
 
   try {
-    // If secret exists => verify. Else decode (dev fallback)
     const decoded: any = secret ? jwt.verify(token, secret) : jwt.decode(token);
     const userId = decoded?.id || decoded?._id || decoded?.userId;
 
@@ -155,46 +177,44 @@ const authRequired = (req: any, res: any, next: any) => {
 };
 
 // ==========================================
-// 🚀 NORMAL API ROUTES
+// 🚀 API ROUTES
 // ==========================================
 
-// Auth
+// --- AUTH & DASHBOARD ---
 app.post('/api/login', loginUser);
-
-// Dashboard (if your dashboard needs auth, add authRequired here too)
 app.get('/api/dashboard', authRequired, getDashboardData);
 
-// Inventory ✅ (auth + includes GET /:id)
+// --- INVENTORY ---
 app.get('/api/inventory', authRequired, getInventory);
 app.get('/api/inventory/:id', authRequired, getInventoryItem);
 app.post('/api/inventory', authRequired, addInventoryItem);
 app.put('/api/inventory/:id', authRequired, updateInventoryItem);
-app.get('/api/inventory/:id', getInventoryItem);
 
-
-// Sales ✅ (auth)
+// --- SALES ---
 app.post('/api/sales', authRequired, recordSale);
 app.get('/api/sales', authRequired, getSalesHistory);
 app.get('/api/sales/report', authRequired, generateSalesReport);
 
-// Settings
+// --- DEBTORS (Identity Management) ---
+app.get('/api/debtors', authRequired, getDebtors);
+app.post('/api/debtors', authRequired, createDebtor);
+app.put('/api/debtors/:id', authRequired, updateDebtor);
+app.delete('/api/debtors/:id', authRequired, deleteDebtor);
+
+// --- DEBTOR PAYMENTS (Financial) ---
+app.post('/api/debtors/payment', authRequired, recordDebtPayment);
+
+// --- SETTINGS & STAFF ---
 app.put('/api/settings', authRequired, updateSettings);
-
-// Public Global Settings
-app.get('/api/admin/settings', getGlobalSettings);
-
-// Staff
+app.get('/api/admin/settings', getGlobalSettings); // Public config
 app.get('/api/staff', authRequired, getStaff);
 app.post('/api/staff', authRequired, addStaff);
 app.delete('/api/staff/:id', authRequired, removeStaff);
 
-// Payment
+// --- BILLING & SYSTEM ---
 app.use('/api/payment', paymentRouter);
-
-// Health
 app.use('/api/health', healthRouter);
 
-// Admin
 app.use(
   '/api/admin',
   (req, _res, next) => {

@@ -1,5 +1,6 @@
 import { Schema, model, Document, Types } from 'mongoose';
 
+// 1. Item Interface (Kept yours)
 export interface ITransactionItem {
   name: string;
   qty: number;
@@ -8,25 +9,32 @@ export interface ITransactionItem {
   total: number | null;
 }
 
+// 2. Main Interface
 export interface ITransaction extends Document {
-  user: Types.ObjectId; // ✅ shop owner id (NOT staff id)
-  type: 'SALE' | 'RESTOCK' | 'ADJUSTMENT' | 'PAYMENT_RECEIVED';
-  paymentStatus: 'PAID' | 'CREDIT';
+  user: Types.ObjectId; // Shop owner
+  
+  // ✅ ADDED 'DEBT_PAYMENT' to the list
+  type: 'SALE' | 'RESTOCK' | 'ADJUSTMENT' | 'PAYMENT_RECEIVED' | 'DEBT_PAYMENT';
+  
+  paymentStatus: 'PAID' | 'CREDIT' | 'PARTIAL'; // Added PARTIAL just in case
 
   items: ITransactionItem[];
   totalMoney: number | null;
 
-  // ✅ debtor linkage
-  debtorId?: Types.ObjectId | null;
-  customerName?: string | null;   // readable label
-  customerKey?: string | null;    // normalized key (optional but useful)
+  // ✅ DEBTOR LINKAGE
+  // Kept 'debtorId' for your old code, added 'debtor' for the new controller
+  debtorId?: Types.ObjectId | null; 
+  debtor?: Types.ObjectId | null;   
+  
+  customerName?: string | null;
+  customerKey?: string | null;
 
-  // ✅ debt settlement fields
+  // ✅ SETTLEMENT FIELDS
   amountPaid: number;
   balance: number;
   settledAt?: Date | null;
 
-  // ✅ undo fields
+  // ✅ UNDO FIELDS
   isUndone: boolean;
   undoneAt?: Date | null;
   undoneByMessageId?: string | null;
@@ -34,16 +42,27 @@ export interface ITransaction extends Document {
   timestamp: Date;
   date: string;
   messageId?: string;
-
-
-
+  
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 const transactionSchema = new Schema<ITransaction>(
   {
     user: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
-    type: { type: String, enum: ['SALE', 'RESTOCK', 'ADJUSTMENT', 'PAYMENT_RECEIVED'], required: true },
-    paymentStatus: { type: String, enum: ['PAID', 'CREDIT'], default: 'PAID' },
+    
+    // ✅ Updated ENUM to include 'DEBT_PAYMENT'
+    type: { 
+      type: String, 
+      enum: ['SALE', 'RESTOCK', 'ADJUSTMENT', 'PAYMENT_RECEIVED', 'DEBT_PAYMENT'], 
+      required: true 
+    },
+    
+    paymentStatus: { 
+      type: String, 
+      enum: ['PAID', 'CREDIT', 'PARTIAL'], 
+      default: 'PAID' 
+    },
 
     items: [
       {
@@ -55,9 +74,12 @@ const transactionSchema = new Schema<ITransaction>(
       },
     ],
 
-    totalMoney: { type: Number, default: null },
+    totalMoney: { type: Number, default: 0 },
 
+    // ✅ Support both naming conventions
     debtorId: { type: Schema.Types.ObjectId, ref: 'Debtor', default: null, index: true },
+    debtor: { type: Schema.Types.ObjectId, ref: 'Debtor', default: null, index: true },
+    
     customerName: { type: String, default: null, index: true },
     customerKey: { type: String, default: null, index: true },
 
@@ -69,7 +91,7 @@ const transactionSchema = new Schema<ITransaction>(
     undoneAt: { type: Date, default: null },
     undoneByMessageId: { type: String, default: null },
 
-    timestamp: { type: Date, default: Date.now },
+    timestamp: { type: Date, default: Date.now, index: true },
     date: { type: String, required: true },
     messageId: { type: String, unique: true, sparse: true },
   },
