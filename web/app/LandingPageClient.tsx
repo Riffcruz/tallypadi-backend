@@ -529,7 +529,7 @@ export default function LandingPage() {
                     </div>
                   </div>
                   <div className="flex-1">
-                    <h4 className="font-bold text-base">Tallypadi Bot</h4>
+                    <h4 className="font-bold text-base">TallyPadi</h4>
                     <p className="text-[10px] text-green-100 opacity-90">Online</p>
                   </div>
                 </div>
@@ -814,7 +814,7 @@ export default function LandingPage() {
                 <PricingItem text="Full Access to all features" />
                 <PricingItem text="Single User Account" />
                 <PricingItem text="Basic Web Dashboard" />
-                <PricingItem text="WhatsApp Bot Support" />
+                <PricingItem text="WhatsApp Support" />
                 <PricingItem text="No credit card required" />
               </ul>
               <a
