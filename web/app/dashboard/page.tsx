@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
-import Sidebar from '../../components/Sidebar'; 
+import Sidebar from '../../components/Sidebar';
 import {
   Wallet,
   Coins,
@@ -13,16 +13,20 @@ import {
   ArrowUpRight,
   Calendar,
   TrendingUp,
-  Clock,
-  Layout,
   ArrowRight,
-  BarChart3,
-  TrendingDown,
-  Package,
-  ShoppingCart,
-  DollarSign,
-  Activity
+  Clock,
+  Layout
 } from 'lucide-react';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Cell,
+} from 'recharts';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 
@@ -44,34 +48,36 @@ interface TransactionRow {
   date: string;
 }
 
-interface DashboardUser {
-  name?: string;
-  shopName?: string;
-  initials?: string;
-  planType?: 'OGA_BOSS' | 'TYCOON';
-  currencyCode?: string;   
-  locale?: string;         
+interface ChartDataPoint {
+  day: string;
+  sales: number;
 }
 
 interface DashboardResponse {
-  user?: DashboardUser;
+  user?: {
+    name?: string;
+    shopName?: string;
+    initials?: string;
+    currencyCode?: string;
+    locale?: string;
+  };
   stats?: {
     revenue?: number;
     itemsSold?: number;
   };
   inventory?: InventoryItem[];
   transactions?: TransactionRow[];
-  salesChart?: Array<{ day: string; sales: number }>;
+  salesChart?: ChartDataPoint[];
 }
 
-// --- DYNAMIC FORMATTER ---
+// --- DYNAMIC CURRENCY FORMATTER ---
 const formatCurrency = (amount: number, currencyCode = 'NGN', locale = 'en-NG') => {
-  const safe = Number(amount);
+  const safe = Number(amount) || 0;
   return new Intl.NumberFormat(locale, {
     style: 'currency',
     currency: currencyCode,
     maximumFractionDigits: 0,
-  }).format(Number.isFinite(safe) ? safe : 0);
+  }).format(safe);
 };
 
 const getGreeting = () => {
@@ -81,40 +87,7 @@ const getGreeting = () => {
   return 'Good Evening';
 };
 
-// --- SIMPLE BAR CHART COMPONENT (No Recharts) ---
-const SimpleBarChart = ({ data }: { data: Array<{ day: string; sales: number }> }) => {
-  const maxValue = Math.max(...data.map(d => d.sales), 1);
-  
-  return (
-    <div className="w-full h-full">
-      <div className="flex items-end justify-between h-48 px-2">
-        {data.map((item, index) => {
-          const height = (item.sales / maxValue) * 100;
-          return (
-            <div key={index} className="flex flex-col items-center flex-1">
-              <div className="relative w-8 md:w-10">
-                <div 
-                  className="w-full bg-emerald-500 rounded-t-lg transition-all duration-500 hover:bg-emerald-600 cursor-pointer relative group"
-                  style={{ height: `${height}%` }}
-                >
-                  <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white text-xs font-bold py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
-                    {formatCurrency(item.sales, 'NGN', 'en-NG')}
-                  </div>
-                  <div className="absolute -top-2 left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900 opacity-0 group-hover:opacity-100"></div>
-                </div>
-              </div>
-              <div className="mt-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                {item.day.substring(0, 3)}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-};
-
-// --- STAT CARD COMPONENT ---
+// --- RESTORED STAT CARD ---
 const StatCard = ({ title, value, icon: Icon, bgClass, iconColor, trend }: any) => (
   <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all duration-300 flex flex-col justify-between h-full relative overflow-hidden group">
     <div className="absolute top-0 right-0 w-24 h-24 bg-gray-50 rounded-bl-[100px] -mr-10 -mt-10 transition-all group-hover:bg-emerald-50/50" />
@@ -125,38 +98,21 @@ const StatCard = ({ title, value, icon: Icon, bgClass, iconColor, trend }: any) 
           <Icon className="w-6 h-6" />
         </div>
         {trend && (
-          <div className={`flex items-center gap-1 px-2.5 py-1 ${trend.startsWith('Up') ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'} rounded-full text-[10px] font-bold uppercase tracking-wider`}>
-            {trend.startsWith('Up') ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+          <div className="flex items-center gap-1 px-2.5 py-1 bg-green-50 rounded-full text-green-700 text-[10px] font-bold uppercase tracking-wider">
+            <TrendingUp className="w-3 h-3" />
             <span>{trend}</span>
           </div>
         )}
       </div>
       <div>
         <p className="text-gray-500 text-sm font-semibold mb-1 uppercase tracking-tight">{title}</p>
-        <h3 className="font-black text-gray-900 text-3xl tracking-tight leading-none truncate">
+        <h3 className="font-black text-gray-900 text-3xl tracking-tight leading-none break-words">
           {value}
         </h3>
       </div>
     </div>
   </div>
 );
-
-// --- ACTIVITY INDICATOR ---
-const ActivityIndicator = ({ type }: { type: 'SALE' | 'RESTOCK' | 'DEBT_PAYMENT' }) => {
-  const config = {
-    SALE: { color: 'bg-emerald-500', icon: ShoppingCart },
-    RESTOCK: { color: 'bg-blue-500', icon: Package },
-    DEBT_PAYMENT: { color: 'bg-amber-500', icon: DollarSign }
-  };
-  
-  const { color, icon: Icon } = config[type] || config.SALE;
-  
-  return (
-    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${color} text-white shadow-sm`}>
-      <Icon className="w-5 h-5" />
-    </div>
-  );
-};
 
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardResponse | null>(null);
@@ -183,26 +139,18 @@ export default function DashboardPage() {
       });
   }, [router]);
 
+  // Derived settings
   const currencyCode = data?.user?.currencyCode || 'NGN';
   const userLocale = data?.user?.locale || 'en-NG';
-
   const inventory = data?.inventory || [];
-  const stockValue = inventory.reduce((acc, curr) => {
-    const qty = Number(curr.quantity ?? curr.stock ?? 0);
-    const price = Number(curr.price ?? curr.lastUnitPrice ?? 0);
-    return acc + (qty * price);
-  }, 0);
-
-  // Generate sample chart data if none exists
-  const chartData = data?.salesChart || [
-    { day: 'Mon', sales: 42000 },
-    { day: 'Tue', sales: 52000 },
-    { day: 'Wed', sales: 38000 },
-    { day: 'Thu', sales: 61000 },
-    { day: 'Fri', sales: 48000 },
-    { day: 'Sat', sales: 72000 },
-    { day: 'Sun', sales: 35000 },
-  ];
+  
+  const stockValue = useMemo(() => {
+    return inventory.reduce((acc, curr) => {
+      const qty = Number(curr.quantity ?? curr.stock ?? 0);
+      const price = Number(curr.price ?? curr.lastUnitPrice ?? 0);
+      return acc + (qty * price);
+    }, 0);
+  }, [inventory]);
 
   if (loading) {
     return (
@@ -220,26 +168,28 @@ export default function DashboardPage() {
 
   return (
     <div className="flex min-h-screen bg-slate-50 font-sans text-gray-900 relative overflow-x-hidden">
-      {/* Mobile Sidebar Overlay */}
+      
+      {/* Sidebar Overlay */}
       {isMobileMenuOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 z-40 md:hidden backdrop-blur-sm" onClick={() => setIsMobileMenuOpen(false)} />
+        <div className="fixed inset-0 bg-slate-900/60 z-40 md:hidden backdrop-blur-sm transition-opacity" onClick={() => setIsMobileMenuOpen(false)} />
       )}
 
-      {/* Sidebar */}
-      <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 transform transition-transform duration-300 md:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+      {/* Sidebar Container */}
+      <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 transform transition-transform duration-300 ease-in-out md:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <Sidebar />
       </div>
 
-      {/* Main Content */}
-      <main className="flex-1 md:ml-64 p-4 md:p-8 w-full max-w-full overflow-x-hidden">
-        {/* Header */}
-        <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-          <div className="flex items-center gap-3">
+      {/* Main Container */}
+      <main className="flex-1 md:ml-64 p-4 md:p-8 w-full max-w-full min-h-screen overflow-x-hidden">
+        
+        {/* --- HEADER STRUCTURE --- */}
+        <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-6">
+          <div className="flex items-center gap-4 min-w-0">
             <button onClick={() => setIsMobileMenuOpen(true)} className="p-2.5 bg-white border border-gray-200 rounded-xl md:hidden text-gray-600 shadow-sm active:scale-95 transition-transform">
               <Menu className="w-6 h-6" />
             </button>
-            <div>
-              <h1 className="text-2xl md:text-3xl font-black text-gray-900 tracking-tight leading-tight">
+            <div className="min-w-0">
+              <h1 className="text-3xl font-black text-gray-900 tracking-tight leading-tight">
                 {getGreeting()}, <span className="text-emerald-700">{data?.user?.shopName || 'Owner'}</span>
               </h1>
               <p className="text-gray-500 text-sm mt-1 flex items-center gap-2 font-medium">
@@ -250,11 +200,9 @@ export default function DashboardPage() {
           </div>
 
           <div className="flex items-center gap-4 self-end md:self-auto shrink-0">
-            <button className="p-2.5 bg-white border border-gray-200 rounded-xl text-gray-600 hover:text-emerald-600 hover:border-emerald-200 transition-all relative">
+            <button className="p-3 bg-white rounded-full border border-gray-200 text-gray-400 hover:text-emerald-600 hover:border-emerald-200 transition-all relative">
               <Bell className="w-5 h-5" />
-              <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center">
-                3
-              </span>
+              <span className="absolute top-3 right-3 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white" />
             </button>
             <div className="h-12 w-12 bg-emerald-100 text-emerald-700 rounded-2xl border-2 border-emerald-50 flex items-center justify-center font-black text-lg shadow-sm">
               {data?.user?.initials || 'IO'}
@@ -262,258 +210,192 @@ export default function DashboardPage() {
           </div>
         </header>
 
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-10">
-          <StatCard 
-            title="Money Made" 
-            value={formatCurrency(data?.stats?.revenue || 0, currencyCode, userLocale)} 
-            icon={Wallet} 
-            bgClass="bg-emerald-50" 
-            iconColor="text-emerald-600" 
-            trend="Up 12%" 
-          />
-          <StatCard 
-            title="Stock Value" 
-            value={formatCurrency(stockValue, currencyCode, userLocale)} 
-            icon={Coins} 
-            bgClass="bg-blue-50" 
-            iconColor="text-blue-600" 
-            trend="Stable" 
-          />
-          <StatCard 
-            title="Sales Today" 
-            value={data?.stats?.itemsSold || 0} 
-            icon={ShoppingBag} 
-            bgClass="bg-orange-50" 
-            iconColor="text-orange-600" 
-            trend="Up 5%" 
-          />
-        </div>
-
-        {/* Charts & Tables Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-          {/* Sales Performance Card */}
-          <div className="bg-white p-6 md:p-8 rounded-3xl border border-gray-100 shadow-sm h-[400px] flex flex-col">
-            <div className="flex justify-between items-center mb-6">
-              <div>
-                 <h3 className="font-black text-gray-900 text-xl tracking-tight">Sales Overview</h3>
-                 <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mt-1">Weekly Performance</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Activity className="w-4 h-4 text-emerald-500" />
-                <span className="text-sm font-bold text-emerald-600">+12.5% from last week</span>
-              </div>
-            </div>
-
-            <div className="flex-1 w-full">
-              <SimpleBarChart data={chartData} />
-              
-              {/* Chart Summary */}
-              <div className="mt-8 pt-6 border-t border-gray-100">
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="text-center">
-                    <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-1">Total Sales</p>
-                    <p className="font-black text-gray-900 text-lg">
-                      {formatCurrency(
-                        chartData.reduce((sum, day) => sum + day.sales, 0),
-                        currencyCode,
-                        userLocale
-                      )}
-                    </p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-1">Avg/Day</p>
-                    <p className="font-black text-gray-900 text-lg">
-                      {formatCurrency(
-                        chartData.reduce((sum, day) => sum + day.sales, 0) / chartData.length,
-                        currencyCode,
-                        userLocale
-                      )}
-                    </p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-1">Peak Day</p>
-                    <p className="font-black text-gray-900 text-lg">
-                      {chartData.reduce((max, day) => day.sales > max.sales ? day : max).day}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
+        {/* --- CONTENT STRUCTURE --- */}
+        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-6 duration-700">
+          
+          {/* 1. Stats Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <StatCard 
+              title="Total Revenue" 
+              value={formatCurrency(data?.stats?.revenue || 0, currencyCode, userLocale)} 
+              icon={Wallet} 
+              bgClass="bg-emerald-50" 
+              iconColor="text-emerald-600" 
+              trend="Performance" 
+            />
+            <StatCard 
+              title="Estimated Stock" 
+              value={formatCurrency(stockValue, currencyCode, userLocale)} 
+              icon={Coins} 
+              bgClass="bg-blue-50" 
+              iconColor="text-blue-600" 
+            />
+            <StatCard 
+              title="Items Sold Today" 
+              value={data?.stats?.itemsSold || 0} 
+              icon={ShoppingBag} 
+              bgClass="bg-orange-50" 
+              iconColor="text-orange-600" 
+              trend="Live" 
+            />
           </div>
 
-          {/* Top Inventory Card */}
-          <div className="bg-white p-6 md:p-8 rounded-3xl border border-gray-100 shadow-sm h-[400px] flex flex-col">
-            <div className="flex justify-between items-center mb-6">
-              <div>
-                 <h3 className="font-black text-gray-900 text-xl tracking-tight">Top Inventory</h3>
-                 <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mt-1">Stock Status</p>
-              </div>
-              <button 
-                onClick={() => router.push('/inventory')} 
-                className="text-xs font-black text-emerald-600 hover:bg-emerald-50 px-4 py-2 rounded-xl transition-all flex items-center gap-2 border border-emerald-100"
-              >
-                ALL <ArrowRight className="w-3 h-3" />
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto space-y-4 pr-1 scrollbar-thin scrollbar-thumb-gray-100">
-                {inventory.slice(0, 6).map((item, i) => (
-                  <div key={i} className="flex items-center justify-between p-4 rounded-2xl bg-gray-50/50 border border-gray-100 hover:bg-white hover:border-emerald-200 transition-all group">
-                    <div className="flex items-center gap-4 min-w-0">
-                      <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center border border-gray-200 font-black text-gray-400 text-sm shadow-sm group-hover:bg-emerald-50 group-hover:text-emerald-600 transition-colors">
-                        {String(item.name || '').substring(0, 2).toUpperCase()}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-bold text-gray-900 capitalize truncate text-sm">{item.name}</p>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <span className={`w-2 h-2 rounded-full ${(Number(item.quantity ?? item.stock ?? 0) < 5) ? 'bg-red-500 animate-pulse' : 'bg-emerald-500'}`} />
-                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                            {Number(item.quantity ?? item.stock ?? 0)} In Stock
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p className="text-sm font-black text-gray-900">
-                        {formatCurrency(Number(item.price ?? item.lastUnitPrice ?? 0), currencyCode, userLocale)}
-                      </p>
-                      <p className="text-[10px] font-bold text-gray-400">
-                        {Number(item.quantity ?? item.stock ?? 0)} × {formatCurrency(Number(item.price ?? item.lastUnitPrice ?? 0) / (Number(item.quantity ?? item.stock ?? 0) || 1), currencyCode, userLocale)}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Recent Transactions Table Section */}
-        <div className="bg-white rounded-[32px] border border-gray-100 shadow-sm overflow-hidden mb-8">
-          <div className="p-8 border-b border-gray-50 flex justify-between items-center bg-gray-50/30">
-             <div>
-                <h3 className="font-black text-gray-900 text-xl tracking-tight">Recent Activity</h3>
-                <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mt-1">Store Transactions</p>
-             </div>
-             <button 
-               onClick={() => router.push('/sales')} 
-               className="p-3 bg-white rounded-2xl border border-gray-200 text-gray-400 hover:text-emerald-600 hover:border-emerald-200 transition-all shadow-sm"
-             >
-                <ArrowUpRight className="w-5 h-5" />
-             </button>
-          </div>
-
-          <div className="p-2">
-            {data?.transactions?.slice(0, 5).map((t, i) => (
-              <div 
-                key={i} 
-                className="flex items-center justify-between p-6 hover:bg-slate-50/80 transition-colors border-b border-gray-50 last:border-0 group"
-              >
-                <div className="flex items-center gap-4 min-w-0">
-                  <ActivityIndicator type={t.type} />
-                  <div className="min-w-0">
-                    <h4 className="font-bold text-gray-900 capitalize text-sm group-hover:text-emerald-700 transition-colors truncate max-w-[200px]">
-                      {t.item}
-                    </h4>
-                    <p className="text-xs text-gray-500 font-medium mt-1">
-                      {t.type === 'SALE' ? 'Sale' : t.type === 'RESTOCK' ? 'Restock' : 'Debt Payment'} • Qty: {t.qty}
-                    </p>
-                  </div>
-                </div>
-                
-                <div className="flex items-center gap-8">
-                  <div className="text-right">
-                    <div className="text-sm font-bold text-gray-700">
-                      {new Date(t.date).toLocaleDateString(userLocale, { month: 'short', day: 'numeric' })}
-                    </div>
-                    <div className="text-xs text-gray-400 font-medium flex items-center gap-1">
-                      <Clock className="w-3 h-3" />
-                      {new Date(t.date).toLocaleTimeString(userLocale, { hour: '2-digit', minute: '2-digit' })}
-                    </div>
-                  </div>
-                  
-                  <div className="text-right">
-                    <div className="font-black text-gray-900 text-lg tabular-nums">
-                      {formatCurrency(t.amount, currencyCode, userLocale)}
-                    </div>
-                    <div className={`text-xs font-bold ${t.type === 'SALE' ? 'text-emerald-600' : 'text-blue-600'}`}>
-                      {t.type === 'SALE' ? 'Revenue' : t.type === 'RESTOCK' ? 'Investment' : 'Payment'}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
+          {/* 2. Charts & Items Section */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             
-            {(!data?.transactions || data.transactions.length === 0) && (
-              <div className="p-12 text-center">
-                <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                  <Activity className="w-8 h-8 text-gray-400" />
+            {/* Sales Performance Card */}
+            <div className="bg-white p-6 md:p-8 rounded-3xl border border-gray-100 shadow-sm flex flex-col h-[400px]">
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                   <h3 className="font-black text-gray-900 text-xl tracking-tight">Sales Overview</h3>
+                   <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mt-1">Weekly Performance</p>
                 </div>
-                <h4 className="font-bold text-gray-900 text-lg mb-2">No Activity Yet</h4>
-                <p className="text-gray-500 max-w-md mx-auto">
-                  Start making sales or adding inventory to see your transaction history here.
-                </p>
-                <button 
-                  onClick={() => router.push('/sales/new')}
-                  className="mt-6 px-6 py-3 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition-all inline-flex items-center gap-2"
-                >
-                  <ShoppingCart className="w-4 h-4" />
-                  Create First Sale
+                <div className="w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center text-gray-400">
+                   <TrendingUp className="w-5 h-5" />
+                </div>
+              </div>
+
+            <div className="flex-1 w-full mt-2">
+  <ResponsiveContainer width="100%" height="100%">
+    <BarChart data={data?.salesChart || []}>
+      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f8fafc" />
+      <XAxis 
+        dataKey="day" 
+        axisLine={false} 
+        tickLine={false} 
+        tick={{fill: '#94a3b8', fontSize: 12, fontWeight: 600}} 
+        dy={10} 
+      />
+      <YAxis 
+        axisLine={false} 
+        tickLine={false} 
+        tick={{fill: '#94a3b8', fontSize: 12, fontWeight: 600}} 
+        tickFormatter={(value: number) => {
+          const val = value || 0;
+          return val >= 1000 ? `${val/1000}k` : val.toString();
+        }} 
+      />
+      <Tooltip 
+        cursor={{fill: '#f1f5f9', radius: 8}}
+        contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)'}}
+        formatter={(value: any) => {
+          const val = Number(value) || 0;
+          return [formatCurrency(val, currencyCode, userLocale), 'Sales'];
+        }}
+      />
+      <Bar dataKey="sales" fill="#10b981" radius={[8, 8, 8, 8]} barSize={32} />
+    </BarChart>
+  </ResponsiveContainer>
+</div>
+            </div>
+
+            {/* Inventory List Card */}
+            <div className="bg-white p-6 md:p-8 rounded-3xl border border-gray-100 shadow-sm flex flex-col h-[400px]">
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                   <h3 className="font-black text-gray-900 text-xl tracking-tight">Top Inventory</h3>
+                   <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mt-1">Current Stock Status</p>
+                </div>
+                <button onClick={() => router.push('/inventory')} className="text-xs font-black text-emerald-600 hover:bg-emerald-50 px-4 py-2 rounded-xl transition-all flex items-center gap-2 border border-emerald-100">
+                  ALL <ArrowRight className="w-3 h-3" />
                 </button>
               </div>
-            )}
-          </div>
-        </div>
 
-        {/* Quick Actions */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-          <button 
-            onClick={() => router.push('/sales/new')}
-            className="p-6 bg-emerald-600 text-white rounded-2xl hover:bg-emerald-700 transition-all text-left group"
-          >
-            <div className="flex items-center justify-between mb-4">
-              <ShoppingCart className="w-8 h-8" />
-              <ArrowUpRight className="w-5 h-5 opacity-0 group-hover:opacity-100 transition-opacity" />
+              <div className="flex-1 overflow-y-auto space-y-4 pr-1 scrollbar-thin scrollbar-thumb-gray-100">
+                {inventory.length > 0 ? (
+                  inventory.slice(0, 6).map((item, i) => (
+                    <div key={i} className="flex items-center justify-between p-4 rounded-2xl bg-gray-50/50 border border-gray-100 hover:bg-white hover:border-emerald-200 transition-all group">
+                      <div className="flex items-center gap-4 min-w-0">
+                        <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center border border-gray-200 font-black text-gray-400 text-sm shadow-sm group-hover:bg-emerald-50 group-hover:text-emerald-600 group-hover:border-emerald-100 transition-colors">
+                          {String(item.name || '').substring(0, 2).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-bold text-gray-900 capitalize truncate">{item.name}</p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className={`w-2 h-2 rounded-full ${(Number(item.quantity ?? item.stock ?? 0) < 5) ? 'bg-red-500 animate-pulse' : 'bg-emerald-500'}`} />
+                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                              {Number(item.quantity ?? item.stock ?? 0)} In Stock
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-sm font-black text-gray-900">
+                          {formatCurrency(Number(item.price ?? item.lastUnitPrice ?? 0), currencyCode, userLocale)}
+                        </p>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="h-full flex flex-col items-center justify-center text-gray-300 gap-2">
+                    <Layout className="w-10 h-10 opacity-20" />
+                    <p className="text-xs font-bold uppercase tracking-widest">No Items Found</p>
+                  </div>
+                )}
+              </div>
             </div>
-            <h4 className="font-black text-lg mb-2">New Sale</h4>
-            <p className="text-emerald-100 text-sm">Record a customer purchase</p>
-          </button>
-          
-          <button 
-            onClick={() => router.push('/inventory/add')}
-            className="p-6 bg-blue-600 text-white rounded-2xl hover:bg-blue-700 transition-all text-left group"
-          >
-            <div className="flex items-center justify-between mb-4">
-              <Package className="w-8 h-8" />
-              <ArrowUpRight className="w-5 h-5 opacity-0 group-hover:opacity-100 transition-opacity" />
+          </div>
+
+          {/* 3. Transactions Table Section */}
+          <div className="bg-white rounded-[32px] border border-gray-100 shadow-sm overflow-hidden">
+            <div className="p-8 border-b border-gray-50 flex justify-between items-center bg-gray-50/30">
+               <div>
+                  <h3 className="font-black text-gray-900 text-xl tracking-tight">Recent Sales</h3>
+                  <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mt-1">Latest Store Activity</p>
+               </div>
+               <button onClick={() => router.push('/sales')} className="p-3 bg-white rounded-2xl border border-gray-200 text-gray-400 hover:text-emerald-600 hover:border-emerald-200 transition-all shadow-sm">
+                  <ArrowUpRight className="w-5 h-5" />
+               </button>
             </div>
-            <h4 className="font-black text-lg mb-2">Add Stock</h4>
-            <p className="text-blue-100 text-sm">Update inventory items</p>
-          </button>
-          
-          <button 
-            onClick={() => router.push('/analytics')}
-            className="p-6 bg-purple-600 text-white rounded-2xl hover:bg-purple-700 transition-all text-left group"
-          >
-            <div className="flex items-center justify-between mb-4">
-              <BarChart3 className="w-8 h-8" />
-              <ArrowUpRight className="w-5 h-5 opacity-0 group-hover:opacity-100 transition-opacity" />
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left min-w-[700px]">
+                <thead className="bg-gray-50/50 text-gray-400 text-[10px] font-black uppercase tracking-[2px] border-b border-gray-100">
+                  <tr>
+                    <th className="px-8 py-5">Product Details</th>
+                    <th className="px-8 py-5 text-center">Timestamp</th>
+                    <th className="px-8 py-5 text-right">Transaction Amount</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {data?.transactions && data.transactions.length > 0 ? (
+                    data.transactions.slice(0, 5).map((t, i) => (
+                      <tr key={i} className="hover:bg-slate-50/80 transition-colors group">
+                        <td className="px-8 py-6">
+                          <div className="flex items-center gap-4">
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-sm ${
+                              t.type === 'SALE' ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-blue-600'
+                            }`}>
+                              {t.type === 'SALE' ? <ShoppingBag className="w-5 h-5" /> : <Coins className="w-5 h-5" />}
+                            </div>
+                            <span className="font-bold text-gray-900 capitalize text-sm group-hover:text-emerald-700 transition-colors truncate max-w-[250px]">{t.item}</span>
+                          </div>
+                        </td>
+                        <td className="px-8 py-6 text-center">
+                          <div className="flex flex-col items-center">
+                            <span className="text-sm font-bold text-gray-700">{new Date(t.date).toLocaleDateString(userLocale, { month: 'short', day: 'numeric' })}</span>
+                            <span className="text-[10px] font-bold text-gray-400 flex items-center gap-1 uppercase tracking-tighter">
+                              <Clock className="w-3 h-3" /> {new Date(t.date).toLocaleTimeString(userLocale, { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-8 py-6 text-right font-black text-gray-900 text-lg tabular-nums">
+                          {formatCurrency(t.amount, currencyCode, userLocale)}
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={3} className="px-8 py-20 text-center text-gray-300 font-bold uppercase tracking-widest text-xs">
+                        No transactions recorded yet
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
-            <h4 className="font-black text-lg mb-2">Analytics</h4>
-            <p className="text-purple-100 text-sm">View detailed reports</p>
-          </button>
-          
-          <button 
-            onClick={() => router.push('/customers')}
-            className="p-6 bg-amber-600 text-white rounded-2xl hover:bg-amber-700 transition-all text-left group"
-          >
-            <div className="flex items-center justify-between mb-4">
-              <Wallet className="w-8 h-8" />
-              <ArrowUpRight className="w-5 h-5 opacity-0 group-hover:opacity-100 transition-opacity" />
-            </div>
-            <h4 className="font-black text-lg mb-2">Customers</h4>
-            <p className="text-amber-100 text-sm">Manage customer debts</p>
-          </button>
+          </div>
+
         </div>
       </main>
     </div>
