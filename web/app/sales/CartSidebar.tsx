@@ -1,7 +1,7 @@
 'use client';
 import React, { useState } from 'react';
 import axios from 'axios';
-import { Trash2, Plus, Minus, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { Trash2, Plus, Minus, CheckCircle2, AlertCircle, Loader2, ShoppingCart, ArrowRight } from 'lucide-react';
 import { CartItem, UserProfile } from './page';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
@@ -17,7 +17,6 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState({ text: '', type: '' });
 
-  // Helpers
   const updateQty = (id: string, delta: number) => {
     setCart(prev => prev.map(item => item.id === id ? { ...item, sellQty: Math.max(1, item.sellQty + delta) } : item));
   };
@@ -30,14 +29,12 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
   
   const total = cart.reduce((acc, item) => acc + (item.sellQty * item.sellPrice), 0);
   
-  // Format Currency (Same logic as main page)
   const formatMoney = (amount: number) => {
     return new Intl.NumberFormat(user?.locale || 'en-NG', {
-      style: 'currency', currency: user?.currencyCode || 'NGN'
+      style: 'currency', currency: user?.currencyCode || 'NGN', maximumFractionDigits: 0
     }).format(amount);
   };
 
-  // --- CHECKOUT LOGIC ---
   const handleCheckout = async () => {
     if (cart.length === 0) return;
     setLoading(true);
@@ -45,97 +42,127 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
 
     try {
       const token = localStorage.getItem('tallyToken');
-      
-      // 1. Prepare Payload
       const payload = {
         items: cart.map(i => ({
           itemId: i.id,
-          quantity: Number(i.sellQty), // ✅ FORCE NUMBER
-          price: Number(i.sellPrice)   // ✅ FORCE NUMBER
+          quantity: Number(i.sellQty),
+          price: Number(i.sellPrice)
         }))
       };
 
-      // 2. Send Request
       await axios.post(`${API_URL}/sales`, payload, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      setMsg({ text: 'Sale Recorded!', type: 'success' });
-      onCheckoutSuccess(); // Clear cart in parent
+      setMsg({ text: 'Sale Recorded Successfully!', type: 'success' });
+      onCheckoutSuccess();
     } catch (err: any) {
       console.error('Checkout Error:', err);
-      // Handle the "Insufficient Stock" explicitly
       const errorMsg = err.response?.data?.message || err.response?.data?.error || 'Checkout failed';
       setMsg({ text: errorMsg, type: 'error' });
     } finally {
       setLoading(false);
-      setTimeout(() => setMsg({ text: '', type: '' }), 4000); // Clear msg after 4s
+      setTimeout(() => setMsg({ text: '', type: '' }), 4000);
     }
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col h-[calc(100vh-8rem)] sticky top-4">
-      <div className="p-4 border-b border-gray-100 bg-gray-50 rounded-t-2xl">
-        <h2 className="font-bold text-gray-800">Current Order ({cart.length})</h2>
+    <div className="bg-white rounded-3xl border border-gray-200 shadow-xl shadow-gray-200/50 flex flex-col h-[calc(100vh-6rem)] sticky top-4 overflow-hidden">
+      
+      {/* Header */}
+      <div className="p-5 border-b border-gray-100 bg-white/80 backdrop-blur-md z-10">
+        <div className="flex items-center gap-3">
+           <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center">
+             <ShoppingCart className="w-5 h-5" />
+           </div>
+           <div>
+             <h2 className="font-extrabold text-gray-900 text-lg">Current Order</h2>
+             <p className="text-xs text-gray-500 font-medium">{cart.length} items</p>
+           </div>
+        </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      {/* Cart Items List */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-thin scrollbar-thumb-gray-200">
         {cart.length === 0 ? (
-          <div className="text-center text-gray-400 mt-10 text-sm">Cart is empty.<br/>Click items to add.</div>
+          <div className="h-full flex flex-col items-center justify-center text-center p-8 opacity-60">
+            <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mb-4">
+               <ShoppingCart className="w-8 h-8 text-gray-300" />
+            </div>
+            <p className="text-gray-900 font-bold">Your cart is empty</p>
+            <p className="text-xs text-gray-500 mt-1">Tap items from the grid to add them here.</p>
+          </div>
         ) : (
           cart.map((item) => (
-            <div key={item.id} className="bg-slate-50 p-3 rounded-xl border border-gray-100">
-              <div className="flex justify-between items-start mb-2">
+            <div key={item.id} className="group bg-white p-3 rounded-2xl border border-gray-100 hover:border-emerald-200 hover:shadow-md transition-all">
+              <div className="flex justify-between items-start mb-3">
                 <span className="font-bold text-sm text-gray-800 capitalize truncate w-32">{item.name}</span>
-                <button onClick={() => remove(item.id)} className="text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
+                <button 
+                  onClick={() => remove(item.id)} 
+                  className="text-gray-300 hover:text-red-500 transition-colors p-1"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
               </div>
               
-              <div className="flex items-center gap-2">
-                {/* Qty Control */}
-                <div className="flex items-center bg-white rounded-lg border border-gray-200">
-                  <button onClick={() => updateQty(item.id, -1)} className="px-2 py-1 hover:bg-gray-100 text-gray-600"><Minus className="w-3 h-3"/></button>
-                  <span className="text-xs font-bold w-6 text-center">{item.sellQty}</span>
-                  <button onClick={() => updateQty(item.id, 1)} className="px-2 py-1 hover:bg-gray-100 text-gray-600"><Plus className="w-3 h-3"/></button>
+              <div className="flex items-center justify-between gap-2">
+                {/* Quantity Pill */}
+                <div className="flex items-center bg-gray-50 rounded-xl border border-gray-200 p-0.5">
+                  <button onClick={() => updateQty(item.id, -1)} className="p-1.5 hover:bg-white hover:shadow-sm rounded-lg text-gray-600 transition-all"><Minus className="w-3 h-3"/></button>
+                  <span className="text-xs font-bold w-8 text-center tabular-nums">{item.sellQty}</span>
+                  <button onClick={() => updateQty(item.id, 1)} className="p-1.5 hover:bg-white hover:shadow-sm rounded-lg text-gray-600 transition-all"><Plus className="w-3 h-3"/></button>
                 </div>
                 
-                <span className="text-gray-400 text-xs">x</span>
+                <span className="text-gray-300 text-xs">x</span>
                 
                 {/* Price Input */}
-                <input 
-                  type="number" 
-                  className="flex-1 w-20 px-2 py-1 text-sm border border-gray-200 rounded-lg outline-none focus:border-emerald-500"
-                  value={item.sellPrice}
-                  onChange={(e) => updatePrice(item.id, Number(e.target.value))}
-                />
+                <div className="relative flex-1">
+                   <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-[10px] font-bold">₦</span>
+                   <input 
+                     type="number" 
+                     className="w-full pl-5 pr-2 py-1.5 text-sm font-bold border border-gray-200 rounded-lg outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 text-right bg-white"
+                     value={item.sellPrice}
+                     onChange={(e) => updatePrice(item.id, Number(e.target.value))}
+                   />
+                </div>
               </div>
-              <div className="text-right mt-1 text-xs font-bold text-gray-700">
-                {formatMoney(item.sellQty * item.sellPrice)}
+              
+              <div className="text-right mt-2 pt-2 border-t border-dashed border-gray-100">
+                <span className="text-xs font-extrabold text-gray-900 bg-gray-50 px-2 py-1 rounded-md">
+                   {formatMoney(item.sellQty * item.sellPrice)}
+                </span>
               </div>
             </div>
           ))
         )}
       </div>
 
-      {/* Footer */}
-      <div className="p-4 border-t border-gray-100 bg-gray-50 rounded-b-2xl">
+      {/* Footer Area */}
+      <div className="p-5 bg-gray-50 border-t border-gray-200 z-10">
         {msg.text && (
-          <div className={`mb-3 p-2 rounded-lg text-xs font-bold flex items-center gap-2 ${msg.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-            {msg.type === 'success' ? <CheckCircle2 className="w-4 h-4"/> : <AlertCircle className="w-4 h-4"/>}
+          <div className={`mb-4 p-3 rounded-xl text-xs font-bold flex items-center gap-2 animate-in slide-in-from-bottom-2 ${msg.type === 'success' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>
+            {msg.type === 'success' ? <CheckCircle2 className="w-4 h-4 shrink-0"/> : <AlertCircle className="w-4 h-4 shrink-0"/>}
             {msg.text}
           </div>
         )}
 
-        <div className="flex justify-between items-center mb-4">
-          <span className="text-gray-500 font-bold">Total</span>
-          <span className="text-xl font-extrabold text-gray-900">{formatMoney(total)}</span>
+        <div className="flex justify-between items-end mb-4">
+          <span className="text-gray-500 font-bold text-sm mb-1">Total Amount</span>
+          <span className="text-2xl font-black text-gray-900 tracking-tight">{formatMoney(total)}</span>
         </div>
 
         <button 
           onClick={handleCheckout}
           disabled={loading || cart.length === 0}
-          className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-lg shadow-emerald-200 transition-all active:scale-95 disabled:opacity-50 flex justify-center items-center gap-2"
+          className="group w-full py-4 bg-gray-900 hover:bg-black text-white font-bold rounded-xl shadow-lg shadow-gray-900/20 transition-all active:scale-[0.98] disabled:opacity-50 disabled:shadow-none flex justify-center items-center gap-3"
         >
-          {loading ? <Loader2 className="animate-spin w-5 h-5"/> : 'Check Out'}
+          {loading ? (
+            <Loader2 className="animate-spin w-5 h-5"/>
+          ) : (
+            <>
+              Confirm Sale <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform"/>
+            </>
+          )}
         </button>
       </div>
     </div>
