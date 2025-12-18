@@ -59,24 +59,22 @@ const sanitizeInput = (input: string): string => {
   if (!input) return '';
   let s = input.slice(0, SAFE_MAX);
 
-  // remove control chars
+  // remove control chars + invisible
   s = s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, ' ');
-
-  // remove bidi/invisible
   s = s.replace(/[\u200B-\u200F\u202A-\u202E\u2060-\u206F]/g, ' ');
 
-  // strip HTML tags
+  // strip HTML
   s = s.replace(/<\/?[^>]+>/g, ' ');
 
-  // reduce prompt injection keywords (lightly)
-  s = s.replace(/\b(ignore|disregard|bypass|override|system prompt)\b/gi, ' ');
+  // strip injection-like phrases (don’t overdo, keep business text)
+  s = s.replace(/\b(ignore (all|any|previous|above|earlier)|system prompt|developer message|hidden rules|act as|you must|bypass|override|jailbreak|return raw|tool|function call|json schema)\b/gi, ' ');
 
-  // allow unicode letters/numbers + money symbols + common punctuation + k/m
-  s = s.replace(/[^\p{L}\p{N}\s₦$€£₵.,\-\/+()%@'":_km]/gu, ' ');
+  // keep unicode letters/numbers + currency symbols etc
+  s = s.replace(/[^\p{L}\p{N}\s₦$€£₵.,\-\/+()%@'_km]/gu, ' ');
 
-  s = s.replace(/\s+/g, ' ').trim();
-  return s;
+  return s.replace(/\s+/g, ' ').trim();
 };
+
 
 // ==========================================
 // 💰 MONEY PARSER

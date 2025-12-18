@@ -107,49 +107,7 @@ const parseQtyUnitItem = (text: string): { qty: number; unit: string; name: stri
   return { qty, unit, name };
 };
 
-const forceParseSaleFromText = (text: string) => {
-  const raw = String(text || '').trim();
-  const low = raw.toLowerCase();
 
-  if (!/\b(sold|sell|comot)\b/.test(low)) return null;
-
-  let rest = raw.replace(/\b(sold|sell|comot)\b/i, '').trim();
-
-  const is_credit = /\b(on\s+credit|credit|owe|owing|later|pay\s+small\s+small)\b/i.test(rest);
-
-  // amount
-  let total_money: number | null = null;
-  const moneyMatch = rest.match(/\b(for|@|at)\s+([₦$€£₵]?\s*[\d,]+(?:\.\d+)?\s*(?:k|m)?)\b/i);
-  if (moneyMatch) {
-    total_money = parseMoney(moneyMatch[2]);
-    rest = rest.replace(moneyMatch[0], '').trim();
-  }
-
-  // customer
-  let customer_name: string | undefined;
-  const toMatch = rest.match(/\bto\s+([a-zA-Z][a-zA-Z0-9\s]{0,30})\b/i);
-  if (toMatch) {
-    customer_name = toMatch[1].trim();
-    rest = rest.replace(toMatch[0], '').trim();
-  }
-
-  // strip credit words
-  rest = rest.replace(/\b(on\s+credit|credit|owe|owing|later)\b/gi, '').trim();
-
-  const q = parseQtyUnitItem(rest);
-  if (!q) return null;
-
-  return {
-    intent: 'SALE',
-    is_credit,
-    customer_name: is_credit ? customer_name : undefined,
-    items: [{ name: q.name, qty: q.qty, unit: q.unit, unit_price: null }],
-    total_money,
-    reply_text: is_credit
-      ? `✅ Recorded as credit sale to ${customer_name || 'customer'}${total_money != null ? ` for ${total_money}` : ''}.`
-      : `✅ Recorded. Sold ${q.qty} ${q.name}${total_money != null ? ` for ${total_money}` : ''}.`,
-  };
-};
 
 /* ========================================================= */
 
@@ -297,6 +255,207 @@ const buildDebtSummary = async (userId: any, symbol: string, locale: string) => 
 };
 
 // 3) BACKGROUND PROCESSOR (called by Worker)
+// ===============================
+// 🔐 SECURITY / ALLOWLIST HELPERS
+// ===============================
+
+const ALLOWED_INTENTS = new Set([
+  'SALE',
+  'RESTOCK',
+  'SET_STOCK',
+  'DELETED_STOCK',
+  'DEFINE_PRICE',
+  'PRICE_CHECK',
+  'REPORT_SALES',
+  'REPORT_STOCK',
+  'REPORT_FULL',
+  'SETTINGS',
+  'CHANGE_LANGUAGE',
+  'DEBT_PAYMENT',
+  'CLOSE_BOOK',
+  'ADD_STAFF',
+  'DOWNLOAD_REPORT',
+  'UNDO_LAST_SALE',
+  'REPORT_DEBTS',
+  'REPORT_RECENT',
+  'HELP',
+  'UNKNOWN',
+]);
+
+const ALLOWED_SETTINGS_KEYS = new Set(['closingTime', 'dailySummary', 'language']);
+const SAFE_TEXT_MAX = 900;
+
+function cleanTextForSecurity(input: string) {
+  let s = String(input || '').slice(0, SAFE_TEXT_MAX);
+  s = s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, ' ');
+  s = s.replace(/[\u200B-\u200F\u202A-\u202E\u2060-\u206F]/g, ' ');
+  return s.replace(/\s+/g, ' ').trim();
+}
+
+function looksLikeTxnSentence(low: string) {
+  return /\b(sold|sell|comot|add|restock|set\s+stock|set\s+price|price\s+of|delete|remove|owe|credit|on\s+credit)\b/.test(
+    low
+  );
+}
+
+/**
+ * "lots of injection-like phrases" → score based
+ * Only suspend if it looks clearly malicious
+ */
+function injectionScore(raw: string) {
+  const s = cleanTextForSecurity(raw).toLowerCase();
+
+  const patterns: RegExp[] = [
+    /\bignore\b/,
+    /\bdisregard\b/,
+    /\bbypass\b/,
+    /\boverride\b/,
+    /\bdeveloper\s+message\b/,
+    /\bsystem\s+prompt\b/,
+    /\bprevious\s+instructions\b/,
+    /\bact\s+as\b/,
+    /\byou\s+must\b/,
+    /\breturn\s+raw\b/,
+    /\btool\b/,
+    /\bfunction\s+call\b/,
+    /\bjson\s+schema\b/,
+    /\bchange\s+schema\b/,
+    /\bdo\s+anything\b/,
+    /\bjailbreak\b/,
+  ];
+
+  let hits = 0;
+  for (const re of patterns) if (re.test(s)) hits++;
+
+  // Boost score if user is clearly trying to force huge/insane values
+  if (/\b\d{9,}\b/.test(s)) hits += 2; // 9+ digit numbers
+  if (/(rrule|dtstart|BEGIN:VEVENT|END:VEVENT)/i.test(s)) hits += 2; // random injection vectors
+  return hits;
+}
+
+async function suspendUser(userId: any, reason: string) {
+  await User.updateOne(
+    { _id: userId },
+    {
+      $set: {
+        subscriptionStatus: 'suspended',
+        suspendedAt: new Date(),
+        suspensionReason: reason,
+      },
+    }
+  );
+}
+
+// ===============================
+// ✅ MODEL OUTPUT ALLOWLIST GUARD
+// ===============================
+function allowlistParsed(parsed: any) {
+  const safe: any = { ...parsed };
+
+  // intent allowlist
+  if (!ALLOWED_INTENTS.has(safe?.intent)) safe.intent = 'UNKNOWN';
+
+  // settings key allowlist
+  if (!ALLOWED_SETTINGS_KEYS.has(safe?.settings_update?.key)) {
+    safe.settings_update = { key: null, value: null };
+  }
+
+  // report params allowlist (only start_date/end_date)
+  if (!safe.report_params || typeof safe.report_params !== 'object') {
+    safe.report_params = { start_date: null, end_date: null };
+  } else {
+    const s = safe.report_params.start_date;
+    const e = safe.report_params.end_date;
+
+    safe.report_params = {
+      start_date: typeof s === 'string' ? s : null,
+      end_date: typeof e === 'string' ? e : null,
+    };
+  }
+
+  // items sanity
+  safe.items = Array.isArray(safe.items) ? safe.items.slice(0, 30) : [];
+  safe.items = safe.items.map((it: any) => ({
+    name: String(it?.name || '').toLowerCase().trim().slice(0, 60) || 'unknown_item',
+    qty: Number.isFinite(Number(it?.qty)) ? Math.max(0, Math.min(Number(it?.qty), 1_000_000)) : 0,
+    unit: String(it?.unit || '').toLowerCase().trim().slice(0, 20),
+    unit_price:
+      it?.unit_price == null
+        ? null
+        : Number.isFinite(Number(it?.unit_price))
+        ? Math.max(0, Math.min(Number(it?.unit_price), 1_000_000_000_000))
+        : null,
+  }));
+
+  // money sanity
+  safe.total_money =
+    safe.total_money == null
+      ? null
+      : Number.isFinite(Number(safe.total_money))
+      ? Math.max(0, Math.min(Number(safe.total_money), 1_000_000_000_000))
+      : null;
+
+  // booleans
+  safe.is_credit = Boolean(safe.is_credit);
+
+  // strings
+  safe.customer_name = typeof safe.customer_name === 'string' ? safe.customer_name.trim() : safe.customer_name;
+  safe.staffPhoneNumber =
+    typeof safe.staffPhoneNumber === 'string' ? safe.staffPhoneNumber.trim() : safe.staffPhoneNumber;
+
+  // reply text clamp
+  safe.reply_text = typeof safe.reply_text === 'string' ? safe.reply_text.slice(0, 400) : 'Noted.';
+
+  return safe;
+}
+
+// ===============================
+// 🧠 HARD FALLBACK PARSER FOR SALE
+// ===============================
+function parseMoneyLoose(raw: string): number | null {
+  if (!raw) return null;
+  const s = raw.toLowerCase().replace(/,/g, '').replace(/\s+/g, '');
+  const mult = s.includes('m') ? 1_000_000 : s.includes('k') ? 1_000 : 1;
+  const num = parseFloat(s.replace(/[^\d.]/g, ''));
+  if (Number.isNaN(num)) return null;
+  const v = num * mult;
+  return Number.isFinite(v) && v >= 0 ? v : null;
+}
+
+/**
+ * Force parse a SALE from sentence like:
+ * "Sold 200 liters kerosene to john for 20k on credit"
+ */
+function forceParseSaleFromText(text: string) {
+  const raw = cleanTextForSecurity(text);
+  const low = raw.toLowerCase();
+
+  const re =
+    /\b(sold|sell|comot)\s+(\d+(?:\.\d+)?)\s*(liters|litres|ltr|ltrs|kg|kgs|bags?|packs?|pcs?|pieces?)?\s*([a-z0-9\s\-]+?)\s+to\s+([a-z0-9\s\-]{1,30})\s+for\s+([₦$€£₵]?\s*[\d,]+(?:\.\d+)?\s*(?:k|m)?)\s*(?:on\s+credit|credit|owe|owing)?/i;
+
+  const m = raw.match(re);
+  if (!m) return null;
+
+  const qty = Number(m[2]);
+  const unit = (m[3] || '').toLowerCase().trim();
+  const item = (m[4] || '').trim();
+  const customer = (m[5] || '').trim();
+  const total = parseMoneyLoose(m[6] || '');
+
+  const isCredit = /\b(on\s+credit|credit|owe|owing)\b/.test(low);
+
+  return {
+    intent: 'SALE',
+    is_credit: isCredit,
+    customer_name: isCredit ? customer : null,
+    items: [{ name: item.toLowerCase(), qty: Number.isFinite(qty) ? qty : 0, unit, unit_price: null }],
+    total_money: total,
+    report_params: { start_date: null, end_date: null },
+    settings_update: { key: null, value: null },
+    reply_text: isCredit ? `✅ Recorded as credit sale to ${customer}.` : `✅ Recorded. Sold ${qty} ${item}.`,
+  };
+}
+
 export const handleMessageLogic = async (
   from: string,
   text: string,
@@ -306,7 +465,10 @@ export const handleMessageLogic = async (
   profileName?: string
 ) => {
   try {
-    console.log(`⚡ Processing Logic for ${from}: "${text}"`);
+    const rawText = cleanTextForSecurity(text);
+    const low = rawText.toLowerCase().trim();
+
+    console.log(`⚡ Processing Logic for ${from}: "${rawText}"`);
 
     // --- GLOBAL SETTINGS (safe fallback) ---
     let MAX_HISTORY = 5;
@@ -375,21 +537,30 @@ export const handleMessageLogic = async (
       return;
     }
 
+    // ✅ If already suspended, block immediately
+    if (user.subscriptionStatus === 'suspended') {
+      await queueOutboundMessage(
+        from,
+        `🛑 Your account has been suspended.\nReason: ${user.suspensionReason || 'Security policy'}`
+      );
+      return;
+    }
+
     // --- REG FLOW ---
     if (user.registrationStage === 'EMAIL') {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(text)) {
+      if (!emailRegex.test(rawText)) {
         await queueOutboundMessage(from, '❌ Invalid email format. Please enter a valid email address.');
         return;
       }
 
-      const existingUser = await User.findOne({ email: text });
+      const existingUser = await User.findOne({ email: rawText });
       if (existingUser) {
         await queueOutboundMessage(from, 'This email is already registered. Please use a different email.');
         return;
       }
 
-      user.email = text;
+      user.email = rawText;
       user.registrationStage = 'PASSWORD';
       await user.save();
 
@@ -401,17 +572,28 @@ export const handleMessageLogic = async (
     }
 
     if (user.registrationStage === 'PASSWORD') {
-      if (text.length < 8) {
+      if (rawText.length < 8) {
         await queueOutboundMessage(from, '❌ Password too short. Please use at least 8 characters.');
         return;
       }
 
       const salt = await bcrypt.genSalt(10);
-      user.password = await bcrypt.hash(text, salt);
+      user.password = await bcrypt.hash(rawText, salt);
       user.registrationStage = 'COMPLETED';
       await user.save();
 
       await queueOutboundMessage(from, `✅ Password Saved!\n\nTry: *I sold 2 bags of rice for ${symbol}50k*`);
+      return;
+    }
+
+    // ✅ SECURITY: detect injection-like messages (only after COMPLETED)
+    const score = injectionScore(rawText);
+    if (score >= 5) {
+      await suspendUser(user._id, 'Prompt injection / unsafe instruction attempt');
+      await queueOutboundMessage(
+        from,
+        `🛑 Your account has been suspended for suspicious instructions.\nIf this is a mistake, contact support.`
+      );
       return;
     }
 
@@ -436,21 +618,17 @@ export const handleMessageLogic = async (
 
       user.messageHistory = user.messageHistory || [];
       if (user.messageHistory.length >= MAX_HISTORY) user.messageHistory.shift();
-      user.messageHistory.push(text);
+      user.messageHistory.push(rawText);
       await user.save();
     }
 
     // ✅ QUICK COMMANDS (no Gemini)
-    const low = (text || '').toLowerCase().trim();
+    const looksLikeTxn = looksLikeTxnSentence(low);
 
-    const looksLikeTxn =
-      /\b(sold|sell|comot|add|restock|set\s+stock|set\s+price|price\s+of|delete|remove)\b/.test(low);
-
-    // ✅ 1) Debt list (NOW supports "credit/credits", but will NEVER run for transaction sentences)
+    // ✅ Debt list command (will NEVER trigger for transaction sentences)
     const isDebtCmd =
       !looksLikeTxn &&
-      (
-        low === 'credit' ||
+      (low === 'credit' ||
         low === 'credits' ||
         low.includes('credit list') ||
         low.includes('credits list') ||
@@ -461,8 +639,7 @@ export const handleMessageLogic = async (
         low.includes('dey owe') ||
         low.includes('who dey owe') ||
         low.includes('who is owing') ||
-        low.includes('who owes')
-      );
+        low.includes('who owes'));
 
     const isPaymentPhrase = /\b(paid|pay|payment|settle|settled|i paid|don pay)\b/.test(low);
 
@@ -472,7 +649,7 @@ export const handleMessageLogic = async (
       return;
     }
 
-    // ✅ 2) Undo last sale (quick)
+    // ✅ Undo (quick)
     const isUndoCmd =
       low === 'undo' ||
       low === 'undo last' ||
@@ -488,11 +665,14 @@ export const handleMessageLogic = async (
 
     // --- AI PARSE ---
     const currentLang = user.settings?.language || 'English';
-    let parsed: any = await parseMessageWithGemini(text, currentLang, imageBuffer, imageMime);
+    let parsed: any = await parseMessageWithGemini(rawText, currentLang, imageBuffer, imageMime);
 
-    // ✅ HARD SAFETY: if AI mistakenly returns REPORT_DEBTS for a transaction sentence, force SALE parse
+    // ✅ SERVER-SIDE ALLOWLIST: model cannot invent ops/keys/params
+    parsed = allowlistParsed(parsed);
+
+    // ✅ HARD SAFETY: if AI returns REPORT_DEBTS for a transaction sentence, force SALE parse
     if (parsed?.intent === 'REPORT_DEBTS' && looksLikeTxn) {
-      const forced = forceParseSaleFromText(text);
+      const forced = forceParseSaleFromText(rawText);
       if (forced) parsed = forced;
     }
 
@@ -581,6 +761,12 @@ export const handleMessageLogic = async (
         break;
       }
 
+      case 'REPORT_DEBTS': {
+        const msg = await buildDebtSummary(user._id, symbol, locale);
+        await queueOutboundMessage(from, msg);
+        break;
+      }
+
       case 'REPORT_RECENT': {
         const limit = parsed.items?.[0]?.qty || 5;
         const safeLimit = Math.min(Math.max(limit, 1), 10);
@@ -590,7 +776,7 @@ export const handleMessageLogic = async (
         const recentTx = await Transaction.find({
           user: user._id,
           type: 'SALE',
-          isUndone: { $ne: true }
+          isUndone: { $ne: true },
         })
           .sort({ timestamp: -1 })
           .limit(safeLimit)
@@ -602,7 +788,6 @@ export const handleMessageLogic = async (
         }
 
         let msg = `🕒 *Last ${safeLimit} Sales:*\n\n`;
-
         recentTx.forEach((tx: any) => {
           const d = new Date(tx.timestamp);
           const timeStr = d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
@@ -623,12 +808,6 @@ export const handleMessageLogic = async (
       case 'UNDO_LAST_SALE': {
         const r = await undoLastSale(user._id, messageId);
         await queueOutboundMessage(from, r.message);
-        break;
-      }
-
-      case 'REPORT_DEBTS': {
-        const msg = await buildDebtSummary(user._id, symbol, locale);
-        await queueOutboundMessage(from, msg);
         break;
       }
 
@@ -677,7 +856,9 @@ export const handleMessageLogic = async (
           break;
         }
 
-        const priceFmt = item.lastUnitPrice > 0 ? `${symbol}${item.lastUnitPrice.toLocaleString(locale)}` : 'Not set yet';
+        const priceFmt =
+          item.lastUnitPrice > 0 ? `${symbol}${item.lastUnitPrice.toLocaleString(locale)}` : 'Not set yet';
+
         await queueOutboundMessage(
           from,
           `🏷️ *Price Check: ${item.name.toUpperCase()}*\n\n💰 Last recorded price: *${priceFmt}*\n📦 Stock Level: *${item.quantity}*`
@@ -884,6 +1065,7 @@ export const handleMessageLogic = async (
         break;
       }
 
+      case 'UNKNOWN':
       default: {
         await queueOutboundMessage(from, parsed.reply_text || 'Noted.');
         break;
@@ -894,3 +1076,6 @@ export const handleMessageLogic = async (
     throw err; // ✅ let BullMQ retry
   }
 };
+
+
+
