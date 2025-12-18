@@ -3,6 +3,7 @@ import { env } from '../config/env';
 
 const genAI = new GoogleGenerativeAI(env.geminiApiKey);
 
+// ✅ Enforce JSON mode to reduce markdown/codefence issues
 const model = genAI.getGenerativeModel({
   model: env.geminiModel,
   generationConfig: { responseMimeType: 'application/json' as any },
@@ -52,82 +53,116 @@ export interface ParsedResult {
 const SAFE_MAX = 900;
 
 // ==========================================
-// 🛠️ HELPERS & SANITIZATION
+// 🧼 SANITIZE
 // ==========================================
-
-/** ✅ Sanitize input: Removes invisible characters and strips HTML */
 const sanitizeInput = (input: string): string => {
   if (!input) return '';
   let s = input.slice(0, SAFE_MAX);
+
+  // remove control chars
   s = s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, ' ');
+
+  // remove bidi/invisible
   s = s.replace(/[\u200B-\u200F\u202A-\u202E\u2060-\u206F]/g, ' ');
+
+  // strip HTML tags
   s = s.replace(/<\/?[^>]+>/g, ' ');
-  // Unicode-safe allow letters/numbers across languages + currency symbols
-  s = s.replace(/[^\p{L}\p{N}\s₦$€£₵.,\-\/+()%@'_km]/gu, ' ');
-  return s.replace(/\s+/g, ' ').trim();
+
+  // reduce prompt injection keywords (lightly)
+  s = s.replace(/\b(ignore|disregard|bypass|override|system prompt)\b/gi, ' ');
+
+  // allow unicode letters/numbers + money symbols + common punctuation + k/m
+  s = s.replace(/[^\p{L}\p{N}\s₦$€£₵.,\-\/+()%@'":_km]/gu, ' ');
+
+  s = s.replace(/\s+/g, ' ').trim();
+  return s;
 };
 
-/** ✅ Standardized Money Parser: Handles "20k", "₦20,000", "1.5m" -> numbers */
+// ==========================================
+// 💰 MONEY PARSER
+// ==========================================
 const parseMoney = (raw: any): number | null => {
   if (raw == null) return null;
-  if (typeof raw === 'number') return Number.isFinite(raw) && raw >= 0 ? raw : null;
 
-  const s = String(raw).toLowerCase().replace(/\s+/g, '').replace(/,/g, '');
+  if (typeof raw === 'number') {
+    return Number.isFinite(raw) && raw >= 0 ? raw : null;
+  }
+
+  const s0 = String(raw).toLowerCase().trim();
+  if (!s0) return null;
+
+  const s = s0.replace(/\s+/g, '').replace(/,/g, '');
+
   const mult = s.includes('m') ? 1_000_000 : s.includes('k') ? 1_000 : 1;
   const num = parseFloat(s.replace(/[^\d.]/g, ''));
 
   if (Number.isNaN(num)) return null;
+
   const v = num * mult;
-  return Number.isFinite(v) && v >= 0 ? v : null;
+  if (!Number.isFinite(v) || v < 0) return null;
+
+  // keep as integer money where possible
+  return Math.round(v);
 };
 
-/** ✅ Normalize product name: Handles plural rules and removes units */
+// ==========================================
+// 📦 ITEM NORMALIZATION
+// ==========================================
 const normalizeItemName = (name: string): string => {
   if (!name) return 'unknown_item';
   let n = sanitizeInput(name).toLowerCase();
 
-  // remove filler/units words
+  // remove filler words (keep core product name)
   n = n.replace(
-    /\b(bags?|pcs?|pieces?|cartons?|packs?|sachets?|rolls?|bottles?|liters?|litres?|ltrs?|ltr|l|kg|kgs|grams?|of|the|a|an)\b/g,
+    /\b(of|the|a|an|my|your|their|this|that|pls|please|abeg)\b/g,
     ' '
   );
+
+  // remove common container words but keep product
+  n = n.replace(
+    /\b(bags?|bag|pcs?|piece|pieces|cartons?|carton|packs?|pack|sachets?|rolls?|bottles?|bottle|plates?|cups?)\b/g,
+    ' '
+  );
+
+  // remove common unit words (unit will be extracted separately)
+  n = n.replace(
+    /\b(liters?|litres?|ltrs?|ltr|ml|cl|kg|kgs|g|grams?|tonnes?|tons?|yards?|mtrs?|meters?|metres?)\b/g,
+    ' '
+  );
+
   n = n.replace(/\s+/g, ' ').trim();
 
-  // safer plural rules
+  // plural -> singular (light rules)
   if (n.endsWith('ies') && n.length > 4) n = n.slice(0, -3) + 'y';
-  else if (/(xes|ses|zes|ches|shes)$/.test(n) && n.length > 4) {
-    const singularEnds = ['gas', 'dress', 'glass', 'bus'];
-    if (!singularEnds.includes(n)) n = n.slice(0, -2);
-  } else if (n.endsWith('s') && n.length > 3 && !n.endsWith('ss')) {
-    const noTouch = new Set(['gas', 'rice', 'beans', 'couscous']);
+  else if (n.endsWith('s') && n.length > 3 && !n.endsWith('ss')) {
+    const noTouch = new Set(['rice', 'beans', 'gas', 'couscous']);
     if (!noTouch.has(n)) n = n.slice(0, -1);
   }
+
   return n || 'item';
 };
 
-/** ✅ Parse "200 liters kerosene" -> qty=200, unit="liters", name="kerosene" */
-const parseQtyUnitItem = (text: string): { qty: number; unit: string; name: string } | null => {
-  const t = sanitizeInput(text).trim();
+const extractUnit = (text: string): string => {
+  const m = sanitizeInput(text).toLowerCase();
+  // capture common units
+  const unitMatch = m.match(/\b(liters?|litres?|ltrs?|ltr|kg|kgs|g|grams?|bags?|cartons?|pcs?|pieces?)\b/);
+  if (!unitMatch) return '';
+  const u = unitMatch[1];
 
-  // supports: 200 liters kerosene, 5 bags rice, 2 kg beans
-  const m = t.match(
-    /^(\d+(?:\.\d+)?)\s*(liters?|litres?|ltrs?|ltr|l|kg|kgs?|g|grams?|bags?|pcs?|pieces?|cartons?|packs?|bottles?|rolls?|sachets?)?\s+(.+)$/i
-  );
-  if (!m) return null;
+  // normalize
+  if (u.startsWith('liter') || u.startsWith('litre') || u.startsWith('ltr') || u.startsWith('ltrs')) return 'liters';
+  if (u.startsWith('kg')) return 'kg';
+  if (u.startsWith('gram') || u === 'g') return 'g';
+  if (u.startsWith('bag')) return 'bag';
+  if (u.startsWith('carton')) return 'carton';
+  if (u.startsWith('pc') || u.startsWith('piece')) return 'pcs';
 
-  const qty = Number(m[1]);
-  if (!Number.isFinite(qty) || qty <= 0) return null;
-
-  const unit = m[2] ? sanitizeInput(m[2]).toLowerCase() : '';
-  const name = normalizeItemName(m[3]);
-
-  return { qty, unit, name };
+  return u;
 };
 
 // ==========================================
-// 🧠 RESULT NORMALIZATION
+// ✅ SAFE RESULT NORMALIZER
 // ==========================================
-
 const allowedIntents: ParsedIntent[] = [
   'SALE',
   'RESTOCK',
@@ -136,16 +171,16 @@ const allowedIntents: ParsedIntent[] = [
   'DEFINE_PRICE',
   'PRICE_CHECK',
   'REPORT_SALES',
-  'REPORT_DEBTS',
   'REPORT_STOCK',
   'REPORT_FULL',
-  'CLOSE_BOOK',
   'SETTINGS',
   'CHANGE_LANGUAGE',
   'DEBT_PAYMENT',
+  'CLOSE_BOOK',
   'ADD_STAFF',
   'DOWNLOAD_REPORT',
   'UNDO_LAST_SALE',
+  'REPORT_DEBTS',
   'REPORT_RECENT',
   'HELP',
   'UNKNOWN',
@@ -153,23 +188,38 @@ const allowedIntents: ParsedIntent[] = [
 
 function safeParsedResult(p: any): ParsedResult {
   const intent: ParsedIntent = allowedIntents.includes(p?.intent) ? p.intent : 'UNKNOWN';
-  const items = Array.isArray(p?.items) ? p.items : [];
 
-  const normalizedItems: ParsedItem[] = items.slice(0, 30).map((it: any) => ({
-    name: typeof it?.name === 'string' ? normalizeItemName(it.name) : 'unknown_item',
-    qty: intent === 'DEFINE_PRICE' || intent === 'PRICE_CHECK' ? 0 : Number(it?.qty) > 0 ? Number(it.qty) : 0,
-    unit_price: parseMoney(it?.unit_price),
-    unit: typeof it?.unit === 'string' ? sanitizeInput(it.unit).toLowerCase() : '',
-  }));
+  const items = Array.isArray(p?.items) ? p.items : [];
+  const normalizedItems: ParsedItem[] = items.slice(0, 30).map((it: any) => {
+    const name = typeof it?.name === 'string' ? normalizeItemName(it.name) : 'unknown_item';
+
+    // qty rules: price check & define price should never deduct stock
+    const qty =
+      intent === 'DEFINE_PRICE' || intent === 'PRICE_CHECK'
+        ? 0
+        : Number(it?.qty) > 0
+        ? Number(it.qty)
+        : 0;
+
+    const unit = typeof it?.unit === 'string' ? sanitizeInput(it.unit).toLowerCase() : '';
+
+    return {
+      name,
+      qty,
+      unit_price: parseMoney(it?.unit_price),
+      unit,
+    };
+  });
 
   const totalMoney = parseMoney(p?.total_money);
 
+  // fallback reply if AI reply missing
   let fallbackReply = 'Noted.';
-  if (normalizedItems.length > 0) {
-    const i = normalizedItems[0];
-    if (intent === 'SALE') fallbackReply = `Noted. ${i.qty} ${i.name} recorded.`;
-    if (intent === 'DEBT_PAYMENT') fallbackReply = `Payment recorded for ${p?.customer_name || 'customer'}.`;
-  }
+  if (intent === 'HELP') fallbackReply = 'Type: "Sold 2 rice 5000" or "Credits" or "Emeka paid 5k".';
+  if (intent === 'REPORT_DEBTS') fallbackReply = '📌 Debtors List';
+  if (intent === 'DEBT_PAYMENT') fallbackReply = `✅ Payment recorded.`;
+  if (intent === 'SALE') fallbackReply = `✅ Recorded.`;
+  if (intent === 'RESTOCK') fallbackReply = `✅ Stock updated.`;
 
   return {
     intent,
@@ -189,132 +239,249 @@ function safeParsedResult(p: any): ParsedResult {
           : null,
       value: p?.settings_update?.value ?? null,
     },
-    reply_text: typeof p?.reply_text === 'string' && p.reply_text.length > 3 ? p.reply_text.trim() : fallbackReply,
+    reply_text:
+      typeof p?.reply_text === 'string' && p.reply_text.trim().length > 2 ? p.reply_text.trim() : fallbackReply,
   };
 }
 
 // ==========================================
-// ⚡ FALLBACK PARSER (Regex for common phrases)
+// ⚡ FAST LOCAL FALLBACK PARSER (NOT STRICT)
 // ==========================================
+function looksLikeHelp(m: string) {
+  return /\b(help|menu|commands|how|how to|use|guide|wetin you fit do)\b/i.test(m);
+}
 
-/**
- * ✅ Debt request should ONLY trigger when user is asking for list.
- * Not when "credit" appears inside a SALE sentence.
- */
-const isDebtListQuery = (m: string) => {
-  const s = m.trim().toLowerCase();
+function looksLikeUndo(m: string) {
+  return /\b(undo|reverse|revert|cancel last|rollback|remove last|delete last)\b/i.test(m);
+}
 
-  // If message looks like a transaction, don't treat it as debt list query
-  if (/\b(sold|sell|comot|add|restock|set\s+price|price\s+of|delete|remove)\b/.test(s)) return false;
+function looksLikeDebts(m: string) {
+  return /\b(credit|credits|debt|debts|debtors|owing|owes|who dey owe|who owes|gbese|bashi|ugwo)\b/i.test(m);
+}
 
-  // Only these trigger debt list:
-  if (/^(credit|credits)$/.test(s)) return true;
-  if (s.includes('credit list') || s.includes('credits list') || s.includes('all credits')) return true;
+function looksLikeDownload(m: string) {
+  return /\b(pdf|download report|send report|export)\b/i.test(m);
+}
 
-  if (s.includes('who owes') || s.includes('who dey owe') || s.includes('who is owing')) return true;
-
-  return /\b(debt|debts|debtors|owing|owes|gbese|bashi|ugwo|tab)\b/.test(s);
-};
+function looksLikeRecent(m: string) {
+  return /\b(last\s+\d+|recent|last sales|recent sales|last transactions|recent transactions)\b/i.test(m);
+}
 
 function fallbackParse(message: string): ParsedResult | null {
-  const mRaw = sanitizeInput(message);
-  const m = mRaw.toLowerCase();
+  const raw = sanitizeInput(message);
+  const m = raw.toLowerCase();
 
-  // ✅ 1) Credit Sale / Normal Sale FIRST (so "on credit" won't route to REPORT_DEBTS)
-  // "Sold 200 liters kerosene to john for 20k on credit"
-  const soldMatch = mRaw.match(/\b(sold|sell|comot)\b/i);
-  if (soldMatch) {
-    let rest = mRaw.replace(/\b(sold|sell|comot)\b/i, '').trim();
-
-    // detect credit
-    const isCredit = /\b(on\s+credit|credit|owe|owing|later)\b/i.test(rest);
-
-    // extract amount (for|@|at)
-    let total_money: number | null = null;
-    const moneyMatch = rest.match(/\b(for|@|at)\s+([₦$€£₵]?\s*[\d,]+(?:\.\d+)?\s*(?:k|m)?)\b/i);
-    if (moneyMatch) {
-      total_money = parseMoney(moneyMatch[2]);
-      rest = rest.replace(moneyMatch[0], '').trim();
-    }
-
-    // extract customer (to NAME)
-    let customer_name: string | undefined = undefined;
-    const toMatch = rest.match(/\bto\s+([a-zA-Z][a-zA-Z0-9\s]{0,30})\b/i);
-    if (toMatch) {
-      customer_name = sanitizeInput(toMatch[1]).trim();
-      rest = rest.replace(toMatch[0], '').trim();
-    }
-
-    // remove credit words after extraction
-    rest = rest.replace(/\b(on\s+credit|credit|owe|owing|later)\b/gi, '').trim();
-
-    // parse qty/unit/item
-    const q = parseQtyUnitItem(rest);
-    if (q) {
-      return safeParsedResult({
-        intent: 'SALE',
-        is_credit: isCredit,
-        customer_name: isCredit ? customer_name : undefined,
-        items: [{ name: q.name, qty: q.qty, unit_price: null, unit: q.unit }],
-        total_money,
-        reply_text: isCredit
-          ? `✅ Recorded as credit sale to ${customer_name || 'customer'}${total_money != null ? ` for ₦${total_money}` : ''}.`
-          : `✅ Recorded. Sold ${q.qty} ${q.name}${total_money != null ? ` for ₦${total_money}` : ''}.`,
-      });
-    }
+  // HELP
+  if (looksLikeHelp(m)) {
+    return safeParsedResult({ intent: 'HELP', reply_text: '🤖 Help' });
   }
 
-  // ✅ 2) Debt List Request (ONLY when user is asking)
-  if (isDebtListQuery(m)) {
+  // UNDO
+  if (looksLikeUndo(m)) {
+    return safeParsedResult({ intent: 'UNDO_LAST_SALE', reply_text: 'Okay ✅ I will undo your last sale.' });
+  }
+
+  // DOWNLOAD
+  if (looksLikeDownload(m)) {
+    return safeParsedResult({ intent: 'DOWNLOAD_REPORT', reply_text: '📄 Generating report...' });
+  }
+
+  // DEBTS LIST
+  if (looksLikeDebts(m) && !/\bpaid|pay|settle|payment|i paid|don pay\b/i.test(m)) {
     return safeParsedResult({ intent: 'REPORT_DEBTS', reply_text: '📌 Debtors List' });
   }
 
-  // ✅ 3) Debt Payment: "John paid 20k"
-  const payMatch = mRaw.match(
-    /\b([a-zA-Z][a-zA-Z0-9\s]{0,20})\s+(paid|pay|has\s+paid)\s+([₦$€£₵]?\s*[\d,]+(?:\.\d+)?\s*(?:k|m)?)\b/i
+  // RECENT (default 5)
+  if (looksLikeRecent(m)) {
+    const nMatch = m.match(/\b(last|recent)\s+(\d+)\b/i);
+    const n = nMatch ? Math.min(Math.max(Number(nMatch[2]), 1), 10) : 5;
+    return safeParsedResult({
+      intent: 'REPORT_RECENT',
+      items: [{ name: 'recent', qty: n, unit_price: null, unit: '' }],
+      reply_text: `🕒 Fetching last ${n} sales...`,
+    });
+  }
+
+  // DEBT PAYMENT: "John paid 20k" / "John pay 20k" / "I collected 2k from John"
+  const pay1 = raw.match(
+    /\b([a-zA-Z][a-zA-Z0-9\s]{0,25})\s+(paid|pay|has\s+paid|don\s+pay|settled|settle)\s+([₦$€£₵]?\s*[\d,]+(?:\.\d+)?\s*(?:k|m)?)\b/i
   );
-  if (payMatch) {
-    const customer = sanitizeInput(payMatch[1]).trim();
-    const amt = parseMoney(payMatch[3]);
-    if (amt != null) {
+  if (pay1) {
+    const customer_name = sanitizeInput(pay1[1]).trim();
+    const total_money = parseMoney(pay1[3]);
+    if (customer_name && total_money != null) {
       return safeParsedResult({
         intent: 'DEBT_PAYMENT',
-        customer_name: customer,
-        total_money: amt,
-        reply_text: `✅ Payment recorded. ${customer} paid ₦${amt}.`,
+        customer_name,
+        total_money,
+        reply_text: `✅ Payment recorded for ${customer_name}.`,
       });
     }
+  }
+
+  const pay2 = raw.match(
+    /\b(i\s+collected|collect|received|i\s+receive|got)\s+([₦$€£₵]?\s*[\d,]+(?:\.\d+)?\s*(?:k|m)?)\s+(from)\s+([a-zA-Z][a-zA-Z0-9\s]{0,25})\b/i
+  );
+  if (pay2) {
+    const total_money = parseMoney(pay2[2]);
+    const customer_name = sanitizeInput(pay2[4]).trim();
+    if (customer_name && total_money != null) {
+      return safeParsedResult({
+        intent: 'DEBT_PAYMENT',
+        customer_name,
+        total_money,
+        reply_text: `✅ Payment recorded for ${customer_name}.`,
+      });
+    }
+  }
+
+  // DEFINE PRICE: "rice is 5k" / "set price of beans to 2000"
+  const priceMatch = raw.match(
+    /(?:price\s+of\s+|set\s+price\s+for\s+|update\s+price\s+for\s+|set\s+)?(.+?)\s+(?:is|to|now|at)\s+([₦$€£₵]?\s*[\d,]+(?:\.\d+)?\s*(?:k|m)?)\b/i
+  );
+  if (priceMatch && !/\b(sold|sell|comot|restock|add|paid|pay)\b/i.test(raw)) {
+    const itemName = normalizeItemName(priceMatch[1]);
+    const unit_price = parseMoney(priceMatch[2]);
+    if (itemName && unit_price != null) {
+      return safeParsedResult({
+        intent: 'DEFINE_PRICE',
+        items: [{ name: itemName, qty: 0, unit_price, unit: '' }],
+        reply_text: `✅ Price updated for ${itemName}.`,
+      });
+    }
+  }
+
+  // DELETE STOCK: "delete rice"
+  const delMatch = raw.match(/\b(delete|remove|clear)\s+(.+)\b/i);
+  if (delMatch && !/\b(last|sale|transaction)\b/i.test(raw)) {
+    const itemName = normalizeItemName(delMatch[2]);
+    if (itemName) {
+      return safeParsedResult({
+        intent: 'DELETED_STOCK',
+        items: [{ name: itemName, qty: 0, unit_price: null, unit: '' }],
+        reply_text: `🗑️ Deleting ${itemName}...`,
+      });
+    }
+  }
+
+  // SALE (CREDIT or PAID)
+  // handles: "Sold 200 liters kerosene to john for 20k on credit"
+  // handles: "sold 2 rice for 5000"
+  const saleMatch = raw.match(
+    /\b(sold|sell|comot)\s+(\d+(?:\.\d+)?)\s*([a-zA-Z]+)?\s+(.+?)(?:\s+to\s+([a-zA-Z][a-zA-Z0-9\s]{0,25}))?(?:\s+(?:for|@|at)\s+([₦$€£₵]?\s*[\d,]+(?:\.\d+)?\s*(?:k|m)?))?(?:\s+(on\s+credit|credit|owe|owing|later))?\b/i
+  );
+
+  if (saleMatch) {
+    const qty = Math.max(Number(saleMatch[2] || 0), 0);
+    const unitCandidate = saleMatch[3] || '';
+    const itemRaw = saleMatch[4] || '';
+    const customerRaw = saleMatch[5] || '';
+    const moneyRaw = saleMatch[6] || '';
+    const creditFlag = saleMatch[7] || '';
+
+    const unit = unitCandidate ? extractUnit(unitCandidate) : extractUnit(raw);
+    const name = normalizeItemName(itemRaw);
+    const total_money = parseMoney(moneyRaw);
+
+    const is_credit =
+      /\bcredit|owe|owing|later\b/i.test(raw) || /\bon\s+credit\b/i.test(String(creditFlag)) ? true : false;
+
+    const customer_name = customerRaw ? sanitizeInput(customerRaw).trim() : undefined;
+
+    return safeParsedResult({
+      intent: 'SALE',
+      is_credit,
+      customer_name,
+      items: [{ name, qty: Number.isFinite(qty) ? qty : 0, unit, unit_price: null }],
+      total_money,
+      reply_text: is_credit
+        ? `✅ Recorded as credit sale${customer_name ? ` to ${customer_name}` : ''}.`
+        : `✅ Recorded. Sold ${qty} ${name}.`,
+    });
+  }
+
+  // RESTOCK: "add 50 sugar" / "restock 20 bags rice"
+  const addMatch = raw.match(/\b(add|restock)\s+(\d+(?:\.\d+)?)\s*([a-zA-Z]+)?\s+(.+)\b/i);
+  if (addMatch) {
+    const qty = Math.max(Number(addMatch[2] || 0), 0);
+    const unit = addMatch[3] ? extractUnit(addMatch[3]) : extractUnit(raw);
+    const name = normalizeItemName(addMatch[4] || '');
+    return safeParsedResult({
+      intent: 'RESTOCK',
+      is_credit: false,
+      items: [{ name, qty, unit, unit_price: null }],
+      total_money: null,
+      reply_text: `✅ Stock updated. Added ${qty} ${name}.`,
+    });
+  }
+
+  // QUICK REPORT WORDS (not strict)
+  if (/\b(sales|report|summary|how market|how far|profit)\b/i.test(raw)) {
+    return safeParsedResult({ intent: 'REPORT_FULL', reply_text: '📊 Generating report...' });
+  }
+  if (/\b(stock|inventory|what remains|balance)\b/i.test(raw)) {
+    return safeParsedResult({ intent: 'REPORT_STOCK', reply_text: '📦 Checking inventory...' });
   }
 
   return null;
 }
 
 // ==========================================
-// 🤖 GEMINI SYSTEM PROMPT
+// 🤖 SYSTEM PROMPT (NOT TOO STRICT)
 // ==========================================
+const getSystemPrompt = (userLanguage: string, currentDate: string) => `
+You are "Tallypadi", a smart Nigerian shop assistant for small businesses.
+Your job: extract structured business data from chat text (and optional images).
 
-const getSystemPrompt = (lang: string, date: string) => `
-You are Tallypadi, a shop assistant for Nigerian SMEs.
-Current Date: ${date}. User Language: ${lang}.
+DateTime: ${currentDate}
+Preferred Language: ${userLanguage}
+Reply in the user's preferred language. Keep replies short and helpful.
 
-🚨 CRITICAL RULES:
-1. "20k" = 20000. "1k" = 1000. DO NOT cut off digits.
-2. If message says "on credit", "owing", or "later" INSIDE a sale, intent must be SALE and is_credit: true.
-3. If user message is ONLY "credit"/"credits" or contains "credit list", that means REPORT_DEBTS.
-4. If user says "Emeka paid 5k", set intent: DEBT_PAYMENT, customer_name: "Emeka", total_money: 5000.
-5. "200 liters" -> qty is 200, unit is "liters". "For 20k" -> total_money is 20000.
-6. Singularize items: "Rice" remains "rice", "Cements" becomes "cement".
+CRITICAL MONEY RULES:
+- "5k" = 5000, "20k" = 20000, "1m" = 1,000,000
+- Never treat "20000" as quantity if it looks like money.
+- If message includes "on credit", "owing", "owe", set is_credit = true
+- If message matches "Emeka paid 20k", intent MUST be DEBT_PAYMENT with customer_name and total_money.
 
-Return JSON only.
+INTENTS (choose best match even for short messages like "credits" or "help"):
+- SALE, RESTOCK, SET_STOCK, DELETED_STOCK, DEFINE_PRICE, PRICE_CHECK
+- REPORT_SALES, REPORT_STOCK, REPORT_FULL, REPORT_DEBTS, REPORT_RECENT
+- DEBT_PAYMENT
+- CLOSE_BOOK, UNDO_LAST_SALE, DOWNLOAD_REPORT
+- SETTINGS, CHANGE_LANGUAGE, ADD_STAFF
+- HELP, UNKNOWN
+
+If user says only: "credits" / "debt" => REPORT_DEBTS
+If user says: "help" => HELP
+If user says: "undo" => UNDO_LAST_SALE
+If user says: "pdf" => DOWNLOAD_REPORT
+If user says: "sales" / "report" => REPORT_FULL
+
+Return ONLY JSON (no markdown).
+
+<schema>
+{
+  "intent": "SALE|RESTOCK|SET_STOCK|DELETED_STOCK|DEFINE_PRICE|PRICE_CHECK|REPORT_SALES|REPORT_STOCK|REPORT_FULL|REPORT_DEBTS|REPORT_RECENT|SETTINGS|CHANGE_LANGUAGE|DEBT_PAYMENT|CLOSE_BOOK|ADD_STAFF|DOWNLOAD_REPORT|UNDO_LAST_SALE|HELP|UNKNOWN",
+  "is_credit": boolean,
+  "customer_name": "string | null",
+  "staffPhoneNumber": "string | null",
+  "items": [
+    { "name": "string (normalized lowercase)", "qty": number, "unit": "string", "unit_price": number | null }
+  ],
+  "total_money": number | null,
+  "report_params": { "start_date": "ISOString" | null, "end_date": "ISOString" | null },
+  "settings_update": { "key": "closingTime" | "dailySummary" | "language" | null, "value": "string|boolean|null" },
+  "reply_text": "string"
+}
+</schema>
 `;
 
 // ==========================================
-// 🚀 EXPORTS
+// ⏱️ TIMEOUT + RETRY
 // ==========================================
-
-async function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error(`Timeout after ${ms}ms`)), ms);
+    const t = setTimeout(() => reject(new Error(`Gemini timeout after ${ms}ms`)), ms);
     p.then((v) => {
       clearTimeout(t);
       resolve(v);
@@ -325,6 +492,33 @@ async function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   });
 }
 
+async function geminiWithRetry(parts: any[]) {
+  try {
+    return await withTimeout(model.generateContent(parts), 25000);
+  } catch (e: any) {
+    const msg = String(e?.message || '');
+    const status = e?.status;
+
+    // don't retry rate limit
+    if (status === 429 || msg.includes('429')) throw e;
+
+    const transient =
+      msg.includes('timeout') ||
+      msg.includes('ETIMEDOUT') ||
+      msg.includes('ECONNRESET') ||
+      msg.includes('ENOTFOUND') ||
+      (status >= 500 && status < 600);
+
+    if (!transient) throw e;
+
+    // retry once
+    return await withTimeout(model.generateContent(parts), 25000);
+  }
+}
+
+// ==========================================
+// 🚀 MAIN EXPORT
+// ==========================================
 export const parseMessageWithGemini = async (
   message: string,
   userLanguage: string = 'English',
@@ -332,24 +526,47 @@ export const parseMessageWithGemini = async (
   imageMimeType?: string
 ): Promise<ParsedResult> => {
   const safeMessage = sanitizeInput(message);
+  const isoDate = new Date().toISOString();
 
-  // ✅ 1) Fast local check first (sale detection now happens before debt list)
+  // ✅ Fast local parse first (handles bad English / pidgin / short commands)
   const local = fallbackParse(safeMessage);
   if (local) return local;
 
-  const parts: any[] = [`${getSystemPrompt(userLanguage, new Date().toISOString())}\n\nUser Message: ${safeMessage}`];
+  const systemInstruction = getSystemPrompt(userLanguage, isoDate);
+
+  const parts: any[] = [
+    `${systemInstruction}\n\n<user_message>${JSON.stringify({ text: safeMessage })}</user_message>\nReturn ONLY a single JSON object.`,
+  ];
+
   if (imageBuffer && imageMimeType) {
     parts.push({ inlineData: { data: imageBuffer, mimeType: imageMimeType } });
   }
 
   try {
-    const result = await withTimeout(model.generateContent(parts), 25000);
+    const result = await geminiWithRetry(parts);
     const text = result.response.text().trim();
+
+    // handle accidental codefences
     const cleaned = text.replace(/```json/gi, '').replace(/```/g, '').trim();
-    return safeParsedResult(JSON.parse(cleaned));
-  } catch (err) {
-    console.error('❌ Gemini Parse Error:', err);
+
+    const parsed = JSON.parse(cleaned);
+    return safeParsedResult(parsed);
+  } catch (err: any) {
+    // ✅ fallback retry (again) in case Gemini failed
     const retry = fallbackParse(safeMessage);
-    return retry || safeParsedResult({ intent: 'UNKNOWN', reply_text: 'I no understand that one, abeg type am again.' });
+    if (retry) return retry;
+
+    if (err?.status === 429 || String(err?.message || '').includes('429')) {
+      return safeParsedResult({
+        intent: 'UNKNOWN',
+        reply_text: 'Too many requests right now. Abeg wait small and try again.',
+      });
+    }
+
+    console.error('❌ Gemini Parse Error:', err);
+    return safeParsedResult({
+      intent: 'UNKNOWN',
+      reply_text: 'Network fluctuate small. Abeg type that again.',
+    });
   }
 };
