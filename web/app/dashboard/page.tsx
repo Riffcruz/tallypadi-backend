@@ -237,13 +237,7 @@ export default function DashboardPage() {
   // ✅ Fix: Add ': number' type to val
   tickFormatter={(val: number) => (val >= 1000 ? `${val / 1000}k` : val.toString())} 
 />
-   <Tooltip
-  cursor={{ fill: '#f1f5f9', radius: 8 }}
-  contentStyle={{
-    borderRadius: '16px',
-    border: 'none',
-    boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)',
-  }}
+<Tooltip
   formatter={(value: ValueType, _name: NameType) => {
     const n = Array.isArray(value) ? Number(value[0] ?? 0) : Number(value ?? 0);
     return [formatCurrency(n, currencyCode, userLocale), 'Sales'];
