@@ -448,6 +448,11 @@ function parseMoneyLoose(moneyText: string): number | null {
  * Returns null for anything it doesn't confidently understand
  * Gemini will handle everything else
  */
+/**
+ * SIMPLE parser that just detects if it might be a sale
+ * Returns null for anything it doesn't confidently understand
+ * Gemini will handle everything else
+ */
 function tryQuickParse(text: string) {
   const raw = cleanTextForSecurity(text);
   const low = raw.toLowerCase();
@@ -457,6 +462,9 @@ function tryQuickParse(text: string) {
     // Clear sale pattern: "sold X bags of rice for Yk"
     /^sold\s+(\d+)\s+bags?\s+(?:of\s+)?([a-z\s]+?)\s+for\s+(\d+)k$/i,
     
+    // Clear sale pattern: "sold X bags rice for Yk"
+    /^sold\s+(\d+)\s+bags?\s+([a-z\s]+?)\s+for\s+(\d+)k$/i,
+    
     // Clear sale with customer: "sold X rice to name for Yk"
     /^sold\s+(\d+)\s+([a-z\s]+?)\s+to\s+([a-z\s]+?)\s+for\s+(\d+)k$/i,
     
@@ -465,22 +473,21 @@ function tryQuickParse(text: string) {
     
     // Very clear stock: "add X rice"
     /^add\s+(\d+)\s+([a-z\s]+?)$/i,
-    
-    // Simple debt check: "credits" or "debt"
-    /^(credits?|debt|debtors?|who\s+owes|who\s+dey\s+owe)$/i,
-    
-    // Simple undo: "undo"
-    /^(undo|undo\s+last|undo\s+last\s+sale)$/i,
   ];
   
   for (const pattern of simplePatterns) {
     const match = raw.match(pattern);
     if (match) {
       // For pattern 1: sold X bags of rice for Yk
-      if (pattern.toString().includes('bags?')) {
+      if (pattern.toString().includes('bags?\\s+(?:of\\s+)?([a-z\\s]+?)')) {
         const qty = parseInt(match[1]);
         const item = match[2].trim();
         const amount = parseInt(match[3]) * 1000;
+        
+        // Check if item makes sense (not empty or just "for")
+        if (!item || item.length < 2 || item === 'for') {
+          return null; // Let Gemini handle it
+        }
         
         return {
           intent: 'SALE' as const,
@@ -500,12 +507,44 @@ function tryQuickParse(text: string) {
         };
       }
       
-      // For pattern 2: sold X rice to name for Yk
-      if (pattern.toString().includes('to\\s+([a-z\\s]+?)')) {
+      // For pattern 2: sold X bags rice for Yk
+      if (pattern.toString().includes('bags?\\s+([a-z\\s]+?)\\s+for')) {
+        const qty = parseInt(match[1]);
+        const item = match[2].trim();
+        const amount = parseInt(match[3]) * 1000;
+        
+        if (!item || item.length < 2 || item === 'for') {
+          return null;
+        }
+        
+        return {
+          intent: 'SALE' as const,
+          is_credit: false,
+          customer_name: null,
+          staffPhoneNumber: null,
+          items: [{
+            name: item.toLowerCase(),
+            qty: qty,
+            unit: 'bag',
+            unit_price: amount / qty
+          }],
+          total_money: amount,
+          report_params: { start_date: null, end_date: null },
+          settings_update: { key: null, value: null },
+          reply_text: `✅ Sale recorded: ${qty} bags of ${item} for ₦${amount.toLocaleString()}`
+        };
+      }
+      
+      // For pattern 3: sold X rice to name for Yk
+      if (pattern.toString().includes('to\\s+([a-z\\s]+?)\\s+for')) {
         const qty = parseInt(match[1]);
         const item = match[2].trim();
         const customer = match[3].trim();
         const amount = parseInt(match[4]) * 1000;
+        
+        if (!item || item.length < 2) {
+          return null;
+        }
         
         return {
           intent: 'SALE' as const,
@@ -525,7 +564,7 @@ function tryQuickParse(text: string) {
         };
       }
       
-      // For pattern 3: name paid Xk (debt payment)
+      // For pattern 4: name paid Xk (debt payment)
       if (pattern.toString().includes('paid')) {
         const customer = match[1].trim();
         const amount = parseInt(match[2]) * 1000;
@@ -543,7 +582,7 @@ function tryQuickParse(text: string) {
         };
       }
       
-      // For pattern 4: add X rice (restock)
+      // For pattern 5: add X rice (restock)
       if (pattern.toString().includes('^add\\s+')) {
         const qty = parseInt(match[1]);
         const item = match[2].trim();
@@ -564,18 +603,6 @@ function tryQuickParse(text: string) {
           settings_update: { key: null, value: null },
           reply_text: `✅ Restocked: ${qty} ${item} added to inventory`
         };
-      }
-      
-      // For pattern 5: credits/debt (will be handled in main logic)
-      if (pattern.toString().includes('credits?|debt|debtors?')) {
-        // Return null so main logic handles it
-        return null;
-      }
-      
-      // For pattern 6: undo (will be handled in main logic)
-      if (pattern.toString().includes('undo')) {
-        // Return null so main logic handles it
-        return null;
       }
     }
   }
