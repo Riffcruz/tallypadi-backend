@@ -22,10 +22,6 @@ import { checkSubscriptionStatus } from '../services/billing.service';
 import { messageQueue, queueOutboundMessage } from '../services/queue.service';
 import { undoLastSale } from '../services/undo.service';
 
-// Import the gemini service - make sure it's exported from gemini.service.ts
-// The function should be exported like: export const parseMessageWithGemini = async (...)
-// You'll need to fix the export in your gemini.service.ts first
-
 // 🌍 CURRENCY CONFIGURATION
 const COUNTRY_CURRENCIES: Record<string, { symbol: string; code: string; locale: string }> = {
   NG: { symbol: '₦', code: 'NGN', locale: 'en-NG' },
@@ -57,60 +53,6 @@ const getUserCurrency = (user: any) => {
 
   return COUNTRY_CURRENCIES[countryCode] || COUNTRY_CURRENCIES.DEFAULT;
 };
-
-function normalizeName(name: string) {
-  return String(name || '')
-    .replace(/\s*\(.*?\)\s*$/, '')
-    .toLowerCase()
-    .trim();
-}
-
-/* =========================================================
-   ✅ NEW: Controller-level safety parsers (backup)
-   ========================================================= */
-
-const parseMoney = (raw: any): number | null => {
-  if (raw == null) return null;
-  if (typeof raw === 'number') return Number.isFinite(raw) && raw >= 0 ? raw : null;
-
-  const s = String(raw).toLowerCase().replace(/\s+/g, '').replace(/,/g, '');
-  const mult = s.includes('m') ? 1_000_000 : s.includes('k') ? 1_000 : 1;
-  const num = parseFloat(s.replace(/[^\d.]/g, ''));
-  if (Number.isNaN(num)) return null;
-
-  const v = num * mult;
-  return Number.isFinite(v) && v >= 0 ? v : null;
-};
-
-const normalizeItemName = (name: string) => {
-  const n = String(name || '').toLowerCase().trim();
-  if (!n) return 'item';
-  // very light normalization (your gemini.service does deeper)
-  return n
-    .replace(/\b(of|the|a|an)\b/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-};
-
-const parseQtyUnitItem = (text: string): { qty: number; unit: string; name: string } | null => {
-  const t = String(text || '').trim();
-
-  // supports: 200 liters kerosene, 5 bags rice, 2 kg beans
-  const m = t.match(
-    /^(\d+(?:\.\d+)?)\s*(liters?|litres?|ltrs?|ltr|l|kg|kgs?|g|grams?|bags?|pcs?|pieces?|cartons?|packs?|bottles?|rolls?|sachets?)?\s+(.+)$/i
-  );
-  if (!m) return null;
-
-  const qty = Number(m[1]);
-  if (!Number.isFinite(qty) || qty <= 0) return null;
-
-  const unit = m[2] ? String(m[2]).toLowerCase() : '';
-  const name = normalizeItemName(m[3]);
-
-  return { qty, unit, name };
-};
-
-/* ========================================================= */
 
 // HELPER: Fetch Image Data from Meta
 const getMediaBuffer = async (
@@ -293,12 +235,6 @@ function cleanTextForSecurity(input: string) {
   return s.replace(/\s+/g, ' ').trim();
 }
 
-function looksLikeTxnSentence(low: string) {
-  return /\b(sold|sell|comot|add|restock|set\s+stock|set\s+price|price\s+of|delete|remove|owe|credit|on\s+credit|vent|vnt|selam|customer bought|purchased from me|took|collected)\b/.test(
-    low
-  );
-}
-
 /**
  * "lots of injection-like phrases" → score based
  * Only suspend if it looks clearly malicious
@@ -410,208 +346,6 @@ function allowlistParsed(parsed: any) {
   return safe;
 }
 
-// ===============================
-// 🧠 SIMPLE PARSER FOR QUICK DETECTION
-// ===============================
-function parseMoneyLoose(moneyText: string): number | null {
-  if (!moneyText) return null;
-  
-  // Clean the text
-  let text = moneyText.toLowerCase().trim();
-  
-  // Remove currency symbols and commas
-  text = text.replace(/[₦$€£₵,]/g, '');
-  
-  // Handle Nigerian shorthand
-  if (text.includes('k')) {
-    const num = parseFloat(text.replace('k', '')) * 1000;
-    return isNaN(num) ? null : Math.round(num);
-  }
-  
-  if (text.includes('m')) {
-    const num = parseFloat(text.replace('m', '')) * 1000000;
-    return isNaN(num) ? null : Math.round(num);
-  }
-  
-  if (text.includes('thousand')) {
-    const num = parseFloat(text.replace('thousand', '')) * 1000;
-    return isNaN(num) ? null : Math.round(num);
-  }
-  
-  // Try direct parse
-  const num = parseFloat(text);
-  return isNaN(num) ? null : Math.round(num);
-}
-
-/**
- * SIMPLE parser that just detects if it might be a sale
- * Returns null for anything it doesn't confidently understand
- * Gemini will handle everything else
- */
-/**
- * SIMPLE parser that just detects if it might be a sale
- * Returns null for anything it doesn't confidently understand
- * Gemini will handle everything else
- */
-function tryQuickParse(text: string) {
-  const raw = cleanTextForSecurity(text);
-  const low = raw.toLowerCase();
-  
-  // VERY SIMPLE patterns - only for crystal clear cases
-  const simplePatterns = [
-    // Clear sale pattern: "sold X bags of rice for Yk"
-    /^sold\s+(\d+)\s+bags?\s+(?:of\s+)?([a-z\s]+?)\s+for\s+(\d+)k$/i,
-    
-    // Clear sale pattern: "sold X bags rice for Yk"
-    /^sold\s+(\d+)\s+bags?\s+([a-z\s]+?)\s+for\s+(\d+)k$/i,
-    
-    // Clear sale with customer: "sold X rice to name for Yk"
-    /^sold\s+(\d+)\s+([a-z\s]+?)\s+to\s+([a-z\s]+?)\s+for\s+(\d+)k$/i,
-    
-    // Clear credit payment: "name paid Xk"
-    /^([a-z\s]+?)\s+paid\s+(\d+)k$/i,
-    
-    // Very clear stock: "add X rice"
-    /^add\s+(\d+)\s+([a-z\s]+?)$/i,
-  ];
-  
-  for (const pattern of simplePatterns) {
-    const match = raw.match(pattern);
-    if (match) {
-      // For pattern 1: sold X bags of rice for Yk
-      if (pattern.toString().includes('bags?\\s+(?:of\\s+)?([a-z\\s]+?)')) {
-        const qty = parseInt(match[1]);
-        const item = match[2].trim();
-        const amount = parseInt(match[3]) * 1000;
-        
-        // Check if item makes sense (not empty or just "for")
-        if (!item || item.length < 2 || item === 'for') {
-          return null; // Let Gemini handle it
-        }
-        
-        return {
-          intent: 'SALE' as const,
-          is_credit: false,
-          customer_name: null,
-          staffPhoneNumber: null,
-          items: [{
-            name: item.toLowerCase(),
-            qty: qty,
-            unit: 'bag',
-            unit_price: amount / qty
-          }],
-          total_money: amount,
-          report_params: { start_date: null, end_date: null },
-          settings_update: { key: null, value: null },
-          reply_text: `✅ Sale recorded: ${qty} bags of ${item} for ₦${amount.toLocaleString()}`
-        };
-      }
-      
-      // For pattern 2: sold X bags rice for Yk
-      if (pattern.toString().includes('bags?\\s+([a-z\\s]+?)\\s+for')) {
-        const qty = parseInt(match[1]);
-        const item = match[2].trim();
-        const amount = parseInt(match[3]) * 1000;
-        
-        if (!item || item.length < 2 || item === 'for') {
-          return null;
-        }
-        
-        return {
-          intent: 'SALE' as const,
-          is_credit: false,
-          customer_name: null,
-          staffPhoneNumber: null,
-          items: [{
-            name: item.toLowerCase(),
-            qty: qty,
-            unit: 'bag',
-            unit_price: amount / qty
-          }],
-          total_money: amount,
-          report_params: { start_date: null, end_date: null },
-          settings_update: { key: null, value: null },
-          reply_text: `✅ Sale recorded: ${qty} bags of ${item} for ₦${amount.toLocaleString()}`
-        };
-      }
-      
-      // For pattern 3: sold X rice to name for Yk
-      if (pattern.toString().includes('to\\s+([a-z\\s]+?)\\s+for')) {
-        const qty = parseInt(match[1]);
-        const item = match[2].trim();
-        const customer = match[3].trim();
-        const amount = parseInt(match[4]) * 1000;
-        
-        if (!item || item.length < 2) {
-          return null;
-        }
-        
-        return {
-          intent: 'SALE' as const,
-          is_credit: false,
-          customer_name: customer,
-          staffPhoneNumber: null,
-          items: [{
-            name: item.toLowerCase(),
-            qty: qty,
-            unit: 'pcs',
-            unit_price: amount / qty
-          }],
-          total_money: amount,
-          report_params: { start_date: null, end_date: null },
-          settings_update: { key: null, value: null },
-          reply_text: `✅ Sale recorded: ${qty} ${item} to ${customer} for ₦${amount.toLocaleString()}`
-        };
-      }
-      
-      // For pattern 4: name paid Xk (debt payment)
-      if (pattern.toString().includes('paid')) {
-        const customer = match[1].trim();
-        const amount = parseInt(match[2]) * 1000;
-        
-        return {
-          intent: 'DEBT_PAYMENT' as const,
-          is_credit: false,
-          customer_name: customer,
-          staffPhoneNumber: null,
-          items: [],
-          total_money: amount,
-          report_params: { start_date: null, end_date: null },
-          settings_update: { key: null, value: null },
-          reply_text: `✅ Payment recorded: ${customer} paid ₦${amount.toLocaleString()}`
-        };
-      }
-      
-      // For pattern 5: add X rice (restock)
-      if (pattern.toString().includes('^add\\s+')) {
-        const qty = parseInt(match[1]);
-        const item = match[2].trim();
-        
-        return {
-          intent: 'RESTOCK' as const,
-          is_credit: false,
-          customer_name: null,
-          staffPhoneNumber: null,
-          items: [{
-            name: item.toLowerCase(),
-            qty: qty,
-            unit: 'pcs',
-            unit_price: null
-          }],
-          total_money: null,
-          report_params: { start_date: null, end_date: null },
-          settings_update: { key: null, value: null },
-          reply_text: `✅ Restocked: ${qty} ${item} added to inventory`
-        };
-      }
-    }
-  }
-  
-  // Return null for anything not perfectly matched
-  // This ensures Gemini handles complex or ambiguous cases
-  return null;
-}
-
 const STRIKE_WINDOW_MS = 24 * 60 * 60 * 1000; // 24h
 const STRIKE_SUSPEND_AT = 3;                  // 3 attempts
 
@@ -665,7 +399,6 @@ export const handleMessageLogic = async (
 ) => {
   try {
     const rawText = cleanTextForSecurity(text);
-    const low = rawText.toLowerCase().trim();
 
     console.log(`⚡ Processing Logic for ${from}: "${rawText}"`);
 
@@ -826,65 +559,14 @@ export const handleMessageLogic = async (
       await user.save();
     }
 
-    // ✅ QUICK COMMANDS (no Gemini)
-    const looksLikeTxn = looksLikeTxnSentence(low);
-
-    // ✅ Debt list command (will NEVER trigger for transaction sentences)
-    const isDebtCmd =
-      !looksLikeTxn &&
-      (low === 'credit' ||
-        low === 'credits' ||
-        low.includes('credit list') ||
-        low.includes('credits list') ||
-        low.includes('all credits') ||
-        low === 'debt' ||
-        low.includes('debtors') ||
-        /\b(debt|debts|debtor|debtors|owing|owes|owe|gbese|bashi|ugwo|tab)\b/.test(low) ||
-        low.includes('dey owe') ||
-        low.includes('who dey owe') ||
-        low.includes('who is owing') ||
-        low.includes('who owes'));
-
-    const isPaymentPhrase = /\b(paid|pay|payment|settle|settled|i paid|don pay)\b/.test(low);
-
-    if (isDebtCmd && !isPaymentPhrase) {
-      const msg = await buildDebtSummary(user._id, symbol, locale);
-      await queueOutboundMessage(from, msg);
-      return;
-    }
-
-    // ✅ Undo (quick)
-    const isUndoCmd =
-      low === 'undo' ||
-      low === 'undo last' ||
-      low === 'undo last sale' ||
-      low === 'cancel last sale' ||
-      low === 'reverse last sale';
-
-    if (isUndoCmd) {
-      const r = await undoLastSale(user._id, messageId);
-      await queueOutboundMessage(from, r.message);
-      return;
-    }
-
-    // --- INTELLIGENT PARSING: Try quick parse first, then Gemini for everything else ---
+    // --- INTELLIGENT PARSING (Solely Gemini) ---
     const currentLang = user.settings?.language || 'English';
-    let parsed: any = null;
-
-    // First, try our VERY SIMPLE parser for crystal clear cases
-    // This only catches patterns like "sold 2 rice for 20k" or "john paid 5k"
-    parsed = tryQuickParse(rawText);
-
-    // If quick parser didn't understand, send to Gemini
-    if (!parsed) {
-      console.log(`🤖 Sending to Gemini for intelligent parsing: "${rawText}"`);
-      
-      // Dynamically import the gemini service to avoid circular dependency
-      const { parseMessageWithGemini } = await import('../services/gemini.service');
-      parsed = await parseMessageWithGemini(rawText, currentLang, imageBuffer, imageMime);
-    } else {
-      console.log(`⚡ Quick parse successful for: "${rawText}"`);
-    }
+    
+    // Dynamically import the gemini service to avoid circular dependency
+    const { parseMessageWithGemini } = await import('../services/gemini.service');
+    
+    console.log(`🤖 Sending to Gemini for parsing: "${rawText}"`);
+    let parsed = await parseMessageWithGemini(rawText, currentLang, imageBuffer, imageMime);
 
     // ✅ SERVER-SIDE ALLOWLIST: model cannot invent ops/keys/params
     parsed = allowlistParsed(parsed);
