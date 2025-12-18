@@ -19,9 +19,6 @@ const toNumber = (input: unknown): number | null => {
 
 const getCurrentDateString = () => new Date().toISOString().split('T')[0];
 
-// Accepts BOTH:
-// 1) { itemId, quantity, price }
-// 2) { items: [{ itemId, quantity, price }, ...] }
 type SaleItemInput = { itemId: string; quantity: number; price: number };
 
 const normalizeSalePayload = (body: any): SaleItemInput[] => {
@@ -35,7 +32,7 @@ const normalizeSalePayload = (body: any): SaleItemInput[] => {
 
     if (!itemId) continue;
     if (!quantity || quantity <= 0) continue;
-    if (!price || price < 0) continue; // Allow 0 price if needed, but usually > 0
+    if (!price || price < 0) continue; 
 
     clean.push({ itemId, quantity, price });
   }
@@ -63,13 +60,16 @@ const THEME = {
 };
 
 // =====================================================
-// 1) RECORD SALE (FIXED: Works on Single Server)
+// 1) RECORD SALE 
 // =====================================================
-export const recordSale = async (req: Request, res: Response) => {
-  // ⚠️ NOTE: Sessions removed to prevent "Transaction numbers only allowed on replica set" error
-  
+export const recordSale = async (req: Request | any, res: Response) => {
   try {
-    const user = await User.findOne(); // TODO: replace with real auth
+    // 🛑 FIX: Get User ID from Token (Middleware)
+    const userId = req.user?.id || req.user?._id;
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    // Fetch the specific user
+    const user = await User.findById(userId); 
     if (!user) return res.status(404).json({ error: "User not found" });
 
     const items = normalizeSalePayload(req.body);
@@ -87,15 +87,15 @@ export const recordSale = async (req: Request, res: Response) => {
       if (!prev) merged.set(it.itemId, { ...it });
       else {
         prev.quantity += it.quantity;
-        prev.price = it.price; // keep latest price
+        prev.price = it.price; 
       }
     }
     const finalItems = Array.from(merged.values());
 
-    // 1. Fetch Inventory (Standard Find)
+    // 1. Fetch Inventory (Scoped to User)
     const invDocs = await Inventory.find({
       _id: { $in: finalItems.map(i => i.itemId) },
-      user: user._id
+      user: userId // ✅ Ensure we only fetch THIS user's items
     });
 
     const invMap = new Map<string, any>();
@@ -112,11 +112,15 @@ export const recordSale = async (req: Request, res: Response) => {
         return res.status(404).json({ error: "Item not found in inventory", itemId: it.itemId });
       }
 
-      if (inv.quantity < it.quantity) {
+      // Ensure we treat stock as a number
+      const currentStock = Number(inv.quantity ?? inv.stock ?? 0);
+
+      if (currentStock < it.quantity) {
         return res.status(409).json({
           error: "Insufficient stock",
           itemId: it.itemId,
-          available: inv.quantity,
+          name: inv.name,
+          available: currentStock,
           requested: it.quantity
         });
       }
@@ -126,7 +130,6 @@ export const recordSale = async (req: Request, res: Response) => {
 
       txItems.push({
         name: inv.name,
-        // Save BOTH formats to prevent Schema validation errors
         qty: it.quantity,
         quantity: it.quantity,
         unit: 'pc',
@@ -136,17 +139,17 @@ export const recordSale = async (req: Request, res: Response) => {
       });
     }
 
-    // 3. Apply Stock Changes (Sequential Updates)
+    // 3. Apply Stock Changes
     for (const it of finalItems) {
       await Inventory.updateOne(
-        { _id: it.itemId, user: user._id },
+        { _id: it.itemId, user: userId },
         { $inc: { quantity: -it.quantity } }
       );
     }
 
     // 4. Create Transaction Record
     const createdTx = await Transaction.create({
-      user: user._id,
+      user: userId, // ✅ Link to authenticated user
       type: 'SALE',
       paymentStatus: 'PAID',
       items: txItems,
@@ -159,7 +162,6 @@ export const recordSale = async (req: Request, res: Response) => {
 
   } catch (error: any) {
     console.error("Record Sale Error:", error?.stack || error);
-    // Return detailed error to frontend for easier debugging
     return res.status(500).json({ 
       error: "Server Error", 
       details: error.message || "Unknown Error" 
@@ -171,17 +173,25 @@ export const recordSale = async (req: Request, res: Response) => {
 // =====================================================
 // 2) GET SALES HISTORY
 // =====================================================
-export const getSalesHistory = async (req: Request, res: Response) => {
+export const getSalesHistory = async (req: Request | any, res: Response) => {
   try {
-    const user = await User.findOne();
-    if (!user) return res.status(404).json({ error: "User not found" });
+    // 🛑 FIX: Get User ID from Token
+    const userId = req.user?.id || req.user?._id;
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
     const startDate = String(req.query.startDate || '');
     const endDate = String(req.query.endDate || '');
 
-    const query: any = { user: user._id, type: 'SALE' };
-    if (startDate && endDate) {
-      query.date = { $gte: startDate, $lte: endDate };
+    // ✅ Query MUST include user: userId
+    const query: any = { user: userId, type: 'SALE' };
+    
+    if (startDate || endDate) {
+      // Logic for filtering by date string (YYYY-MM-DD) or timestamp
+      if (startDate && endDate) {
+         query.date = { $gte: startDate, $lte: endDate };
+      } else if (startDate) {
+         query.date = { $gte: startDate };
+      }
     }
 
     const sales = await Transaction.find(query).sort({ timestamp: -1 });
@@ -192,7 +202,6 @@ export const getSalesHistory = async (req: Request, res: Response) => {
       totalAmount: t.totalMoney || 0,
       items: (t.items || []).map((i: any) => ({
         name: i.name,
-        // Handle both schema possibilities
         quantity: i.qty ?? i.quantity ?? 0,
         price: i.unitPrice ?? i.price ?? 0
       }))
@@ -209,9 +218,14 @@ export const getSalesHistory = async (req: Request, res: Response) => {
 // =====================================================
 // 3) GENERATE PDF REPORT
 // =====================================================
-export const generateSalesReport = async (req: Request, res: Response) => {
+export const generateSalesReport = async (req: Request | any, res: Response) => {
   try {
-    const user = await User.findOne();
+    // 🛑 FIX: Get User ID from Token
+    const userId = req.user?.id || req.user?._id;
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    // Fetch User Details for Header
+    const user = await User.findById(userId);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
     if (user.planType !== 'TYCOON') {
@@ -225,13 +239,16 @@ export const generateSalesReport = async (req: Request, res: Response) => {
     const startDate = String(req.query.startDate || '');
     const endDate = String(req.query.endDate || '');
 
-    const query: any = { user: user._id, type: 'SALE' };
+    // ✅ Query MUST include user: userId
+    const query: any = { user: userId, type: 'SALE' };
     if (startDate && endDate) query.date = { $gte: startDate, $lte: endDate };
 
     const transactions = await Transaction.find(query).sort({ timestamp: 1 });
     const totalRevenue = transactions.reduce((sum: number, t: any) => sum + (t.totalMoney || 0), 0);
     const totalTx = transactions.length;
 
+    // ... (Rest of PDF generation code remains exactly the same)
+    
     const doc = new PDFDocument({
       size: 'A4',
       margins: { top: 50, bottom: 50, left: 40, right: 40 },
@@ -254,7 +271,7 @@ export const generateSalesReport = async (req: Request, res: Response) => {
     res.setHeader('Content-Disposition', `attachment; filename=Sales_Report_${safeStart}_${safeEnd}.pdf`);
     doc.pipe(res);
 
-    // Fonts
+    // Fonts Logic (Same as before)
     const fontPaths = [
       path.join(__dirname, '..', 'assets', 'fonts', 'NotoSans-Regular.ttf'),
       '/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf',
@@ -337,7 +354,7 @@ export const generateSalesReport = async (req: Request, res: Response) => {
       doc.text(`Page ${page} of ${total}`, margin, y, { width: contentW, align: 'right' });
     };
 
-    // Build PDF
+    // Build PDF Content
     drawWatermark();
     drawHeader();
     drawSummaryCards();
