@@ -3,14 +3,18 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
-import Sidebar from '../../components/Sidebar';
+import Sidebar from '../../components/Sidebar'; // Keep this path if Sidebar is in app/components
+import { ShoppingCart, History, Menu, Loader2 } from 'lucide-react';
+
+// ✅ IMPORT YOUR LOCAL COMPONENTS
+// (Ensure these files exist in the same folder)
 import ProductGrid from './ProductGrid';
 import CartSidebar from './CartSidebar';
 import SalesHistory from './SalesHistory';
-import { ShoppingCart, History, Menu, Loader2, AlertCircle } from 'lucide-react';
 
-// --- TYPES ---
-// (You can move these to a types.ts file later)
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
+
+// --- SHARED TYPES (Exported for components to use) ---
 export interface InventoryItem {
   id: string;
   name: string;
@@ -29,8 +33,6 @@ export interface UserProfile {
   currencyCode?: string; // e.g., 'USD', 'NGN'
   locale?: string;       // e.g., 'en-US', 'en-NG'
 }
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 
 export default function SalesPage() {
   const router = useRouter();
@@ -78,14 +80,21 @@ export default function SalesPage() {
   const handleClearCart = () => setCart([]);
 
   if (loadingUser) {
-    return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin w-8 h-8 text-emerald-600"/></div>;
+    return (
+      <div className="h-screen flex items-center justify-center bg-slate-50">
+        <div className="flex flex-col items-center gap-2">
+          <Loader2 className="animate-spin w-8 h-8 text-emerald-600"/>
+          <p className="text-sm font-medium text-gray-500">Loading Register...</p>
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="flex min-h-screen bg-slate-50 font-sans text-gray-900 relative">
       {/* Mobile Sidebar Overlay */}
       {isMobileMenuOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 z-40 md:hidden" onClick={() => setIsMobileMenuOpen(false)} />
+        <div className="fixed inset-0 bg-slate-900/50 z-40 md:hidden backdrop-blur-sm" onClick={() => setIsMobileMenuOpen(false)} />
       )}
 
       {/* Sidebar */}
@@ -99,13 +108,15 @@ export default function SalesPage() {
         {/* Header */}
         <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
           <div className="flex items-center gap-3">
-            <button onClick={() => setIsMobileMenuOpen(true)} className="p-2 -ml-2 md:hidden bg-white rounded-lg shadow-sm">
+            <button onClick={() => setIsMobileMenuOpen(true)} className="p-2 -ml-2 md:hidden bg-white rounded-lg shadow-sm border border-gray-100">
               <Menu className="w-6 h-6 text-gray-700" />
             </button>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Sales Register</h1>
+              <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Sales Register</h1>
               {user?.currencyCode && (
-                <p className="text-xs text-gray-500 font-medium">Currency: {user.currencyCode}</p>
+                <p className="text-xs text-emerald-600 font-bold uppercase tracking-wider mt-1">
+                  Region: {user.currencyCode}
+                </p>
               )}
             </div>
           </div>
@@ -129,7 +140,7 @@ export default function SalesPage() {
 
         {/* --- DYNAMIC CONTENT --- */}
         {activeTab === 'new' ? (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 relative">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 relative animate-in fade-in slide-in-from-bottom-2 duration-500">
             {/* Left: Product Grid */}
             <div className="lg:col-span-2">
               <ProductGrid 
@@ -151,7 +162,9 @@ export default function SalesPage() {
           </div>
         ) : (
           /* History View */
-          <SalesHistory user={user} />
+          <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
+            <SalesHistory user={user} />
+          </div>
         )}
 
       </main>
