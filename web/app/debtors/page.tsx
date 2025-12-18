@@ -270,12 +270,18 @@ export default function DashboardPage() {
         axisLine={false} 
         tickLine={false} 
         tick={{fill: '#94a3b8', fontSize: 12, fontWeight: 600}} 
-        tickFormatter={(val: number) => val >= 1000 ? `${val/1000}k` : val} // Type val
+        tickFormatter={(value: number) => {
+          const val = value || 0;
+          return val >= 1000 ? `${val/1000}k` : val.toString();
+        }} 
       />
       <Tooltip 
         cursor={{fill: '#f1f5f9', radius: 8}}
         contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)'}}
-        formatter={(val: number) => [formatCurrency(val, currencyCode, userLocale), 'Sales']} // Type val
+        formatter={(value: any) => {
+          const val = Number(value) || 0;
+          return [formatCurrency(val, currencyCode, userLocale), 'Sales'];
+        }}
       />
       <Bar dataKey="sales" fill="#10b981" radius={[8, 8, 8, 8]} barSize={32} />
     </BarChart>
