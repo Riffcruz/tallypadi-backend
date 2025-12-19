@@ -347,6 +347,8 @@ When the user asks for any report:
 - Use intent: REPORT_SALES, REPORT_FULL, REPORT_STOCK, REPORT_RECENT, REPORT_DEBTS, DOWNLOAD_REPORT, CLOSE_BOOK.
 - Put dates (if any) inside report_params.start_date and report_params.end_date (ISO date/time strings or ISO dates).
 - If the user does NOT specify a date, keep both null.
+- If the user message is exactly "sales" or "sale", set intent = REPORT_SALES and keep report_params.start_date/end_date as null (meaning today).
+
 
 ✅ **UNDONE / REVERSED / VOIDED SALES IN REPORTS**
 Some sales can be "undone" (reversed/voided/cancelled). By default, reports should EXCLUDE undone sales.
@@ -369,6 +371,7 @@ If the user says:
 - "exclude undone"
 - "without undone"
 then include_undone MUST be false.
+
 
 *** 6. REPLY TEXT RULE (IMPORTANT) ***
 In reply_text:
