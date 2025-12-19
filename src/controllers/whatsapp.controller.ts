@@ -16,7 +16,10 @@ import {
   messageQueue,
   queueOutboundMessage,
   queueOutboundButtons, // ✅ NEW: queued buttons helper
+queueSaleResponse,
 } from '../services/queue.service';
+
+
 import { undoLastSale } from '../services/undo.service';
 
 import { resolveDebtor, normName } from '../services/debtor.service';
@@ -929,25 +932,25 @@ export const handleMessageLogic = async (
     switch (parsed.intent) {
       case 'SALE': {
         await processTransaction(shopId as any, parsed, messageId);
-        await queueOutboundMessage(from, parsed.reply_text || '✅ Sale recorded.');
-
+       
         const tx = await Transaction.findOne({ user: shopId, messageId }).lean();
         if (tx?._id) {
           const txId = String(tx._id);
           const body = `After sale:\nChoose action 👇`;
 
           try {
-            // ✅ queued interactive buttons (no direct send)
-            await sendWhatsAppButtons3(
-              from,
-              body,
-              [
-                { id: saleBtnId('UNDO', txId), title: '↩️ Undo' },
-                { id: saleBtnId('RECEIPT', txId), title: '🧾 Receipt' },
-                { id: saleBtnId('CREDIT', txId), title: '💳 Credit' },
-              ],
-              `btn:${messageId}` // ✅ stable dedupe id per inbound message
-            );
+            await queueSaleResponse(
+  from,
+  parsed.reply_text || '✅ Sale recorded.',
+  'After sale:\nChoose action 👇',
+  [
+    { id: saleBtnId('UNDO', txId), title: '↩️ Undo' },
+    { id: saleBtnId('RECEIPT', txId), title: '🧾 Receipt' },
+    { id: saleBtnId('CREDIT', txId), title: '💳 Credit' },
+  ],
+  `sale_${messageId}`
+);
+
           } catch (e) {
             console.error('❌ Failed to queue buttons:', e);
           }

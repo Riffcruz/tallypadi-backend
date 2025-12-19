@@ -111,3 +111,10 @@ export const queueOutboundButtons = async (
   );
 };
 
+export const queueSaleResponse = async (phoneNumber: string, message: string, bodyText: string, buttons: any[], jobId?: string) => {
+  await replyQueue.add(
+    'send-sale-response',
+    { phoneNumber, message, bodyText, buttons },
+    { jobId: jobId || `sale_${phoneNumber}_${Date.now()}` }
+  );
+};

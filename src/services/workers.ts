@@ -1,6 +1,6 @@
 // src/services/queue.worker.ts (or wherever this worker file lives)
 import { Worker } from 'bullmq';
-import { connection } from './queue.service';
+import { connection,  } from './queue.service';
 import { sendWhatsAppText, sendWhatsAppButtons } from './whatsapp.service';
 
 // ============================================================
@@ -22,6 +22,16 @@ export const replyWorker = new Worker(
       return;
     }
 
+    if (job.name === 'send-sale-response') {
+      const { phoneNumber, message, bodyText, buttons } = job.data;
+      await sendWhatsAppText(phoneNumber, message);         // ✅ first
+      await sendWhatsAppButtons(phoneNumber, bodyText, buttons); // ✅ then
+      return;
+}
+
+
+    
+
     if (job.name === 'send-buttons') {
       const { phoneNumber, bodyText, buttons } = job.data;
       await sendWhatsAppButtons(phoneNumber, bodyText, buttons);
@@ -39,6 +49,8 @@ export const replyWorker = new Worker(
     lockDuration: 60_000,
   }
 );
+
+
 
 
 replyWorker.on('completed', (job) => console.log(`✅ Reply sent: ${job.name} -> ${job.data.phoneNumber}`));
