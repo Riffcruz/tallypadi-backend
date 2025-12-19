@@ -9,10 +9,26 @@ const model = genAI.getGenerativeModel({
 });
 
 export type ParsedIntent =
-  | 'SALE' | 'RESTOCK' | 'SET_STOCK' | 'DELETED_STOCK' | 'DEFINE_PRICE' | 'PRICE_CHECK'
-  | 'REPORT_SALES' | 'REPORT_STOCK' | 'REPORT_FULL' | 'SETTINGS' | 'CHANGE_LANGUAGE'
-  | 'DEBT_PAYMENT' | 'CLOSE_BOOK' | 'ADD_STAFF' | 'DOWNLOAD_REPORT' | 'UNDO_LAST_SALE'
-  | 'REPORT_DEBTS' | 'REPORT_RECENT' | 'HELP' | 'UNKNOWN';
+  | 'SALE'
+  | 'RESTOCK'
+  | 'SET_STOCK'
+  | 'DELETED_STOCK'
+  | 'DEFINE_PRICE'
+  | 'PRICE_CHECK'
+  | 'REPORT_SALES'
+  | 'REPORT_STOCK'
+  | 'REPORT_FULL'
+  | 'SETTINGS'
+  | 'CHANGE_LANGUAGE'
+  | 'DEBT_PAYMENT'
+  | 'CLOSE_BOOK'
+  | 'ADD_STAFF'
+  | 'DOWNLOAD_REPORT'
+  | 'UNDO_LAST_SALE'
+  | 'REPORT_DEBTS'
+  | 'REPORT_RECENT'
+  | 'HELP'
+  | 'UNKNOWN';
 
 export interface ParsedItem {
   name: string;
@@ -43,7 +59,6 @@ export interface ParsedResult {
   settings_update: { key: string | null; value: string | boolean | null };
   reply_text: string;
 }
-
 
 const SAFE_MAX = 1000;
 
@@ -79,7 +94,10 @@ const sanitizeInput = (input: string): string => {
 // 🧩 JSON EXTRACTOR (survives extra text)
 // ==========================================
 const extractJsonObject = (text: string): string => {
-  const t = String(text || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+  const t = String(text || '')
+    .replace(/```json/gi, '')
+    .replace(/```/g, '')
+    .trim();
   const first = t.indexOf('{');
   const last = t.lastIndexOf('}');
   if (first === -1 || last === -1 || last <= first) return t;
@@ -153,14 +171,48 @@ const normalizeItemName = (name: string): string => {
 };
 
 // ==========================================
+// ✅ TOTAL COMPUTE (qty * unit_price)
+// ==========================================
+const computeTotalFromItems = (items: ParsedItem[]): number | null => {
+  const sum = items.reduce((acc, it) => {
+    const qty = Number(it?.qty || 0);
+    const unit = Number(it?.unit_price ?? 0);
+
+    if (!Number.isFinite(qty) || qty <= 0) return acc;
+    if (!Number.isFinite(unit) || unit <= 0) return acc;
+
+    return acc + qty * unit;
+  }, 0);
+
+  return sum > 0 ? Math.round(sum) : null;
+};
+
+// ==========================================
 // ✅ SAFE RESULT NORMALIZER
+// - FIXES: "each/per" cases by enforcing computed totals when unit_price exists
 // ==========================================
 function safeParsedResult(p: any): ParsedResult {
-  const allowedIntents = [
-    'SALE', 'RESTOCK', 'SET_STOCK', 'DELETED_STOCK', 'DEFINE_PRICE', 'PRICE_CHECK',
-    'REPORT_SALES', 'REPORT_STOCK', 'REPORT_FULL', 'SETTINGS', 'CHANGE_LANGUAGE',
-    'DEBT_PAYMENT', 'CLOSE_BOOK', 'ADD_STAFF', 'DOWNLOAD_REPORT', 'UNDO_LAST_SALE',
-    'REPORT_DEBTS', 'REPORT_RECENT', 'HELP', 'UNKNOWN'
+  const allowedIntents: ParsedIntent[] = [
+    'SALE',
+    'RESTOCK',
+    'SET_STOCK',
+    'DELETED_STOCK',
+    'DEFINE_PRICE',
+    'PRICE_CHECK',
+    'REPORT_SALES',
+    'REPORT_STOCK',
+    'REPORT_FULL',
+    'SETTINGS',
+    'CHANGE_LANGUAGE',
+    'DEBT_PAYMENT',
+    'CLOSE_BOOK',
+    'ADD_STAFF',
+    'DOWNLOAD_REPORT',
+    'UNDO_LAST_SALE',
+    'REPORT_DEBTS',
+    'REPORT_RECENT',
+    'HELP',
+    'UNKNOWN',
   ];
 
   const intent: ParsedIntent = allowedIntents.includes(p?.intent) ? p.intent : 'UNKNOWN';
@@ -171,27 +223,46 @@ function safeParsedResult(p: any): ParsedResult {
     qty: Number.isFinite(Number(it?.qty)) ? Math.max(0, Number(it.qty)) : 0,
     unit_price: parseMoney(it?.unit_price),
     unit: typeof it?.unit === 'string' ? sanitizeInput(it.unit).toLowerCase() : '',
-    category: typeof it?.category === 'string' ? sanitizeInput(it.category) : null
+    category: typeof it?.category === 'string' ? sanitizeInput(it.category) : null,
   }));
 
   let needsClarification = Boolean(p?.needs_clarification);
   if (intent === 'SALE') {
-    const hasRealItem = normalizedItems.some(i => i.qty > 0 && i.name && i.name !== 'unknown_item' && i.name !== 'item');
+    const hasRealItem = normalizedItems.some(
+      (i) => i.qty > 0 && i.name && i.name !== 'unknown_item' && i.name !== 'item'
+    );
     if (!hasRealItem) needsClarification = true;
-  }
-
-  let fallback = 'Noted.';
-  if (intent === 'SALE') {
-    const total = parseMoney(p?.total_money);
-    const i = normalizedItems[0];
-    fallback = i ? `✅ Recorded. Sold ${i.qty} ${i.name}.` : '✅ Sale recorded.';
-    if (total != null) fallback += ` Total: ${total.toLocaleString()}`;
-    if (needsClarification) fallback = 'I got the quantity, but what exactly did you sell? (e.g., "rice", "indomie")';
   }
 
   // ✅ include_undone safe normalization:
   const includeUndoneRaw = p?.report_params?.include_undone;
   const include_undone = typeof includeUndoneRaw === 'boolean' ? includeUndoneRaw : false;
+
+  // ✅ FIX: compute correct totals when unit_price exists
+  const parsedTotal = parseMoney(p?.total_money);
+  const computedTotal = computeTotalFromItems(normalizedItems);
+
+  let finalTotal = parsedTotal;
+  if (computedTotal != null) {
+    // Use computed if total is missing OR total looks like the unit price
+    if (finalTotal == null || finalTotal < computedTotal) {
+      finalTotal = computedTotal;
+    }
+  }
+
+  const discount = parseMoney(p?.discount_amount);
+  if (finalTotal != null && discount != null && discount > 0) {
+    finalTotal = Math.max(0, finalTotal - discount);
+  }
+
+  // fallback reply
+  let fallback = 'Noted.';
+  if (intent === 'SALE') {
+    const i = normalizedItems[0];
+    fallback = i ? `✅ Recorded. Sold ${i.qty} ${i.name}.` : '✅ Sale recorded.';
+    if (finalTotal != null) fallback += ` Total: ${finalTotal.toLocaleString()}`;
+    if (needsClarification) fallback = 'I got the quantity, but what exactly did you sell? (e.g., "rice", "indomie")';
+  }
 
   return {
     intent,
@@ -199,15 +270,15 @@ function safeParsedResult(p: any): ParsedResult {
     customer_name: typeof p?.customer_name === 'string' ? sanitizeInput(p.customer_name) : undefined,
     staffPhoneNumber: normalizePhone(p?.staffPhoneNumber),
     items: normalizedItems,
-    total_money: parseMoney(p?.total_money),
-    discount_amount: parseMoney(p?.discount_amount),
+    total_money: finalTotal,
+    discount_amount: discount,
     confidence_score: typeof p?.confidence_score === 'number' ? p.confidence_score : 1,
     needs_clarification: needsClarification,
     report_params: {
       start_date: p?.report_params?.start_date || null,
       end_date: p?.report_params?.end_date || null,
       category_filter: p?.report_params?.category_filter || null,
-      include_undone, // ✅ NEW (defaults false)
+      include_undone,
     },
     settings_update: {
       key: p?.settings_update?.key || null,
@@ -217,15 +288,13 @@ function safeParsedResult(p: any): ParsedResult {
   };
 }
 
-
 // ==========================================
 // ⚡ REFINED LOCAL PARSER (SMARTER REGEX)
-// NOTE: This is still used when Gemini is slow.
-// We also fixed it to NOT force ₦.
+// NOTE: Used when Gemini is slow.
+// FIXED: supports "each/per" and computes total_money = qty * unit_price
 // ==========================================
 function fallbackParse(message: string): ParsedResult | null {
   const raw = sanitizeInput(stripWhatsAppExportLine(message));
-
   if (/^\d+$/.test(raw)) return null;
 
   const m = raw.toLowerCase();
@@ -233,7 +302,8 @@ function fallbackParse(message: string): ParsedResult | null {
   if (/\b(help|menu|commands|guide|options)\b/i.test(m)) {
     return safeParsedResult({
       intent: 'HELP',
-      reply_text: '🤖 *TallyPadi Menu*\n1. Sales: "Sold 2 rice 5k"\n2. Stock: "Add 10 sugar"\n3. Reports: "Sales today"'
+      reply_text:
+        '🤖 *TallyPadi Menu*\n1. Sales: "Sold 2 rice 5k"\n2. Stock: "Add 10 sugar"\n3. Reports: "Sales today"',
     });
   }
 
@@ -249,9 +319,13 @@ function fallbackParse(message: string): ParsedResult | null {
     return safeParsedResult({ intent: 'REPORT_DEBTS', reply_text: 'Fetching debtors list...' });
   }
 
-  // Handles: "I sold 3 bags of rice for 100k" OR "Sold 3 rice $50"
+  // Handles:
+  // "Sold 3 bags rice for 100k"
+  // "Sold 5 pack water for $1 each"
+  // "Sold 2 coke at ₦500 per"
+  // "Sold 4 bread for 2000 total"
   const saleRegex =
-    /(?:i|we)?\s*\b(?:sold|sell)\b\s+(\d+(?:\.\d+)?)\s*(bags?|pcs?|cartons?|liters?|kg)?\s*(?:of)?\s+([a-z0-9\s]+?)\s+(?:for|at|price)\s+([₦$€£₵]?\s*[\d,]+(?:k|m)?)\b/i;
+    /(?:i|we)?\s*\b(?:sold|sell)\b\s+(\d+(?:\.\d+)?)\s*(bags?|pcs?|pieces?|cartons?|packs?|sachets?|bottles?|rolls?|liters?|ltrs?|kg)?\s*(?:of)?\s+(.+?)\s+(?:for|at|price)\s+([₦$€£₵]?\s*[\d,]+(?:k|m)?)\s*(each|per|\/each|\/per|total)?\b/i;
 
   const match = raw.match(saleRegex);
 
@@ -259,40 +333,62 @@ function fallbackParse(message: string): ParsedResult | null {
     const qty = parseFloat(match[1]);
     const unitRaw = match[2] || 'pcs';
     const name = normalizeItemName(match[3]);
-    const priceRaw = match[4];
-    const price = parseMoney(priceRaw);
-    const sym = detectMoneySymbol(priceRaw);
+    const moneyRaw = match[4];
+    const qualifier = String(match[5] || '').toLowerCase(); // each/per/total...
+    const price = parseMoney(moneyRaw);
+    const sym = detectMoneySymbol(moneyRaw);
 
     const unit =
-      unitRaw.toLowerCase().startsWith('bag') ? 'bag' :
-      unitRaw.toLowerCase().startsWith('carton') ? 'carton' :
-      unitRaw.toLowerCase().startsWith('liter') ? 'liter' :
-      unitRaw.toLowerCase().startsWith('kg') ? 'kg' :
-      unitRaw.toLowerCase().startsWith('pc') ? 'pcs' : unitRaw.toLowerCase();
+      unitRaw.toLowerCase().startsWith('bag')
+        ? 'bag'
+        : unitRaw.toLowerCase().startsWith('carton')
+          ? 'carton'
+          : unitRaw.toLowerCase().startsWith('pack')
+            ? 'pack'
+            : unitRaw.toLowerCase().startsWith('bottle')
+              ? 'bottle'
+              : unitRaw.toLowerCase().startsWith('liter') || unitRaw.toLowerCase().startsWith('ltr')
+                ? 'liter'
+                : unitRaw.toLowerCase().startsWith('kg')
+                  ? 'kg'
+                  : unitRaw.toLowerCase().startsWith('pc') || unitRaw.toLowerCase().startsWith('piece')
+                    ? 'pcs'
+                    : unitRaw.toLowerCase();
 
     if (name && name !== 'unknown_item' && qty > 0) {
+      const isUnit =
+        qualifier === 'each' || qualifier === 'per' || qualifier === '/each' || qualifier === '/per';
+
+      const unitPrice = isUnit ? price : null;
+      const totalMoney = price == null ? null : isUnit ? Math.round(qty * price) : price;
+
       return safeParsedResult({
         intent: 'SALE',
         is_credit: false,
-        items: [{
-          name,
-          qty,
-          unit,
-          unit_price: null,
-          category: null
-        }],
-        total_money: price,
-        reply_text: price != null
-          ? `✅ Recorded. Sold ${qty} ${unit} of ${name} for ${sym}${price.toLocaleString()}`.trim()
-          : `✅ Recorded. Sold ${qty} ${unit} of ${name}.`
+        items: [
+          {
+            name,
+            qty,
+            unit,
+            unit_price: unitPrice,
+            category: null,
+          },
+        ],
+        total_money: totalMoney,
+        reply_text:
+          totalMoney != null
+            ? `✅ Recorded. Sold ${qty} ${unit} of ${name} for ${sym}${totalMoney.toLocaleString()}`.trim()
+            : `✅ Recorded. Sold ${qty} ${unit} of ${name}.`,
       });
     }
   }
 
   return null;
 }
+
 // ==========================================
-// 🧠 TALLYPADI SYSTEM PROMPT (ENHANCED & MORE ROBUST PARSING)
+// 🧠 TALLYPADI SYSTEM PROMPT
+// (UPDATED: explicit rule to compute total_money when unit_price exists)
 // ==========================================
 const getSystemPrompt = (userLanguage: string, currentDate: string, history: string[]) => `
 You are **TallyPadi**, an intelligent business assistant specializing in small retail/shop management.
@@ -328,81 +424,25 @@ A. QUANTITY & UNIT EXTRACTION (HIGHLY FLEXIBLE ORDER)
 
 B. ITEM NAME EXTRACTION & NORMALIZATION (ROBUST CLEANING)
 - Extract the core generic product name; aggressively remove noise.
-- Remove brand names unless they define the product (e.g., "Indomie" → keep as category clue, but normalize to "noodles").
+- Remove brand names unless they define the product.
 - Rules:
   - "Aquarite table water", "Eva water", "CWAY water" → "table water"
   - "Coca-Cola", "coke", "cocacola", "big coke" → "coke"
   - "Indomie noodles", "indomie hungryman" → "noodles"
-  - "Peak milk", "peak powdered milk" → "powdered milk"
-  - "Golden Penny noodles" → "noodles"
-- Remove filler/adjective words: "some", "about", "roughly", "approximately", "pure", "sachet", "big", "small" (unless size is part of unit).
-- Normalize plurals to singular: "waters" → "water", "bags" → "bag", "eggs" → "egg".
-- Handle common misspellings: "indomi", "indome" → "noodles"; "cocacola" → "coke".
+- Normalize plurals to singular.
 
 C. PRICE/MONEY EXTRACTION (POSITION-INDEPENDENT & SMART SCALING)
 - Money can appear anywhere in the sentence.
-- Detect currency via:
-  - Symbols: ₦, $, £, €, ₵ (before or after number, with/without space)
-  - Codes: NGN, USD, GBP, EUR, GHS
-  - Words: "naira", "dollars", "pounds", "euros", "cedis"
-- Smart scaling (common slang):
-  - "100k" or "100 k" → 100000
-  - "1.5m" or "1.5 m" → 1500000
-  - "10 grand" → 10000
-  - "5 bucks" → 5 USD
-  - "two thousand" → 2000
+- Smart scaling: "100k"→100000, "1.5m"→1500000.
 - Distinguish unit_price vs total_money:
-  - Words like "each", "per", "a piece", "per bag" → unit_price
-  - No such word + single item → likely total_money
-  - Multiple quantity → prefer total_money if no "per"
-- Default currency: NGN if none detected.
-
-D. ROBUST PARSING EXAMPLES
-1. "sold customer 5 packs pure water for 500 naira each"
-   → name: "table water", qty: 5, unit: "pack", unit_price: 500, currency: NGN
-2. "bought 3 cartons of indomie at ₦15000 total"
-   → name: "noodles", qty: 3, unit: "carton", total_money: 15000, currency: NGN
-3. "tolu took 6 big coke on credit"
-   → name: "coke", qty: 6, unit: "bottle", is_credit: true, customer_name: "tolu"
-4. "5kg rice for 10k"
-   → name: "rice", qty: 5, unit: "kg", total_money: 10000, currency: NGN
-5. "customer paid 2k for the garri"
-   → total_money: 2000 (contextual completion if ongoing sale)
-6. "half dozen eggs at 800"
-   → qty: 6, unit: "pcs", name: "egg", unit_price: 800 (or total depending on context)
-
-*** 2. CONTEXTUAL COMPLETION ***
-- Use conversation history to complete partial inputs.
-- If previous turn asked "How many?" and user says "5" → apply qty: 5 to pending item.
-- If asked "What item?" and user says "rice" → apply name: "rice".
-- Support multi-item transactions across turns.
-
-*** 3. CREDIT/DEBT DETECTION ***
-Triggers for credit sale:
-- "on credit", "owe", "gbese", "pay later", "will pay tomorrow", "took without paying", "debt"
-Triggers for debt payment:
-- "paid debt", "settled", "cleared balance", "paid what he owed", "refunded"
+  - If "each/per/a piece/per bag" is present → set unit_price
+  - ✅ CRITICAL: If you set unit_price, you MUST set total_money = sum(qty * unit_price) across items (minus discount if any). Do NOT set total_money to the unit price.
 
 *** 4. REPORT & DATE HANDLING ***
-- Natural date phrases:
-  - "today" → start_date: currentDate, end_date: currentDate
-  - "yesterday" → previous day
-  - "this week", "last week", "last month" → calculate range
-  - "from 10th to 15th" or "monday to friday" → resolve to ISO dates
-- include_undone: default false
-  → Set true only if explicitly requested: "include cancelled", "with undone", "show all"
-
-*** 5. INTENT & WORD VARIATION TOLERANCE ***
-Broad matching:
-- Sale: sell, sold, selling, customer bought, took, purchased (by customer)
-- Restock: buy, bought, purchase, restocked, supplier brought
-- Plural/singular variations accepted everywhere.
+- include_undone: default false; set true only if explicitly requested.
 
 *** 6. JSON OUTPUT RULES ***
-- ALWAYS output strict valid JSON (no trailing commas, proper escaping).
-- confidence_score: 0.1–1.0 (lower if ambiguous/missing key data).
-- needs_clarification: true if critical info missing or highly ambiguous.
-- reply_text: Natural, helpful response in the detected user language.
+- ALWAYS output strict valid JSON only.
 
 *** 7. OUTPUT SCHEMA ***
 {
@@ -412,11 +452,10 @@ Broad matching:
   "staffPhoneNumber": string | null,
   "items": [
     {
-      "name": string,                  // normalized, lowercase, singular
+      "name": string,
       "qty": number,
-      "unit": string,                  // singular: "bag", "pcs", "kg", "liter", "bottle", "pack", "carton", etc.
+      "unit": string,
       "unit_price": number | null,
-      "total_price": number | null,    // optional: if total for this item is clearer
       "currency": "NGN|USD|GBP|EUR|GHS|null",
       "category": string | null
     }
@@ -424,11 +463,10 @@ Broad matching:
   "total_money": number | null,
   "total_currency": "NGN|USD|GBP|EUR|GHS|null",
   "discount_amount": number | null,
-  "confidence_score": number,        // 0.1 to 1.0
+  "confidence_score": number,
   "needs_clarification": boolean,
-  "clarification_question": string | null,  // suggested question if needed
   "report_params": {
-    "start_date": string | null,     // YYYY-MM-DD
+    "start_date": string | null,
     "end_date": string | null,
     "category_filter": string | null,
     "include_undone": boolean
@@ -439,14 +477,22 @@ Broad matching:
 `;
 
 export default getSystemPrompt;
+
 // ==========================================
 // ⏱️ TIMEOUT UTILS
 // ==========================================
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('TIMEOUT')), ms);
-    promise.then(value => { clearTimeout(timer); resolve(value); })
-      .catch(err => { clearTimeout(timer); reject(err); });
+    promise
+      .then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
   });
 }
 
@@ -457,7 +503,7 @@ async function generateWithRetry(parts: any[], retries = 1) {
       return result;
     } catch (err: any) {
       if (i === retries) throw err;
-      await new Promise(r => setTimeout(r, 1000));
+      await new Promise((r) => setTimeout(r, 1000));
     }
   }
   throw new Error('Gemini retries failed');
@@ -490,9 +536,7 @@ export const parseMessageWithGemini = async (
   const recentHistory = history.slice(-5);
   const prompt = getSystemPrompt(userLanguage, new Date().toISOString(), recentHistory);
 
-  const parts: any[] = [
-    `${prompt}\n\nUSER MESSAGE: "${safeMessage}"\n\nReturn JSON only.`
-  ];
+  const parts: any[] = [`${prompt}\n\nUSER MESSAGE: "${safeMessage}"\n\nReturn JSON only.`];
 
   if (imageBuffer && imageMimeType) {
     parts.push({ inlineData: { data: imageBuffer, mimeType: imageMimeType } });
@@ -508,7 +552,7 @@ export const parseMessageWithGemini = async (
     console.error('❌ Gemini Error:', error);
     return safeParsedResult({
       intent: 'UNKNOWN',
-      reply_text: 'Network weak. Please try again or use format: "Sold 2 rice 5000"'
+      reply_text: 'Network weak. Please try again or use format: "Sold 2 rice 5000"',
     });
   }
 };
