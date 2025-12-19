@@ -162,6 +162,8 @@ const ALLOWED_INTENTS = new Set([
 
 const ALLOWED_SETTINGS_KEYS = new Set(['closingTime', 'dailySummary', 'language']);
 const SAFE_TEXT_MAX = 1000;
+const STRIKE_WINDOW_MS = 24 * 60 * 60 * 1000; // 24h
+const STRIKE_SUSPEND_AT = 3;
 
 function cleanTextForSecurity(input: string) {
   let s = String(input || '').slice(0, SAFE_TEXT_MAX);
@@ -189,6 +191,32 @@ async function suspendUser(userId: any, reason: string) {
     { _id: userId },
     { $set: { subscriptionStatus: 'suspended', suspendedAt: new Date(), suspensionReason: reason } }
   );
+}
+
+// ✅ ROBUST INJECTION HANDLER
+async function handleInjectionAttemptOrRefuse(user: any, from: string, rawText: string) {
+  const score = injectionScore(rawText);
+  if (score <= 0) return { handled: false };
+
+  const now = new Date();
+  const last = user.security?.lastInjectionAt ? new Date(user.security.lastInjectionAt) : null;
+  const withinWindow = last ? (now.getTime() - last.getTime()) <= STRIKE_WINDOW_MS : false;
+
+  user.security = user.security || { injectionStrikes: 0, lastInjectionAt: null };
+  user.security.injectionStrikes = withinWindow ? (user.security.injectionStrikes || 0) + 1 : 1;
+  user.security.lastInjectionAt = now;
+
+  // ✅ Suspend if too many attempts OR very high score
+  if (user.security.injectionStrikes >= STRIKE_SUSPEND_AT || score >= 5) {
+    await suspendUser(user._id, 'Prompt injection / Malicious instruction attempt');
+    await queueOutboundMessage(from, `🛑 Your account has been suspended for suspicious activity.`);
+    return { handled: true };
+  }
+
+  // ✅ Refuse (warning)
+  await user.save();
+  await queueOutboundMessage(from, `🛡️ I can't process that instruction. Please stick to recording sales and checking stock.`);
+  return { handled: true };
 }
 
 // ✅ PARSER SANITIZER (Prevents AI Hallucinations being passed to logic)
@@ -365,11 +393,9 @@ export const handleMessageLogic = async (
     }
 
     // ✅ SECURITY: injection
-    const score = injectionScore(rawText);
-    if (score >= 5) {
-      await suspendUser(user._id, 'Prompt injection attempt');
-      await queueOutboundMessage(from, `🛑 Account suspended.`);
-      return;
+    if (user.registrationStage === 'COMPLETED') {
+      const inj = await handleInjectionAttemptOrRefuse(user, from, rawText);
+      if (inj.handled) return;
     }
 
     // --- SUB CHECK + HISTORY ---
