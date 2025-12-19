@@ -1,6 +1,17 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import axios from 'axios';
-import { Crown, X, Calendar, Download, FileText, Share2, Loader2, Trash2, MessageSquare, Send } from 'lucide-react';
+import {
+  Crown,
+  X,
+  Calendar,
+  Download,
+  FileText,
+  Share2,
+  Loader2,
+  Trash2,
+  MessageSquare,
+  Send,
+} from 'lucide-react';
 import Swal from 'sweetalert2';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -43,21 +54,30 @@ export default function UserDeepDiveModal({
   const [staffTarget, setStaffTarget] = useState<string>(''); // phone number
   const [msg, setMsg] = useState('');
   const [sending, setSending] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [clearing, setClearing] = useState(false);
+
+  const [deletingUser, setDeletingUser] = useState(false);
+  const [clearingMsgHistory, setClearingMsgHistory] = useState(false);
+  const [deletingSales, setDeletingSales] = useState(false);
+
+  // ✅ Central refresh (prevents stale UI after deletes)
+  const refreshDetails = useCallback(async () => {
+    if (!user?.id) return;
+    setLoadingDetails(true);
+    try {
+      const res = await axios.get(`${API_URL}/admin/users/${user.id}/details`, {
+        headers: { 'x-admin-secret': adminKey },
+      });
+      setDetails(res.data);
+    } catch (e) {
+      Swal.fire('Error', 'Failed to load details', 'error');
+    } finally {
+      setLoadingDetails(false);
+    }
+  }, [user?.id, adminKey]);
 
   useEffect(() => {
-    if (!user?.id) return;
-
-    setLoadingDetails(true);
-    axios
-      .get(`${API_URL}/admin/users/${user.id}/details`, {
-        headers: { 'x-admin-secret': adminKey },
-      })
-      .then((res) => setDetails(res.data))
-      .catch(() => Swal.fire('Error', 'Failed to load details', 'error'))
-      .finally(() => setLoadingDetails(false));
-  }, [user?.id, adminKey]);
+    refreshDetails();
+  }, [refreshDetails]);
 
   // auto-set default staff target when staff loads
   useEffect(() => {
@@ -87,7 +107,6 @@ export default function UserDeepDiveModal({
       inputPlaceholder: 'Select a plan',
       showCancelButton: true,
     });
-
     if (!plan) return;
 
     const { isConfirmed: isStandard } = await Swal.fire({
@@ -102,7 +121,6 @@ export default function UserDeepDiveModal({
     });
 
     let expiryDate = new Date();
-
     if (isStandard) {
       expiryDate.setDate(expiryDate.getDate() + 30);
     } else {
@@ -222,6 +240,36 @@ export default function UserDeepDiveModal({
     doc.save(`${fileName}.pdf`);
   };
 
+  // ✅ Delete SALES history only (not user)
+  const handleDeleteSalesHistoryOnly = async () => {
+    const res = await Swal.fire({
+      title: 'Delete Sales History?',
+      text: 'This will permanently delete ALL sales records for this user (including staff sales).',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Yes, Delete Sales',
+      confirmButtonColor: '#dc2626',
+    });
+    if (!res.isConfirmed) return;
+
+    try {
+      setDeletingSales(true);
+      await onAction(user.id, 'delete_sales_history');
+
+      // ✅ clear UI immediately
+      setDetails((prev: any) => ({ ...prev, recentSales: [] }));
+
+      // ✅ refetch from server to avoid stale cache
+      await refreshDetails();
+
+      Swal.fire('Deleted', 'Sales history deleted successfully.', 'success');
+    } catch (e) {
+      Swal.fire('Error', 'Failed to delete sales history', 'error');
+    } finally {
+      setDeletingSales(false);
+    }
+  };
+
   // ✅ Delete user + history
   const handleDeleteUserAndHistory = async () => {
     const res = await Swal.fire({
@@ -232,47 +280,46 @@ export default function UserDeepDiveModal({
       confirmButtonText: 'Yes, Delete',
       confirmButtonColor: '#dc2626',
     });
-
     if (!res.isConfirmed) return;
 
     try {
-      setDeleting(true);
+      setDeletingUser(true);
       await onAction(user.id, 'delete_user', { deleteHistory: true });
       Swal.fire('Deleted', 'User and history deleted successfully.', 'success');
       onClose();
     } catch (e) {
       Swal.fire('Error', 'Failed to delete user', 'error');
     } finally {
-      setDeleting(false);
+      setDeletingUser(false);
     }
   };
 
-  // ✅ Clear only history (keep user)
+  // ✅ Clear only message history (keep user + sales)
   const handleClearHistoryOnly = async () => {
     const res = await Swal.fire({
-      title: 'Clear History?',
-      text: 'This will delete user message history/recent logs. (User account stays.)',
+      title: 'Clear Message History?',
+      text: 'This will delete user message history only. (Sales remain.)',
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonText: 'Clear History',
+      confirmButtonText: 'Clear Messages',
       confirmButtonColor: '#f59e0b',
     });
-
     if (!res.isConfirmed) return;
 
     try {
-      setClearing(true);
+      setClearingMsgHistory(true);
       await onAction(user.id, 'clear_history');
-      Swal.fire('Cleared', 'User history cleared.', 'success');
+
       setDetails((prev: any) => ({ ...prev, lastMessages: [] }));
+      Swal.fire('Cleared', 'Message history cleared.', 'success');
     } catch (e) {
       Swal.fire('Error', 'Failed to clear history', 'error');
     } finally {
-      setClearing(false);
+      setClearingMsgHistory(false);
     }
   };
 
-  // ✅ Send message to individual (user or staff) — like broadcast
+  // ✅ Send message to individual (user or staff)
   const sendIndividualMessage = async (directTo?: string) => {
     const to =
       directTo ||
@@ -291,15 +338,11 @@ export default function UserDeepDiveModal({
       showCancelButton: true,
       confirmButtonText: 'Send Now',
     });
-
     if (!res.isConfirmed) return;
 
     try {
       setSending(true);
-
-      // preferred (consistent with your admin actions)
       await onAction(user.id, 'send_message', { to, message: text });
-
       Swal.fire('Sent', 'Message queued', 'success');
       setMsg('');
     } catch (e) {
@@ -419,31 +462,40 @@ export default function UserDeepDiveModal({
                   </button>
                 )}
 
-                {/* ✅ Danger Zone (Desktop) */}
+                {/* ✅ Danger Zone */}
                 <div className="hidden sm:block mt-3 pt-3 border-t border-slate-600/60 space-y-2">
                   <h4 className="text-[11px] text-red-300 font-extrabold uppercase">Danger Zone</h4>
 
                   <button
-                    disabled={clearing}
+                    disabled={clearingMsgHistory}
                     onClick={handleClearHistoryOnly}
                     className="w-full bg-amber-600/90 hover:bg-amber-600 text-white px-3 py-2 rounded-lg text-xs font-extrabold flex items-center justify-center gap-2 disabled:opacity-60"
                   >
-                    {clearing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 size={14} />}
-                    Clear History Only
+                    {clearingMsgHistory ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 size={14} />}
+                    Clear Message History
                   </button>
 
                   <button
-                    disabled={deleting}
-                    onClick={handleDeleteUserAndHistory}
-                    className="w-full bg-red-700 hover:bg-red-600 text-white px-3 py-2 rounded-lg text-xs font-extrabold flex items-center justify-center gap-2 disabled:opacity-60"
+                    disabled={deletingSales}
+                    onClick={handleDeleteSalesHistoryOnly}
+                    className="w-full bg-red-600/90 hover:bg-red-600 text-white px-3 py-2 rounded-lg text-xs font-extrabold flex items-center justify-center gap-2 disabled:opacity-60"
                   >
-                    {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 size={14} />}
-                    Delete User + History
+                    {deletingSales ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 size={14} />}
+                    Delete Sales History
+                  </button>
+
+                  <button
+                    disabled={deletingUser}
+                    onClick={handleDeleteUserAndHistory}
+                    className="w-full bg-red-800 hover:bg-red-700 text-white px-3 py-2 rounded-lg text-xs font-extrabold flex items-center justify-center gap-2 disabled:opacity-60"
+                  >
+                    {deletingUser ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 size={14} />}
+                    Delete User + Everything
                   </button>
                 </div>
               </div>
 
-              {/* ✅ Individual Message (like Broadcast) + Last Messages */}
+              {/* Message panel + last messages */}
               <div className="space-y-4">
                 <div className="p-4 bg-slate-700/30 rounded-xl border border-slate-600">
                   <h3 className="text-slate-400 text-xs uppercase font-extrabold mb-3 flex items-center gap-2">
@@ -511,12 +563,11 @@ export default function UserDeepDiveModal({
                   </div>
                 </div>
 
-                {/* Last 5 Messages */}
                 <div className="p-4 bg-slate-700/30 rounded-xl border border-slate-600">
                   <h3 className="text-slate-400 text-xs uppercase font-extrabold mb-2">Last 5 Messages</h3>
                   <div className="space-y-2">
                     {(details?.lastMessages || []).length ? (
-                      (details.lastMessages || []).map((m: string, i: number) => (
+                      (details.lastMessages || []).slice(-5).map((m: string, i: number) => (
                         <div
                           key={i}
                           className="text-xs bg-slate-900 p-2 rounded-lg text-slate-200 border border-slate-700"
@@ -528,23 +579,6 @@ export default function UserDeepDiveModal({
                       <p className="text-slate-500 text-xs">No history.</p>
                     )}
                   </div>
-
-                  <div className="mt-3 flex gap-2">
-                    <button
-                      disabled={clearing}
-                      onClick={handleClearHistoryOnly}
-                      className="flex-1 bg-amber-600/90 hover:bg-amber-600 text-white px-3 py-2 rounded-lg text-xs font-extrabold disabled:opacity-60"
-                    >
-                      {clearing ? 'Clearing…' : 'Clear History'}
-                    </button>
-                    <button
-                      disabled={deleting}
-                      onClick={handleDeleteUserAndHistory}
-                      className="flex-1 bg-red-700 hover:bg-red-600 text-white px-3 py-2 rounded-lg text-xs font-extrabold disabled:opacity-60"
-                    >
-                      {deleting ? 'Deleting…' : 'Delete User'}
-                    </button>
-                  </div>
                 </div>
               </div>
             </div>
@@ -553,6 +587,24 @@ export default function UserDeepDiveModal({
           {/* SALES */}
           {view === 'sales' && (
             <div className="space-y-4">
+              {/* ✅ Sales Danger Bar */}
+              <div className="bg-slate-900 p-3 rounded-xl border border-slate-700 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <div className="text-xs text-slate-300">
+                  <span className="font-extrabold text-white">Sales Records:</span>{' '}
+                  {(details?.recentSales || []).length.toLocaleString()}
+                </div>
+
+                <button
+                  disabled={deletingSales}
+                  onClick={handleDeleteSalesHistoryOnly}
+                  className="bg-red-700 hover:bg-red-600 text-white px-3 py-2 rounded-lg text-xs font-extrabold flex items-center justify-center gap-2 disabled:opacity-60"
+                >
+                  {deletingSales ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 size={14} />}
+                  Delete Sales History
+                </button>
+              </div>
+
+              {/* Filters */}
               <div className="bg-slate-900 p-3 rounded-xl border border-slate-700">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <input
@@ -584,6 +636,7 @@ export default function UserDeepDiveModal({
                 </div>
               </div>
 
+              {/* Mobile cards */}
               <div className="sm:hidden space-y-3">
                 {getFilteredSales().length === 0 ? (
                   <div className="text-center text-slate-400 text-sm py-10 border border-slate-700 rounded-xl bg-slate-900">
@@ -628,6 +681,7 @@ export default function UserDeepDiveModal({
                 )}
               </div>
 
+              {/* Desktop table */}
               <div className="hidden sm:block bg-slate-900 rounded-xl overflow-hidden border border-slate-700 max-h-[60vh] overflow-y-auto">
                 <table className="w-full text-xs text-left text-slate-300">
                   <thead className="text-slate-400 bg-slate-800 sticky top-0">
@@ -721,12 +775,11 @@ export default function UserDeepDiveModal({
                       <p className="text-xs text-slate-400 break-words">{s.phoneNumber}</p>
                     </div>
 
-                    {/* ✅ Send to staff (one-tap) */}
                     <button
                       onClick={() => {
                         setTarget('staff');
                         setStaffTarget(s.phoneNumber);
-                        setView('info'); // move to message panel
+                        setView('info');
                         Swal.fire('Selected', `Staff selected: ${s.name || 'Staff'}`, 'info');
                       }}
                       className="p-2 rounded-xl hover:bg-white/10 transition"
@@ -741,14 +794,11 @@ export default function UserDeepDiveModal({
           )}
         </div>
 
-        {/* ✅ MOBILE FOOTER ACTION BAR */}
+        {/* ✅ MOBILE FOOTER */}
         <div className="sm:hidden shrink-0 border-t border-slate-700 bg-slate-900/80 backdrop-blur-md px-4 py-3">
           {view === 'info' && (
             <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={handlePlanChange}
-                className="bg-purple-600 text-white py-3 rounded-xl text-sm font-extrabold"
-              >
+              <button onClick={handlePlanChange} className="bg-purple-600 text-white py-3 rounded-xl text-sm font-extrabold">
                 Renew / Change
               </button>
               <button
@@ -758,20 +808,28 @@ export default function UserDeepDiveModal({
                 <Calendar size={16} /> Set Expiry
               </button>
 
-              {/* ✅ Mobile danger buttons */}
               <button
-                disabled={clearing}
+                disabled={clearingMsgHistory}
                 onClick={handleClearHistoryOnly}
                 className="bg-amber-600/90 text-white py-3 rounded-xl text-sm font-extrabold col-span-2 disabled:opacity-60"
               >
-                {clearing ? 'Clearing…' : 'Clear History'}
+                {clearingMsgHistory ? 'Clearing…' : 'Clear Message History'}
               </button>
+
               <button
-                disabled={deleting}
-                onClick={handleDeleteUserAndHistory}
-                className="bg-red-700 text-white py-3 rounded-xl text-sm font-extrabold col-span-2 disabled:opacity-60"
+                disabled={deletingSales}
+                onClick={handleDeleteSalesHistoryOnly}
+                className="bg-red-600/90 text-white py-3 rounded-xl text-sm font-extrabold col-span-2 disabled:opacity-60"
               >
-                {deleting ? 'Deleting…' : 'Delete User + History'}
+                {deletingSales ? 'Deleting…' : 'Delete Sales History'}
+              </button>
+
+              <button
+                disabled={deletingUser}
+                onClick={handleDeleteUserAndHistory}
+                className="bg-red-800 text-white py-3 rounded-xl text-sm font-extrabold col-span-2 disabled:opacity-60"
+              >
+                {deletingUser ? 'Deleting…' : 'Delete User + Everything'}
               </button>
             </div>
           )}
@@ -790,14 +848,19 @@ export default function UserDeepDiveModal({
               >
                 <FileText size={16} /> PDF
               </button>
+
+              <button
+                disabled={deletingSales}
+                onClick={handleDeleteSalesHistoryOnly}
+                className="col-span-2 bg-red-600/90 text-white py-3 rounded-xl text-sm font-extrabold disabled:opacity-60"
+              >
+                {deletingSales ? 'Deleting…' : 'Delete Sales History'}
+              </button>
             </div>
           )}
 
           {(view === 'inventory' || view === 'staff') && (
-            <button
-              onClick={onClose}
-              className="w-full bg-white/10 text-white py-3 rounded-xl text-sm font-extrabold"
-            >
+            <button onClick={onClose} className="w-full bg-white/10 text-white py-3 rounded-xl text-sm font-extrabold">
               Close
             </button>
           )}
