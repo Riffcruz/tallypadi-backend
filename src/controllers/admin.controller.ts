@@ -139,7 +139,15 @@ export const manageUser = async (req: Request, res: Response) => {
     const user = await User.findById(id);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    // ✅ SEND INDIVIDUAL MESSAGE (user or staff)
+    // Determine ownerId (supports if admin accidentally opens staff)
+    const ownerId = user.role === 'OWNER' ? user._id : user.ownerId;
+    if (!ownerId) return res.status(400).json({ error: 'OwnerId not found for this user' });
+
+    // Staff IDs under owner (needed to wipe staff sales too)
+    const staffIds: any[] = await User.find({ ownerId, role: 'STAFF' }).distinct('_id');
+    const allUserIds = [ownerId, ...staffIds];
+
+    // ✅ 1) SEND INDIVIDUAL MESSAGE (User or Staff)
     if (action === 'send_message') {
       const to = String(payload?.to || '').trim();
       const message = String(payload?.message || '').trim();
@@ -152,71 +160,78 @@ export const manageUser = async (req: Request, res: Response) => {
       return res.json({ success: true, message: `Message queued to ${to}` });
     }
 
-    // ✅ CLEAR USER MESSAGE HISTORY ONLY (keep account/data)
+    // ✅ 2) CLEAR MESSAGE HISTORY ONLY (keeps account + sales)
     if (action === 'clear_history') {
-      user.messageHistory = [];
-      await user.save();
-      return res.json({ success: true, message: 'User history cleared' });
+      await User.updateOne({ _id: ownerId }, { $set: { messageHistory: [] } });
+      return res.json({ success: true, message: 'User message history cleared' });
     }
 
-    // ✅ DELETE USER + HISTORY (and staff)
+    // ✅ 3) DELETE SALES HISTORY ONLY (owner + staff sales)
+    if (action === 'delete_sales_history') {
+      const r = await Transaction.deleteMany({
+        user: { $in: allUserIds },
+        type: 'SALE',
+      });
+
+      // optional: reset daily stats too (if you want sales chart to drop)
+      await DailyStats.deleteMany({ user: ownerId });
+
+      return res.json({
+        success: true,
+        message: 'Sales history deleted',
+        deletedSales: r.deletedCount || 0,
+      });
+    }
+
+    // ✅ 4) DELETE USER + HISTORY (owner + staff + all data)
     if (action === 'delete_user') {
       const deleteHistory = payload?.deleteHistory !== false; // default true
-      const ownerId = user._id;
-
-      // find staff IDs under this owner (so we can clean their ProcessedMessage too)
-      const staffDocs = await User.find({ ownerId }).select('_id');
-      const staffIds = staffDocs.map((s) => s._id);
 
       // delete staff accounts
-      await User.deleteMany({ ownerId });
+      await User.deleteMany({ ownerId, role: 'STAFF' });
 
       if (deleteHistory) {
-        // owner-level data
-        await Transaction.deleteMany({ user: ownerId });
+        // delete ALL transactions (not just owner)
+        await Transaction.deleteMany({ user: { $in: allUserIds } });
+
         await Inventory.deleteMany({ user: ownerId });
         await DailyStats.deleteMany({ user: ownerId });
         await Debtor.deleteMany({ user: ownerId });
-
-        // message processing locks/logs (owner + staff)
-        await ProcessedMessage.deleteMany({ user: { $in: [ownerId, ...staffIds] } });
+        await ProcessedMessage.deleteMany({ user: { $in: allUserIds } });
       }
 
-      // finally delete owner
+      // delete owner last
       await User.deleteOne({ _id: ownerId });
 
       return res.json({ success: true, message: 'User and history deleted' });
     }
 
-    // ✅ EXISTING ACTIONS
-    if (action === 'suspend') {
-      user.subscriptionStatus = 'suspended';
-    } else if (action === 'unsuspend' || action === 'activate') {
-      user.subscriptionStatus = 'active';
-    } else if (action === 'cancel') {
-      user.subscriptionStatus = 'cancelled';
-    } else if (action === 'change_plan') {
-      if (payload?.planType) user.planType = payload.planType;
+    // ✅ EXISTING ACTIONS (subscription)
+    const owner = await User.findById(ownerId);
+    if (!owner) return res.status(404).json({ error: 'Owner not found' });
+
+    if (action === 'suspend') owner.subscriptionStatus = 'suspended';
+    else if (action === 'unsuspend' || action === 'activate') owner.subscriptionStatus = 'active';
+    else if (action === 'cancel') owner.subscriptionStatus = 'cancelled';
+    else if (action === 'change_plan') {
+      if (payload?.planType) owner.planType = payload.planType;
     } else if (action === 'set_expiry') {
       if (payload?.date) {
         const newDate = new Date(payload.date);
-        user.trialEndsAt = newDate;
-        user.nextBillingDate = newDate;
-
-        // AUTO-CANCEL if past date
-        if (newDate < new Date()) {
-          user.subscriptionStatus = 'cancelled';
-        }
+        owner.trialEndsAt = newDate;
+        owner.nextBillingDate = newDate;
+        if (newDate < new Date()) owner.subscriptionStatus = 'cancelled';
       }
     }
 
-    await user.save();
-    return res.json({ success: true, message: `User updated: ${action}`, user });
+    await owner.save();
+    return res.json({ success: true, message: `User updated: ${action}`, user: owner });
   } catch (error) {
     console.error('Update User Error:', error);
     return res.status(500).json({ error: 'Update User Error' });
   }
 };
+
 
 // --- GLOBAL SETTINGS ---
 export const getGlobalSettings = async (req: Request, res: Response) => {
