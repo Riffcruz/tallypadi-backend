@@ -100,7 +100,7 @@ function ownerRequestedUndoneHistory(rawText: string, parsed: any) {
   // Positive triggers (include undone)
   const wantsUndone =
     /\b(include|show|with)\b.*\b(undone|reversed|void|voided|cancelled|canceled|undo)\b/.test(s) ||
-    /\b(undone|reversed|void|voided|cancelled|canceled|undo)\b.*\b(history|histories|sales|transactions|tx|records)\b/.test(s) ||
+    /\b(undone|reversed|void|voided|cancelled|canceled|undo)\b.*\b(show me undone)\b/.test(s) ||
     /\bundo history\b/.test(s) ||
     /\bundone histories\b/.test(s);
 
