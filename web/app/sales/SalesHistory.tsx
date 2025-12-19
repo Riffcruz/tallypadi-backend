@@ -48,14 +48,32 @@ export default function SalesHistory({ user }: { user: UserProfile | null }) {
     axios
       .get(`${API_URL}/sales`, { headers: { Authorization: `Bearer ${token}` }, params })
       .then((res) => {
-        setHistory(Array.isArray(res.data) ? res.data : []);
-        setLoading(false);
-      })
-      .catch((err) => {
-        console.error('History Error', err);
-        setLoading(false);
-      });
+  const rows = Array.isArray(res.data) ? res.data : [];
+
+  // ✅ hide undone + unknown
+  const filtered = rows.filter((sale: any) => !isUndoneSale(sale) && !isUnknownItemSale(sale));
+
+  setHistory(filtered);
+  setLoading(false);
+});
   };
+
+  const isUnknownItemSale = (sale: any) => {
+  const items = Array.isArray(sale?.items) ? sale.items : [];
+
+  // no items at all = unknown
+  if (!items.length) return true;
+
+  // any item with empty/null/unknown-ish name = unknown
+  const unknownNames = new Set(['unknown_item', 'unknown', 'item', 'null', 'undefined']);
+  return items.some((i: any) => {
+    const name = String(i?.name ?? '').trim().toLowerCase();
+    return !name || unknownNames.has(name);
+  });
+};
+
+const isUndoneSale = (sale: any) => sale?.isUndone === true || sale?.isUndone === 'true';
+
 
   const downloadPDF = async () => {
     if (user?.planType !== 'TYCOON') {
