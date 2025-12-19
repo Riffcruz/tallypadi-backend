@@ -1,7 +1,9 @@
 import { Request, Response } from 'express';
 import { Debtor } from '../models/debtor.model';
 import { Transaction } from '../models/transaction.model';
+import { DailyStats } from '../models/dailyStats.model';
 import mongoose from 'mongoose';
+import { applyPaymentToDebts } from '../services/debt.service';
 
 // 1. GET ALL DEBTORS (Includes financial summary & last items)
 export const getDebtors = async (req: Request | any, res: Response) => {
@@ -22,8 +24,9 @@ export const getDebtors = async (req: Request | any, res: Response) => {
               $match: { 
                 $expr: { 
                   $and: [ 
-                    { $eq: ['$debtor', '$$debtorId'] }, 
-                    { $eq: ['$isUndone', false] } 
+                    // Check both fields for compatibility
+                    { $or: [ { $eq: ['$debtor', '$$debtorId'] }, { $eq: ['$debtorId', '$$debtorId'] } ] }, 
+                    { $ne: ['$isUndone', true] } 
                   ] 
                 } 
               } 
@@ -43,7 +46,12 @@ export const getDebtors = async (req: Request | any, res: Response) => {
               initialValue: 0,
               in: {
                 $cond: [
-                  { $eq: ['$$this.type', 'DEBT_PAYMENT'] },
+                  { 
+                    $or: [
+                      { $eq: ['$$this.type', 'DEBT_PAYMENT'] },
+                      { $eq: ['$$this.type', 'PAYMENT_RECEIVED'] }
+                    ]
+                  },
                   { $subtract: ['$$value', { $ifNull: ['$$this.amountPaid', 0] }] },
                   { $add: ['$$value', { $ifNull: ['$$this.totalMoney', 0] }] }
                 ]
@@ -57,7 +65,12 @@ export const getDebtors = async (req: Request | any, res: Response) => {
                 $filter: { 
                   input: '$history', 
                   as: 'tx', 
-                  cond: { $ne: ['$$tx.type', 'DEBT_PAYMENT'] } 
+                  cond: { 
+                    $and: [
+                      { $ne: ['$$tx.type', 'DEBT_PAYMENT'] },
+                      { $ne: ['$$tx.type', 'PAYMENT_RECEIVED'] }
+                    ]
+                  } 
                 } 
               }, 
               0 
@@ -104,30 +117,33 @@ export const createDebtor = async (req: Request | any, res: Response) => {
 
     if (!displayName) return res.status(400).json({ error: 'Name is required' });
 
+    const debtAmount = initialDebt ? Number(initialDebt) : 0;
+
     const debtor = await Debtor.create({
       user: userId,
       displayName,
       debtorKey: displayName.toLowerCase().trim(),
-      aliases: aliases || []
+      aliases: aliases || [],
+      totalDebt: debtAmount, // Update model directly
+      lastProductStr: initialProduct || (debtAmount > 0 ? 'Opening Balance' : '')
     });
 
     // If an opening balance is provided, create a CREDIT transaction
-    if (initialDebt && Number(initialDebt) > 0) {
-      const debtAmount = Number(initialDebt);
+    if (debtAmount > 0) {
       await Transaction.create({
         user: userId,
         type: 'SALE', 
         paymentStatus: 'CREDIT',
-        debtor: debtor._id,
+        debtorId: debtor._id,
         customerName: displayName,
         totalMoney: debtAmount,
         amountPaid: 0,
         balance: debtAmount,
         items: [{
           name: initialProduct || 'Opening Balance',
-          qty: 1, // ✅ Updated to match model
+          qty: 1, 
           unit: 'pc',
-          unitPrice: debtAmount, // ✅ Updated to match model
+          unitPrice: debtAmount, 
           total: debtAmount
         }],
         date: new Date().toISOString().split('T')[0],
@@ -195,20 +211,35 @@ export const recordDebtPayment = async (req: Request | any, res: Response) => {
     if (!debtor) return res.status(404).json({ error: 'Debtor not found' });
 
     const paymentAmount = Number(amount);
+    const todayString = date || new Date().toISOString().split('T')[0];
 
+    // Use PAYMENT_RECEIVED to allow aggregation to work correctly with existing logic
     const tx = await Transaction.create({
       user: userId, 
-      type: 'DEBT_PAYMENT', 
-      debtor: debtorId, 
+      type: 'PAYMENT_RECEIVED', 
+      debtorId: debtorId, 
       customerName: debtor.displayName,
       amountPaid: paymentAmount, 
-      totalMoney: 0, 
+      totalMoney: paymentAmount, 
       balance: 0,
       items: [], 
       paymentStatus: 'PAID',
-      date: date || new Date().toISOString().split('T')[0], 
+      date: todayString, 
       timestamp: new Date()
     });
+
+    // Update matching logic
+    const r = await applyPaymentToDebts(userId, debtorId, paymentAmount);
+    
+    // Update daily stats
+    await DailyStats.findOneAndUpdate(
+      { user: userId, date: todayString },
+      { $inc: { totalRevenue: r.applied || 0, totalTransactions: 1 } },
+      { upsert: true }
+    );
+
+    // ✅ Sync frontend data immediately
+    await Debtor.findByIdAndUpdate(debtorId, { $inc: { totalDebt: -paymentAmount } });
 
     res.json({ success: true, transaction: tx });
   } catch (error) {

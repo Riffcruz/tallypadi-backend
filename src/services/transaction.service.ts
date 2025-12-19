@@ -226,6 +226,9 @@ export const processTransaction = async (
         { upsert: true }
       );
 
+      // ✅ SYNC FRONTEND: Update Debtor balance immediately
+      await Debtor.findByIdAndUpdate(debtorId, { $inc: { totalDebt: -amt } });
+
       if (r.applied <= 0) {
         parsed.reply_text = `I no see any outstanding debt for *${displayName}*.`;
       } else if (r.remaining > 0) {
@@ -440,6 +443,14 @@ export const processTransaction = async (
       timestamp: now,
       date: todayString,
     });
+
+    // ✅ SYNC FRONTEND: Update Debtor balance if CREDIT SALE
+    if (isCreditSale && debtorId) {
+      await Debtor.findByIdAndUpdate(debtorId, {
+        $inc: { totalDebt: finalTotalMoney },
+        $set: { lastProductStr: finalItems.map(i => `${i.qty} ${i.name}`).join(', ') }
+      });
+    }
 
     // =========================================================
     // DAILY STATS (only count PAID sales as revenue)
