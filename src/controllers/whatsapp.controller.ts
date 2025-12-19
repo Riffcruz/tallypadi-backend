@@ -358,7 +358,9 @@ export const handleMessageLogic = async (
       user.password = await bcrypt.hash(rawText, salt);
       user.registrationStage = 'COMPLETED';
       await user.save();
-      await queueOutboundMessage(from, `✅ Setup Complete!\n\nTry: *I sold 2 bags of rice for ${symbol}50k*`);
+       const cheatSheet = `✅ *Setup Complete! You are ready.* 🚀\n\nHere is how to use Tallypadi:\n\n🛒 *Record Sales*\n• "Sold 2 cars"\n• "Sold 5 Coke for ${symbol}1,500"\n\n📦 *Restock / Expenses*\n• "Restock 50 bags of Rice at ${symbol}40k"\n• "Bought fuel ${symbol}5,000"\n\n📊 *See Reports*\n• "How much did I make today?"\n• "Show me sales for yesterday"\n\n📉 *Check Stock*\n• "How many Rice remain?"\n\n💡 *Tip:* You can type in English or Pidgin!`;
+      
+      await queueOutboundMessage(from, cheatSheet); 
       return;
     }
 
