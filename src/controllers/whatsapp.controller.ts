@@ -18,6 +18,7 @@ import { undoLastSale } from '../services/undo.service';
 import { resolveDebtor, normName } from '../services/debtor.service';
 
 // Reports / PDF (your existing services)
+// NOTE: Ensure these services are updated to accept the 'includeUndone' boolean argument
 import {
   getDailySummary,
   getStockReport,
@@ -675,6 +676,17 @@ export const handleMessageLogic = async (
     let parsed = await parseMessageWithGemini(rawText, currentLang, contextHistory, imageBuffer, imageMime);
     parsed = allowlistParsed(parsed);
 
+    // =====================================================
+    // 🔍 Undone Filter Logic
+    // Detect if user SPECIFICALLY asked for undone/reversed history.
+    // If NOT asked, we filter OUT undone items.
+    // =====================================================
+    const requestedUndone = 
+      parsed.intent === 'REPORT_UNDONE' || 
+      rawText.toLowerCase().includes('undone') || 
+      rawText.toLowerCase().includes('reversed') || 
+      rawText.toLowerCase().includes('deleted sales');
+
     // --- DATE PARSING ---
     let startDate: Date | undefined;
     let endDate: Date | undefined;
@@ -765,34 +777,47 @@ export const handleMessageLogic = async (
         break;
       }
 
+      case 'REPORT_UNDONE': // Explicit intent for undone
       case 'REPORT_RECENT': {
         const limit = parsed.items?.[0]?.qty || 5;
         const safeLimit = Math.min(Math.max(Number(limit) || 5, 1), 10);
 
-        await queueOutboundMessage(from, `🔎 Fetching last ${safeLimit} transactions...`);
+        // Filter Logic: If asked for undone, show undone. Else, hide them.
+        const query: any = {
+          user: ownerId, // or shopId
+          type: 'SALE',
+        };
 
-        const recentTx = await Transaction.find({
-            user: ownerId,                 // or shopId
-            type: 'SALE',
-            $or: [{ isUndone: { $exists: false } }, { isUndone: false }],
-          })
-            .sort({ createdAt: -1 })
-            .limit(safeLimit)
-            .lean();
+        if (requestedUndone) {
+          query.isUndone = true;
+          await queueOutboundMessage(from, `🔎 Fetching last ${safeLimit} *UNDONE* transactions...`);
+        } else {
+          query.$or = [{ isUndone: { $exists: false } }, { isUndone: false }];
+          await queueOutboundMessage(from, `🔎 Fetching last ${safeLimit} transactions...`);
+        }
 
+        const recentTx = await Transaction.find(query)
+          .sort({ createdAt: -1 })
+          .limit(safeLimit)
+          .lean();
 
         if (!recentTx.length) {
-          await queueOutboundMessage(from, 'No sales found.');
+          await queueOutboundMessage(from, requestedUndone ? 'No undone sales found.' : 'No sales found.');
           break;
         }
 
-        let out = `🕒 *Last ${safeLimit} Sales:*\n\n`;
+        let out = `🕒 *Last ${safeLimit} ${requestedUndone ? 'UNDONE Sales' : 'Sales'}:*\n\n`;
         recentTx.forEach((t: any) => {
           const local = toUserLocalDate(t.timestamp, offsetMinutes); // ✅ USER TIME
           const timeStr = local.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
           const money = `${symbol}${Number(t.totalMoney || 0).toLocaleString(locale)}`;
           const itemsStr = (t.items || []).map((i: any) => `${i.name} (${i.qty})`).join(', ');
-          out += `• *${itemsStr}* — ${money} (${timeStr})\n`;
+          
+          if (requestedUndone) {
+             out += `❌ *${itemsStr}* — ${money} (${timeStr})\n`;
+          } else {
+             out += `• *${itemsStr}* — ${money} (${timeStr})\n`;
+          }
         });
 
         await queueOutboundMessage(from, out);
@@ -802,8 +827,9 @@ export const handleMessageLogic = async (
       case 'REPORT_SALES': {
         await queueOutboundMessage(from, `Calculating ${dateLabel.toLowerCase()} report... ⏳`);
 
-        const summary = await getDailySummary(shopId as any, startDate, endDate);
-        const transactions = await getTodayTransactions(shopId as any, startDate, endDate);
+        // Passing requestedUndone flag to services (Note: Update your services to accept this arg)
+        const summary = await getDailySummary(shopId as any, startDate, endDate, requestedUndone);
+        const transactions = await getTodayTransactions(shopId as any, startDate, endDate, requestedUndone);
 
         const totalFormatted = Number(summary.totalRevenue || 0).toLocaleString(locale, {
           style: 'currency',
@@ -811,7 +837,7 @@ export const handleMessageLogic = async (
           maximumFractionDigits: 0,
         });
 
-        let salesMsg = `📅 *${dateLabel} Sales Breakdown*\n\n`;
+        let salesMsg = `📅 *${dateLabel} Sales Breakdown${requestedUndone ? ' (UNDONE ONLY)' : ''}*\n\n`;
         if (transactions.length > 0) {
           transactions.forEach((tx: any) => {
             const local = toUserLocalDate(tx.timestamp, offsetMinutes);
@@ -819,11 +845,12 @@ export const handleMessageLogic = async (
 
             (tx.items || []).forEach((it: any) => {
               const line = Number(it.total || 0);
-              salesMsg += `🕒 ${timeStr} • ${it.name} (${it.qty}${it.unit ? ' ' + it.unit : ''}) - ${symbol}${line.toLocaleString(locale)}\n`;
+              const icon = requestedUndone ? '❌' : '🕒';
+              salesMsg += `${icon} ${timeStr} • ${it.name} (${it.qty}${it.unit ? ' ' + it.unit : ''}) - ${symbol}${line.toLocaleString(locale)}\n`;
             });
           });
         } else {
-          salesMsg += `_No sales recorded._\n`;
+          salesMsg += `_No records found._\n`;
         }
 
         salesMsg += `\n💰 *Total:* ${totalFormatted}`;
@@ -878,11 +905,12 @@ export const handleMessageLogic = async (
       case 'REPORT_FULL': {
         await queueOutboundMessage(from, 'Generating summary... 📋');
 
-        const fullData = await getFullSummary(shopId as any, startDate, endDate);
-        const revenueSummary = await getDailySummary(shopId as any, startDate, endDate);
+        // Passing requestedUndone flag to services
+        const fullData = await getFullSummary(shopId as any, startDate, endDate, requestedUndone);
+        const revenueSummary = await getDailySummary(shopId as any, startDate, endDate, requestedUndone);
 
         let fullMsg =
-          `📋 *${dateLabel} Summary*\n` +
+          `📋 *${dateLabel} Summary${requestedUndone ? ' (UNDONE)' : ''}*\n` +
           `💰 Revenue: ${symbol}${Number(revenueSummary.totalRevenue || 0).toLocaleString(locale)}\n\n`;
 
         if (!fullData.length) fullMsg += `_No data._`;

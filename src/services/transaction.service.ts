@@ -1,480 +1,342 @@
+// src/services/report.service.ts
 import { Types } from 'mongoose';
-import { Inventory } from '../models/inventory.model';
 import { Transaction } from '../models/transaction.model';
-import { DailyStats } from '../models/dailyStats.model';
-import { User } from '../models/user.model';
-import { ParsedResult } from './gemini.service';
-import { queueOutboundMessage } from './queue.service';
-import { ProcessedMessage } from '../models/processedMessage.model';
+import { Inventory } from '../models/inventory.model';
+import { User, IUser } from '../models/user.model';
+import { getTodayRangeForOffset } from '../utils/dates';
 
-import { applyPaymentToDebts } from './debt.service';
-import { resolveDebtor, normName } from './debtor.service';
-import { Debtor } from '../models/debtor.model';
+// Standard filter: Only show valid (not undone) sales
+const notUndoneMatch = {
+  $or: [{ isUndone: { $exists: false } }, { isUndone: false }],
+};
 
-// ==========================================
-// 🔧 HELPERS
-// ==========================================
-function normalizeItemName(name: string) {
-  return String(name || '')
-    .replace(/\s*\(.*?\)\s*$/, '') // remove "(...)" at end
-    .toLowerCase()
-    .trim();
-}
+// Filter Logic:
+// If includeUndone is TRUE -> Show ONLY undone items (so we can see what was cancelled).
+// If includeUndone is FALSE -> Show ONLY valid items (standard report).
+const applyUndoneFilter = (showUndoneOnly?: boolean) => {
+  if (showUndoneOnly) {
+    return { isUndone: true };
+  }
+  return notUndoneMatch;
+};
 
-// root normalizer to merge "bags of rice" -> "rice"
-function rootItemName(name: string) {
-  let n = normalizeItemName(name);
+// Helper function to get relevant user IDs based on role and report type
+const _getRelevantUserIds = async (user: IUser, reportScope: 'OWN' | 'SHOP'): Promise<Types.ObjectId[]> => {
+  if (!user) throw new Error('User not found');
 
-  // strip filler words
-  n = n.replace(/\b(of|the|a|an|my|your|pls|please|abeg)\b/g, ' ');
+  if (reportScope === 'OWN') return [user._id as Types.ObjectId];
 
-  // strip container/unit words that cause duplicates
-  n = n.replace(/\b(bags?|bag|pcs?|pieces?|cartons?|carton|packs?|pack|sachets?|sachet|bottles?|bottle|rolls?|roll)\b/g, ' ');
-  n = n.replace(/\b(liters?|ltrs?|kg|gms?|grams?)\b/g, ' ');
+  if (user.role === 'OWNER') {
+    const staff = await User.find({ ownerId: user._id, role: 'STAFF' });
+    return [user._id as Types.ObjectId].concat(staff.map((s) => s._id as Types.ObjectId));
+  } else if (user.role === 'STAFF' && user.ownerId) {
+    const owner = await User.findById(user.ownerId);
+    if (!owner) return [user._id as Types.ObjectId];
 
-  // cleanup spaces
-  n = n.replace(/\s+/g, ' ').trim();
-
-  // simple singularization
-  if (n.endsWith('s') && !n.endsWith('ss') && n.length > 3) {
-    const protectedWords = ['rice', 'beans', 'gas', 'flour', 'semovita', 'wheat', 'indomie', 'coke'];
-    if (!protectedWords.includes(n)) n = n.slice(0, -1);
+    const staff = await User.find({ ownerId: user.ownerId, role: 'STAFF' });
+    return [owner._id as Types.ObjectId].concat(staff.map((s) => s._id as Types.ObjectId));
   }
 
-  return n || '';
+  return [user._id as Types.ObjectId];
+};
+
+interface DailyAggResult {
+  _id: string;
+  totalQty: number;
+  unit?: string;
+  totalAmount?: number;
 }
 
-function toNumber(v: any): number {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : 0;
+interface DailyItem {
+  name: string;
+  qty: number;
+  unit: string;
+  totalAmount?: number;
 }
 
-function toISODateForOffset(offsetMinutes: number): string {
-  const now = new Date();
-  const localTime = new Date(now.getTime() + offsetMinutes * 60 * 1000);
-  return localTime.toISOString().split('T')[0];
+interface StockItem {
+  name: string;
+  quantity: number;
 }
 
-function escapeRegex(str: string) {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+interface SalesAggResult {
+  _id: { name: string; status: string };
+  totalQty: number;
+  unit?: string;
+  totalAmount?: number;
 }
 
-/**
- * ✅ SMART RESOLVER
- * 1) exact match (normalized)
- * 2) root match where input contains inventory name OR inventory name contains input
- * 3) only auto-merge if EXACTLY ONE match
- * 4) if multiple matches, return { status: 'ambiguous', options: [...] }
- */
-async function findExistingItem(userId: Types.ObjectId, rawName: string) {
-  const clean = normalizeItemName(rawName);
-  const root = rootItemName(rawName) || clean;
+interface FullSummaryEntry {
+  name: string;
+  stock: number;
+  soldPaid: number;
+  soldCredit: number;
+  revenue: number;
+  unit: string;
+}
 
-  // 1) exact match
-  const exact = await Inventory.findOne({ user: userId, name: clean });
-  if (exact) return { status: 'found' as const, inv: exact };
+// 1. SALES REPORT (Money)
+export const getDailySummary = async (
+  userId: Types.ObjectId,
+  customStart?: Date,
+  customEnd?: Date,
+  includeUndone: boolean = false
+): Promise<{ totalRevenue: number; items: DailyItem[] }> => {
+  const user = await User.findById(userId);
+  if (!user) throw new Error('User not found');
 
-  // If root is empty, stop
-  if (!root) return { status: 'none' as const, inv: null };
+  const scope = user.role === 'OWNER' ? 'SHOP' : 'OWN';
+  const relevantUserIds = await _getRelevantUserIds(user, scope);
 
-  // 2) get candidates by root regex (limit to avoid heavy scans)
-  const rx = new RegExp(escapeRegex(root), 'i');
-  const candidates = await Inventory.find({ user: userId, name: { $regex: rx } })
-    .limit(25);
+  let start: Date, end: Date;
 
-  // Also check reverse containment (inventory name contained in input)
-  const inputNorm = root; // already normalized-ish
-  const matches = candidates.filter((c) => {
-    const invName = normalizeItemName(c.name);
-    return invName === inputNorm || invName.includes(inputNorm) || inputNorm.includes(invName);
+  if (customStart && customEnd) {
+    start = customStart;
+    end = customEnd;
+  } else {
+    const offset = user.settings?.utcOffsetMinutes ?? 60;
+    const range = getTodayRangeForOffset(offset);
+    start = range.start;
+    end = range.end;
+  }
+
+  const undoneFilter = applyUndoneFilter(includeUndone);
+
+  const result = await Transaction.aggregate<DailyAggResult>([
+    {
+      $match: {
+        user: { $in: relevantUserIds },
+        type: 'SALE',
+        createdAt: { $gte: start, $lte: end },
+        ...undoneFilter,
+      },
+    },
+    { $unwind: '$items' },
+    {
+      $group: {
+        _id: '$items.name',
+        totalQty: { $sum: '$items.qty' },
+        unit: { $first: '$items.unit' },
+        totalAmount: { $sum: { $ifNull: ['$items.total', 0] } },
+      },
+    },
+  ]);
+
+  const totalRevenue = result.reduce((sum, item) => sum + (item.totalAmount || 0), 0);
+
+  return {
+    totalRevenue,
+    items: result.map((r) => ({
+      name: r._id,
+      qty: r.totalQty,
+      unit: r.unit || '',
+      totalAmount: r.totalAmount,
+    })),
+  };
+};
+
+// 2. STOCK REPORT (Quantity)
+// Note: Stock report reads from Inventory model, which reflects current state.
+// Undone sales restore stock immediately, so no filter is needed here.
+export const getStockReport = async (userId: Types.ObjectId, itemQuery: string | null = null): Promise<StockItem[]> => {
+  const user = await User.findById(userId);
+  if (!user) throw new Error('User not found');
+
+  const relevantUserIds = await _getRelevantUserIds(user, 'SHOP');
+
+  const query: any = { user: { $in: relevantUserIds } };
+  if (itemQuery) query['name'] = { $regex: itemQuery, $options: 'i' };
+
+  const stock = await Inventory.aggregate([
+    { $match: query },
+    { $group: { _id: '$name', quantity: { $sum: '$quantity' } } },
+  ]);
+
+  return stock.map((item: any) => ({ name: item._id, quantity: item.quantity }));
+};
+
+// 3. FULL SUMMARY (Sales + Stock + Credit)
+export const getFullSummary = async (
+  userId: Types.ObjectId,
+  customStart?: Date,
+  customEnd?: Date,
+  includeUndone: boolean = false
+): Promise<FullSummaryEntry[]> => {
+  const user = await User.findById(userId);
+  if (!user) throw new Error('User not found');
+
+  const salesScope = user.role === 'OWNER' ? 'SHOP' : 'OWN';
+  const salesUserIds = await _getRelevantUserIds(user, salesScope);
+
+  const stockScope = 'SHOP';
+  const stockUserIds = await _getRelevantUserIds(user, stockScope);
+
+  let start: Date, end: Date;
+  if (customStart && customEnd) {
+    start = customStart;
+    end = customEnd;
+  } else {
+    const offset = user.settings?.utcOffsetMinutes ?? 60;
+    const range = getTodayRangeForOffset(offset);
+    start = range.start;
+    end = range.end;
+  }
+
+  const undoneFilter = applyUndoneFilter(includeUndone);
+
+  const salesAgg = await Transaction.aggregate<SalesAggResult>([
+    {
+      $match: {
+        user: { $in: salesUserIds },
+        type: 'SALE',
+        createdAt: { $gte: start, $lte: end },
+        ...undoneFilter,
+      },
+    },
+    { $unwind: '$items' },
+    {
+      $group: {
+        _id: { name: '$items.name', status: '$paymentStatus' },
+        totalQty: { $sum: '$items.qty' },
+        unit: { $first: '$items.unit' },
+        totalAmount: { $sum: { $ifNull: ['$items.total', 0] } },
+      },
+    },
+  ]);
+
+  const stock = await Inventory.find({ user: { $in: stockUserIds } });
+
+  const reportMap: Map<string, FullSummaryEntry> = new Map();
+
+  // Populate Stock first
+  stock.forEach((item: { name: string; quantity: number }) => {
+    if (reportMap.has(item.name)) {
+      reportMap.get(item.name)!.stock += item.quantity;
+    } else {
+      reportMap.set(item.name, {
+        name: item.name,
+        stock: item.quantity,
+        soldPaid: 0,
+        soldCredit: 0,
+        revenue: 0,
+        unit: 'pcs',
+      });
+    }
   });
 
-  // If none matched, try a broader fallback: search by clean text too (still limited)
-  if (matches.length === 0 && clean && clean !== root) {
-    const rx2 = new RegExp(escapeRegex(clean), 'i');
-    const more = await Inventory.find({ user: userId, name: { $regex: rx2 } })
-      .limit(25);
+  // Populate Sales (Valid OR Undone based on filter)
+  salesAgg.forEach((sale) => {
+    const name = sale._id.name;
+    const status = sale._id.status;
 
-    const matches2 = more.filter((c) => {
-      const invName = normalizeItemName(c.name);
-      return invName === clean || invName.includes(clean) || clean.includes(invName);
-    });
-
-    if (matches2.length === 1) return { status: 'found' as const, inv: matches2[0] };
-    if (matches2.length > 1) {
-      return { status: 'ambiguous' as const, inv: null, options: matches2.map(x => x.name) };
+    if (!reportMap.has(name)) {
+      reportMap.set(name, { name, stock: 0, soldPaid: 0, soldCredit: 0, revenue: 0, unit: sale.unit || 'pcs' });
     }
-    return { status: 'none' as const, inv: null, rootName: root };
-  }
 
-  // 3) decide based on match count
-  if (matches.length === 1) return { status: 'found' as const, inv: matches[0] };
+    const entry = reportMap.get(name)!;
 
-  if (matches.length > 1) {
-    return { status: 'ambiguous' as const, inv: null, options: matches.map(x => x.name) };
-  }
+    if (status === 'CREDIT') {
+      entry.soldCredit += sale.totalQty;
+    } else {
+      entry.soldPaid += sale.totalQty;
+      entry.revenue += sale.totalAmount || 0;
+    }
 
-  // 4) none found: return rootName so we create clean root item
-  return { status: 'none' as const, inv: null, rootName: root };
-}
+    if (sale.unit) entry.unit = sale.unit;
+  });
 
-export const processTransaction = async (
+  return Array.from(reportMap.values());
+};
+
+// 4. TODAY'S TRANSACTIONS (Audit Trail)
+export const getTodayTransactions = async (
   userId: Types.ObjectId,
-  parsed: ParsedResult,
-  messageId: string
+  customStart?: Date,
+  customEnd?: Date,
+  includeUndone: boolean = false
 ) => {
-  // ✅ 0) CLAIM LOCK FIRST (prevents double inventory update)
-  try {
-    await ProcessedMessage.create({
-      user: userId,
-      messageId,
-      status: 'PROCESSING',
-    });
-  } catch (e: any) {
-    if (e?.code === 11000) {
-      console.log(`⚠️ Duplicate message detected (${messageId}). Skipping safely.`);
-      return;
-    }
-    throw e;
+  const user = await User.findById(userId);
+  if (!user) throw new Error('User not found');
+
+  const scope = user.role === 'OWNER' ? 'SHOP' : 'OWN';
+  const relevantUserIds = await _getRelevantUserIds(user, scope);
+
+  let start: Date, end: Date;
+  if (customStart && customEnd) {
+    start = customStart;
+    end = customEnd;
+  } else {
+    const offset = user.settings?.utcOffsetMinutes ?? 60;
+    const range = getTodayRangeForOffset(offset);
+    start = range.start;
+    end = range.end;
   }
 
-  try {
-    // --- TIME / USER ---
-    const user = await User.findById(userId).lean();
-    const offset = user?.settings?.utcOffsetMinutes ?? 60;
-    const todayString = toISODateForOffset(offset);
-    const now = new Date();
+  const undoneFilter = applyUndoneFilter(includeUndone);
 
-    // =========================================================
-    // ✅ DEBT PAYMENT (PAYMENT_RECEIVED + apply to credit sales)
-    // =========================================================
-    if (parsed.intent === 'DEBT_PAYMENT') {
-      const rawName = String(parsed.customer_name || '').trim();
-      const amt = toNumber(parsed.total_money);
+  const transactions = await Transaction.find({
+    user: { $in: relevantUserIds },
+    type: 'SALE',
+    createdAt: { $gte: start, $lte: end },
+    ...undoneFilter,
+  })
+    .populate('user', 'phoneNumber name role')
+    .sort({ createdAt: 1 });
 
-      if (!rawName || amt <= 0) {
-        parsed.reply_text = "To record payment, type like: *Emeka paid 20000*";
-        await ProcessedMessage.updateOne(
-          { user: userId, messageId },
-          { $set: { status: 'DONE' } }
-        );
-        return;
-      }
+  return transactions;
+};
 
-      // resolve debtor
-      const res = await resolveDebtor(userId, rawName);
+// 5. SMART SUGGESTIONS
+export const getSmartSuggestions = async (
+  userId: Types.ObjectId,
+  includeUndone: boolean = false
+): Promise<string[]> => {
+  const user = await User.findById(userId);
+  if (!user) return [];
 
-      if (res.status === 'suggest') {
-        const list = res.options
-          .map((o, i) => `${i + 1}) ${o.displayName}`)
-          .join('\n');
-        parsed.reply_text =
-          `I see similar names. Reply the correct number:\n\n${list}\n\nOr type the full name again (add surname).`;
+  const relevantUserIds = await _getRelevantUserIds(user, 'OWN');
 
-        await ProcessedMessage.updateOne(
-          { user: userId, messageId },
-          { $set: { status: 'DONE' } }
-        );
-        return;
-      }
+  const offset = user.settings?.utcOffsetMinutes ?? 60;
 
-      let debtorId: Types.ObjectId | null = null;
-      let displayName = rawName;
-      let debtorKey = normName(rawName);
+  const now = new Date();
+  const localNow = new Date(now.getTime() + offset * 60 * 1000);
+  const currentHour = localNow.getUTCHours();
 
-      if (res.status === 'new') {
-        const created = await Debtor.create({
-          user: userId,
-          displayName: res.displayName,
-          debtorKey: res.debtorKey,
-          aliases: [res.debtorKey],
-        });
-        debtorId = created._id as any;
-        displayName = created.displayName;
-        debtorKey = created.debtorKey;
-      } else {
-        debtorId = res.debtorId as any;
-        displayName = res.displayName;
-        debtorKey = res.debtorKey;
-      }
+  const startHour = (currentHour - 2 + 24) % 24;
+  const endHour = (currentHour + 2) % 24;
 
-      // record payment event (audit)
-      await Transaction.create({
-        user: userId,
-        type: 'PAYMENT_RECEIVED',
-        paymentStatus: 'PAID',
-        items: [],
-        totalMoney: amt,
-        debtorId,
-        customerName: displayName,
-        customerKey: debtorKey,
-        amountPaid: amt,
-        balance: 0,
-        settledAt: now,
-        messageId,
-        timestamp: now,
-        date: todayString,
-      });
+  const undoneFilter = applyUndoneFilter(includeUndone);
 
-      // apply payment to credit sales for that debtor
-      const r = await applyPaymentToDebts(userId, debtorId as Types.ObjectId, amt);
+  const suggestions = await Transaction.aggregate([
+    {
+      $match: {
+        user: { $in: relevantUserIds },
+        type: 'SALE',
+        timestamp: { $gte: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000) },
+        ...undoneFilter,
+      },
+    },
+    {
+      $addFields: {
+        transHour: { $hour: { date: { $add: ['$timestamp', offset * 60 * 1000] } } },
+      },
+    },
+    {
+      $match: {
+        $expr: {
+          $cond: {
+            if: { $lte: [startHour, endHour] },
+            then: { $and: [{ $gte: ['$transHour', startHour] }, { $lte: ['$transHour', endHour] }] },
+            else: { $or: [{ $gte: ['$transHour', startHour] }, { $lte: ['$transHour', endHour] }] },
+          },
+        },
+      },
+    },
+    { $unwind: '$items' },
+    { $group: { _id: '$items.name', count: { $sum: 1 } } },
+    { $sort: { count: -1 } },
+    { $limit: 3 },
+  ]);
 
-      // update stats (money received today)
-      await DailyStats.findOneAndUpdate(
-        { user: userId, date: todayString },
-        { $inc: { totalRevenue: r.applied || 0, totalTransactions: 1 } },
-        { upsert: true }
-      );
-
-      // ✅ SYNC FRONTEND: Update Debtor balance immediately
-      await Debtor.findByIdAndUpdate(debtorId, { $inc: { totalDebt: -amt } });
-
-      if (r.applied <= 0) {
-        parsed.reply_text = `I no see any outstanding debt for *${displayName}*.`;
-      } else if (r.remaining > 0) {
-        parsed.reply_text =
-          `✅ Payment recorded for *${displayName}*.\n` +
-          `Applied: *${r.applied.toLocaleString()}*\n` +
-          `Extra: *${r.remaining.toLocaleString()}* (no more debt to match).`;
-      } else {
-        parsed.reply_text =
-          `✅ Payment recorded for *${displayName}*.\n` +
-          `Applied: *${r.applied.toLocaleString()}*\n` +
-          (r.clearedCount > 0 ? `Cleared debts: *${r.clearedCount}*` : `Noted.`);
-      }
-
-      await ProcessedMessage.updateOne(
-        { user: userId, messageId },
-        { $set: { status: 'DONE' } }
-      );
-      return;
-    }
-
-    // =========================================================
-    // Map intents -> transaction type
-    // =========================================================
-    let type: 'SALE' | 'RESTOCK' | 'ADJUSTMENT';
-    if (parsed.intent === 'SALE') type = 'SALE';
-    else if (parsed.intent === 'RESTOCK') type = 'RESTOCK';
-    else if (parsed.intent === 'SET_STOCK') type = 'ADJUSTMENT';
-    else type = 'ADJUSTMENT';
-
-    // =========================================================
-    // Resolve debtor for CREDIT SALE
-    // =========================================================
-    let debtorId: Types.ObjectId | null = null;
-    let customerName: string | null = null;
-    let customerKey: string | null = null;
-
-    const isCreditSale = type === 'SALE' && Boolean(parsed.is_credit);
-
-    if (isCreditSale) {
-      const rawName = String(parsed.customer_name || '').trim();
-      if (!rawName) {
-        parsed.reply_text = "Who dey owe you? Reply like: *Sold 2 rice to Emeka on credit*";
-        await ProcessedMessage.updateOne(
-          { user: userId, messageId },
-          { $set: { status: 'DONE' } }
-        );
-        return;
-      }
-
-      const res = await resolveDebtor(userId, rawName);
-
-      if (res.status === 'suggest') {
-        const list = res.options
-          .map((o, i) => `${i + 1}) ${o.displayName}`)
-          .join('\n');
-        parsed.reply_text =
-          `I see similar names. Reply the correct number:\n\n${list}\n\nOr type the full name again (add surname).`;
-
-        await ProcessedMessage.updateOne(
-          { user: userId, messageId },
-          { $set: { status: 'DONE' } }
-        );
-        return;
-      }
-
-      if (res.status === 'new') {
-        const created = await Debtor.create({
-          user: userId,
-          displayName: res.displayName,
-          debtorKey: res.debtorKey,
-          aliases: [res.debtorKey],
-        });
-        debtorId = created._id as any;
-        customerName = created.displayName;
-        customerKey = created.debtorKey;
-      } else {
-        debtorId = res.debtorId as any;
-        customerName = res.displayName;
-        customerKey = res.debtorKey;
-      }
-    }
-
-    // =========================================================
-    // INVENTORY UPDATES + PRICE CALCULATIONS
-    // =========================================================
-    const finalItems: any[] = [];
-    let calculatedTotal = 0;
-
-    for (const item of parsed.items || []) {
-      const qty = toNumber(item.qty);
-      if (qty <= 0) continue;
-
-      const inputName = String(item.name || '').trim();
-      const cleanName = normalizeItemName(inputName || 'unknown_item');
-      if (!cleanName) continue;
-
-      // ✅ SMART RESOLVE (merge common roots, protect specifics)
-      const resolved = await findExistingItem(userId, cleanName);
-
-      // If ambiguous, stop and ask user (prevents bad merges / dirty inventory)
-      if (resolved.status === 'ambiguous') {
-        const options = (resolved.options || []).slice(0, 6).map((n, i) => `${i + 1}) ${n}`).join('\n');
-        parsed.reply_text =
-          `I found multiple items that match *"${cleanName}"*.\n` +
-          `Which one did you mean?\n\n${options}\n\n` +
-          `Reply with the full item name (e.g. "used tire" or "new tire").`;
-
-        await ProcessedMessage.updateOne(
-          { user: userId, messageId },
-          { $set: { status: 'DONE' } }
-        );
-        return;
-      }
-
-      let inv = resolved.status === 'found' ? (resolved as any).inv : null;
-
-      // If item doesn't exist, create it using ROOT name (clean inventory)
-      if (!inv) {
-        const rootName = (resolved as any).rootName || rootItemName(cleanName) || cleanName;
-        if (!rootName) continue;
-
-        inv = new Inventory({
-          user: userId,
-          name: rootName,
-          quantity: 0,
-          lastUnitPrice: 0,
-        });
-      }
-
-      // Determine Price: Message price > DB Last Price > 0
-      let effectiveUnitPrice = 0;
-      const msgPrice = item.unit_price == null ? null : toNumber(item.unit_price);
-
-      if (msgPrice !== null && msgPrice > 0) {
-        effectiveUnitPrice = msgPrice;
-        inv.lastUnitPrice = msgPrice; // Update DB with new price
-      } else {
-        effectiveUnitPrice = toNumber(inv.lastUnitPrice);
-      }
-
-      // Update Stock
-      if (type === 'SALE') {
-        inv.quantity = toNumber(inv.quantity) - qty;
-      } else if (type === 'RESTOCK') {
-        inv.quantity = toNumber(inv.quantity) + qty;
-      } else {
-        inv.quantity = qty; // SET_STOCK
-      }
-
-      await inv.save();
-
-      // ✅ LOW STOCK ALERT
-      if (type === 'SALE' && inv.quantity <= 5 && inv.quantity > 0 && user?.phoneNumber) {
-        await queueOutboundMessage(
-          user.phoneNumber,
-          `⚠️ *Low Stock Alert:* ${inv.name} is running low (${inv.quantity} left). Restock soon!`
-        );
-      }
-
-      // ✅ Add to final list with calculated totals
-      const lineTotal = effectiveUnitPrice * qty;
-      calculatedTotal += lineTotal;
-
-      finalItems.push({
-        // ✅ Name consistency: always use the official DB name
-        name: inv.name,
-        qty,
-        unit: (item.unit || 'pcs').toString(),
-        unitPrice: effectiveUnitPrice,
-        total: lineTotal
-      });
-    }
-
-    // =========================================================
-    // RECORD TRANSACTION
-    // =========================================================
-
-    // If parsed.total_money is missing, use calculatedTotal
-    let finalTotalMoney = parsed.total_money != null ? toNumber(parsed.total_money) : calculatedTotal;
-
-    // Safety: If it's a SALE and total is 0, but we calculated something from DB, use that.
-    if (type === 'SALE' && finalTotalMoney === 0 && calculatedTotal > 0) {
-      finalTotalMoney = calculatedTotal;
-    }
-
-    const paymentStatus =
-      type === 'SALE' ? (parsed.is_credit ? 'CREDIT' : 'PAID') : 'PAID';
-
-    const isCredit = paymentStatus === 'CREDIT';
-
-    // ✅ Robust paid/balance logic
-    const amountPaid = type === 'SALE' ? (isCredit ? 0 : finalTotalMoney) : 0;
-    const balance = type === 'SALE' ? (isCredit ? finalTotalMoney : 0) : 0;
-
-    await Transaction.create({
-      user: userId,
-      type,
-      paymentStatus,
-      items: finalItems,
-      totalMoney: finalTotalMoney,
-
-      debtorId: isCreditSale ? debtorId : null,
-      customerName: isCreditSale ? customerName : null,
-      customerKey: isCreditSale ? customerKey : null,
-
-      amountPaid,
-      balance,
-      settledAt: type === 'SALE' ? (isCredit ? null : now) : null,
-
-      messageId,
-      timestamp: now,
-      date: todayString,
-    });
-
-    // ✅ SYNC FRONTEND: Update Debtor balance if CREDIT SALE
-    if (isCreditSale && debtorId) {
-      await Debtor.findByIdAndUpdate(debtorId, {
-        $inc: { totalDebt: finalTotalMoney },
-        $set: { lastProductStr: finalItems.map(i => `${i.qty} ${i.name}`).join(', ') }
-      });
-    }
-
-    // =========================================================
-    // DAILY STATS (only count PAID sales as revenue)
-    // =========================================================
-    if (type === 'SALE' && paymentStatus === 'PAID' && finalTotalMoney > 0) {
-      await DailyStats.findOneAndUpdate(
-        { user: userId, date: todayString },
-        { $inc: { totalRevenue: finalTotalMoney, totalTransactions: 1 } },
-        { upsert: true }
-      );
-    }
-
-    await ProcessedMessage.updateOne(
-      { user: userId, messageId },
-      { $set: { status: 'DONE' } }
-    );
-  } catch (err: any) {
-    console.error('❌ processTransaction error:', err);
-
-    await ProcessedMessage.updateOne(
-      { user: userId, messageId },
-      { $set: { status: 'FAILED', error: String(err?.message || err) } }
-    );
-
-    throw err;
-  }
+  return suggestions.map((s: any) => s._id);
 };
