@@ -8,6 +8,38 @@ import { ProcessedMessage } from '../models/processedMessage.model';
 import { Debtor } from '../models/debtor.model';
 import { sendWhatsAppText, sendWhatsAppTemplate } from '../services/whatsapp.service';
 
+// Treat these as "unknown item" (invalid sales)
+const UNKNOWN_ITEM_NAMES = ['unknown_item', 'unknown', 'item', 'null', 'undefined'];
+
+// Matches sales that have no items OR items with missing/invalid name
+const unknownSaleQuery = {
+  $or: [
+    { items: { $exists: false } },
+    { items: { $size: 0 } },
+    {
+      items: {
+        $elemMatch: {
+          $or: [
+            { name: { $exists: false } },
+            { name: null },
+            { name: '' },
+            { name: { $in: UNKNOWN_ITEM_NAMES } },
+          ],
+        },
+      },
+    },
+  ],
+};
+
+// “Valid sale” = not undone AND not unknown-item
+const validSaleMatch = {
+  $and: [
+    { $or: [{ isUndone: { $exists: false } }, { isUndone: false }] },
+    { $nor: [unknownSaleQuery] },
+  ],
+};
+
+
 // --- ANALYTICS DASHBOARD ---
 export const getSystemAnalytics = async (req: Request, res: Response) => {
   try {
@@ -32,16 +64,18 @@ export const getSystemAnalytics = async (req: Request, res: Response) => {
     });
 
     // 2. Financial Stats (GMV)
-    const salesAgg = await Transaction.aggregate([
-      { $match: { type: 'SALE' } },
-      { $group: { _id: null, total: { $sum: '$totalMoney' }, count: { $sum: 1 } } },
-    ]);
+  const salesAgg = await Transaction.aggregate([
+  { $match: { type: 'SALE', ...validSaleMatch } },
+  { $group: { _id: null, total: { $sum: '$totalMoney' }, count: { $sum: 1 } } },
+]);
+
     const gmv = salesAgg[0]?.total || 0;
     const txCount = salesAgg[0]?.count || 0;
 
     // 3. Graph Data
     const graphData = await Transaction.aggregate([
-      { $match: { type: 'SALE', timestamp: { $gte: startDate } } },
+      { $match: { type: 'SALE', timestamp: { $gte: startDate }, ...validSaleMatch } },
+
       {
         $group: {
           _id: { $dateToString: { format: '%Y-%m-%d', date: '$timestamp' } },
@@ -85,7 +119,8 @@ export const getAllUsers = async (req: Request, res: Response) => {
     const usersWithStats = await Promise.all(
       users.map(async (u) => {
         const salesAgg = await Transaction.aggregate([
-          { $match: { user: u._id, type: 'SALE' } },
+          { $match: { user: u._id, type: 'SALE', ...validSaleMatch } },
+
           { $group: { _id: null, total: { $sum: '$totalMoney' } } },
         ]);
         return {
@@ -126,12 +161,13 @@ export const getUserDeepDive = async (req: Request, res: Response) => {
 
     // ✅ include staff sales too
     const recentSales = await Transaction.find({
-      user: { $in: allUserIds },
-      type: 'SALE',
-      isUndone: false
-    })
-      .sort({ timestamp: -1 })
-      .limit(100);
+  user: { $in: allUserIds },
+  type: 'SALE',
+  ...validSaleMatch,
+})
+  .sort({ timestamp: -1 })
+  .limit(100);
+
 
     // ✅ messages are on OWNER (your design)
     const owner = await User.findById(ownerId);
