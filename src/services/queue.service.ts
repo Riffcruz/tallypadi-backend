@@ -80,10 +80,20 @@ export const queueOutboundBulk = async (phoneNumber: string, message: string, jo
 // ============================================================
 export type OutboundButton = { id: string; title: string };
 
+// src/services/queue.service.ts
+
+function safeJobId(id: string) {
+  // BullMQ custom id cannot contain ":" (and avoid other weird chars too)
+  return String(id || '')
+    .replace(/[:\s]/g, '_')        // replace colon + spaces
+    .replace(/[^\w.-]/g, '_')      // keep only [a-zA-Z0-9_ . -]
+    .slice(0, 240);                // keep it short
+}
+
 export const queueOutboundButtons = async (
   phoneNumber: string,
   bodyText: string,
-  buttons: OutboundButton[],
+  buttons: { id: string; title: string }[],
   jobId?: string
 ) => {
   const safeButtons = (buttons || [])
@@ -94,13 +104,12 @@ export const queueOutboundButtons = async (
     }))
     .filter((b) => b.id && b.title);
 
+  const finalJobId = safeJobId(jobId || `btn_${phoneNumber}_${Date.now()}`);
+
   await replyQueue.add(
     'send-buttons',
-    {
-      phoneNumber,
-      bodyText: String(bodyText || '').slice(0, 1024),
-      buttons: safeButtons,
-    },
-    { jobId: jobId || `btn:${phoneNumber}:${Date.now()}` }
+    { phoneNumber, bodyText: String(bodyText || '').slice(0, 1024), buttons: safeButtons },
+    { jobId: finalJobId }
   );
 };
+
