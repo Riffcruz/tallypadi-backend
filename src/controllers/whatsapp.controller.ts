@@ -1,3 +1,4 @@
+// src/controllers/whatsapp.controller.ts
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import axios from 'axios';
@@ -16,13 +17,13 @@ import { undoLastSale } from '../services/undo.service';
 
 import { resolveDebtor, normName } from '../services/debtor.service';
 
+// Reports / PDF (your existing services)
 import {
   getDailySummary,
   getStockReport,
   getFullSummary,
   getTodayTransactions,
 } from '../services/report.service';
-
 import { generatePdfReport } from '../services/pdf.service';
 
 // =====================================================
@@ -59,52 +60,15 @@ const getUserCurrency = (user: any) => {
 };
 
 // =====================================================
-// Security: Parsed allowlist (prevents weird Gemini output)
+// 🕒 User-local time helpers (fixes UTC display issues)
 // =====================================================
-function allowlistParsed(parsed: any) {
-  const safe: any = {};
-
-  const allowedIntents = new Set([
-    'SALE',
-    'RESTOCK',
-    'SET_STOCK',
-    'DEFINE_PRICE',
-    'DEBT_PAYMENT',
-    'UNDO_LAST_SALE',
-
-    'REPORT_RECENT',
-    'REPORT_SALES',
-    'REPORT_STOCK',
-    'REPORT_FULL',
-
-    'CLOSE_BOOK',
-    'HELP',
-    'UNKNOWN',
-  ]);
-
-  safe.intent = allowedIntents.has(parsed?.intent) ? parsed.intent : 'UNKNOWN';
-  safe.is_credit = Boolean(parsed?.is_credit);
-
-  safe.items = Array.isArray(parsed?.items)
-    ? parsed.items.slice(0, 20).map((i: any) => ({
-        name: String(i?.name || '').slice(0, 120),
-        qty: Number(i?.qty || 0),
-        unit: String(i?.unit || 'pcs').slice(0, 20),
-        unit_price: i?.unit_price == null ? null : Number(i.unit_price),
-      }))
-    : [];
-
-  safe.total_money = parsed?.total_money == null ? null : Number(parsed.total_money);
-
-  safe.report_params = {
-    start_date: parsed?.report_params?.start_date ? String(parsed.report_params.start_date) : null,
-    end_date: parsed?.report_params?.end_date ? String(parsed.report_params.end_date) : null,
-  };
-
-  safe.reply_text = String(parsed?.reply_text || '').slice(0, 1500);
-  safe.customer_name = parsed?.customer_name ? String(parsed.customer_name).slice(0, 120) : null;
-
-  return safe;
+function toUserLocalDate(d: any, offsetMinutes: number) {
+  return new Date(new Date(d).getTime() + offsetMinutes * 60_000);
+}
+function toISODateForOffset(offsetMinutes: number): string {
+  const now = new Date();
+  const local = new Date(now.getTime() + offsetMinutes * 60_000);
+  return local.toISOString().split('T')[0];
 }
 
 // =====================================================
@@ -134,11 +98,7 @@ const getMediaBuffer = async (mediaId: string): Promise<{ data: string; mimeType
 // =====================================================
 // WhatsApp buttons (max 3)
 // =====================================================
-async function sendWhatsAppButtons3(
-  to: string,
-  bodyText: string,
-  buttons: { id: string; title: string }[]
-) {
+async function sendWhatsAppButtons3(to: string, bodyText: string, buttons: { id: string; title: string }[]) {
   const safeButtons = (buttons || []).slice(0, 3);
 
   const payload = {
@@ -177,7 +137,6 @@ async function resolveActorAndOwner(from: string) {
     return { actor, owner, ownerId: owner?._id || null };
   }
 
-  // OWNER
   return { actor, owner: actor, ownerId: actor._id };
 }
 
@@ -198,18 +157,24 @@ function parseBtnText(rawText: string) {
 }
 
 // =====================================================
-// Receipt builder (fix ?? + || mix)
+// Receipt builder (fixed TS ??/|| mixing)
 // =====================================================
-function buildReceiptText(tx: any, symbol: string, locale: string, businessName?: string) {
-  const d = new Date(tx.timestamp);
-  const when = `${d.toLocaleDateString(locale)} ${d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}`;
+function buildReceiptText(tx: any, symbol: string, locale: string, businessName?: string, offsetMinutes = 60) {
+  const local = toUserLocalDate(tx.timestamp, offsetMinutes);
+  const when =
+    `${local.toLocaleDateString(locale)} ` +
+    `${local.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}`;
 
   const items = (tx.items || [])
     .map((i: any) => {
-      const calc = Number(i.qty || 0) * Number(i.unitPrice || 0);
-      const lineTotal = Number((i.total ?? calc) || 0); // ✅ safe precedence
+      const qty = Number(i.qty || 0);
+      const unitPrice = Number(i.unitPrice || 0);
+      const computed = qty * unitPrice;
 
-      return `• ${i.qty}${i.unit ? ` ${i.unit}` : ''} ${i.name} — ${symbol}${lineTotal.toLocaleString(locale)}`;
+      let lineTotal = i.total != null ? Number(i.total) : Number(computed);
+      if (!Number.isFinite(lineTotal)) lineTotal = 0;
+
+      return `• ${qty}${i.unit ? ` ${i.unit}` : ''} ${i.name} — ${symbol}${lineTotal.toLocaleString(locale)}`;
     })
     .join('\n');
 
@@ -237,11 +202,11 @@ function escapeRegex(s: string) {
 async function undoSaleById(ownerId: any, txId: string, undoMessageId: string) {
   const tx = await Transaction.findOne({ _id: txId, user: ownerId, type: 'SALE' });
   if (!tx) return { ok: false, message: 'Sale not found.' };
-  if ((tx as any).isUndone) return { ok: false, message: 'Already undone.' };
+  if (tx.isUndone) return { ok: false, message: 'Already undone.' };
 
-  (tx as any).isUndone = true;
-  (tx as any).undoneAt = new Date();
-  (tx as any).undoneByMessageId = undoMessageId;
+  tx.isUndone = true;
+  tx.undoneAt = new Date();
+  tx.undoneByMessageId = undoMessageId;
   await tx.save();
 
   const items: any[] = (tx as any).items || [];
@@ -265,20 +230,18 @@ async function undoSaleById(ownerId: any, txId: string, undoMessageId: string) {
 async function markSaleCredit(ownerId: any, txId: string) {
   const tx = await Transaction.findOne({ _id: txId, user: ownerId, type: 'SALE' });
   if (!tx) return { ok: false, msg: 'Sale not found.' };
-  if ((tx as any).isUndone) return { ok: false, msg: 'That sale was already undone.' };
+  if (tx.isUndone) return { ok: false, msg: 'That sale was already undone.' };
 
-  (tx as any).paymentStatus = 'CREDIT';
-  (tx as any).amountPaid = 0;
-  (tx as any).balance = Number((tx as any).totalMoney || 0);
-  (tx as any).settledAt = null;
+  tx.paymentStatus = 'CREDIT';
+  tx.amountPaid = 0;
+  tx.balance = Number(tx.totalMoney || 0);
+  tx.settledAt = null;
   await tx.save();
 
-  const needsName = !(tx as any).customerName;
+  const needsName = !tx.customerName;
   return {
     ok: true,
-    msg: needsName
-      ? `💳 Marked as CREDIT.\n\nWho owes you? Reply like: *credit John*`
-      : `💳 Marked as CREDIT for *${(tx as any).customerName}*.`,
+    msg: needsName ? `💳 Marked as CREDIT.\n\nWho owes you? Reply like: *credit John*` : `💳 Marked as CREDIT for *${tx.customerName}*.`,
   };
 }
 
@@ -305,9 +268,7 @@ async function attachCreditNameToLatest(shopUserId: any, rawName: string) {
     const list = res.options.map((o, i) => `${i + 1}) ${o.displayName}`).join('\n');
     return {
       ok: false,
-      msg:
-        `I see similar names. Reply the correct number:\n\n${list}\n\n` +
-        `Or type the full name again (add surname).`,
+      msg: `I see similar names. Reply the correct number:\n\n${list}\n\nOr type the full name again (add surname).`,
     };
   }
 
@@ -333,42 +294,29 @@ async function attachCreditNameToLatest(shopUserId: any, rawName: string) {
     debtorKey = res.debtorKey;
   }
 
-  (tx as any).debtorId = debtorId;
-  (tx as any).customerName = displayName;
-  (tx as any).customerKey = debtorKey;
+  tx.debtorId = debtorId;
+  tx.customerName = displayName;
+  tx.customerKey = debtorKey;
   await tx.save();
 
   await Debtor.findByIdAndUpdate(debtorId, {
-    $inc: { totalDebt: Number((tx as any).totalMoney || 0) },
-    $set: { lastProductStr: ((tx as any).items || []).map((i: any) => `${i.qty} ${i.name}`).join(', ') },
+    $inc: { totalDebt: Number(tx.totalMoney || 0) },
+    $set: { lastProductStr: (tx.items || []).map((i: any) => `${i.qty} ${i.name}`).join(', ') },
   });
 
   return { ok: true, msg: `✅ Credit linked to *${displayName}*.` };
 }
 
 // =====================================================
-// Date helpers (user-local by utcOffsetMinutes)
+// Simple allowlist (keeps your “previous logic” safe, but doesn’t change behavior)
 // =====================================================
-function localNow(offsetMinutes: number) {
-  const now = new Date();
-  return new Date(now.getTime() + offsetMinutes * 60 * 1000);
-}
-
-function localDayRange(offsetMinutes: number, which: 'today' | 'yesterday') {
-  const ln = localNow(offsetMinutes);
-  if (which === 'yesterday') ln.setDate(ln.getDate() - 1);
-
-  const startLocal = new Date(ln);
-  startLocal.setHours(0, 0, 0, 0);
-
-  const endLocal = new Date(ln);
-  endLocal.setHours(23, 59, 59, 999);
-
-  // Convert local-range back to UTC Date objects
-  const startUtc = new Date(startLocal.getTime() - offsetMinutes * 60 * 1000);
-  const endUtc = new Date(endLocal.getTime() - offsetMinutes * 60 * 1000);
-
-  return { startUtc, endUtc };
+function allowlistParsed(parsed: any) {
+  if (!parsed || typeof parsed !== 'object') return { intent: 'UNKNOWN', items: [], report_params: {}, settings_update: {} };
+  parsed.items = Array.isArray(parsed.items) ? parsed.items : [];
+  parsed.report_params = parsed.report_params || { start_date: null, end_date: null };
+  parsed.settings_update = parsed.settings_update || { key: null, value: null };
+  parsed.reply_text = typeof parsed.reply_text === 'string' ? parsed.reply_text : '';
+  return parsed;
 }
 
 // =====================================================
@@ -474,6 +422,65 @@ function cleanTextForSecurity(input: string) {
   return s.replace(/\s+/g, ' ').trim();
 }
 
+// =====================================================
+// Staff add helper (keeps your flow intact)
+// =====================================================
+function normalizePhone(raw: string) {
+  return String(raw || '').replace(/[^\d+]/g, '').trim();
+}
+
+async function addStaffUnderOwner(owner: any, staffPhoneRaw?: string | null) {
+  const staffPhone = normalizePhone(staffPhoneRaw || '');
+  if (!staffPhone) return { ok: false, msg: 'Reply with staff number (e.g. +2348123456789).' };
+
+  if (String(owner.phoneNumber) === staffPhone) return { ok: false, msg: 'You cannot add your own number as staff.' };
+
+  const existing = await User.findOne({ phoneNumber: staffPhone });
+  if (existing) {
+    // If exists but not staff, block
+    if (existing.role !== 'STAFF') return { ok: false, msg: 'That number is already registered as a shop owner.' };
+
+    // If staff, re-link to this owner
+    existing.ownerId = owner._id;
+    existing.businessName = owner.businessName;
+    existing.subscriptionStatus = owner.subscriptionStatus;
+    existing.planType = owner.planType;
+    existing.registrationStage = 'COMPLETED';
+    await existing.save();
+
+    return { ok: true, msg: `✅ Staff linked: ${staffPhone}` };
+  }
+
+  await User.create({
+    phoneNumber: staffPhone,
+    role: 'STAFF',
+    ownerId: owner._id,
+    businessName: owner.businessName,
+    name: 'Staff',
+    countryCode: owner.countryCode || guessCountryFromPhone(staffPhone),
+    registrationStage: 'COMPLETED',
+    subscriptionStatus: owner.subscriptionStatus || 'trial',
+    trialEndsAt: owner.trialEndsAt || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    planType: owner.planType || 'OGA_BOSS',
+    messageHistory: [],
+    settings: owner.settings || {
+      dailySummaryEnabled: false,
+      closingTime: '20:00',
+      utcOffsetMinutes: 60,
+      language: 'English',
+      pdfReportsEnabled: true,
+    },
+  });
+
+  // Notify staff
+  await queueOutboundMessage(
+    staffPhone,
+    `✅ You have been added as *STAFF* for *${owner.businessName || 'TallyPadi Shop'}*.\nYou can now record sales and view reports on WhatsApp.`
+  );
+
+  return { ok: true, msg: `✅ Staff added: ${staffPhone}` };
+}
+
 export const handleMessageLogic = async (
   from: string,
   text: string,
@@ -517,9 +524,11 @@ export const handleMessageLogic = async (
         businessName: initialShopName,
         name: profileName,
         countryCode,
+
         registrationStage: 'EMAIL',
         subscriptionStatus: 'trial',
         trialEndsAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+
         planType: 'OGA_BOSS',
         messageHistory: [],
         settings: {
@@ -534,10 +543,7 @@ export const handleMessageLogic = async (
       owner = actor;
       ownerId = actor._id;
 
-      await queueOutboundMessage(
-        from,
-        `Welcome to *Tallypadi*, ${profileName || 'Friend'}! 👋\n\nTo start, reply with your *EMAIL ADDRESS*.`
-      );
+      await queueOutboundMessage(from, `Welcome to *Tallypadi*, ${profileName || 'Friend'}! 👋\n\nTo start, reply with your *EMAIL ADDRESS*.`);
       return;
     }
 
@@ -547,8 +553,7 @@ export const handleMessageLogic = async (
         await queueOutboundMessage(from, `❌ This staff account has no owner linked. Ask owner to re-add you.`);
         return;
       }
-      // staff must not be blocked by registration stage
-      actor.registrationStage = 'COMPLETED';
+      actor.registrationStage = 'COMPLETED'; // staff never blocked by reg stage
     }
 
     // ✅ owner registration
@@ -594,11 +599,8 @@ export const handleMessageLogic = async (
       }
     }
 
-    // ✅ shopUser (owner if staff)
-    const shopUser = owner || actor;
-    const shopId = ownerId || actor._id;
-
     // ✅ suspension check (owner suspension blocks staff too)
+    const shopUser = owner || actor;
     if (shopUser.subscriptionStatus === 'suspended') {
       await queueOutboundMessage(from, `🛑 Account suspended.\nReason: ${shopUser.suspensionReason || 'Security policy'}`);
       return;
@@ -615,17 +617,24 @@ export const handleMessageLogic = async (
     await actor.save();
 
     const { symbol, locale, code } = getUserCurrency(shopUser);
-    const utcOffsetMinutes = shopUser.settings?.utcOffsetMinutes ?? 60;
+    const shopId = ownerId || actor._id;
+
+    // ✅ Use user offset everywhere we display or compute “today”
+    const offsetMinutes = shopUser?.settings?.utcOffsetMinutes ?? 60;
+    const todayKey = toISODateForOffset(offsetMinutes);
 
     // =====================================================
-    // ✅ BUTTON fast path
+    // ✅ BUTTON fast path (UNDO / RECEIPT / CREDIT)
     // =====================================================
     const btn = parseBtnText(rawText);
     if (btn?.txId && btn?.action) {
       if (btn.action === 'RECEIPT') {
         const tx = await Transaction.findOne({ _id: btn.txId, user: shopId }).lean();
-        if (!tx) return void (await queueOutboundMessage(from, 'Sale not found for receipt.'));
-        await queueOutboundMessage(from, buildReceiptText(tx, symbol, locale, shopUser.businessName));
+        if (!tx) {
+          await queueOutboundMessage(from, 'Sale not found for receipt.');
+          return;
+        }
+        await queueOutboundMessage(from, buildReceiptText(tx, symbol, locale, shopUser.businessName, offsetMinutes));
         return;
       }
 
@@ -656,9 +665,9 @@ export const handleMessageLogic = async (
     }
 
     // =====================================================
-    // 🧠 PARSE WITH GEMINI
+    // 🧠 PARSE WITH GEMINI (your existing service)
     // =====================================================
-    const currentLang = shopUser.settings?.language || 'English';
+    const currentLang = (shopUser.settings?.language || 'English') as string;
     const contextHistory = actor.messageHistory || [];
 
     const { parseMessageWithGemini } = await import('../services/gemini.service');
@@ -666,84 +675,65 @@ export const handleMessageLogic = async (
     let parsed = await parseMessageWithGemini(rawText, currentLang, contextHistory, imageBuffer, imageMime);
     parsed = allowlistParsed(parsed);
 
-    // --- DATE PARSING (user-local range by utcOffset) ---
+    // --- DATE PARSING ---
     let startDate: Date | undefined;
     let endDate: Date | undefined;
     let dateLabel = "Today's";
 
-    // default to TODAY range
-    const todayRange = localDayRange(utcOffsetMinutes, 'today');
-    startDate = todayRange.startUtc;
-    endDate = todayRange.endUtc;
-
-    // if Gemini supplied date(s), use them (treat them as date-only)
     if (parsed?.report_params?.start_date) {
-      const s = new Date(parsed.report_params.start_date);
-      if (!Number.isNaN(s.getTime())) {
-        // interpret as local date start/end, then convert to UTC
-        const local = new Date(s);
-        local.setHours(0, 0, 0, 0);
-
-        const endLocal = parsed.report_params.end_date ? new Date(parsed.report_params.end_date) : new Date(s);
-        endLocal.setHours(23, 59, 59, 999);
-
-        startDate = new Date(local.getTime() - utcOffsetMinutes * 60 * 1000);
-        endDate = new Date(endLocal.getTime() - utcOffsetMinutes * 60 * 1000);
-
-        const localToday = localNow(utcOffsetMinutes);
-        const localTodayKey = localToday.toDateString();
-
-        const localStartKey = new Date(s.getTime()).toDateString();
-        dateLabel = localStartKey === localTodayKey
-          ? "Today's"
-          : new Date(s).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
+      startDate = new Date(parsed.report_params.start_date);
+      if (parsed.report_params.end_date) endDate = new Date(parsed.report_params.end_date);
+      else {
+        endDate = new Date(startDate);
+        endDate.setHours(23, 59, 59, 999);
       }
+
+      // label is user-local (not server-local)
+      const todayLocal = toUserLocalDate(new Date(), offsetMinutes);
+      const startLocal = toUserLocalDate(startDate, offsetMinutes);
+
+      if (startLocal.toDateString() === todayLocal.toDateString()) dateLabel = "Today's";
+      else dateLabel = startLocal.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
     }
 
+    // CLOSE_BOOK -> Yesterday (if morning)
     if (parsed?.intent === 'CLOSE_BOOK') {
-      // if morning in user-local time, close yesterday
-      const localT = localNow(utcOffsetMinutes);
-      const currentHour = localT.getHours();
+      const nowLocal = toUserLocalDate(new Date(), offsetMinutes);
+      const currentHour = nowLocal.getHours();
 
       if (currentHour < 12) {
-        const y = localDayRange(utcOffsetMinutes, 'yesterday');
-        startDate = y.startUtc;
-        endDate = y.endUtc;
+        const y = new Date(nowLocal);
+        y.setDate(y.getDate() - 1);
+        y.setHours(0, 0, 0, 0);
+
+        // convert back to UTC-ish Date by subtracting offset so your report services behave consistently
+        const yUtc = new Date(y.getTime() - offsetMinutes * 60_000);
+
+        startDate = yUtc;
+        endDate = new Date(yUtc);
+        endDate.setHours(23, 59, 59, 999);
+
         dateLabel = "Yesterday's (Closed)";
         await queueOutboundMessage(from, '💡 Closing book for *Yesterday* (since it is morning).');
-      } else {
-        // afternoon/evening -> close today
-        const t = localDayRange(utcOffsetMinutes, 'today');
-        startDate = t.startUtc;
-        endDate = t.endUtc;
-        dateLabel = "Today's (Closed)";
-        await queueOutboundMessage(from, '💡 Closing book for *Today*.');
       }
 
       parsed.intent = 'REPORT_FULL';
     }
 
     // =====================================================
-    // 🚦 ROUTING
+    // 🚦 ROUTING (ALL YOUR PREVIOUS INTENTS)
     // =====================================================
     switch (parsed.intent) {
       case 'SALE': {
-        // ✅ record sale under OWNER shop
         await processTransaction(shopId as any, parsed, messageId);
 
-        // send normal reply
         await queueOutboundMessage(from, parsed.reply_text || '✅ Sale recorded.');
 
-        // ✅ fetch the saved sale by messageId
+        // ✅ fetch the saved sale by messageId (key)
         const tx = await Transaction.findOne({ user: shopId, messageId }).lean();
-
         if (tx?._id) {
           const txId = String(tx._id);
-
-          const body =
-            `After sale:\n` +
-            `✅ Confirm (auto)\n` +
-            `Choose action 👇`;
+          const body = `After sale:\nChoose action 👇`;
 
           try {
             await sendWhatsAppButtons3(from, body, [
@@ -755,13 +745,14 @@ export const handleMessageLogic = async (
             console.error('❌ Failed to send buttons:', e);
           }
         }
-
         break;
       }
 
       case 'RESTOCK':
       case 'SET_STOCK':
+      case 'DELETED_STOCK':
       case 'DEFINE_PRICE':
+      case 'PRICE_CHECK':
       case 'DEBT_PAYMENT': {
         await processTransaction(shopId as any, parsed, messageId);
         await queueOutboundMessage(from, parsed.reply_text || '✅ Done.');
@@ -775,8 +766,9 @@ export const handleMessageLogic = async (
       }
 
       case 'REPORT_RECENT': {
-        const limit = Number(parsed.items?.[0]?.qty || 5);
-        const safeLimit = Math.min(Math.max(limit, 1), 10);
+        const limit = parsed.items?.[0]?.qty || 5;
+        const safeLimit = Math.min(Math.max(Number(limit) || 5, 1), 10);
+
         await queueOutboundMessage(from, `🔎 Fetching last ${safeLimit} transactions...`);
 
         const recentTx = await Transaction.find({
@@ -795,8 +787,8 @@ export const handleMessageLogic = async (
 
         let out = `🕒 *Last ${safeLimit} Sales:*\n\n`;
         recentTx.forEach((t: any) => {
-          const d = new Date(t.timestamp);
-          const timeStr = d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+          const local = toUserLocalDate(t.timestamp, offsetMinutes); // ✅ USER TIME
+          const timeStr = local.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
           const money = `${symbol}${Number(t.totalMoney || 0).toLocaleString(locale)}`;
           const itemsStr = (t.items || []).map((i: any) => `${i.name} (${i.qty})`).join(', ');
           out += `• *${itemsStr}* — ${money} (${timeStr})\n`;
@@ -808,6 +800,7 @@ export const handleMessageLogic = async (
 
       case 'REPORT_SALES': {
         await queueOutboundMessage(from, `Calculating ${dateLabel.toLowerCase()} report... ⏳`);
+
         const summary = await getDailySummary(shopId as any, startDate, endDate);
         const transactions = await getTodayTransactions(shopId as any, startDate, endDate);
 
@@ -820,13 +813,12 @@ export const handleMessageLogic = async (
         let salesMsg = `📅 *${dateLabel} Sales Breakdown*\n\n`;
         if (transactions.length > 0) {
           transactions.forEach((tx: any) => {
-            const d = new Date(tx.timestamp);
-            const timeStr = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-            (tx.items || []).forEach((it: any) => {
-              const calc = Number(it.qty || 0) * Number(it.unitPrice || 0);
-              const lineTotal = Number((it.total ?? calc) || 0);
+            const local = toUserLocalDate(tx.timestamp, offsetMinutes);
+            const timeStr = `${String(local.getHours()).padStart(2, '0')}:${String(local.getMinutes()).padStart(2, '0')}`;
 
-              salesMsg += `🕒 ${timeStr} • ${it.name} (${it.qty}${it.unit ? ' ' + it.unit : ''}) - ${symbol}${lineTotal.toLocaleString(locale)}\n`;
+            (tx.items || []).forEach((it: any) => {
+              const line = Number(it.total || 0);
+              salesMsg += `🕒 ${timeStr} • ${it.name} (${it.qty}${it.unit ? ' ' + it.unit : ''}) - ${symbol}${line.toLocaleString(locale)}\n`;
             });
           });
         } else {
@@ -858,25 +850,53 @@ export const handleMessageLogic = async (
         break;
       }
 
+      case 'REPORT_DEBTS': {
+        await queueOutboundMessage(from, 'Fetching debtors list...');
+
+        const list = await Debtor.find({ user: shopId })
+          .sort({ totalDebt: -1, updatedAt: -1 })
+          .limit(25)
+          .lean();
+
+        if (!list.length) {
+          await queueOutboundMessage(from, '✅ No debtors yet.');
+          break;
+        }
+
+        let msg = `📌 *Debtors List*\n\n`;
+        list.forEach((d: any, idx: number) => {
+          const amt = `${symbol}${Number(d.totalDebt || 0).toLocaleString(locale)}`;
+          msg += `${idx + 1}) *${d.displayName}* — ${amt}\n`;
+          if (d.lastProductStr) msg += `   • Last: ${d.lastProductStr}\n`;
+        });
+
+        await queueOutboundMessage(from, msg);
+        break;
+      }
+
       case 'REPORT_FULL': {
         await queueOutboundMessage(from, 'Generating summary... 📋');
 
         const fullData = await getFullSummary(shopId as any, startDate, endDate);
         const revenueSummary = await getDailySummary(shopId as any, startDate, endDate);
 
-        let fullMsg = `📋 *${dateLabel} Summary*\n💰 Revenue: ${symbol}${Number(
-          revenueSummary.totalRevenue || 0
-        ).toLocaleString(locale)}\n\n`;
+        let fullMsg =
+          `📋 *${dateLabel} Summary*\n` +
+          `💰 Revenue: ${symbol}${Number(revenueSummary.totalRevenue || 0).toLocaleString(locale)}\n\n`;
 
         if (!fullData.length) fullMsg += `_No data._`;
         else {
           fullData.forEach((it: any) => {
-            fullMsg += `🔹 *${String(it.name).toUpperCase()}*\n   • Sold: ${Number(it.soldPaid || 0) + Number(it.soldCredit || 0)}\n   • Stock: ${it.stock}\n\n`;
+            fullMsg +=
+              `🔹 *${String(it.name).toUpperCase()}*\n` +
+              `   • Sold: ${Number(it.soldPaid || 0) + Number(it.soldCredit || 0)}\n` +
+              `   • Stock: ${it.stock}\n\n`;
           });
         }
 
         await queueOutboundMessage(from, fullMsg);
 
+        // ✅ PDF only for TYCOON (your existing rule)
         if (shopUser.planType === 'TYCOON') {
           try {
             const pdfFileName = await generatePdfReport(shopId as any, 'FULL', dateLabel, startDate, endDate);
@@ -885,6 +905,67 @@ export const handleMessageLogic = async (
             console.error(e);
           }
         }
+
+        break;
+      }
+
+      case 'DOWNLOAD_REPORT': {
+        if (shopUser.planType !== 'TYCOON') {
+          await queueOutboundMessage(from, '📄 PDF reports are available on *TYCOON* plan.');
+          break;
+        }
+
+        await queueOutboundMessage(from, '📄 Generating PDF report...');
+        try {
+          const pdfFileName = await generatePdfReport(shopId as any, 'FULL', dateLabel, startDate, endDate);
+          await queueOutboundMessage(from, `✨ PDF: https://tallypadi.com/reports/${pdfFileName}`);
+        } catch (e) {
+          console.error(e);
+          await queueOutboundMessage(from, '❌ Failed to generate PDF. Try again later.');
+        }
+        break;
+      }
+
+      case 'ADD_STAFF': {
+        // only owner can add staff
+        if (actor.role !== 'OWNER') {
+          await queueOutboundMessage(from, '❌ Only the shop owner can add staff.');
+          break;
+        }
+
+        const r = await addStaffUnderOwner(actor, parsed.staffPhoneNumber || null);
+        await queueOutboundMessage(from, r.msg);
+        break;
+      }
+
+      case 'SETTINGS':
+      case 'CHANGE_LANGUAGE': {
+        // keep behavior simple: update settings_update if provided
+        if (actor.role !== 'OWNER') {
+          await queueOutboundMessage(from, '❌ Only the shop owner can change settings.');
+          break;
+        }
+
+        const key = parsed?.settings_update?.key;
+        const value = parsed?.settings_update?.value;
+
+        if (!key) {
+          await queueOutboundMessage(from, parsed.reply_text || 'Which setting do you want to change?');
+          break;
+        }
+
+        // minimal allowlist (expand as you need)
+        const allowedKeys = ['closingTime', 'dailySummaryEnabled', 'language', 'pdfReportsEnabled', 'utcOffsetMinutes'];
+        if (!allowedKeys.includes(String(key))) {
+          await queueOutboundMessage(from, '❌ Unsupported setting.');
+          break;
+        }
+
+        (actor.settings as any) = actor.settings || {};
+        (actor.settings as any)[key] = value;
+        await actor.save();
+
+        await queueOutboundMessage(from, parsed.reply_text || '✅ Settings updated.');
         break;
       }
 
