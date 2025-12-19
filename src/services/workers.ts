@@ -9,33 +9,28 @@ import { sendWhatsAppText, sendWhatsAppButtons } from './whatsapp.service';
 //  - job.name === 'send-text'
 //  - job.name === 'send-buttons' ✅
 // ============================================================
+
+
 export const replyWorker = new Worker(
   'outbound-replies',
   async (job) => {
-    const name = job.name;
+    console.log('📌 Reply job:', job.name, job.data?.phoneNumber);
 
-    // ✅ TEXT
-    if (name === 'send-text') {
-      const { phoneNumber, message } = job.data as { phoneNumber: string; message: string };
-      console.log(`💬 Reply(TEXT) -> ${phoneNumber}`);
+    if (job.name === 'send-text') {
+      const { phoneNumber, message } = job.data;
       await sendWhatsAppText(phoneNumber, message);
       return;
     }
 
-    // ✅ BUTTONS
-    if (name === 'send-buttons') {
-      const { phoneNumber, bodyText, buttons } = job.data as {
-        phoneNumber: string;
-        bodyText: string;
-        buttons: { id: string; title: string }[];
-      };
-
-      console.log(`💬 Reply(BUTTONS) -> ${phoneNumber}`);
+    if (job.name === 'send-buttons') {
+      const { phoneNumber, bodyText, buttons } = job.data;
       await sendWhatsAppButtons(phoneNumber, bodyText, buttons);
       return;
     }
+    console.log('📌 Reply job:', job.name, job.data?.phoneNumber);
 
-    console.log(`⚠️ Unknown reply job: ${name}`);
+
+    console.log(`⚠️ Unknown reply job name: ${job.name}`);
   },
   {
     connection,
@@ -44,6 +39,7 @@ export const replyWorker = new Worker(
     lockDuration: 60_000,
   }
 );
+
 
 replyWorker.on('completed', (job) => console.log(`✅ Reply sent: ${job.name} -> ${job.data.phoneNumber}`));
 replyWorker.on('failed', (job, err) =>
