@@ -101,6 +101,20 @@ const getGreeting = () => {
 };
 
 const clamp = (n: number, a: number, b: number) => Math.min(b, Math.max(a, n));
+const isUnknownItemTx = (t: any) => {
+  // if your backend sends item string (like TransactionRow.item)
+  const item = String(t?.item ?? '').trim().toLowerCase();
+
+  // hide empty / unknown / null-like placeholders
+  return (
+    !item ||
+    item === 'unknown_item' ||
+    item === 'unknown' ||
+    item === 'item' ||
+    item === 'null' ||
+    item === 'undefined'
+  );
+};
 
 // --- STAT CARD (modern) ---
 function StatCard({
@@ -316,7 +330,15 @@ export default function DashboardPage() {
     return new Date().toLocaleDateString(userLocale, { weekday: 'long', day: 'numeric', month: 'long' });
   }, [userLocale]);
 
-  const topTransactions = data?.transactions?.slice(0, 6) || [];
+const filteredTransactions = useMemo(() => {
+  const txs = data?.transactions || [];
+
+  // ✅ hide undone + hide unknown-item sales/rows
+  return txs.filter((t: any) => !t?.isUndone && !isUnknownItemTx(t));
+}, [data?.transactions]);
+
+const topTransactions = filteredTransactions.slice(0, 6);
+
   const chartData = data?.salesChart || [];
 
   const sendChat = async (text: string) => {
