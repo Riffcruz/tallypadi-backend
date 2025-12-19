@@ -772,13 +772,14 @@ export const handleMessageLogic = async (
         await queueOutboundMessage(from, `🔎 Fetching last ${safeLimit} transactions...`);
 
         const recentTx = await Transaction.find({
-          user: shopId,
-          type: 'SALE',
-          isUndone: { $ne: true },
-        })
-          .sort({ timestamp: -1 })
-          .limit(safeLimit)
-          .lean();
+            user: ownerId,                 // or shopId
+            type: 'SALE',
+            $or: [{ isUndone: { $exists: false } }, { isUndone: false }],
+          })
+            .sort({ createdAt: -1 })
+            .limit(safeLimit)
+            .lean();
+
 
         if (!recentTx.length) {
           await queueOutboundMessage(from, 'No sales found.');
