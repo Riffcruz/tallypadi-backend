@@ -119,6 +119,27 @@ function suffixReportScope(includeUndone: boolean) {
   return includeUndone ? ' (including undone)' : ' (excluding undone)';
 }
 
+async function getSalesCountForPeriod(
+  shopId: any,
+  startUtc: Date,
+  endUtc: Date,
+  includeUndone: boolean
+) {
+  const q: any = {
+    user: shopId,
+    type: 'SALE',
+    timestamp: { $gte: startUtc, $lte: endUtc },
+  };
+
+  // default: exclude undone
+  if (!includeUndone) {
+    q.$or = [{ isUndone: { $exists: false } }, { isUndone: false }];
+  }
+
+  return Transaction.countDocuments(q);
+}
+
+
 // =====================================================
 // 🧾 TYCOON PDF helper (match report type)
 // =====================================================
@@ -1003,71 +1024,69 @@ export const handleMessageLogic = async (
         break;
       }
 
-      case 'REPORT_SALES': {
-        await queueOutboundMessage(from, `Calculating ${dateLabel.toLowerCase()} report... ⏳`);
+     case 'REPORT_SALES': {
+  await queueOutboundMessage(from, `Calculating ${String(dateLabel || "Today's").toLowerCase()} report... ⏳`);
 
-        // ✅ Use same services as your old version (correct math)
-        const summary = await getDailySummary(shopId as any, startUtc, endUtc);
-        let transactions = await getTodayTransactions(shopId as any, startUtc, endUtc);
+  // ✅ 1) Get the correct UTC range for the user's requested period
+  const { startUtc, endUtc } = getUtcRangeForUser(offsetMinutes, startDate, endDate);
 
-        // ✅ enforce undone filter even if report.service doesn't
-        if (!includeUndoneRequestedByOwner) {
-          transactions = (transactions || []).filter((t: any) => !t?.isUndone);
-        }
+  // ✅ 2) Pull transactions (so we can decide empty BEFORE doing anything else)
+  const salesTx = await Transaction.find({
+    user: shopId,
+    type: 'SALE',
+    timestamp: { $gte: startUtc, $lte: endUtc },
+    ...buildUndoneFilter(includeUndoneRequestedByOwner),
+  })
+    .sort({ timestamp: 1 })
+    .lean();
 
-        // If summary includes undone internally, recompute revenue from filtered tx to match message + pdf expectation
-        const safeRevenue = (transactions || []).reduce((sum: number, t: any) => sum + Number(t.totalMoney || 0), 0);
+  // ✅ 3) If empty: do NOT generate PDF, do NOT continue
+  if (!salesTx.length) {
+    await queueOutboundMessage(from, `📭 No sales found for *${dateLabel}*.`);
+    break;
+  }
 
-        const totalFormatted = Number(safeRevenue || 0).toLocaleString(locale, {
-          style: 'currency',
-          currency: code,
-          maximumFractionDigits: 0,
-        });
+  // ✅ 4) Use same service as old version for correct totals/summary
+  // (Make sure your report.service expects (userId, startDate, endDate) dates)
+  const summary = await getDailySummary(shopId as any, startUtc, endUtc);
 
-        let salesMsg = `📅 *${dateLabel} Sales Breakdown*${suffixReportScope(includeUndoneRequestedByOwner)}\n\n`;
+  const totalFormatted = Number(summary?.totalRevenue || 0).toLocaleString(locale, {
+    style: 'currency',
+    currency: code,
+    maximumFractionDigits: 0,
+  });
 
-        if (transactions.length > 0) {
-          transactions.forEach((t: any) => {
-            const local = toUserLocalDate(t.timestamp, offsetMinutes);
-            const hh = String(local.getHours()).padStart(2, '0');
-            const mm = String(local.getMinutes()).padStart(2, '0');
-            const timeStr = `${hh}:${mm}`;
+  // ✅ 5) Build breakdown message (from salesTx — consistent with undone filter)
+  let salesMsg = `📅 *${dateLabel} Sales Breakdown*${suffixReportScope(includeUndoneRequestedByOwner)}\n\n`;
 
-            const dateStr = dateLabel === "Today's" ? "" : `(${local.getDate()}/${local.getMonth() + 1}) `;
+  salesTx.forEach((tx: any) => {
+    const local = toUserLocalDate(tx.timestamp, offsetMinutes);
+    const timeStr = `${String(local.getHours()).padStart(2, '0')}:${String(local.getMinutes()).padStart(2, '0')}`;
+    const undoneTag = tx.isUndone ? ' ⚠️UNDONE' : '';
 
-            (t.items || []).forEach((item: any) => {
-              const itemTotalNum =
-                item.total != null
-                  ? Number(item.total)
-                  : Number(item.qty || 0) * Number(item.unitPrice || 0);
+    (tx.items || []).forEach((it: any) => {
+      const qty = Number(it.qty || 0);
+      const unitPrice = Number(it.unitPrice || 0);
 
-              const itemTotal = Number(itemTotalNum || 0).toLocaleString(locale, { maximumFractionDigits: 0 });
-              const unitLabel = item.unit ? ` ${item.unit}` : '';
+      // ✅ fallback for line total (fixes many “0”/wrong totals)
+      const line =
+        it.total != null && Number.isFinite(Number(it.total))
+          ? Number(it.total)
+          : qty * unitPrice;
 
-              salesMsg += `🕒 ${dateStr}${timeStr} • ${item.name} (${item.qty}${unitLabel}) - ${symbol}${itemTotal}\n`;
-            });
-          });
-        } else {
-          salesMsg += `_No sales recorded for ${dateLabel.toLowerCase()}._\n`;
-        }
+      salesMsg += `🕒 ${timeStr} • ${it.name} (${qty}${it.unit ? ' ' + it.unit : ''}) - ${symbol}${Number(line || 0).toLocaleString(locale)}${undoneTag}\n`;
+    });
+  });
 
-        salesMsg += `\n💰 *Total Money:* ${totalFormatted}\n`;
-        salesMsg += `📉 *Total Transactions:* ${transactions.length}`;
+  salesMsg += `\n💰 *Total Money:* ${totalFormatted}`;
+  salesMsg += `\n📉 *Total Transactions:* ${salesTx.length}`;
 
-        await queueOutboundMessage(from, salesMsg);
+  await queueOutboundMessage(from, salesMsg);
 
-        // ✅ PDF type = SALES (matches your older approach)
-        await sendPdfIfTycoon({
-          user: shopUser,
-          from,
-          type: 'SALES',
-          dateLabel: `${dateLabel}${suffixReportScope(includeUndoneRequestedByOwner)}`,
-          startUtc,
-          endUtc,
-        });
+  // ✅ IMPORTANT: no PDF auto-send here unless you explicitly want it
+  break;
+}
 
-        break;
-      }
 
       case 'REPORT_STOCK': {
         await queueOutboundMessage(from, 'Checking inventory... 📦');
@@ -1109,7 +1128,8 @@ export const handleMessageLogic = async (
         break;
       }
 
-      case 'REPORT_FULL': {
+
+        case 'REPORT_FULL': {
         await queueOutboundMessage(from, 'Generating comprehensive report... 📋');
 
         const fullData = await getFullSummary(shopId as any, startUtc, endUtc);
@@ -1148,6 +1168,8 @@ export const handleMessageLogic = async (
 
         await queueOutboundMessage(from, fullMsg);
 
+        
+
         // ✅ PDF type = FULL (matches old summary report)
         await sendPdfIfTycoon({
           user: shopUser,
@@ -1160,32 +1182,50 @@ export const handleMessageLogic = async (
 
         break;
       }
+      
 
-      case 'DOWNLOAD_REPORT': {
-        if (!isTycoon(shopUser)) {
-          await queueOutboundMessage(from, '📄 PDF reports are available on *TYCOON* plan.');
-          break;
-        }
+case 'DOWNLOAD_REPORT': {
+  if (shopUser.planType !== 'TYCOON') {
+    await queueOutboundMessage(from, '📄 PDF reports are available on *TYCOON* plan.');
+    break;
+  }
 
-        await queueOutboundMessage(from, '📄 Generating PDF report...');
+  const { startUtc, endUtc } = getUtcRangeForUser(offsetMinutes, startDate, endDate);
 
-        // Decide PDF type from user message (same vibe as your old code)
-        const msgLower = rawText.toLowerCase();
-        let pdfType: 'SALES' | 'FULL' = 'FULL';
-        if (msgLower.includes('sales')) pdfType = 'SALES';
-        if (msgLower.includes('breakdown')) pdfType = 'SALES';
+  // ✅ check first
+  const count = await getSalesCountForPeriod(
+    shopId,
+    startUtc,
+    endUtc,
+    includeUndoneRequestedByOwner
+  );
 
-        await sendPdfIfTycoon({
-          user: shopUser,
-          from,
-          type: pdfType,
-          dateLabel: `${dateLabel}${suffixReportScope(includeUndoneRequestedByOwner)}`,
-          startUtc,
-          endUtc,
-        });
+  if (count === 0) {
+    await queueOutboundMessage(from, `📭 No sales found for *${dateLabel}*. No PDF generated.`);
+    break;
+  }
 
-        break;
-      }
+  // ✅ only now we tell them we’re generating
+  await queueOutboundMessage(from, '📄 Generating PDF report...');
+
+  try {
+    const pdfFileName = await generatePdfReport(
+      shopId as any,
+      'FULL',
+      dateLabel,
+      startUtc,
+      endUtc
+    );
+
+    await queueOutboundMessage(from, `✨ PDF: https://tallypadi.com/reports/${pdfFileName}`);
+  } catch (e) {
+    console.error(e);
+    await queueOutboundMessage(from, '❌ Failed to generate PDF. Try again later.');
+  }
+
+  break;
+}
+
 
       case 'ADD_STAFF': {
         if (actor.role !== 'OWNER') {
