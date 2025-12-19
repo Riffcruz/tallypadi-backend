@@ -24,30 +24,28 @@ import { env } from './config/env';
 
 // --- CONTROLLERS ---
 import { getDashboardData } from './controllers/dashboard.controller';
-import { 
-  getInventory, 
-  getInventoryItem, 
-  addInventoryItem, 
-  updateInventoryItem 
+import {
+  getInventory,
+  getInventoryItem,
+  addInventoryItem,
+  updateInventoryItem
 } from './controllers/inventory.controller';
 import { updateSettings } from './controllers/settings.controller';
 import { getGlobalSettings } from './controllers/admin.controller';
 import { getStaff, addStaff, removeStaff } from './controllers/staff.controller';
 
-// Sales Controller (Strictly Sales & Reports)
-import { 
-  recordSale, 
-  getSalesHistory, 
-  generateSalesReport 
+import {
+  recordSale,
+  getSalesHistory,
+  generateSalesReport
 } from './controllers/sales.controller';
 
-// ✅ Debtor Controller (Debtor CRUD + Payments)
-import { 
-  getDebtors, 
-  createDebtor, 
-  updateDebtor, 
+import {
+  getDebtors,
+  createDebtor,
+  updateDebtor,
   deleteDebtor,
-  recordDebtPayment 
+  recordDebtPayment
 } from './controllers/debtor.controller';
 
 dotenv.config();
@@ -74,38 +72,40 @@ app.use((req, _res, next) => {
 });
 
 // ==========================================
-// 🔐 WEBHOOK SIGNATURE VERIFICATION
+// 🔐 WEBHOOK SIGNATURE VERIFICATION (SAFE HEX COMPARE)
 // ==========================================
 const verifySignature = (req: any, _res: any, buf: Buffer) => {
   if (!req.originalUrl.startsWith('/api/whatsapp') || req.method !== 'POST') return;
 
-  const signature = req.headers['x-hub-signature-256'] as string | undefined;
+  const header = req.headers['x-hub-signature-256'];
   const appSecret = process.env.WHATSAPP_APP_SECRET;
 
-  if (process.env.NODE_ENV === 'production') {
-    if (!signature || !appSecret) {
-      req.signatureValid = false;
-      return;
-    }
+  req.signatureValid = false;
 
-    const expected = 'sha256=' + crypto.createHmac('sha256', appSecret).update(buf).digest('hex');
-
-    try {
-      const sigBuf = Buffer.from(signature);
-      const expBuf = Buffer.from(expected);
-      req.signatureValid = sigBuf.length === expBuf.length && crypto.timingSafeEqual(sigBuf, expBuf);
-    } catch {
-      req.signatureValid = false;
-    }
-  } else {
+  // ✅ Optional dev bypass
+  if (process.env.NODE_ENV !== 'production') {
     req.signatureValid = true;
+    return;
+  }
+
+  if (!appSecret || typeof header !== 'string') return;
+
+  const givenHex = header.startsWith('sha256=') ? header.slice(7) : header;
+  const expectedHex = crypto.createHmac('sha256', appSecret).update(buf).digest('hex');
+
+  try {
+    const a = Buffer.from(givenHex, 'hex');
+    const b = Buffer.from(expectedHex, 'hex');
+    req.signatureValid = a.length === b.length && crypto.timingSafeEqual(a, b);
+  } catch {
+    req.signatureValid = false;
   }
 };
 
 app.use(express.json({ limit: '1mb', verify: verifySignature }));
 
 // ==========================================
-// 🚦 RATE LIMITER
+// 🚦 RATE LIMITERS
 // ==========================================
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -113,6 +113,67 @@ const apiLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: 'Too many requests from this IP, please try again after 15 minutes',
+});
+
+// ✅ Login: IP limiter
+const loginLimiterIp = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: 'Too many login attempts from this IP. Try again in 15 minutes.',
+});
+
+const normalizeStr = (v: any) => String(v || '').trim().toLowerCase();
+const normalizePhoneDigits = (v: any) => String(v || '').replace(/[^\d]/g, '');
+
+const looksLikeEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+
+// ✅ Login: identifier limiter (email OR phone)
+const loginLimiterIdentity = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: 'Too many login attempts for this account. Try again in 15 minutes.',
+  keyGenerator: (req: any) => {
+    // ✅ YOUR FRONTEND/BACKEND USES "identifier"
+    const identifier = normalizeStr(req.body?.identifier || req.body?.email || req.body?.phoneNumber);
+
+    if (!identifier) return `ip:${req.ip}`;
+
+    if (looksLikeEmail(identifier)) return `email:${identifier}`;
+    return `phone:${normalizePhoneDigits(identifier)}`;
+  },
+});
+
+// ✅ Separate EMAIL limiter (extra protection)
+const emailLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 6,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: 'Too many login attempts for this email. Try again in 15 minutes.',
+  keyGenerator: (req: any) => {
+    const identifier = normalizeStr(req.body?.identifier || req.body?.email);
+    if (identifier && looksLikeEmail(identifier)) return `email:${identifier}`;
+    return `ip:${req.ip}`;
+  },
+});
+
+// ✅ Separate PHONE limiter (extra protection)
+const phoneLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 6,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: 'Too many login attempts for this phone number. Try again in 15 minutes.',
+  keyGenerator: (req: any) => {
+    const identifier = normalizeStr(req.body?.identifier || req.body?.phoneNumber);
+    if (!identifier) return `ip:${req.ip}`;
+    if (looksLikeEmail(identifier)) return `ip:${req.ip}`; // not phone
+    return `phone:${normalizePhoneDigits(identifier)}`;
+  },
 });
 
 app.use('/api', (req, res, next) => {
@@ -152,10 +213,10 @@ app.use((req, _res, next) => {
 });
 
 // ==========================================
-// 🛡️ AUTH MIDDLEWARE
+// 🛡️ AUTH MIDDLEWARE (NO jwt.decode FALLBACK)
 // ==========================================
 const authRequired = (req: any, res: any, next: any) => {
-  const auth = req.headers.authorization || '';
+  const auth = String(req.headers.authorization || '');
   if (!auth.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
@@ -163,16 +224,20 @@ const authRequired = (req: any, res: any, next: any) => {
   const token = auth.slice(7);
   const secret = process.env.JWT_SECRET || (env as any).jwtSecret;
 
-  try {
-    const decoded: any = secret ? jwt.verify(token, secret) : jwt.decode(token);
-    const userId = decoded?.id || decoded?._id || decoded?.userId;
+  if (!secret) {
+    console.error('❌ JWT_SECRET missing (server misconfigured)');
+    return res.status(500).json({ error: 'Server misconfigured' });
+  }
 
+  try {
+    const decoded: any = jwt.verify(token, secret, { algorithms: ['HS256'] });
+    const userId = decoded?.id || decoded?._id || decoded?.userId;
     if (!userId) return res.status(401).json({ error: 'Invalid token' });
 
     req.user = { id: userId };
     return next();
-  } catch (e) {
-    return res.status(401).json({ error: 'Invalid token' });
+  } catch {
+    return res.status(401).json({ error: 'Invalid or expired token' });
   }
 };
 
@@ -181,7 +246,9 @@ const authRequired = (req: any, res: any, next: any) => {
 // ==========================================
 
 // --- AUTH & DASHBOARD ---
-app.post('/api/login', loginUser);
+// ✅ APPLY: IP + identity + email + phone limiters
+app.post('/api/login', loginLimiterIp, loginLimiterIdentity, emailLimiter, phoneLimiter, loginUser);
+
 app.get('/api/dashboard', authRequired, getDashboardData);
 
 // --- INVENTORY ---
@@ -195,18 +262,18 @@ app.post('/api/sales', authRequired, recordSale);
 app.get('/api/sales', authRequired, getSalesHistory);
 app.get('/api/sales/report', authRequired, generateSalesReport);
 
-// --- DEBTORS (Identity Management) ---
+// --- DEBTORS ---
 app.get('/api/debtors', authRequired, getDebtors);
 app.post('/api/debtors', authRequired, createDebtor);
 app.put('/api/debtors/:id', authRequired, updateDebtor);
 app.delete('/api/debtors/:id', authRequired, deleteDebtor);
 
-// --- DEBTOR PAYMENTS (Financial) ---
+// --- DEBTOR PAYMENTS ---
 app.post('/api/debtors/payment', authRequired, recordDebtPayment);
 
 // --- SETTINGS & STAFF ---
 app.put('/api/settings', authRequired, updateSettings);
-app.get('/api/admin/settings', getGlobalSettings); // Public config
+app.get('/api/admin/settings', getGlobalSettings); // Public config (OK if intentional)
 app.get('/api/staff', authRequired, getStaff);
 app.post('/api/staff', authRequired, addStaff);
 app.delete('/api/staff/:id', authRequired, removeStaff);
@@ -215,6 +282,7 @@ app.delete('/api/staff/:id', authRequired, removeStaff);
 app.use('/api/payment', paymentRouter);
 app.use('/api/health', healthRouter);
 
+// --- ADMIN (SITE OWNER) ---
 app.use(
   '/api/admin',
   (req, _res, next) => {
@@ -241,7 +309,8 @@ mongoose
   .then(() => {
     console.log('✅ MongoDB Connected (Secured)');
     startScheduler();
-
     app.listen(env.port, () => console.log(`🚀 Server running on port ${env.port}`));
   })
   .catch((err) => console.error('❌ DB Connection Error:', err));
+
+export default app;
