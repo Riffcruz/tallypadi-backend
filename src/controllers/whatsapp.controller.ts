@@ -177,7 +177,8 @@ function injectionScore(raw: string) {
   const patterns: RegExp[] = [
     /\bignore\b/, /\bdisregard\b/, /\bbypass\b/, /\boverride\b/, /\bdeveloper\s+message\b/,
     /\bsystem\s+prompt\b/, /\bprevious\s+instructions\b/, /\bact\s+as\b/, /\byou\s+must\b/,
-    /\breturn\s+raw\b/, /\btool\b/, /\bfunction\s+call\b/, /\bjson\s+schema\b/
+    /\breturn\s+raw\b/, /\btool\b/, /\bfunction\s+call\b/, /\bjson\s+schema\b/,
+    /\bjailbreak\b/
   ];
 
   let hits = 0;
