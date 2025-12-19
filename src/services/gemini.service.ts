@@ -36,10 +36,14 @@ export interface ParsedResult {
     start_date: string | null;
     end_date: string | null;
     category_filter?: string | null;
+
+    // ✅ NEW
+    include_undone?: boolean; // default false unless user asks
   };
   settings_update: { key: string | null; value: string | boolean | null };
   reply_text: string;
 }
+
 
 const SAFE_MAX = 1000;
 
@@ -176,9 +180,6 @@ function safeParsedResult(p: any): ParsedResult {
     if (!hasRealItem) needsClarification = true;
   }
 
-  // ✅ IMPORTANT: do NOT hardcode ₦ here.
-  // If a symbol exists in user's input, Gemini may return it in total_money string; but we only have number.
-  // So safest: no symbol in fallback.
   let fallback = 'Noted.';
   if (intent === 'SALE') {
     const total = parseMoney(p?.total_money);
@@ -187,6 +188,10 @@ function safeParsedResult(p: any): ParsedResult {
     if (total != null) fallback += ` Total: ${total.toLocaleString()}`;
     if (needsClarification) fallback = 'I got the quantity, but what exactly did you sell? (e.g., "rice", "indomie")';
   }
+
+  // ✅ include_undone safe normalization:
+  const includeUndoneRaw = p?.report_params?.include_undone;
+  const include_undone = typeof includeUndoneRaw === 'boolean' ? includeUndoneRaw : false;
 
   return {
     intent,
@@ -202,6 +207,7 @@ function safeParsedResult(p: any): ParsedResult {
       start_date: p?.report_params?.start_date || null,
       end_date: p?.report_params?.end_date || null,
       category_filter: p?.report_params?.category_filter || null,
+      include_undone, // ✅ NEW (defaults false)
     },
     settings_update: {
       key: p?.settings_update?.key || null,
@@ -210,6 +216,7 @@ function safeParsedResult(p: any): ParsedResult {
     reply_text: typeof p?.reply_text === 'string' && p.reply_text.length > 2 ? p.reply_text.trim() : fallback,
   };
 }
+
 
 // ==========================================
 // ⚡ REFINED LOCAL PARSER (SMARTER REGEX)
@@ -335,12 +342,40 @@ Slang:
 - Credit: "on credit", "pay later", "gbese" → is_credit: true, intent usually SALE.
 - Debt payment: "Emeka paid 20k", "Paid my debt", "Clear debt" → intent: DEBT_PAYMENT, customer_name required.
 
-*** 5. REPLY TEXT RULE (IMPORTANT) ***
+*** 5. REPORTS (IMPORTANT) ***
+When the user asks for any report:
+- Use intent: REPORT_SALES, REPORT_FULL, REPORT_STOCK, REPORT_RECENT, REPORT_DEBTS, DOWNLOAD_REPORT, CLOSE_BOOK.
+- Put dates (if any) inside report_params.start_date and report_params.end_date (ISO date/time strings or ISO dates).
+- If the user does NOT specify a date, keep both null.
+
+✅ **UNDONE / REVERSED / VOIDED SALES IN REPORTS**
+Some sales can be "undone" (reversed/voided/cancelled). By default, reports should EXCLUDE undone sales.
+
+Set:
+  report_params.include_undone = false
+unless the user clearly asks to include them.
+
+Set:
+  report_params.include_undone = true
+ONLY if the user asks things like:
+- "show undone history"
+- "include undone sales"
+- "include reversed transactions"
+- "with cancelled/voided sales"
+- "show me undone reports"
+- "show full history including undone"
+
+If the user says:
+- "exclude undone"
+- "without undone"
+then include_undone MUST be false.
+
+*** 6. REPLY TEXT RULE (IMPORTANT) ***
 In reply_text:
 - If the user typed a currency symbol, you may repeat that same symbol.
 - If the user did NOT type a currency symbol, do NOT force ₦. You can say "Total: 50,000" without any symbol.
 
-*** 6. JSON OUTPUT SCHEMA (STRICT) ***
+*** 7. JSON OUTPUT SCHEMA (STRICT) ***
 Return ONLY this JSON object. No markdown. No extra keys.
 
 {
@@ -361,9 +396,17 @@ Return ONLY this JSON object. No markdown. No extra keys.
   "discount_amount": number | null,
   "confidence_score": number,
   "needs_clarification": boolean,
+  "report_params": {
+    "start_date": "string | null",
+    "end_date": "string | null",
+    "category_filter": "string | null",
+    "include_undone": boolean
+  },
+  "settings_update": { "key": "string | null", "value": "string | boolean | null" },
   "reply_text": "string"
 }
 `;
+
 
 // ==========================================
 // ⏱️ TIMEOUT UTILS
