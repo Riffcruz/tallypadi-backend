@@ -2,6 +2,34 @@ import { Request, Response } from 'express';
 import { Transaction } from '../models/transaction.model';
 import { Inventory } from '../models/inventory.model';
 import { User } from '../models/user.model';
+const UNKNOWN_ITEM_NAMES = ['unknown_item', 'unknown', 'item', 'null', 'undefined'];
+
+const unknownSaleQuery = {
+  $or: [
+    { items: { $exists: false } },
+    { items: { $size: 0 } },
+    {
+      items: {
+        $elemMatch: {
+          $or: [
+            { name: { $exists: false } },
+            { name: null },
+            { name: '' },
+            { name: { $in: UNKNOWN_ITEM_NAMES } },
+          ],
+        },
+      },
+    },
+  ],
+};
+
+const validSaleMatch = {
+  $and: [
+    { $or: [{ isUndone: { $exists: false } }, { isUndone: false }] },
+    { $nor: [unknownSaleQuery] },
+  ],
+};
+
 
 // --- HELPER: Map Country Code to Currency & Locale ---
 const getCurrencyConfig = (countryCode: string = 'NG') => {
@@ -50,9 +78,13 @@ export const getDashboardData = async (req: Request | any, res: Response) => {
     }));
 
     // 3) Recent transactions
-    const transactionDocs = await Transaction.find({ user: user._id, isUndone: false })
-      .sort({ timestamp: -1 })
-      .limit(10);
+    const transactionDocs = await Transaction.find({
+  user: user._id,
+  ...validSaleMatch, // ✅ excludes undone + unknown
+})
+  .sort({ timestamp: -1 })
+  .limit(10);
+
 
     const transactions = transactionDocs.map(t => ({
       id: t._id,
@@ -64,16 +96,18 @@ export const getDashboardData = async (req: Request | any, res: Response) => {
     }));
 
     // 4) Stats
-    const totalRevenueAgg = await Transaction.aggregate([
-      { $match: { user: user._id, type: 'SALE' } },
-      { $group: { _id: null, total: { $sum: '$totalMoney' } } },
-    ]);
+  const totalRevenueAgg = await Transaction.aggregate([
+  { $match: { user: user._id, type: 'SALE', ...validSaleMatch } },
+  { $group: { _id: null, total: { $sum: '$totalMoney' } } },
+]);
+
 
     const totalItemsSoldAgg = await Transaction.aggregate([
-      { $match: { user: user._id, type: 'SALE' } },
-      { $unwind: '$items' },
-      { $group: { _id: null, total: { $sum: '$items.qty' } } },
-    ]);
+  { $match: { user: user._id, type: 'SALE', ...validSaleMatch } },
+  { $unwind: '$items' },
+  { $group: { _id: null, total: { $sum: '$items.qty' } } },
+]);
+
 
     // 5) Sales chart
     const start = new Date();
@@ -81,20 +115,22 @@ export const getDashboardData = async (req: Request | any, res: Response) => {
     start.setHours(0, 0, 0, 0);
 
     const salesByDow = await Transaction.aggregate([
-      {
-        $match: {
-          user: user._id,
-          type: 'SALE',
-          timestamp: { $gte: start },
-        },
-      },
-      {
-        $group: {
-          _id: { $dayOfWeek: '$timestamp' },
-          sales: { $sum: '$totalMoney' },
-        },
-      },
-    ]);
+  {
+    $match: {
+      user: user._id,
+      type: 'SALE',
+      timestamp: { $gte: start },
+      ...validSaleMatch, // ✅ excludes undone + unknown
+    },
+  },
+  {
+    $group: {
+      _id: { $dayOfWeek: '$timestamp' },
+      sales: { $sum: '$totalMoney' },
+    },
+  },
+]);
+
 
     const map: Record<string, number> = { Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0, Sat: 0, Sun: 0 };
     const dowToName: Record<number, keyof typeof map> = {
