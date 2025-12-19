@@ -57,12 +57,10 @@ export const messageQueue = new Queue('incoming-messages', {
 
 // ✅ Text replies (interactive/fast)
 export const queueOutboundMessage = async (phoneNumber: string, message: string, jobId?: string) => {
-  await replyQueue.add(
-    'send-text',
-    { phoneNumber, message },
-    { jobId: jobId || `reply:${phoneNumber}:${Date.now()}` }
-  );
+  const finalJobId = safeJobId(jobId || `reply_${phoneNumber}_${Date.now()}`);
+  await replyQueue.add('send-text', { phoneNumber, message }, { jobId: finalJobId });
 };
+
 
 // ✅ Bulk/summaries/pdf links (slower)
 export const queueOutboundBulk = async (phoneNumber: string, message: string, jobId?: string) => {
