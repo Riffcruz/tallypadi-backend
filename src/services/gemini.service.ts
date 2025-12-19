@@ -45,26 +45,15 @@ const SAFE_MAX = 1000;
 
 // ==========================================
 // 🧾 STRIP WHATSAPP EXPORT LINE
-// Fixes things like:
-// [[18/12/2025, 22:54:44]] SnowTech: I sold 2 bags of rice for 100k
-// [18/12/2025, 22:54:44] SnowTech: ...
-// 18/12/2025, 22:54 - SnowTech: ...
 // ==========================================
 const stripWhatsAppExportLine = (input: string): string => {
   if (!input) return '';
 
   let s = input.trim();
 
-  // [[...]] -> [...]
   s = s.replace(/^\[\[([^\]]+)\]\]\s*/, '[$1] ');
-
-  // remove leading timestamp blocks like: [dd/mm/yyyy, hh:mm(:ss)] ...
   s = s.replace(/^\[\s*\d{1,2}\/\d{1,2}\/\d{2,4},\s*\d{1,2}:\d{2}(?::\d{2})?\s*\]\s*/i, '');
-
-  // remove leading export style: dd/mm/yyyy, hh:mm - ...
   s = s.replace(/^\d{1,2}\/\d{1,2}\/\d{2,4},\s*\d{1,2}:\d{2}\s*-\s*/i, '');
-
-  // remove leading "Name:" (including "~H:")
   s = s.replace(/^~?[a-z0-9 _.-]{1,40}:\s*/i, '');
 
   return s.trim();
@@ -78,7 +67,6 @@ const sanitizeInput = (input: string): string => {
   let s = input.slice(0, SAFE_MAX);
   s = s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, ' ');
   s = s.replace(/<\/?[^>]+>/g, ' ');
-  // Remove injection attempts but keep natural language
   s = s.replace(/\b(system prompt|ignore previous|developer mode)\b/gi, ' ');
   return s.replace(/\s+/g, ' ').trim();
 };
@@ -105,7 +93,23 @@ const normalizePhone = (raw: any): string | undefined => {
 };
 
 // ==========================================
-// 💰 MONEY PARSER
+// 💱 CURRENCY SYMBOL DETECTOR (for reply_text only)
+// If user typed a symbol, we echo it back.
+// If none, return '' so reply_text does NOT force ₦ (prevents mismatch with USD reports).
+// ==========================================
+const detectMoneySymbol = (raw: any): string => {
+  const s = String(raw || '');
+  if (s.includes('$')) return '$';
+  if (s.includes('£')) return '£';
+  if (s.includes('€')) return '€';
+  if (s.includes('₵')) return '₵';
+  if (s.includes('₦')) return '₦';
+  return '';
+};
+
+// ==========================================
+// 💰 MONEY PARSER (number only)
+// Supports 100k, 1.5m, ₦20,000, $50 etc.
 // ==========================================
 const parseMoney = (raw: any): number | null => {
   if (raw == null) return null;
@@ -130,16 +134,12 @@ const normalizeItemName = (name: string): string => {
   if (!name) return 'unknown_item';
   let n = sanitizeInput(name).toLowerCase();
 
-  // Strip filler words "of", "the", "please"
   n = n.replace(/\b(of|the|a|an|my|your|pls|please|abeg)\b/g, ' ');
-
-  // Strip container/unit words IF they appear in the name field
   n = n.replace(/\b(bags?|pcs?|pieces?|cartons?|packs?|sachets?|bottles?|rolls?)\b/g, ' ');
   n = n.replace(/\b(liters?|ltrs?|kg|gms?|grams?)\b/g, ' ');
 
   n = n.replace(/\s+/g, ' ').trim();
 
-  // Simple singularization (avoiding irregulars)
   if (n.endsWith('s') && !n.endsWith('ss') && n.length > 3) {
     const protectedWords = ['rice', 'beans', 'gas', 'flour', 'semovita', 'wheat', 'indomie', 'coke'];
     if (!protectedWords.includes(n)) n = n.slice(0, -1);
@@ -170,20 +170,21 @@ function safeParsedResult(p: any): ParsedResult {
     category: typeof it?.category === 'string' ? sanitizeInput(it.category) : null
   }));
 
-  // Force clarification if SALE but item missing/unknown
   let needsClarification = Boolean(p?.needs_clarification);
   if (intent === 'SALE') {
     const hasRealItem = normalizedItems.some(i => i.qty > 0 && i.name && i.name !== 'unknown_item' && i.name !== 'item');
     if (!hasRealItem) needsClarification = true;
   }
 
-  // Smart fallback replies based on intent
+  // ✅ IMPORTANT: do NOT hardcode ₦ here.
+  // If a symbol exists in user's input, Gemini may return it in total_money string; but we only have number.
+  // So safest: no symbol in fallback.
   let fallback = 'Noted.';
   if (intent === 'SALE') {
     const total = parseMoney(p?.total_money);
     const i = normalizedItems[0];
-    fallback = i ? `✅ Recorded: ${i.qty} ${i.name}` : '✅ Sale recorded.';
-    if (total != null) fallback += ` for ₦${total.toLocaleString()}`;
+    fallback = i ? `✅ Recorded. Sold ${i.qty} ${i.name}.` : '✅ Sale recorded.';
+    if (total != null) fallback += ` Total: ${total.toLocaleString()}`;
     if (needsClarification) fallback = 'I got the quantity, but what exactly did you sell? (e.g., "rice", "indomie")';
   }
 
@@ -212,16 +213,16 @@ function safeParsedResult(p: any): ParsedResult {
 
 // ==========================================
 // ⚡ REFINED LOCAL PARSER (SMARTER REGEX)
+// NOTE: This is still used when Gemini is slow.
+// We also fixed it to NOT force ₦.
 // ==========================================
 function fallbackParse(message: string): ParsedResult | null {
   const raw = sanitizeInput(stripWhatsAppExportLine(message));
 
-  // 1️⃣ Skip if it's just a number (we need Gemini to use History for context)
   if (/^\d+$/.test(raw)) return null;
 
   const m = raw.toLowerCase();
 
-  // 1. HELP / MENU
   if (/\b(help|menu|commands|guide|options)\b/i.test(m)) {
     return safeParsedResult({
       intent: 'HELP',
@@ -229,23 +230,19 @@ function fallbackParse(message: string): ParsedResult | null {
     });
   }
 
-  // 2. UNDO
   if (/\b(undo|cancel last|mistake|delete last)\b/i.test(m)) {
     return safeParsedResult({ intent: 'UNDO_LAST_SALE', reply_text: '✅ Last transaction cancelled.' });
   }
 
-  // 3. DOWNLOAD
   if (/\b(download|pdf|export|send report)\b/i.test(m)) {
     return safeParsedResult({ intent: 'DOWNLOAD_REPORT', reply_text: '📄 Generating PDF report...' });
   }
 
-  // 4. DEBTS
   if (/\b(debtors?|owing|who owes|credit list)\b/i.test(m) && !/\b(paid|pay)\b/i.test(m)) {
     return safeParsedResult({ intent: 'REPORT_DEBTS', reply_text: 'Fetching debtors list...' });
   }
 
-  // 5. SMARTER SALE REGEX
-  // Handles: "I sold 3 bags of rice for 100k" OR "Sold 3 rice 100k"
+  // Handles: "I sold 3 bags of rice for 100k" OR "Sold 3 rice $50"
   const saleRegex =
     /(?:i|we)?\s*\b(?:sold|sell)\b\s+(\d+(?:\.\d+)?)\s*(bags?|pcs?|cartons?|liters?|kg)?\s*(?:of)?\s+([a-z0-9\s]+?)\s+(?:for|at|price)\s+([₦$€£₵]?\s*[\d,]+(?:k|m)?)\b/i;
 
@@ -255,7 +252,9 @@ function fallbackParse(message: string): ParsedResult | null {
     const qty = parseFloat(match[1]);
     const unitRaw = match[2] || 'pcs';
     const name = normalizeItemName(match[3]);
-    const price = parseMoney(match[4]);
+    const priceRaw = match[4];
+    const price = parseMoney(priceRaw);
+    const sym = detectMoneySymbol(priceRaw);
 
     const unit =
       unitRaw.toLowerCase().startsWith('bag') ? 'bag' :
@@ -277,7 +276,7 @@ function fallbackParse(message: string): ParsedResult | null {
         }],
         total_money: price,
         reply_text: price != null
-          ? `✅ Recorded. Sold ${qty} ${unit} of ${name} for ₦${price.toLocaleString()}.`
+          ? `✅ Recorded. Sold ${qty} ${unit} of ${name} for ${sym}${price.toLocaleString()}`.trim()
           : `✅ Recorded. Sold ${qty} ${unit} of ${name}.`
       });
     }
@@ -287,7 +286,7 @@ function fallbackParse(message: string): ParsedResult | null {
 }
 
 // ==========================================
-// 🧠 ULTIMATE SYSTEM PROMPT (COMBINED)
+// 🧠 SYSTEM PROMPT (UPDATED FOR MULTI-CURRENCY)
 // ==========================================
 const getSystemPrompt = (userLanguage: string, currentDate: string, history: string[]) => `
 You are **TallyPadi**, an intelligent business assistant.
@@ -296,34 +295,53 @@ User Language: ${userLanguage.toUpperCase()}
 
 *** STRICT LANGUAGE RULES ***
 1. If User Language is "ENGLISH": Use professional, standard English.
-   - ❌ Avoid: "My guy", "Abeg", "Wetin".
+   - ❌ Avoid slang: "My guy", "Abeg", "Wetin".
    - ✅ Use: "Recorded", "Please clarify".
-2. If User Language is "PIDGIN" or user speaks Pidgin: Use Nigerian Pidgin.
+2. If User Language is "PIDGIN": Use Nigerian Pidgin.
 
 *** CONVERSATION HISTORY (CONTEXT) ***
 ${history.map((msg, i) => `[User Turn ${i + 1}]: ${msg}`).join('\n')}
 
 *** 1. PARSING INTELLIGENCE (CRITICAL) ***
-You must extract the **Exact Item Name**, **Quantity**, **Unit**, and **Price**.
+Extract the **Exact Item Name**, **Quantity**, **Unit**, and **Money**.
 
-* "I sold 3 bags of rice for 100k"
-    * ❌ BAD: { name: "bags of rice", qty: 3, unit: "pcs" }
-    * ✅ GOOD: { name: "rice", qty: 3, unit: "bag", total_money: 100000 }
+Examples:
+- "I sold 3 bags of rice for 100k"
+  ✅ name: "rice", qty: 3, unit: "bag", total_money: 100000
 
-* "Sold 5 cartons of indomie"
-    * ✅ GOOD: { name: "indomie", qty: 5, unit: "carton" }
+- "Sold 5 cartons of indomie"
+  ✅ name: "indomie", qty: 5, unit: "carton"
 
 *** 2. CONTEXT AWARENESS ***
-* Clarification: If history shows "Sold rice" -> "How many?", and current input is "1", then Intent = SALE, Qty = 1.
-* Correction: If history shows "Sold 2 beans", and input is "No, it was rice", then update Item Name.
+- If history shows the bot asked for quantity and user replies "1", treat it as completing the previous SALE.
+- If history shows the bot asked "what item?" and user replies "rice", treat it as completing the previous SALE.
 
-*** 3. NIGERIAN MARKET RULES ***
-* Currency: "100k" = 100,000 | "1.5m" = 1,500,000 | "500 naira" = 500.
-* Credit: "On credit", "pay later", "gbese" → is_credit: true.
-* Debt Payment: "Emeka paid 20k", "Clear debt" → Intent: DEBT_PAYMENT.
+*** 3. MONEY + MULTI-CURRENCY RULES (VERY IMPORTANT) ***
+You must understand these currencies/symbols:
+- ₦ or NGN = Nigerian Naira
+- $ or USD = US Dollar
+- £ or GBP = British Pound
+- € or EUR = Euro
+- ₵ or GHS = Ghana Cedi
 
-*** 4. JSON OUTPUT SCHEMA (STRICT) ***
-Return ONLY this JSON object. No markdown.
+If user includes a currency symbol (₦ $ £ € ₵), treat the amount as that currency **but still output total_money as a NUMBER**.
+If user does NOT include a currency symbol/code, still output total_money as a NUMBER.
+
+Slang:
+- "100k" = 100,000
+- "1.5m" = 1,500,000
+
+*** 4. CREDIT / DEBT RULES ***
+- Credit: "on credit", "pay later", "gbese" → is_credit: true, intent usually SALE.
+- Debt payment: "Emeka paid 20k", "Paid my debt", "Clear debt" → intent: DEBT_PAYMENT, customer_name required.
+
+*** 5. REPLY TEXT RULE (IMPORTANT) ***
+In reply_text:
+- If the user typed a currency symbol, you may repeat that same symbol.
+- If the user did NOT type a currency symbol, do NOT force ₦. You can say "Total: 50,000" without any symbol.
+
+*** 6. JSON OUTPUT SCHEMA (STRICT) ***
+Return ONLY this JSON object. No markdown. No extra keys.
 
 {
   "intent": "SALE|RESTOCK|SET_STOCK|DELETED_STOCK|DEFINE_PRICE|PRICE_CHECK|REPORT_SALES|REPORT_STOCK|REPORT_FULL|REPORT_DEBTS|REPORT_RECENT|DEBT_PAYMENT|CLOSE_BOOK|ADD_STAFF|DOWNLOAD_REPORT|UNDO_LAST_SALE|SETTINGS|CHANGE_LANGUAGE|HELP|UNKNOWN",
@@ -381,7 +399,6 @@ export const parseMessageWithGemini = async (
   imageBuffer?: string,
   imageMimeType?: string
 ): Promise<ParsedResult> => {
-  // ✅ strip WhatsApp export noise FIRST, then sanitize
   const stripped = stripWhatsAppExportLine(message);
   const safeMessage = sanitizeInput(stripped);
 
@@ -411,7 +428,6 @@ export const parseMessageWithGemini = async (
     const result = await generateWithRetry(parts);
     const text = result.response.text();
 
-    // ✅ robust JSON extraction
     const cleanJson = extractJsonObject(text);
     return safeParsedResult(JSON.parse(cleanJson));
   } catch (error) {
