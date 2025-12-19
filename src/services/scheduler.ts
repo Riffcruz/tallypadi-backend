@@ -163,7 +163,7 @@ export function startScheduler() {
             nextBillingDate: { $lte: threeDaysFromNow, $gte: twoDaysFromNow },
           },
           {
-            subscriptionStatus: 'trial',
+            subscriptionStatus: { $in: ['trial'] },
             trialEndsAt: { $lte: threeDaysFromNow, $gte: twoDaysFromNow },
           },
         ],
@@ -184,8 +184,8 @@ export function startScheduler() {
     }
   });
 
-  // 3) PDF cleanup (daily 2am)
-  cron.schedule('0 2 * * *', async () => {
+  // 3) PDF cleanup (runs EVERY HOUR to catch expired files faster)
+  cron.schedule('0 * * * *', async () => {
     try {
       console.log('⏰ Cleaning up old PDF reports...');
       await cleanupPdfReports();

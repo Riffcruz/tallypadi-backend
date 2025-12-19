@@ -371,10 +371,17 @@ export const handleMessageLogic = async (
         await queueOutboundMessage(from, '❌ Invalid email format.');
         return;
       }
+
+      const existingUser = await User.findOne({ email: rawText });
+      if (existingUser) {
+        await queueOutboundMessage(from, '❌ This email is already registered. Please provide a different email address.');
+        return;
+      }
+
       user.email = rawText;
       user.registrationStage = 'PASSWORD';
       await user.save();
-      await queueOutboundMessage(from, `✅ Email Saved! Now reply with a *SECRET PASSWORD*.`);
+      await queueOutboundMessage(from, `✅ Email Saved! Now reply with a *SECRET PASSWORD (min 8 chars)*.`);
       return;
     }
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
-import { Crown, X, Calendar, Download, FileText, Share2, Loader2 } from 'lucide-react';
+import { Crown, X, Calendar, Download, FileText, Share2, Loader2, Trash2, MessageSquare, Send } from 'lucide-react';
 import Swal from 'sweetalert2';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -38,6 +38,14 @@ export default function UserDeepDiveModal({
   const [salesDate, setSalesDate] = useState({ start: '', end: '' });
   const [loadingDetails, setLoadingDetails] = useState(false);
 
+  // ✅ Individual message UI (like Broadcast)
+  const [target, setTarget] = useState<'user' | 'staff'>('user');
+  const [staffTarget, setStaffTarget] = useState<string>(''); // phone number
+  const [msg, setMsg] = useState('');
+  const [sending, setSending] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [clearing, setClearing] = useState(false);
+
   useEffect(() => {
     if (!user?.id) return;
 
@@ -50,6 +58,14 @@ export default function UserDeepDiveModal({
       .catch(() => Swal.fire('Error', 'Failed to load details', 'error'))
       .finally(() => setLoadingDetails(false));
   }, [user?.id, adminKey]);
+
+  // auto-set default staff target when staff loads
+  useEffect(() => {
+    const staff = details?.staff || [];
+    if (staff.length && !staffTarget) {
+      setStaffTarget(staff[0]?.phoneNumber || '');
+    }
+  }, [details?.staff, staffTarget]);
 
   const currencySymbol = useMemo(() => {
     const code = details?.profile?.countryCode || 'NG';
@@ -206,7 +222,94 @@ export default function UserDeepDiveModal({
     doc.save(`${fileName}.pdf`);
   };
 
-  // --- Loading state (mobile-friendly, not weird “checking”) ---
+  // ✅ Delete user + history
+  const handleDeleteUserAndHistory = async () => {
+    const res = await Swal.fire({
+      title: 'Delete User?',
+      text: 'This will delete the user AND their history (messages, sales, inventory, staff, etc). This cannot be undone.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Yes, Delete',
+      confirmButtonColor: '#dc2626',
+    });
+
+    if (!res.isConfirmed) return;
+
+    try {
+      setDeleting(true);
+      await onAction(user.id, 'delete_user', { deleteHistory: true });
+      Swal.fire('Deleted', 'User and history deleted successfully.', 'success');
+      onClose();
+    } catch (e) {
+      Swal.fire('Error', 'Failed to delete user', 'error');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  // ✅ Clear only history (keep user)
+  const handleClearHistoryOnly = async () => {
+    const res = await Swal.fire({
+      title: 'Clear History?',
+      text: 'This will delete user message history/recent logs. (User account stays.)',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Clear History',
+      confirmButtonColor: '#f59e0b',
+    });
+
+    if (!res.isConfirmed) return;
+
+    try {
+      setClearing(true);
+      await onAction(user.id, 'clear_history');
+      Swal.fire('Cleared', 'User history cleared.', 'success');
+      setDetails((prev: any) => ({ ...prev, lastMessages: [] }));
+    } catch (e) {
+      Swal.fire('Error', 'Failed to clear history', 'error');
+    } finally {
+      setClearing(false);
+    }
+  };
+
+  // ✅ Send message to individual (user or staff) — like broadcast
+  const sendIndividualMessage = async (directTo?: string) => {
+    const to =
+      directTo ||
+      (target === 'user'
+        ? (details?.profile?.phoneNumber || user?.phoneNumber || '')
+        : staffTarget);
+
+    const text = String(msg || '').trim();
+    if (!to) return Swal.fire('Error', 'No phone number found for target.', 'error');
+    if (!text) return;
+
+    const res = await Swal.fire({
+      title: 'Confirm Message',
+      text: `Send to: ${to}`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Send Now',
+    });
+
+    if (!res.isConfirmed) return;
+
+    try {
+      setSending(true);
+
+      // preferred (consistent with your admin actions)
+      await onAction(user.id, 'send_message', { to, message: text });
+
+      Swal.fire('Sent', 'Message queued', 'success');
+      setMsg('');
+    } catch (e) {
+      Swal.fire('Error', 'Message failed', 'error');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  // --- Loading state ---
   if (loadingDetails || !details) {
     return (
       <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
@@ -228,9 +331,8 @@ export default function UserDeepDiveModal({
 
   return (
     <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-0 sm:p-4 backdrop-blur-sm">
-      {/* Fullscreen on mobile, normal modal on desktop */}
       <div className="bg-slate-800 w-full sm:max-w-4xl h-[100dvh] sm:h-auto sm:max-h-[95dvh] rounded-none sm:rounded-2xl border border-slate-700 shadow-2xl flex flex-col overflow-hidden">
-        {/* Header (always visible) */}
+        {/* Header */}
         <div className="px-4 sm:px-6 py-4 border-b border-slate-700 flex justify-between items-start bg-slate-900/60 shrink-0">
           <div className="min-w-0">
             <h2 className="text-lg sm:text-2xl font-extrabold text-white flex items-center gap-2 truncate">
@@ -251,7 +353,7 @@ export default function UserDeepDiveModal({
           </button>
         </div>
 
-        {/* Tabs (scrollable on mobile) */}
+        {/* Tabs */}
         <div className="flex border-b border-slate-700 overflow-x-auto shrink-0 bg-slate-900/30">
           <button onClick={() => setView('info')} className={tabBtn('info')}>info</button>
           <button onClick={() => setView('inventory')} className={tabBtn('inventory')}>inventory</button>
@@ -259,7 +361,7 @@ export default function UserDeepDiveModal({
           <button onClick={() => setView('staff')} className={tabBtn('staff')}>staff</button>
         </div>
 
-        {/* Content (add bottom padding because mobile footer is fixed inside modal) */}
+        {/* Content */}
         <div className="p-4 sm:p-6 overflow-y-auto flex-1 pb-24 sm:pb-6">
           {/* INFO */}
           {view === 'info' && (
@@ -292,7 +394,7 @@ export default function UserDeepDiveModal({
                   </div>
                 </div>
 
-                {/* Desktop buttons (mobile uses footer so these can stay smaller) */}
+                {/* Desktop buttons */}
                 <div className="hidden sm:grid grid-cols-2 gap-2 mt-2">
                   <button
                     onClick={handlePlanChange}
@@ -316,24 +418,133 @@ export default function UserDeepDiveModal({
                     Unsuspend User
                   </button>
                 )}
+
+                {/* ✅ Danger Zone (Desktop) */}
+                <div className="hidden sm:block mt-3 pt-3 border-t border-slate-600/60 space-y-2">
+                  <h4 className="text-[11px] text-red-300 font-extrabold uppercase">Danger Zone</h4>
+
+                  <button
+                    disabled={clearing}
+                    onClick={handleClearHistoryOnly}
+                    className="w-full bg-amber-600/90 hover:bg-amber-600 text-white px-3 py-2 rounded-lg text-xs font-extrabold flex items-center justify-center gap-2 disabled:opacity-60"
+                  >
+                    {clearing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 size={14} />}
+                    Clear History Only
+                  </button>
+
+                  <button
+                    disabled={deleting}
+                    onClick={handleDeleteUserAndHistory}
+                    className="w-full bg-red-700 hover:bg-red-600 text-white px-3 py-2 rounded-lg text-xs font-extrabold flex items-center justify-center gap-2 disabled:opacity-60"
+                  >
+                    {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 size={14} />}
+                    Delete User + History
+                  </button>
+                </div>
               </div>
 
-              {/* Messages */}
-              <div className="p-4 bg-slate-700/30 rounded-xl border border-slate-600">
-                <h3 className="text-slate-400 text-xs uppercase font-extrabold mb-2">Last 5 Messages</h3>
-                <div className="space-y-2">
-                  {(details?.lastMessages || []).length ? (
-                    (details.lastMessages || []).map((msg: string, i: number) => (
-                      <div
-                        key={i}
-                        className="text-xs bg-slate-900 p-2 rounded-lg text-slate-200 border border-slate-700"
-                      >
-                        <p className="break-words whitespace-pre-wrap">“{msg}”</p>
+              {/* ✅ Individual Message (like Broadcast) + Last Messages */}
+              <div className="space-y-4">
+                <div className="p-4 bg-slate-700/30 rounded-xl border border-slate-600">
+                  <h3 className="text-slate-400 text-xs uppercase font-extrabold mb-3 flex items-center gap-2">
+                    <MessageSquare size={14} className="text-purple-300" /> Send Individual Message
+                  </h3>
+
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[10px] font-extrabold text-slate-400 uppercase mb-1">Target</label>
+                        <select
+                          className="w-full bg-slate-900 border border-slate-600 rounded-xl px-4 py-3 text-white focus:border-green-500 outline-none"
+                          value={target}
+                          onChange={(e) => setTarget(e.target.value as any)}
+                        >
+                          <option value="user">User (Main Number)</option>
+                          <option value="staff">Staff</option>
+                        </select>
                       </div>
-                    ))
-                  ) : (
-                    <p className="text-slate-500 text-xs">No history.</p>
-                  )}
+
+                      <div>
+                        <label className="block text-[10px] font-extrabold text-slate-400 uppercase mb-1">Recipient</label>
+                        {target === 'user' ? (
+                          <div className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white text-sm font-mono truncate">
+                            {details?.profile?.phoneNumber || '—'}
+                          </div>
+                        ) : (
+                          <select
+                            className="w-full bg-slate-900 border border-slate-600 rounded-xl px-4 py-3 text-white focus:border-green-500 outline-none"
+                            value={staffTarget}
+                            onChange={(e) => setStaffTarget(e.target.value)}
+                          >
+                            {(details?.staff || []).length ? (
+                              (details.staff || []).map((s: any) => (
+                                <option key={s._id} value={s.phoneNumber}>
+                                  {(s.name || 'Staff')} — {s.phoneNumber}
+                                </option>
+                              ))
+                            ) : (
+                              <option value="">No staff found</option>
+                            )}
+                          </select>
+                        )}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-extrabold text-slate-400 uppercase mb-1">Message</label>
+                      <textarea
+                        className="w-full h-28 bg-slate-900 border border-slate-600 rounded-xl p-4 text-white focus:border-green-500 outline-none resize-none"
+                        placeholder="Type message..."
+                        value={msg}
+                        onChange={(e) => setMsg(e.target.value)}
+                      />
+                    </div>
+
+                    <button
+                      disabled={sending || !msg.trim() || (target === 'staff' && !staffTarget)}
+                      onClick={() => sendIndividualMessage()}
+                      className="w-full bg-blue-600 hover:bg-blue-500 text-white font-extrabold py-4 rounded-xl shadow-lg shadow-blue-900/20 transition-all disabled:opacity-60 flex items-center justify-center gap-2"
+                    >
+                      {sending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send size={18} />}
+                      Send Message
+                    </button>
+                  </div>
+                </div>
+
+                {/* Last 5 Messages */}
+                <div className="p-4 bg-slate-700/30 rounded-xl border border-slate-600">
+                  <h3 className="text-slate-400 text-xs uppercase font-extrabold mb-2">Last 5 Messages</h3>
+                  <div className="space-y-2">
+                    {(details?.lastMessages || []).length ? (
+                      (details.lastMessages || []).map((m: string, i: number) => (
+                        <div
+                          key={i}
+                          className="text-xs bg-slate-900 p-2 rounded-lg text-slate-200 border border-slate-700"
+                        >
+                          <p className="break-words whitespace-pre-wrap">“{m}”</p>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-slate-500 text-xs">No history.</p>
+                    )}
+                  </div>
+
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      disabled={clearing}
+                      onClick={handleClearHistoryOnly}
+                      className="flex-1 bg-amber-600/90 hover:bg-amber-600 text-white px-3 py-2 rounded-lg text-xs font-extrabold disabled:opacity-60"
+                    >
+                      {clearing ? 'Clearing…' : 'Clear History'}
+                    </button>
+                    <button
+                      disabled={deleting}
+                      onClick={handleDeleteUserAndHistory}
+                      className="flex-1 bg-red-700 hover:bg-red-600 text-white px-3 py-2 rounded-lg text-xs font-extrabold disabled:opacity-60"
+                    >
+                      {deleting ? 'Deleting…' : 'Delete User'}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -342,7 +553,6 @@ export default function UserDeepDiveModal({
           {/* SALES */}
           {view === 'sales' && (
             <div className="space-y-4">
-              {/* Filters (nice on mobile) */}
               <div className="bg-slate-900 p-3 rounded-xl border border-slate-700">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <input
@@ -374,7 +584,6 @@ export default function UserDeepDiveModal({
                 </div>
               </div>
 
-              {/* Mobile cards */}
               <div className="sm:hidden space-y-3">
                 {getFilteredSales().length === 0 ? (
                   <div className="text-center text-slate-400 text-sm py-10 border border-slate-700 rounded-xl bg-slate-900">
@@ -419,7 +628,6 @@ export default function UserDeepDiveModal({
                 )}
               </div>
 
-              {/* Desktop table */}
               <div className="hidden sm:block bg-slate-900 rounded-xl overflow-hidden border border-slate-700 max-h-[60vh] overflow-y-auto">
                 <table className="w-full text-xs text-left text-slate-300">
                   <thead className="text-slate-400 bg-slate-800 sticky top-0">
@@ -512,7 +720,20 @@ export default function UserDeepDiveModal({
                       <p className="font-extrabold text-white truncate">{s.name || 'Staff'}</p>
                       <p className="text-xs text-slate-400 break-words">{s.phoneNumber}</p>
                     </div>
-                    <Share2 size={16} className="text-emerald-400 shrink-0" />
+
+                    {/* ✅ Send to staff (one-tap) */}
+                    <button
+                      onClick={() => {
+                        setTarget('staff');
+                        setStaffTarget(s.phoneNumber);
+                        setView('info'); // move to message panel
+                        Swal.fire('Selected', `Staff selected: ${s.name || 'Staff'}`, 'info');
+                      }}
+                      className="p-2 rounded-xl hover:bg-white/10 transition"
+                      title="Send message to staff"
+                    >
+                      <Share2 size={16} className="text-emerald-400 shrink-0" />
+                    </button>
                   </div>
                 ))
               )}
@@ -520,7 +741,7 @@ export default function UserDeepDiveModal({
           )}
         </div>
 
-        {/* ✅ MOBILE FOOTER ACTION BAR (always visible on small screens) */}
+        {/* ✅ MOBILE FOOTER ACTION BAR */}
         <div className="sm:hidden shrink-0 border-t border-slate-700 bg-slate-900/80 backdrop-blur-md px-4 py-3">
           {view === 'info' && (
             <div className="grid grid-cols-2 gap-2">
@@ -537,14 +758,21 @@ export default function UserDeepDiveModal({
                 <Calendar size={16} /> Set Expiry
               </button>
 
-              {details?.profile?.subscriptionStatus === 'suspended' && (
-                <button
-                  onClick={() => onAction(user.id, 'unsuspend')}
-                  className="col-span-2 bg-emerald-600 text-white py-3 rounded-xl text-sm font-extrabold"
-                >
-                  Unsuspend User
-                </button>
-              )}
+              {/* ✅ Mobile danger buttons */}
+              <button
+                disabled={clearing}
+                onClick={handleClearHistoryOnly}
+                className="bg-amber-600/90 text-white py-3 rounded-xl text-sm font-extrabold col-span-2 disabled:opacity-60"
+              >
+                {clearing ? 'Clearing…' : 'Clear History'}
+              </button>
+              <button
+                disabled={deleting}
+                onClick={handleDeleteUserAndHistory}
+                className="bg-red-700 text-white py-3 rounded-xl text-sm font-extrabold col-span-2 disabled:opacity-60"
+              >
+                {deleting ? 'Deleting…' : 'Delete User + History'}
+              </button>
             </div>
           )}
 
