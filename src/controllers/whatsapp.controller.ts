@@ -60,7 +60,7 @@ const getUserCurrency = (user: any) => {
 };
 
 // =====================================================
-// 🕒 User-local time helpers (fixes UTC display issues)
+// 🕒 User-local time helpers
 // =====================================================
 function toUserLocalDate(d: any, offsetMinutes: number) {
   return new Date(new Date(d).getTime() + offsetMinutes * 60_000);
@@ -71,13 +71,11 @@ function toISODateForOffset(offsetMinutes: number): string {
   return local.toISOString().split('T')[0];
 }
 
-// Build a UTC-ish range that matches the user's local "today" or requested day range
 function getUtcRangeForUser(offsetMinutes: number, startDate?: Date, endDate?: Date) {
-  // If user provided explicit dates, keep them
   if (startDate && endDate) return { startUtc: startDate, endUtc: endDate };
 
-  // Default: user's local today 00:00 -> 23:59:59.999, converted back to UTC-ish by subtracting offset
   const nowLocal = toUserLocalDate(new Date(), offsetMinutes);
+
   const startLocal = new Date(nowLocal);
   startLocal.setHours(0, 0, 0, 0);
 
@@ -91,23 +89,18 @@ function getUtcRangeForUser(offsetMinutes: number, startDate?: Date, endDate?: D
 
 // =====================================================
 // ✅ Undone filtering rules for reports
-// - Default: exclude undone everywhere in reports
-// - Only OWNER can explicitly request include undone histories
 // =====================================================
 function ownerRequestedUndoneHistory(rawText: string, parsed: any) {
   const s = String(rawText || '').toLowerCase();
 
-  // Positive triggers (include undone)
   const wantsUndone =
     /\b(include|show|with)\b.*\b(undone|reversed|void|voided|cancelled|canceled|undo)\b/.test(s) ||
     /\bundo history\b/.test(s) ||
     /\bundone histories\b/.test(s);
 
-  // Negative triggers (explicitly exclude)
   const excludeUndone =
     /\b(exclude|remove|hide|without)\b.*\b(undone|reversed|void|voided|cancelled|canceled|undo)\b/.test(s);
 
-  // If Gemini schema provides a flag
   const parsedFlag =
     Boolean((parsed as any)?.report_params?.include_undone) ||
     Boolean((parsed as any)?.include_undone) ||
@@ -127,7 +120,7 @@ function suffixReportScope(includeUndone: boolean) {
 }
 
 // =====================================================
-// 🧾 TYCOON PDF helper — used after ANY report
+// 🧾 TYCOON PDF helper (match report type)
 // =====================================================
 const REPORT_BASE_URL = process.env.REPORT_BASE_URL || 'https://tallypadi.com/reports/';
 
@@ -135,28 +128,31 @@ function isTycoon(user: any) {
   return String(user?.planType || '').toUpperCase() === 'TYCOON';
 }
 
+/**
+ * IMPORTANT:
+ * - Use type='SALES' for REPORT_SALES
+ * - Use type='FULL' for REPORT_FULL
+ * - For STOCK/DEBTS/RECENT, default to FULL unless your pdf.service supports those.
+ */
 async function sendPdfIfTycoon(opts: {
-  user: any;             // MUST be owner user (shopUser)
+  user: any;
   from: string;
+  type: 'FULL' | 'SALES';
   dateLabel: string;
-  startDate: Date;
-  endDate: Date;
-  includeUndone?: boolean;
+  startUtc?: Date;
+  endUtc?: Date;
 }) {
-  const { user, from, dateLabel, startDate, endDate } = opts;
-
+  const { user, from, type, dateLabel, startUtc, endUtc } = opts;
   if (!isTycoon(user)) return;
 
   try {
-    // keep signature compatible with your existing old use
     const pdfFileName = await generatePdfReport(
       user._id as any,
-      'FULL',
+      type,
       dateLabel,
-      startDate,
-      endDate
+      startUtc,
+      endUtc
     );
-
     await queueOutboundMessage(from, `📄 PDF: ${REPORT_BASE_URL}${pdfFileName}`);
   } catch (e) {
     console.error('PDF gen error:', e);
@@ -164,7 +160,7 @@ async function sendPdfIfTycoon(opts: {
 }
 
 // =====================================================
-// Media download (image/audio)
+// Media download
 // =====================================================
 const getMediaBuffer = async (mediaId: string): Promise<{ data: string; mimeType: string } | null> => {
   try {
@@ -192,8 +188,8 @@ function isValidDate(d: any) {
 }
 
 /**
- * Parses: "today", "yesterday", "2025", "2025-12-18", "18/12/2025", "18-12-2025"
- * into UTC-ish boundaries matching the user's local time.
+ * Parses: today/yesterday/2025/2025-12-18/18-12-2025/18-12-2025
+ * into UTC-ish boundaries matching the user's local day.
  */
 function parseReportDateToUtc(input: any, offsetMinutes: number, isEnd: boolean): Date | null {
   if (!input) return null;
@@ -203,7 +199,6 @@ function parseReportDateToUtc(input: any, offsetMinutes: number, isEnd: boolean)
 
   const s = raw.toLowerCase();
 
-  // keywords
   if (s === 'today') {
     const nowLocal = toUserLocalDate(new Date(), offsetMinutes);
     const y = new Date(nowLocal);
@@ -219,7 +214,6 @@ function parseReportDateToUtc(input: any, offsetMinutes: number, isEnd: boolean)
     return new Date(y.getTime() - offsetMinutes * 60_000);
   }
 
-  // Year only: "2025"
   const yearOnly = raw.match(/^(\d{4})$/);
   if (yearOnly) {
     const yr = Number(yearOnly[1]);
@@ -232,7 +226,6 @@ function parseReportDateToUtc(input: any, offsetMinutes: number, isEnd: boolean)
     return new Date(Date.UTC(yr, m, d, hh, mm, ss, ms) - offsetMinutes * 60_000);
   }
 
-  // YYYY-MM-DD
   const ymd = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (ymd) {
     const yr = Number(ymd[1]);
@@ -245,7 +238,6 @@ function parseReportDateToUtc(input: any, offsetMinutes: number, isEnd: boolean)
     return new Date(Date.UTC(yr, mo, da, hh, mm, ss, ms) - offsetMinutes * 60_000);
   }
 
-  // DD/MM/YYYY or DD-MM-YYYY
   const dmy = raw.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
   if (dmy) {
     const da = Number(dmy[1]);
@@ -258,42 +250,35 @@ function parseReportDateToUtc(input: any, offsetMinutes: number, isEnd: boolean)
     return new Date(Date.UTC(yr, mo, da, hh, mm, ss, ms) - offsetMinutes * 60_000);
   }
 
-  // Fall back to normal Date parsing (ISO timestamps etc.)
   const d = new Date(raw);
   if (!isValidDate(d)) return null;
   return d;
 }
 
-function buildReportDateLabel(startUtc: Date, endUtc: Date, offsetMinutes: number, locale: string) {
+/**
+ * Make labels like your older logic:
+ * - Today/Yesterday
+ * - Weekly/Monthly based on diffDays
+ * - Specific date otherwise
+ */
+function buildDateLabelOldStyle(startUtc: Date, endUtc: Date, offsetMinutes: number) {
   const startLocal = toUserLocalDate(startUtc, offsetMinutes);
   const endLocal = toUserLocalDate(endUtc, offsetMinutes);
 
-  const todayLocal = toUserLocalDate(new Date(), offsetMinutes);
-  const yLocal = new Date(todayLocal);
-  yLocal.setDate(yLocal.getDate() - 1);
+  const today = toUserLocalDate(new Date(), offsetMinutes);
+  const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
 
-  const sameDay = startLocal.toDateString() === endLocal.toDateString();
+  if (startLocal.toDateString() === today.toDateString()) return "Today's";
+  if (startLocal.toDateString() === yesterday.toDateString()) return "Yesterday's";
 
-  if (sameDay) {
-    if (startLocal.toDateString() === todayLocal.toDateString()) return "Today's";
-    if (startLocal.toDateString() === yLocal.toDateString()) return "Yesterday's";
-    return startLocal.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
-  }
+  const diffTime = Math.abs(endLocal.getTime() - startLocal.getTime());
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-  // Full-year label (Jan 1 - Dec 31)
-  if (
-    startLocal.getFullYear() === endLocal.getFullYear() &&
-    startLocal.getMonth() === 0 &&
-    startLocal.getDate() === 1 &&
-    endLocal.getMonth() === 11 &&
-    endLocal.getDate() === 31
-  ) {
-    return `${startLocal.getFullYear()}`;
-  }
+  if (diffDays > 20) return 'Monthly';
+  if (diffDays > 1) return 'Weekly';
 
-  const a = startLocal.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
-  const b = endLocal.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
-  return `${a} - ${b}`;
+  // default single day
+  return startLocal.toLocaleDateString('en-NG', { month: 'short', day: 'numeric' });
 }
 
 // =====================================================
@@ -358,7 +343,7 @@ function parseBtnText(rawText: string) {
 }
 
 // =====================================================
-// Receipt builder (fixed TS ??/|| mixing)
+// Receipt builder
 // =====================================================
 function buildReceiptText(tx: any, symbol: string, locale: string, businessName?: string, offsetMinutes = 60) {
   const local = toUserLocalDate(tx.timestamp, offsetMinutes);
@@ -395,7 +380,7 @@ function buildReceiptText(tx: any, symbol: string, locale: string, businessName?
 }
 
 // =====================================================
-// Undo by txId (safe + restores stock)
+// Undo by txId
 // =====================================================
 function escapeRegex(s: string) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -510,7 +495,7 @@ async function attachCreditNameToLatest(shopUserId: any, rawName: string) {
 }
 
 // =====================================================
-// Simple allowlist
+// Allowlist parsed
 // =====================================================
 function allowlistParsed(parsed: any) {
   if (!parsed || typeof parsed !== 'object') return { intent: 'UNKNOWN', items: [], report_params: {}, settings_update: {} };
@@ -625,7 +610,7 @@ function cleanTextForSecurity(input: string) {
 }
 
 // =====================================================
-// Staff add helper (keeps your flow intact)
+// Staff add helper
 // =====================================================
 function normalizePhone(raw: string) {
   return String(raw || '').replace(/[^\d+]/g, '').trim();
@@ -680,6 +665,9 @@ async function addStaffUnderOwner(owner: any, staffPhoneRaw?: string | null) {
   return { ok: true, msg: `✅ Staff added: ${staffPhone}` };
 }
 
+// =====================================================
+// Main handler
+// =====================================================
 export const handleMessageLogic = async (
   from: string,
   text: string,
@@ -798,7 +786,7 @@ export const handleMessageLogic = async (
       }
     }
 
-    // ✅ suspension check (owner suspension blocks staff too)
+    // ✅ suspension check
     const shopUser = owner || actor;
     if (shopUser.subscriptionStatus === 'suspended') {
       await queueOutboundMessage(from, `🛑 Account suspended.\nReason: ${shopUser.suspensionReason || 'Security policy'}`);
@@ -809,7 +797,7 @@ export const handleMessageLogic = async (
     const allowed = await checkSubscriptionStatus(shopUser);
     if (!allowed) return;
 
-    // ✅ store history per actor (staff gets own context)
+    // ✅ store history per actor
     actor.messageHistory = actor.messageHistory || [];
     if (actor.messageHistory.length >= MAX_HISTORY) actor.messageHistory.shift();
     actor.messageHistory.push(rawText);
@@ -818,12 +806,11 @@ export const handleMessageLogic = async (
     const { symbol, locale, code } = getUserCurrency(shopUser);
     const shopId = ownerId || actor._id;
 
-    // ✅ Use user offset everywhere we display or compute “today”
     const offsetMinutes = shopUser?.settings?.utcOffsetMinutes ?? 60;
     const todayKey = toISODateForOffset(offsetMinutes);
 
     // =====================================================
-    // ✅ BUTTON fast path (UNDO / RECEIPT / CREDIT)
+    // ✅ BUTTON fast path
     // =====================================================
     const btn = parseBtnText(rawText);
     if (btn?.txId && btn?.action) {
@@ -864,7 +851,7 @@ export const handleMessageLogic = async (
     }
 
     // =====================================================
-    // 🧠 PARSE WITH GEMINI (your existing service)
+    // 🧠 PARSE WITH GEMINI
     // =====================================================
     const currentLang = (shopUser.settings?.language || 'English') as string;
     const contextHistory = actor.messageHistory || [];
@@ -875,22 +862,19 @@ export const handleMessageLogic = async (
     parsed = allowlistParsed(parsed);
 
     // =====================================================
-    // ✅ Decide undone scope for reports
-    // - Only OWNER can override to include undone histories
+    // ✅ undone scope
     // =====================================================
     const includeUndoneRequestedByOwner =
       actor.role === 'OWNER' && ownerRequestedUndoneHistory(rawText, parsed);
 
     // =====================================================
-    // ✅ DATE PARSING (FIXED: yesterday/year/specific-date/range)
+    // ✅ DATE PARSING (yesterday/year/specific-date)
     // =====================================================
     let startDate: Date | undefined;
     let endDate: Date | undefined;
     let dateLabel = "Today's";
 
     const rp: any = parsed?.report_params || {};
-
-    // allow more fields from Gemini (even if you add later)
     const startRaw = rp?.start_date ?? rp?.from ?? rp?.date ?? rp?.year ?? null;
     const endRaw = rp?.end_date ?? rp?.to ?? (rp?.year ? rp?.year : null) ?? null;
 
@@ -901,12 +885,7 @@ export const handleMessageLogic = async (
       if (s && e) {
         startDate = s;
         endDate = e;
-        dateLabel = buildReportDateLabel(startDate, endDate, offsetMinutes, locale);
-      } else {
-        // fallback safely to today
-        startDate = undefined;
-        endDate = undefined;
-        dateLabel = "Today's";
+        dateLabel = buildDateLabelOldStyle(startDate, endDate, offsetMinutes);
       }
     }
 
@@ -933,13 +912,15 @@ export const handleMessageLogic = async (
       parsed.intent = 'REPORT_FULL';
     }
 
+    // Always use UTC range for services (prevents empty results)
+    const { startUtc, endUtc } = getUtcRangeForUser(offsetMinutes, startDate, endDate);
+
     // =====================================================
-    // 🚦 ROUTING (ALL YOUR PREVIOUS INTENTS)
+    // 🚦 ROUTING
     // =====================================================
     switch (parsed.intent) {
       case 'SALE': {
         await processTransaction(shopId as any, parsed, messageId);
-
         await queueOutboundMessage(from, parsed.reply_text || '✅ Sale recorded.');
 
         const tx = await Transaction.findOne({ user: shopId, messageId }).lean();
@@ -1009,15 +990,14 @@ export const handleMessageLogic = async (
 
         await queueOutboundMessage(from, out);
 
-        // ✅ PDF alongside any report (TYCOON only)
-        const { startUtc, endUtc } = getUtcRangeForUser(offsetMinutes, startDate, endDate);
+        // PDF (default FULL for recent)
         await sendPdfIfTycoon({
           user: shopUser,
           from,
+          type: 'FULL',
           dateLabel: `${dateLabel}${suffixReportScope(includeUndoneRequestedByOwner)}`,
-          startDate: startUtc,
-          endDate: endUtc,
-          includeUndone: includeUndoneRequestedByOwner,
+          startUtc,
+          endUtc,
         });
 
         break;
@@ -1026,20 +1006,19 @@ export const handleMessageLogic = async (
       case 'REPORT_SALES': {
         await queueOutboundMessage(from, `Calculating ${dateLabel.toLowerCase()} report... ⏳`);
 
-        const { startUtc, endUtc } = getUtcRangeForUser(offsetMinutes, startDate, endDate);
+        // ✅ Use same services as your old version (correct math)
+        const summary = await getDailySummary(shopId as any, startUtc, endUtc);
+        let transactions = await getTodayTransactions(shopId as any, startUtc, endUtc);
 
-        const salesTx = await Transaction.find({
-          user: shopId,
-          type: 'SALE',
-          timestamp: { $gte: startUtc, $lte: endUtc },
-          ...buildUndoneFilter(includeUndoneRequestedByOwner),
-        })
-          .sort({ timestamp: 1 })
-          .lean();
+        // ✅ enforce undone filter even if report.service doesn't
+        if (!includeUndoneRequestedByOwner) {
+          transactions = (transactions || []).filter((t: any) => !t?.isUndone);
+        }
 
-        const totalRevenue = salesTx.reduce((sum: number, tx: any) => sum + Number(tx.totalMoney || 0), 0);
+        // If summary includes undone internally, recompute revenue from filtered tx to match message + pdf expectation
+        const safeRevenue = (transactions || []).reduce((sum: number, t: any) => sum + Number(t.totalMoney || 0), 0);
 
-        const totalFormatted = Number(totalRevenue || 0).toLocaleString(locale, {
+        const totalFormatted = Number(safeRevenue || 0).toLocaleString(locale, {
           style: 'currency',
           currency: code,
           maximumFractionDigits: 0,
@@ -1047,32 +1026,44 @@ export const handleMessageLogic = async (
 
         let salesMsg = `📅 *${dateLabel} Sales Breakdown*${suffixReportScope(includeUndoneRequestedByOwner)}\n\n`;
 
-        if (salesTx.length > 0) {
-          salesTx.forEach((tx: any) => {
-            const local = toUserLocalDate(tx.timestamp, offsetMinutes);
-            const timeStr = `${String(local.getHours()).padStart(2, '0')}:${String(local.getMinutes()).padStart(2, '0')}`;
-            const undoneTag = tx.isUndone ? ' ⚠️UNDONE' : '';
+        if (transactions.length > 0) {
+          transactions.forEach((t: any) => {
+            const local = toUserLocalDate(t.timestamp, offsetMinutes);
+            const hh = String(local.getHours()).padStart(2, '0');
+            const mm = String(local.getMinutes()).padStart(2, '0');
+            const timeStr = `${hh}:${mm}`;
 
-            (tx.items || []).forEach((it: any) => {
-              const line = Number(it.total || (Number(it.qty || 0) * Number(it.unitPrice || 0)) || 0);
-              salesMsg += `🕒 ${timeStr} • ${it.name} (${it.qty}${it.unit ? ' ' + it.unit : ''}) - ${symbol}${line.toLocaleString(locale)}${undoneTag}\n`;
+            const dateStr = dateLabel === "Today's" ? "" : `(${local.getDate()}/${local.getMonth() + 1}) `;
+
+            (t.items || []).forEach((item: any) => {
+              const itemTotalNum =
+                item.total != null
+                  ? Number(item.total)
+                  : Number(item.qty || 0) * Number(item.unitPrice || 0);
+
+              const itemTotal = Number(itemTotalNum || 0).toLocaleString(locale, { maximumFractionDigits: 0 });
+              const unitLabel = item.unit ? ` ${item.unit}` : '';
+
+              salesMsg += `🕒 ${dateStr}${timeStr} • ${item.name} (${item.qty}${unitLabel}) - ${symbol}${itemTotal}\n`;
             });
           });
         } else {
-          salesMsg += `_No sales recorded._\n`;
+          salesMsg += `_No sales recorded for ${dateLabel.toLowerCase()}._\n`;
         }
 
-        salesMsg += `\n💰 *Total:* ${totalFormatted}`;
+        salesMsg += `\n💰 *Total Money:* ${totalFormatted}\n`;
+        salesMsg += `📉 *Total Transactions:* ${transactions.length}`;
+
         await queueOutboundMessage(from, salesMsg);
 
-        // ✅ PDF alongside any report (TYCOON only)
+        // ✅ PDF type = SALES (matches your older approach)
         await sendPdfIfTycoon({
           user: shopUser,
           from,
+          type: 'SALES',
           dateLabel: `${dateLabel}${suffixReportScope(includeUndoneRequestedByOwner)}`,
-          startDate: startUtc,
-          endDate: endUtc,
-          includeUndone: includeUndoneRequestedByOwner,
+          startUtc,
+          endUtc,
         });
 
         break;
@@ -1080,6 +1071,7 @@ export const handleMessageLogic = async (
 
       case 'REPORT_STOCK': {
         await queueOutboundMessage(from, 'Checking inventory... 📦');
+
         const targetItem = parsed.items?.length ? parsed.items[0].name : null;
         const stockList = await getStockReport(shopId as any, targetItem);
 
@@ -1088,196 +1080,108 @@ export const handleMessageLogic = async (
           break;
         }
 
-        let stockMsg = `📦 *Current Stock*\n\n`;
+        let stockMsg = `📦 *Current Stock Balance*\n\n`;
+        let hasNegative = false;
+
         stockList.forEach((it: any) => {
-          if (Number(it.quantity || 0) < 0) stockMsg += `• ${it.name}: ⚠️ *${Math.abs(it.quantity)}* (Oversold)\n`;
-          else stockMsg += `• ${it.name}: *${it.quantity}* remaining\n`;
+          if (Number(it.quantity || 0) < 0) {
+            hasNegative = true;
+            stockMsg += `• ${it.name}: ⚠️ *${Math.abs(it.quantity)}* (Oversold/Not Recorded)\n`;
+          } else {
+            stockMsg += `• ${it.name}: *${it.quantity}* remaining\n`;
+          }
         });
+
+        if (hasNegative) stockMsg += `\n_Note: Some items show negative numbers. Please update me when you restock._`;
 
         await queueOutboundMessage(from, stockMsg);
 
-        // ✅ PDF alongside any report (TYCOON only)
-        const { startUtc, endUtc } = getUtcRangeForUser(offsetMinutes, startDate, endDate);
+        // PDF for stock: safest is FULL (unless your pdf.service supports STOCK)
         await sendPdfIfTycoon({
           user: shopUser,
           from,
-          dateLabel: `${dateLabel}${suffixReportScope(includeUndoneRequestedByOwner)}`,
-          startDate: startUtc,
-          endDate: endUtc,
-          includeUndone: includeUndoneRequestedByOwner,
-        });
-
-        break;
-      }
-
-      case 'REPORT_DEBTS': {
-        await queueOutboundMessage(from, 'Fetching debtors list...');
-
-        const list = await Debtor.find({ user: shopId })
-          .sort({ totalDebt: -1, updatedAt: -1 })
-          .limit(25)
-          .lean();
-
-        if (!list.length) {
-          await queueOutboundMessage(from, '✅ No debtors yet.');
-          break;
-        }
-
-        let msg = `📌 *Debtors List*\n\n`;
-        list.forEach((d: any, idx: number) => {
-          const amt = `${symbol}${Number(d.totalDebt || 0).toLocaleString(locale)}`;
-          msg += `${idx + 1}) *${d.displayName}* — ${amt}\n`;
-          if (d.lastProductStr) msg += `   • Last: ${d.lastProductStr}\n`;
-        });
-
-        await queueOutboundMessage(from, msg);
-
-        // ✅ PDF alongside any report (TYCOON only)
-        const { startUtc, endUtc } = getUtcRangeForUser(offsetMinutes, startDate, endDate);
-        await sendPdfIfTycoon({
-          user: shopUser,
-          from,
-          dateLabel: `${dateLabel}${suffixReportScope(includeUndoneRequestedByOwner)}`,
-          startDate: startUtc,
-          endDate: endUtc,
-          includeUndone: includeUndoneRequestedByOwner,
+          type: 'FULL',
+          dateLabel: `${dateLabel} Stock${suffixReportScope(includeUndoneRequestedByOwner)}`,
+          startUtc,
+          endUtc,
         });
 
         break;
       }
 
       case 'REPORT_FULL': {
-        await queueOutboundMessage(from, 'Generating summary... 📋');
+        await queueOutboundMessage(from, 'Generating comprehensive report... 📋');
 
-        const { startUtc, endUtc } = getUtcRangeForUser(offsetMinutes, startDate, endDate);
+        const fullData = await getFullSummary(shopId as any, startUtc, endUtc);
+        const revenueSummary = await getDailySummary(shopId as any, startUtc, endUtc);
 
-        const salesTx = await Transaction.find({
-          user: shopId,
-          type: 'SALE',
-          timestamp: { $gte: startUtc, $lte: endUtc },
-          ...buildUndoneFilter(includeUndoneRequestedByOwner),
-        }).lean();
+        let fullMsg = `📋 *${dateLabel} Business Summary*${suffixReportScope(includeUndoneRequestedByOwner)}\n\n`;
+        fullMsg += `💰 *Revenue (${dateLabel}):* ${symbol}${Number(revenueSummary.totalRevenue || 0).toLocaleString(locale)}\n`;
+        fullMsg += `📉 *Items Sold:* ${(revenueSummary.items || []).length}\n\n`;
 
-        const agg: Record<string, { name: string; soldPaid: number; soldCredit: number; soldTotal: number }> = {};
-
-        for (const tx of salesTx) {
-          const isCredit = String((tx as any).paymentStatus || '').toUpperCase() === 'CREDIT';
-          for (const it of ((tx as any).items || []) as any[]) {
-            const nm = String(it.name || '').trim();
-            if (!nm) continue;
-            const qty = Number(it.qty || 0);
-            if (!Number.isFinite(qty) || qty <= 0) continue;
-
-            if (!agg[nm]) agg[nm] = { name: nm, soldPaid: 0, soldCredit: 0, soldTotal: 0 };
-            if (isCredit) agg[nm].soldCredit += qty;
-            else agg[nm].soldPaid += qty;
-            agg[nm].soldTotal += qty;
-          }
-        }
-
-        const revenue = salesTx.reduce((sum: number, tx: any) => sum + Number(tx.totalMoney || 0), 0);
-
-        const aggNames = Object.keys(agg);
-        let inventoryDocs: any[] = [];
-
-        if (aggNames.length) {
-          inventoryDocs = await Inventory.find({
-            user: shopId,
-            name: { $in: aggNames },
-          }).lean();
+        if (!fullData || fullData.length === 0) {
+          fullMsg += `_No data found for this period._`;
         } else {
-          inventoryDocs = await Inventory.find({ user: shopId }).sort({ updatedAt: -1 }).limit(20).lean();
-        }
+          fullMsg += `*Current Inventory Status:*\n\n`;
 
-        const stockMap: Record<string, number> = {};
-        for (const inv of inventoryDocs) {
-          stockMap[String(inv.name || '').trim()] = Number(inv.quantity ?? inv.stock ?? 0);
-        }
+          fullData.forEach((item: any) => {
+            const unit = item.unit || 'units';
 
-        let fullMsg =
-          `📋 *${dateLabel} Summary*${suffixReportScope(includeUndoneRequestedByOwner)}\n` +
-          `💰 Revenue: ${symbol}${Number(revenue || 0).toLocaleString(locale)}\n\n`;
+            fullMsg += `🔹 *${String(item.name || '').toUpperCase()}*\n`;
+            if (Number(item.soldPaid || 0) > 0) fullMsg += `   • Sold (Paid): ${item.soldPaid} ${unit}\n`;
+            if (Number(item.soldCredit || 0) > 0) fullMsg += `   • Sold (Credit): ${item.soldCredit} ${unit} ⚠️\n`;
 
-        if (!aggNames.length && inventoryDocs.length) {
-          fullMsg += `📦 *Stock Snapshot*\n`;
-          for (const inv of inventoryDocs) {
-            const q = Number(inv.quantity ?? inv.stock ?? 0);
-            fullMsg += `• ${inv.name}: ${q}\n`;
-          }
-          await queueOutboundMessage(from, fullMsg);
+            if (Number(item.stock || 0) < 0) {
+              fullMsg += `   • Stock Left: 0 ${unit} (⚠️ System shows -${Math.abs(item.stock)}. Please update stock!)\n`;
+            } else {
+              fullMsg += `   • Stock Left: ${item.stock} ${unit}\n`;
+            }
 
-          // ✅ PDF alongside any report (TYCOON only)
-          await sendPdfIfTycoon({
-            user: shopUser,
-            from,
-            dateLabel: `${dateLabel}${suffixReportScope(includeUndoneRequestedByOwner)}`,
-            startDate: startUtc,
-            endDate: endUtc,
-            includeUndone: includeUndoneRequestedByOwner,
+            const itemRevenue = Number(item.revenue || 0) > 0 ? `${symbol}${Number(item.revenue).toLocaleString(locale)}` : null;
+            if (itemRevenue) fullMsg += `   • Revenue: ${itemRevenue}\n`;
+
+            fullMsg += `\n`;
           });
 
-          break;
+          fullMsg += `_End of Report_`;
         }
-
-        if (!aggNames.length) {
-          fullMsg += `_No data._`;
-          await queueOutboundMessage(from, fullMsg);
-
-          // ✅ PDF alongside any report (TYCOON only)
-          await sendPdfIfTycoon({
-            user: shopUser,
-            from,
-            dateLabel: `${dateLabel}${suffixReportScope(includeUndoneRequestedByOwner)}`,
-            startDate: startUtc,
-            endDate: endUtc,
-            includeUndone: includeUndoneRequestedByOwner,
-          });
-
-          break;
-        }
-
-        const rows = Object.values(agg).sort((a, b) => (b.soldTotal || 0) - (a.soldTotal || 0));
-
-        rows.forEach((it) => {
-          const stock = stockMap[it.name] ?? 0;
-          fullMsg +=
-            `🔹 *${String(it.name).toUpperCase()}*\n` +
-            `   • Sold: ${Number(it.soldPaid || 0) + Number(it.soldCredit || 0)}\n` +
-            `   • Stock: ${stock}\n\n`;
-        });
 
         await queueOutboundMessage(from, fullMsg);
 
-        // ✅ PDF alongside any report (TYCOON only)
+        // ✅ PDF type = FULL (matches old summary report)
         await sendPdfIfTycoon({
           user: shopUser,
           from,
+          type: 'FULL',
           dateLabel: `${dateLabel}${suffixReportScope(includeUndoneRequestedByOwner)}`,
-          startDate: startUtc,
-          endDate: endUtc,
-          includeUndone: includeUndoneRequestedByOwner,
+          startUtc,
+          endUtc,
         });
 
         break;
       }
 
       case 'DOWNLOAD_REPORT': {
-        if (shopUser.planType !== 'TYCOON') {
+        if (!isTycoon(shopUser)) {
           await queueOutboundMessage(from, '📄 PDF reports are available on *TYCOON* plan.');
           break;
         }
 
         await queueOutboundMessage(from, '📄 Generating PDF report...');
 
-        const { startUtc, endUtc } = getUtcRangeForUser(offsetMinutes, startDate, endDate);
+        // Decide PDF type from user message (same vibe as your old code)
+        const msgLower = rawText.toLowerCase();
+        let pdfType: 'SALES' | 'FULL' = 'FULL';
+        if (msgLower.includes('sales')) pdfType = 'SALES';
+        if (msgLower.includes('breakdown')) pdfType = 'SALES';
 
         await sendPdfIfTycoon({
           user: shopUser,
           from,
+          type: pdfType,
           dateLabel: `${dateLabel}${suffixReportScope(includeUndoneRequestedByOwner)}`,
-          startDate: startUtc,
-          endDate: endUtc,
-          includeUndone: includeUndoneRequestedByOwner,
+          startUtc,
+          endUtc,
         });
 
         break;
