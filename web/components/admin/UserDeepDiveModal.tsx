@@ -182,17 +182,40 @@ export default function UserDeepDiveModal({
       Swal.fire('Updated', 'Expiration date extended.', 'success');
     }
   };
+  const isUnknownItemSale = (s: any) => {
+  const items = Array.isArray(s?.items) ? s.items : [];
+  if (!items.length) return true; // no items => unknown
 
-  const getFilteredSales = () => {
-    let data = details?.recentSales || [];
-    if (salesDate.start) data = data.filter((s: any) => new Date(s.timestamp) >= new Date(salesDate.start));
-    if (salesDate.end) {
-      const end = new Date(salesDate.end);
-      end.setHours(23, 59, 59);
-      data = data.filter((s: any) => new Date(s.timestamp) <= end);
-    }
-    return data;
-  };
+  return items.some((i: any) => {
+    const name = String(i?.name ?? '').trim().toLowerCase();
+    return (
+      !name ||
+      name === 'unknown_item' ||
+      name === 'unknown' ||
+      name === 'item' ||
+      name === 'null' ||
+      name === 'undefined'
+    );
+  });
+};
+
+
+const getFilteredSales = () => {
+  let data = details?.recentSales || [];
+
+  // ✅ hide undone + hide unknown-item sales
+  data = data.filter((s: any) => !s?.isUndone && !isUnknownItemSale(s));
+
+  if (salesDate.start) data = data.filter((s: any) => new Date(s.timestamp) >= new Date(salesDate.start));
+
+  if (salesDate.end) {
+    const end = new Date(salesDate.end);
+    end.setHours(23, 59, 59);
+    data = data.filter((s: any) => new Date(s.timestamp) <= end);
+  }
+
+  return data;
+};
 
   const exportSales = (format: 'csv' | 'pdf') => {
     const data = getFilteredSales();
@@ -591,7 +614,8 @@ export default function UserDeepDiveModal({
               <div className="bg-slate-900 p-3 rounded-xl border border-slate-700 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                 <div className="text-xs text-slate-300">
                   <span className="font-extrabold text-white">Sales Records:</span>{' '}
-                  {(details?.recentSales || []).length.toLocaleString()}
+                  {getFilteredSales().length.toLocaleString()}
+
                 </div>
 
                 <button
