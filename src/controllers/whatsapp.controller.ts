@@ -12,7 +12,11 @@ import { AdminSettings } from '../models/adminSettings.model';
 
 import { processTransaction } from '../services/transaction.service';
 import { checkSubscriptionStatus } from '../services/billing.service';
-import { messageQueue, queueOutboundMessage } from '../services/queue.service';
+import {
+  messageQueue,
+  queueOutboundMessage,
+  queueOutboundButtons, // ✅ NEW: queued buttons helper
+} from '../services/queue.service';
 import { undoLastSale } from '../services/undo.service';
 
 import { resolveDebtor, normName } from '../services/debtor.service';
@@ -138,7 +142,6 @@ async function getSalesCountForPeriod(
 
   return Transaction.countDocuments(q);
 }
-
 
 // =====================================================
 // 🧾 TYCOON PDF helper (match report type)
@@ -287,7 +290,8 @@ function buildDateLabelOldStyle(startUtc: Date, endUtc: Date, offsetMinutes: num
   const endLocal = toUserLocalDate(endUtc, offsetMinutes);
 
   const today = toUserLocalDate(new Date(), offsetMinutes);
-  const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
 
   if (startLocal.toDateString() === today.toDateString()) return "Today's";
   if (startLocal.toDateString() === yesterday.toDateString()) return "Yesterday's";
@@ -303,32 +307,10 @@ function buildDateLabelOldStyle(startUtc: Date, endUtc: Date, offsetMinutes: num
 }
 
 // =====================================================
-// WhatsApp buttons (max 3)
+// WhatsApp buttons (max 3) — ✅ NOW QUEUED (NO DIRECT API CALL)
 // =====================================================
-async function sendWhatsAppButtons3(to: string, bodyText: string, buttons: { id: string; title: string }[]) {
-  const safeButtons = (buttons || []).slice(0, 3);
-
-  const payload = {
-    messaging_product: 'whatsapp',
-    to,
-    type: 'interactive',
-    interactive: {
-      type: 'button',
-      body: { text: bodyText },
-      action: {
-        buttons: safeButtons.map((b) => ({
-          type: 'reply',
-          reply: { id: b.id, title: b.title },
-        })),
-      },
-    },
-  };
-
-  const url = `https://graph.facebook.com/v21.0/${env.whatsappPhoneNumberId}/messages`;
-  await axios.post(url, payload, {
-    headers: { Authorization: `Bearer ${env.whatsappToken}`, 'Content-Type': 'application/json' },
-    timeout: 20_000,
-  });
+async function sendWhatsAppButtons3(to: string, bodyText: string, buttons: { id: string; title: string }[], jobId?: string) {
+  await queueOutboundButtons(to, bodyText, (buttons || []).slice(0, 3), jobId);
 }
 
 // =====================================================
@@ -603,8 +585,10 @@ export const handleWebhook = async (req: Request, res: Response) => {
 
     if (!text && !mediaId) return res.sendStatus(200);
 
+    // ✅ ACK FAST
     res.sendStatus(200);
 
+    // ✅ Queue inbound processing
     void messageQueue
       .add(
         'process-message',
@@ -751,7 +735,10 @@ export const handleMessageLogic = async (
       owner = actor;
       ownerId = actor._id;
 
-      await queueOutboundMessage(from, `Welcome to *Tallypadi*, ${profileName || 'Friend'}! 👋\n\nTo start, reply with your *EMAIL ADDRESS*.`);
+      await queueOutboundMessage(
+        from,
+        `Welcome to *Tallypadi*, ${profileName || 'Friend'}! 👋\n\nTo start, reply with your *EMAIL ADDRESS*.`
+      );
       return;
     }
 
@@ -950,13 +937,19 @@ export const handleMessageLogic = async (
           const body = `After sale:\nChoose action 👇`;
 
           try {
-            await sendWhatsAppButtons3(from, body, [
-              { id: saleBtnId('UNDO', txId), title: '↩️ Undo' },
-              { id: saleBtnId('RECEIPT', txId), title: '🧾 Receipt' },
-              { id: saleBtnId('CREDIT', txId), title: '💳 Credit' },
-            ]);
+            // ✅ queued interactive buttons (no direct send)
+            await sendWhatsAppButtons3(
+              from,
+              body,
+              [
+                { id: saleBtnId('UNDO', txId), title: '↩️ Undo' },
+                { id: saleBtnId('RECEIPT', txId), title: '🧾 Receipt' },
+                { id: saleBtnId('CREDIT', txId), title: '💳 Credit' },
+              ],
+              `btn:${messageId}` // ✅ stable dedupe id per inbound message
+            );
           } catch (e) {
-            console.error('❌ Failed to send buttons:', e);
+            console.error('❌ Failed to queue buttons:', e);
           }
         }
         break;
@@ -1024,69 +1017,67 @@ export const handleMessageLogic = async (
         break;
       }
 
-     case 'REPORT_SALES': {
-  await queueOutboundMessage(from, `Calculating ${String(dateLabel || "Today's").toLowerCase()} report... ⏳`);
+      case 'REPORT_SALES': {
+        await queueOutboundMessage(from, `Calculating ${String(dateLabel || "Today's").toLowerCase()} report... ⏳`);
 
-  // ✅ 1) Get the correct UTC range for the user's requested period
-  const { startUtc, endUtc } = getUtcRangeForUser(offsetMinutes, startDate, endDate);
+        // ✅ 1) Get the correct UTC range for the user's requested period
+        const { startUtc, endUtc } = getUtcRangeForUser(offsetMinutes, startDate, endDate);
 
-  // ✅ 2) Pull transactions (so we can decide empty BEFORE doing anything else)
-  const salesTx = await Transaction.find({
-    user: shopId,
-    type: 'SALE',
-    timestamp: { $gte: startUtc, $lte: endUtc },
-    ...buildUndoneFilter(includeUndoneRequestedByOwner),
-  })
-    .sort({ timestamp: 1 })
-    .lean();
+        // ✅ 2) Pull transactions (so we can decide empty BEFORE doing anything else)
+        const salesTx = await Transaction.find({
+          user: shopId,
+          type: 'SALE',
+          timestamp: { $gte: startUtc, $lte: endUtc },
+          ...buildUndoneFilter(includeUndoneRequestedByOwner),
+        })
+          .sort({ timestamp: 1 })
+          .lean();
 
-  // ✅ 3) If empty: do NOT generate PDF, do NOT continue
-  if (!salesTx.length) {
-    await queueOutboundMessage(from, `📭 No sales found for *${dateLabel}*.`);
-    break;
-  }
+        // ✅ 3) If empty: do NOT generate PDF, do NOT continue
+        if (!salesTx.length) {
+          await queueOutboundMessage(from, `📭 No sales found for *${dateLabel}*.`);
+          break;
+        }
 
-  // ✅ 4) Use same service as old version for correct totals/summary
-  // (Make sure your report.service expects (userId, startDate, endDate) dates)
-  const summary = await getDailySummary(shopId as any, startUtc, endUtc);
+        // ✅ 4) Use same service as old version for correct totals/summary
+        const summary = await getDailySummary(shopId as any, startUtc, endUtc);
 
-  const totalFormatted = Number(summary?.totalRevenue || 0).toLocaleString(locale, {
-    style: 'currency',
-    currency: code,
-    maximumFractionDigits: 0,
-  });
+        const totalFormatted = Number(summary?.totalRevenue || 0).toLocaleString(locale, {
+          style: 'currency',
+          currency: code,
+          maximumFractionDigits: 0,
+        });
 
-  // ✅ 5) Build breakdown message (from salesTx — consistent with undone filter)
-  let salesMsg = `📅 *${dateLabel} Sales Breakdown*${suffixReportScope(includeUndoneRequestedByOwner)}\n\n`;
+        // ✅ 5) Build breakdown message (from salesTx — consistent with undone filter)
+        let salesMsg = `📅 *${dateLabel} Sales Breakdown*${suffixReportScope(includeUndoneRequestedByOwner)}\n\n`;
 
-  salesTx.forEach((tx: any) => {
-    const local = toUserLocalDate(tx.timestamp, offsetMinutes);
-    const timeStr = `${String(local.getHours()).padStart(2, '0')}:${String(local.getMinutes()).padStart(2, '0')}`;
-    const undoneTag = tx.isUndone ? ' ⚠️UNDONE' : '';
+        salesTx.forEach((tx: any) => {
+          const local = toUserLocalDate(tx.timestamp, offsetMinutes);
+          const timeStr = `${String(local.getHours()).padStart(2, '0')}:${String(local.getMinutes()).padStart(2, '0')}`;
+          const undoneTag = tx.isUndone ? ' ⚠️UNDONE' : '';
 
-    (tx.items || []).forEach((it: any) => {
-      const qty = Number(it.qty || 0);
-      const unitPrice = Number(it.unitPrice || 0);
+          (tx.items || []).forEach((it: any) => {
+            const qty = Number(it.qty || 0);
+            const unitPrice = Number(it.unitPrice || 0);
 
-      // ✅ fallback for line total (fixes many “0”/wrong totals)
-      const line =
-        it.total != null && Number.isFinite(Number(it.total))
-          ? Number(it.total)
-          : qty * unitPrice;
+            // ✅ fallback for line total
+            const line =
+              it.total != null && Number.isFinite(Number(it.total))
+                ? Number(it.total)
+                : qty * unitPrice;
 
-      salesMsg += `🕒 ${timeStr} • ${it.name} (${qty}${it.unit ? ' ' + it.unit : ''}) - ${symbol}${Number(line || 0).toLocaleString(locale)}${undoneTag}\n`;
-    });
-  });
+            salesMsg += `🕒 ${timeStr} • ${it.name} (${qty}${it.unit ? ' ' + it.unit : ''}) - ${symbol}${Number(line || 0).toLocaleString(locale)}${undoneTag}\n`;
+          });
+        });
 
-  salesMsg += `\n💰 *Total Money:* ${totalFormatted}`;
-  salesMsg += `\n📉 *Total Transactions:* ${salesTx.length}`;
+        salesMsg += `\n💰 *Total Money:* ${totalFormatted}`;
+        salesMsg += `\n📉 *Total Transactions:* ${salesTx.length}`;
 
-  await queueOutboundMessage(from, salesMsg);
+        await queueOutboundMessage(from, salesMsg);
 
-  // ✅ IMPORTANT: no PDF auto-send here unless you explicitly want it
-  break;
-}
-
+        // ✅ IMPORTANT: no PDF auto-send here unless you explicitly want it
+        break;
+      }
 
       case 'REPORT_STOCK': {
         await queueOutboundMessage(from, 'Checking inventory... 📦');
@@ -1115,7 +1106,7 @@ export const handleMessageLogic = async (
 
         await queueOutboundMessage(from, stockMsg);
 
-        // PDF for stock: safest is FULL (unless your pdf.service supports STOCK)
+        // PDF for stock: safest is FULL
         await sendPdfIfTycoon({
           user: shopUser,
           from,
@@ -1128,8 +1119,7 @@ export const handleMessageLogic = async (
         break;
       }
 
-
-        case 'REPORT_FULL': {
+      case 'REPORT_FULL': {
         await queueOutboundMessage(from, 'Generating comprehensive report... 📋');
 
         const fullData = await getFullSummary(shopId as any, startUtc, endUtc);
@@ -1157,7 +1147,8 @@ export const handleMessageLogic = async (
               fullMsg += `   • Stock Left: ${item.stock} ${unit}\n`;
             }
 
-            const itemRevenue = Number(item.revenue || 0) > 0 ? `${symbol}${Number(item.revenue).toLocaleString(locale)}` : null;
+            const itemRevenue =
+              Number(item.revenue || 0) > 0 ? `${symbol}${Number(item.revenue).toLocaleString(locale)}` : null;
             if (itemRevenue) fullMsg += `   • Revenue: ${itemRevenue}\n`;
 
             fullMsg += `\n`;
@@ -1168,9 +1159,7 @@ export const handleMessageLogic = async (
 
         await queueOutboundMessage(from, fullMsg);
 
-        
-
-        // ✅ PDF type = FULL (matches old summary report)
+        // ✅ PDF type = FULL
         await sendPdfIfTycoon({
           user: shopUser,
           from,
@@ -1182,50 +1171,36 @@ export const handleMessageLogic = async (
 
         break;
       }
-      
 
-case 'DOWNLOAD_REPORT': {
-  if (shopUser.planType !== 'TYCOON') {
-    await queueOutboundMessage(from, '📄 PDF reports are available on *TYCOON* plan.');
-    break;
-  }
+      case 'DOWNLOAD_REPORT': {
+        if (shopUser.planType !== 'TYCOON') {
+          await queueOutboundMessage(from, '📄 PDF reports are available on *TYCOON* plan.');
+          break;
+        }
 
-  const { startUtc, endUtc } = getUtcRangeForUser(offsetMinutes, startDate, endDate);
+        const { startUtc, endUtc } = getUtcRangeForUser(offsetMinutes, startDate, endDate);
 
-  // ✅ check first
-  const count = await getSalesCountForPeriod(
-    shopId,
-    startUtc,
-    endUtc,
-    includeUndoneRequestedByOwner
-  );
+        // ✅ check first
+        const count = await getSalesCountForPeriod(shopId, startUtc, endUtc, includeUndoneRequestedByOwner);
 
-  if (count === 0) {
-    await queueOutboundMessage(from, `📭 No sales found for *${dateLabel}*. No PDF generated.`);
-    break;
-  }
+        if (count === 0) {
+          await queueOutboundMessage(from, `📭 No sales found for *${dateLabel}*. No PDF generated.`);
+          break;
+        }
 
-  // ✅ only now we tell them we’re generating
-  await queueOutboundMessage(from, '📄 Generating PDF report...');
+        // ✅ only now we tell them we’re generating
+        await queueOutboundMessage(from, '📄 Generating PDF report...');
 
-  try {
-    const pdfFileName = await generatePdfReport(
-      shopId as any,
-      'FULL',
-      dateLabel,
-      startUtc,
-      endUtc
-    );
+        try {
+          const pdfFileName = await generatePdfReport(shopId as any, 'FULL', dateLabel, startUtc, endUtc);
+          await queueOutboundMessage(from, `✨ PDF: https://tallypadi.com/reports/${pdfFileName}`);
+        } catch (e) {
+          console.error(e);
+          await queueOutboundMessage(from, '❌ Failed to generate PDF. Try again later.');
+        }
 
-    await queueOutboundMessage(from, `✨ PDF: https://tallypadi.com/reports/${pdfFileName}`);
-  } catch (e) {
-    console.error(e);
-    await queueOutboundMessage(from, '❌ Failed to generate PDF. Try again later.');
-  }
-
-  break;
-}
-
+        break;
+      }
 
       case 'ADD_STAFF': {
         if (actor.role !== 'OWNER') {
@@ -1233,7 +1208,7 @@ case 'DOWNLOAD_REPORT': {
           break;
         }
 
-        const r = await addStaffUnderOwner(actor, parsed.staffPhoneNumber || null);
+        const r = await addStaffUnderOwner(actor, (parsed as any).staffPhoneNumber || null);
         await queueOutboundMessage(from, r.msg);
         break;
       }

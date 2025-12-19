@@ -1,44 +1,77 @@
+// src/services/queue.worker.ts (or wherever this worker file lives)
 import { Worker } from 'bullmq';
-import { connection } from './queue.service'; // use the exported connection
-import { sendWhatsAppText } from './whatsapp.service';
-
+import { connection } from './queue.service';
+import { sendWhatsAppText, sendWhatsAppButtons } from './whatsapp.service';
 
 // ============================================================
 // WORKER: OUTBOUND REPLIES (FAST / interactive)
+// Handles:
+//  - job.name === 'send-text'
+//  - job.name === 'send-buttons' ✅
 // ============================================================
 export const replyWorker = new Worker(
   'outbound-replies',
   async (job) => {
-    const { phoneNumber, message } = job.data;
-    console.log(`💬 Reply -> ${phoneNumber}`);
-    await sendWhatsAppText(phoneNumber, message); // ✅ throws on final failure
+    const name = job.name;
+
+    // ✅ TEXT
+    if (name === 'send-text') {
+      const { phoneNumber, message } = job.data as { phoneNumber: string; message: string };
+      console.log(`💬 Reply(TEXT) -> ${phoneNumber}`);
+      await sendWhatsAppText(phoneNumber, message);
+      return;
+    }
+
+    // ✅ BUTTONS
+    if (name === 'send-buttons') {
+      const { phoneNumber, bodyText, buttons } = job.data as {
+        phoneNumber: string;
+        bodyText: string;
+        buttons: { id: string; title: string }[];
+      };
+
+      console.log(`💬 Reply(BUTTONS) -> ${phoneNumber}`);
+      await sendWhatsAppButtons(phoneNumber, bodyText, buttons);
+      return;
+    }
+
+    console.log(`⚠️ Unknown reply job: ${name}`);
   },
   {
     connection,
-    limiter: { max: 15, duration: 1000 }, // faster than bulk
+    limiter: { max: 15, duration: 1000 },
     concurrency: 10,
     lockDuration: 60_000,
   }
 );
 
-replyWorker.on('completed', (job) => console.log(`✅ Reply sent: ${job.data.phoneNumber}`));
+replyWorker.on('completed', (job) => console.log(`✅ Reply sent: ${job.name} -> ${job.data.phoneNumber}`));
 replyWorker.on('failed', (job, err) =>
-  console.error(`❌ Reply failed [Attempt ${job?.attemptsMade ?? 'N/A'}]: ${err.message}`)
+  console.error(`❌ Reply failed [${job?.name}] [Attempt ${job?.attemptsMade ?? 'N/A'}]: ${err.message}`)
 );
 
 // ============================================================
 // WORKER: OUTBOUND BULK (SLOW / summaries / alerts)
+// Handles:
+//  - job.name === 'send-text'
 // ============================================================
 export const bulkWorker = new Worker(
   'outbound-bulk',
   async (job) => {
-    const { phoneNumber, message } = job.data;
-    console.log(`📤 Bulk -> ${phoneNumber}`);
+    const name = job.name;
+
+    if (name !== 'send-text') {
+      console.log(`⚠️ Unknown bulk job: ${name}`);
+      return;
+    }
+
+    const { phoneNumber, message } = job.data as { phoneNumber: string; message: string };
+    console.log(`📤 Bulk(TEXT) -> ${phoneNumber}`);
     await sendWhatsAppText(phoneNumber, message);
   },
   {
     connection,
-    limiter: { max: 5, duration: 1000 }, // safer bulk limiter
+    limiter: { max: 5, duration: 1000 },
     concurrency: 3,
     lockDuration: 60_000,
   }

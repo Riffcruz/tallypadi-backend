@@ -1,148 +1,180 @@
-import axios, { AxiosError } from 'axios';
+// src/services/whatsapp.service.ts
+import axios from 'axios';
 import { env } from '../config/env';
 
-const BASE_URL = 'https://graph.facebook.com/v21.0';
+/**
+ * WhatsApp Cloud API helpers
+ * - All sending should happen from workers (queued)
+ * - These functions ONLY talk to Meta API
+ */
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const WHATSAPP_API_VERSION = process.env.WHATSAPP_API_VERSION || 'v21.0';
 
-const isRetryable = (err: AxiosError) => {
-  const status = err.response?.status;
+function messagesUrl() {
+  return `https://graph.facebook.com/${WHATSAPP_API_VERSION}/${env.whatsappPhoneNumberId}/messages`;
+}
 
-  // network / timeout
-  if (err.code === 'ECONNRESET' || err.code === 'ETIMEDOUT' || err.code === 'ECONNABORTED') return true;
-  if (!status) return true;
+function authHeaders() {
+  return {
+    Authorization: `Bearer ${env.whatsappToken}`,
+    'Content-Type': 'application/json',
+  };
+}
 
-  // WhatsApp/Meta throttling + transient server issues
-  if (status === 429) return true;
-  if (status >= 500) return true;
+function safeText(s: any, max = 4096) {
+  return String(s ?? '')
+    .replace(/\u0000/g, '')
+    .slice(0, max);
+}
 
-  return false;
-};
+// ============================================================
+// ✅ SEND: TEXT
+// ============================================================
+export async function sendWhatsAppText(to: string, message: string) {
+  const payload = {
+    messaging_product: 'whatsapp',
+    to,
+    type: 'text',
+    text: { body: safeText(message, 4096) },
+  };
 
-const getRetryDelayMs = (attempt: number, err: AxiosError) => {
-  // If Meta returns Retry-After, honor it
-  const ra = err.response?.headers?.['retry-after'];
-  if (ra) {
-    const seconds = Number(ra);
-    if (!Number.isNaN(seconds) && seconds > 0) return seconds * 1000;
-  }
+  await axios.post(messagesUrl(), payload, {
+    headers: authHeaders(),
+    timeout: 20_000,
+  });
+}
 
-  // exponential backoff: 1s, 2s, 4s, 8s... capped
-  const base = Math.min(30_000, 1000 * Math.pow(2, attempt - 1));
-  // add small jitter
-  const jitter = Math.floor(Math.random() * 250);
-  return base + jitter;
-};
-
-// 1) TEXT MESSAGE
-export const sendWhatsAppText = async (to: string, body: string) => {
-  const msg = (body || '').trim();
-  if (!msg) {
-    console.warn('⚠️ Attempted to send empty message. Skipping.');
-    return { ok: true, skipped: true };
-  }
-
-  const url = `${BASE_URL}/${env.whatsappPhoneNumberId}/messages`;
-
-  const maxAttempts = 5;
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      console.log(`📤 WhatsApp send (attempt ${attempt}/${maxAttempts}) -> ${to}`);
-
-      const res = await axios.post(
-        url,
-        {
-          messaging_product: 'whatsapp',
-          to,
-          type: 'text',
-          text: { body: msg },
-        },
-        {
-          timeout: 20_000, // ✅ don’t hang forever
-          headers: {
-            Authorization: `Bearer ${env.whatsappToken}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
-
-      return { ok: true, status: res.status, data: res.data };
-    } catch (e: any) {
-      const err = e as AxiosError;
-
-      const retryable = isRetryable(err);
-      const status = err.response?.status;
-      const metaErr = err.response?.data;
-
-      console.error('❌ WhatsApp send error:', { to, status, retryable, metaErr, msg: err.message });
-
-      if (!retryable || attempt === maxAttempts) {
-        // ✅ IMPORTANT: throw so BullMQ marks job failed + retries / DLQ
-        throw err;
-      }
-
-      const delay = getRetryDelayMs(attempt, err);
-      await sleep(delay);
-    }
-  }
-
-  // should never reach
-  return { ok: false };
-};
-
-// 2) TEMPLATE MESSAGE
-export const sendWhatsAppTemplate = async (
+// ============================================================
+// ✅ SEND: INTERACTIVE BUTTONS (max 3)
+// Job name in queue: 'send-buttons'
+// ============================================================
+export async function sendWhatsAppButtons(
   to: string,
-  templateName: string,
-  components: any[] = [],
-  languageCode = 'en_US'
-) => {
-  const url = `${BASE_URL}/${env.whatsappPhoneNumberId}/messages`;
+  bodyText: string,
+  buttons: { id: string; title: string }[]
+) {
+  const safeButtons = (buttons || [])
+    .slice(0, 3)
+    .map((b) => ({
+      id: safeText(b?.id, 256), // safe
+      title: safeText(b?.title, 20), // WhatsApp UI is strict
+    }))
+    .filter((b) => b.id && b.title);
 
-  const maxAttempts = 5;
+  const payload = {
+    messaging_product: 'whatsapp',
+    to,
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      body: { text: safeText(bodyText, 1024) },
+      action: {
+        buttons: safeButtons.map((b) => ({
+          type: 'reply',
+          reply: { id: b.id, title: b.title },
+        })),
+      },
+    },
+  };
 
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      console.log(`📨 Template send (attempt ${attempt}/${maxAttempts}) -> ${to} (${templateName})`);
+  await axios.post(messagesUrl(), payload, {
+    headers: authHeaders(),
+    timeout: 20_000,
+  });
+}
 
-      const res = await axios.post(
-        url,
-        {
-          messaging_product: 'whatsapp',
-          to,
-          type: 'template',
-          template: {
-            name: templateName,
-            language: { code: languageCode },
-            components,
-          },
-        },
-        {
-          timeout: 20_000,
-          headers: {
-            Authorization: `Bearer ${env.whatsappToken}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
+// ============================================================
+// ✅ SEND: MEDIA (image/audio/doc) by MEDIA ID (already uploaded to WhatsApp)
+// Useful if later you queue media responses.
+// ============================================================
+export async function sendWhatsAppMediaById(opts: {
+  to: string;
+  mediaId: string;
+  type: 'image' | 'audio' | 'document' | 'video';
+  caption?: string;
+  filename?: string;
+}) {
+  const { to, mediaId, type, caption, filename } = opts;
 
-      return { ok: true, status: res.status, data: res.data };
-    } catch (e: any) {
-      const err = e as AxiosError;
+  const payload: any = {
+    messaging_product: 'whatsapp',
+    to,
+    type,
+    [type]: {
+      id: mediaId,
+    },
+  };
 
-      const retryable = isRetryable(err);
-      const status = err.response?.status;
-      const metaErr = err.response?.data;
-
-      console.error('❌ WhatsApp template error:', { to, templateName, status, retryable, metaErr, msg: err.message });
-
-      if (!retryable || attempt === maxAttempts) throw err;
-
-      const delay = getRetryDelayMs(attempt, err);
-      await sleep(delay);
-    }
+  if (caption && (type === 'image' || type === 'document' || type === 'video')) {
+    payload[type].caption = safeText(caption, 1024);
   }
 
-  return { ok: false };
-};
+  if (filename && type === 'document') {
+    payload.document.filename = safeText(filename, 200);
+  }
+
+  await axios.post(messagesUrl(), payload, {
+    headers: authHeaders(),
+    timeout: 20_000,
+  });
+}
+
+// ============================================================
+// ✅ OPTIONAL: MARK AS READ (useful if you want worker to mark messages read)
+// ============================================================
+export async function markWhatsAppMessageRead(messageId: string) {
+  if (!messageId) return;
+
+  const payload = {
+    messaging_product: 'whatsapp',
+    status: 'read',
+    message_id: messageId,
+  };
+
+  await axios.post(messagesUrl(), payload, {
+    headers: authHeaders(),
+    timeout: 20_000,
+  });
+}
+
+// ============================================================
+// ✅ OPTIONAL: HEALTH CHECK
+// ============================================================
+export async function whatsappHealthCheck() {
+  // A lightweight call to validate token & phone ID.
+  // Meta doesn't have a perfect "ping", so we just return config sanity.
+  return {
+    apiVersion: WHATSAPP_API_VERSION,
+    phoneNumberId: env.whatsappPhoneNumberId,
+    tokenPresent: Boolean(env.whatsappToken),
+  };
+}
+
+
+export async function sendWhatsAppTemplate(opts: {
+  to: string;
+  name: string; // template name in Meta dashboard
+  languageCode?: string; // e.g. "en_US"
+  components?: any[]; // template components (body params, buttons, etc.)
+}) {
+  const { to, name, languageCode = 'en_US', components = [] } = opts;
+
+  const payload: any = {
+    messaging_product: 'whatsapp',
+    to,
+    type: 'template',
+    template: {
+      name,
+      language: { code: languageCode },
+    },
+  };
+
+  if (components?.length) {
+    payload.template.components = components;
+  }
+
+  await axios.post(messagesUrl(), payload, {
+    headers: authHeaders(),
+    timeout: 20_000,
+  });
+}
