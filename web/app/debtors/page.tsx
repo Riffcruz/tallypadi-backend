@@ -2,68 +2,16 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
+import Swal from 'sweetalert2';
+import Sidebar from '../../components/Sidebar';
 import { 
   Search, Plus, Edit2, Trash2, 
   Wallet, Loader2, X, CheckCircle2, 
-  Coins, ShoppingBag, Menu, RefreshCw,
-  Home, Users, Settings, LogOut, BarChart3, AlertCircle
+  Coins, ShoppingBag, Menu, RefreshCw
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
-
-// --- INTERNAL COMPONENTS & MOCKS (To fix build errors) ---
-
-// Mock useRouter for standalone environment
-const useRouter = () => {
-  return {
-    push: (path: string) => console.log(`Navigating to ${path}`),
-  };
-};
-
-// Internal Sidebar Component
-const Sidebar = () => (
-  <div className="h-full flex flex-col p-6 bg-white text-gray-800">
-    <div className="mb-10 px-2 flex items-center gap-2">
-      <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center text-white font-bold">T</div>
-      <span className="text-xl font-bold tracking-tight">Tallypadi</span>
-    </div>
-    <nav className="flex-1 space-y-2">
-      {[
-        { icon: Home, label: 'Dashboard', active: false },
-        { icon: Users, label: 'Debtors', active: true },
-        { icon: BarChart3, label: 'Reports', active: false },
-        { icon: Settings, label: 'Settings', active: false },
-      ].map((item) => (
-        <button
-          key={item.label}
-          className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-            item.active 
-              ? 'bg-emerald-50 text-emerald-700 font-bold' 
-              : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
-          }`}
-        >
-          <item.icon className="w-5 h-5" />
-          {item.label}
-        </button>
-      ))}
-    </nav>
-    <button className="flex items-center gap-3 px-4 py-3 text-gray-400 hover:text-red-600 transition-colors mt-auto">
-      <LogOut className="w-5 h-5" />
-      Log Out
-    </button>
-  </div>
-);
-
-// Custom Toast Notification Component (Replaces SweetAlert)
-const Toast = ({ message, type, onClose }: { message: string, type: 'success' | 'error', onClose: () => void }) => (
-  <div className={`fixed top-6 right-6 z-[100] flex items-center gap-3 px-6 py-4 rounded-xl shadow-2xl transition-all animate-in slide-in-from-right duration-300 ${
-    type === 'success' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'
-  }`}>
-    {type === 'success' ? <CheckCircle2 className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
-    <span className="font-bold text-sm">{message}</span>
-    <button onClick={onClose} className="ml-2 hover:opacity-80"><X className="w-4 h-4" /></button>
-  </div>
-);
 
 // --- TYPES ---
 interface Debtor {
@@ -88,9 +36,6 @@ export default function DebtorsPage() {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  // Notification State
-  const [toast, setToast] = useState<{ msg: string, type: 'success' | 'error' } | null>(null);
-
   // Modal & Form States
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
@@ -101,20 +46,14 @@ export default function DebtorsPage() {
   const [paymentData, setPaymentData] = useState({ amount: '' });
   const [submitting, setSubmitting] = useState(false);
 
-  // Helper function to show toast
-  const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 3000);
-  };
-
   useEffect(() => {
     // Avoid SSR issues
     if (typeof window === 'undefined') return;
 
     const token = localStorage.getItem('tallyToken');
     if (!token) { 
-      console.log('No token found, redirecting...'); 
-      // router.push('/login'); 
+      router.push('/login'); 
+      return;
     }
 
     const fetchProfile = async () => {
@@ -127,7 +66,7 @@ export default function DebtorsPage() {
     };
     fetchProfile();
     fetchDebtors(token || '');
-  }, []);
+  }, [router]);
 
   const fetchDebtors = async (token: string) => {
     try {
@@ -138,12 +77,14 @@ export default function DebtorsPage() {
       setDebtors(data);
     } catch (err) {
       console.warn("API unavailable or failed:", err);
-      // Fallback data for preview if API fails
-      setDebtors([
-        { _id: '1', displayName: 'Mama Nkechi', aliases: ['Iya Rice'], totalDebt: 15000, lastProductStr: '2 bags of rice' },
-        { _id: '2', displayName: 'Mechanic John', aliases: [], totalDebt: 0, lastProductStr: 'Engine Oil' },
-      ]);
-      if (token) showToast('Could not load live data', 'error');
+      Swal.fire({
+        toast: true,
+        icon: 'error',
+        title: 'Could not load list',
+        position: 'top-end',
+        showConfirmButton: false,
+        timer: 3000
+      });
     } finally {
       setLoading(false);
     }
@@ -195,9 +136,16 @@ export default function DebtorsPage() {
       }
       fetchDebtors(token || '');
       closeForm();
-      showToast('Debtor saved successfully');
+      Swal.fire({
+        toast: true,
+        icon: 'success',
+        title: 'Saved successfully',
+        position: 'top-end',
+        showConfirmButton: false,
+        timer: 2000
+      });
     } catch (err) {
-      showToast('Failed to save debtor', 'error');
+      Swal.fire('Error', 'Failed to save.', 'error');
     } finally {
       setSubmitting(false);
     }
@@ -216,43 +164,44 @@ export default function DebtorsPage() {
       
       fetchDebtors(token || '');
       closePayment();
-      showToast('Payment recorded!');
+      Swal.fire({ icon: 'success', title: 'Payment Recorded', timer: 1500, showConfirmButton: false });
     } catch (err) {
-      showToast('Payment failed', 'error');
+      Swal.fire('Error', 'Payment failed.', 'error');
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleDelete = async (debtor: Debtor) => {
-    if (window.confirm(`Are you sure you want to remove ${debtor.displayName}?`)) {
+    const res = await Swal.fire({ 
+      title: 'Remove Debtor?', 
+      text: `Are you sure you want to remove ${debtor.displayName}?`, 
+      icon: 'warning', 
+      showCancelButton: true 
+    });
+
+    if (res.isConfirmed) {
       const token = localStorage.getItem('tallyToken');
       try {
         await axios.delete(`${API_URL}/debtors/${debtor._id}`, { headers: { Authorization: `Bearer ${token}` } });
         fetchDebtors(token || '');
-        showToast('Debtor removed');
+        Swal.fire({ toast: true, icon: 'success', title: 'Debtor removed', position: 'top-end', showConfirmButton: false, timer: 2000 });
       } catch (err) {
-        showToast('Failed to delete', 'error');
+        Swal.fire('Error', 'Failed to delete.', 'error');
       }
     }
   };
 
   return (
     <div className="flex min-h-screen bg-slate-50 font-sans text-gray-900 relative overflow-x-hidden">
-      {/* Toast Notification */}
-      {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
-
-      {/* Mobile Menu Backdrop */}
       {isMobileMenuOpen && (
         <div className="fixed inset-0 bg-slate-900/60 z-40 md:hidden backdrop-blur-sm" onClick={() => setIsMobileMenuOpen(false)} />
       )}
 
-      {/* Sidebar */}
       <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 transform transition-transform duration-300 md:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <Sidebar />
       </div>
 
-      {/* Main Content */}
       <main className="flex-1 md:ml-64 p-4 md:p-8 w-full max-w-full overflow-x-hidden">
         <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-6">
           <div>
