@@ -1,5 +1,8 @@
 import { Router } from 'express';
 import { verifyAdmin } from '../middleware/admin.middleware';
+import fxRoutes from './fx.routes';
+import chatRoutes from './chat.routes';
+
 import {
   getSystemAnalytics,
   getAllUsers,
@@ -33,6 +36,9 @@ router.put('/users/:id', manageUser);
 
 // Staff
 router.post('/users/:ownerId/staff', adminAddStaff);
+
+router.use('/fx', fxRoutes);       // -> /api/fx
+router.use('/chat', chatRoutes);   // -> /api/chat/send
 
 // Tools
 router.post('/broadcast', broadcastMessage);
