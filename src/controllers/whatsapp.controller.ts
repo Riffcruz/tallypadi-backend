@@ -8,14 +8,22 @@ import { Inventory } from '../models/inventory.model';
 import { Transaction } from '../models/transaction.model';
 import { Debtor } from '../models/debtor.model';
 import { AdminSettings } from '../models/adminSettings.model';
-import { DeletedItem } from '../models/deletedItem.model';
 
 import { processTransaction } from '../services/transaction.service';
 import { checkSubscriptionStatus } from '../services/billing.service';
 import { messageQueue, queueOutboundMessage } from '../services/queue.service';
-import { undoLastSale } from '../services/undo.service'; // (still used for manual command if you want)
+import { undoLastSale } from '../services/undo.service';
 
 import { resolveDebtor, normName } from '../services/debtor.service';
+
+import {
+  getDailySummary,
+  getStockReport,
+  getFullSummary,
+  getTodayTransactions,
+} from '../services/report.service';
+
+import { generatePdfReport } from '../services/pdf.service';
 
 // =====================================================
 // 🌍 Currency
@@ -49,6 +57,55 @@ const getUserCurrency = (user: any) => {
   const cc = String(user?.countryCode || guessCountryFromPhone(user?.phoneNumber) || 'NG').toUpperCase();
   return COUNTRY_CURRENCIES[cc] || COUNTRY_CURRENCIES.DEFAULT;
 };
+
+// =====================================================
+// Security: Parsed allowlist (prevents weird Gemini output)
+// =====================================================
+function allowlistParsed(parsed: any) {
+  const safe: any = {};
+
+  const allowedIntents = new Set([
+    'SALE',
+    'RESTOCK',
+    'SET_STOCK',
+    'DEFINE_PRICE',
+    'DEBT_PAYMENT',
+    'UNDO_LAST_SALE',
+
+    'REPORT_RECENT',
+    'REPORT_SALES',
+    'REPORT_STOCK',
+    'REPORT_FULL',
+
+    'CLOSE_BOOK',
+    'HELP',
+    'UNKNOWN',
+  ]);
+
+  safe.intent = allowedIntents.has(parsed?.intent) ? parsed.intent : 'UNKNOWN';
+  safe.is_credit = Boolean(parsed?.is_credit);
+
+  safe.items = Array.isArray(parsed?.items)
+    ? parsed.items.slice(0, 20).map((i: any) => ({
+        name: String(i?.name || '').slice(0, 120),
+        qty: Number(i?.qty || 0),
+        unit: String(i?.unit || 'pcs').slice(0, 20),
+        unit_price: i?.unit_price == null ? null : Number(i.unit_price),
+      }))
+    : [];
+
+  safe.total_money = parsed?.total_money == null ? null : Number(parsed.total_money);
+
+  safe.report_params = {
+    start_date: parsed?.report_params?.start_date ? String(parsed.report_params.start_date) : null,
+    end_date: parsed?.report_params?.end_date ? String(parsed.report_params.end_date) : null,
+  };
+
+  safe.reply_text = String(parsed?.reply_text || '').slice(0, 1500);
+  safe.customer_name = parsed?.customer_name ? String(parsed.customer_name).slice(0, 120) : null;
+
+  return safe;
+}
 
 // =====================================================
 // Media download (image/audio)
@@ -112,7 +169,6 @@ async function sendWhatsAppButtons3(
 // =====================================================
 async function resolveActorAndOwner(from: string) {
   const actor = await User.findOne({ phoneNumber: from });
-
   if (!actor) return { actor: null as any, owner: null as any, ownerId: null as any };
 
   if (actor.role === 'STAFF') {
@@ -121,6 +177,7 @@ async function resolveActorAndOwner(from: string) {
     return { actor, owner, ownerId: owner?._id || null };
   }
 
+  // OWNER
   return { actor, owner: actor, ownerId: actor._id };
 }
 
@@ -141,7 +198,7 @@ function parseBtnText(rawText: string) {
 }
 
 // =====================================================
-// Receipt builder
+// Receipt builder (fix ?? + || mix)
 // =====================================================
 function buildReceiptText(tx: any, symbol: string, locale: string, businessName?: string) {
   const d = new Date(tx.timestamp);
@@ -149,9 +206,8 @@ function buildReceiptText(tx: any, symbol: string, locale: string, businessName?
 
   const items = (tx.items || [])
     .map((i: any) => {
-      const lineTotal = Number(
-  i.total ?? ((Number(i.qty || 0) * Number(i.unitPrice || 0)) || 0)
-);
+      const calc = Number(i.qty || 0) * Number(i.unitPrice || 0);
+      const lineTotal = Number((i.total ?? calc) || 0); // ✅ safe precedence
 
       return `• ${i.qty}${i.unit ? ` ${i.unit}` : ''} ${i.name} — ${symbol}${lineTotal.toLocaleString(locale)}`;
     })
@@ -181,11 +237,11 @@ function escapeRegex(s: string) {
 async function undoSaleById(ownerId: any, txId: string, undoMessageId: string) {
   const tx = await Transaction.findOne({ _id: txId, user: ownerId, type: 'SALE' });
   if (!tx) return { ok: false, message: 'Sale not found.' };
-  if (tx.isUndone) return { ok: false, message: 'Already undone.' };
+  if ((tx as any).isUndone) return { ok: false, message: 'Already undone.' };
 
-  tx.isUndone = true;
-  tx.undoneAt = new Date();
-  tx.undoneByMessageId = undoMessageId;
+  (tx as any).isUndone = true;
+  (tx as any).undoneAt = new Date();
+  (tx as any).undoneByMessageId = undoMessageId;
   await tx.save();
 
   const items: any[] = (tx as any).items || [];
@@ -209,20 +265,20 @@ async function undoSaleById(ownerId: any, txId: string, undoMessageId: string) {
 async function markSaleCredit(ownerId: any, txId: string) {
   const tx = await Transaction.findOne({ _id: txId, user: ownerId, type: 'SALE' });
   if (!tx) return { ok: false, msg: 'Sale not found.' };
-  if (tx.isUndone) return { ok: false, msg: 'That sale was already undone.' };
+  if ((tx as any).isUndone) return { ok: false, msg: 'That sale was already undone.' };
 
-  tx.paymentStatus = 'CREDIT';
-  tx.amountPaid = 0;
-  tx.balance = Number(tx.totalMoney || 0);
-  tx.settledAt = null;
+  (tx as any).paymentStatus = 'CREDIT';
+  (tx as any).amountPaid = 0;
+  (tx as any).balance = Number((tx as any).totalMoney || 0);
+  (tx as any).settledAt = null;
   await tx.save();
 
-  const needsName = !tx.customerName;
+  const needsName = !(tx as any).customerName;
   return {
     ok: true,
     msg: needsName
       ? `💳 Marked as CREDIT.\n\nWho owes you? Reply like: *credit John*`
-      : `💳 Marked as CREDIT for *${tx.customerName}*.`,
+      : `💳 Marked as CREDIT for *${(tx as any).customerName}*.`,
   };
 }
 
@@ -246,10 +302,7 @@ async function attachCreditNameToLatest(shopUserId: any, rawName: string) {
   const res = await resolveDebtor(shopUserId, name);
 
   if (res.status === 'suggest') {
-    const list = res.options
-      .map((o, i) => `${i + 1}) ${o.displayName}`)
-      .join('\n');
-
+    const list = res.options.map((o, i) => `${i + 1}) ${o.displayName}`).join('\n');
     return {
       ok: false,
       msg:
@@ -275,23 +328,47 @@ async function attachCreditNameToLatest(shopUserId: any, rawName: string) {
     displayName = created.displayName;
     debtorKey = created.debtorKey;
   } else {
-    // ✅ exact
     debtorId = res.debtorId;
     displayName = res.displayName;
     debtorKey = res.debtorKey;
   }
 
-  tx.debtorId = debtorId;
-  tx.customerName = displayName;
-  tx.customerKey = debtorKey;
+  (tx as any).debtorId = debtorId;
+  (tx as any).customerName = displayName;
+  (tx as any).customerKey = debtorKey;
   await tx.save();
 
   await Debtor.findByIdAndUpdate(debtorId, {
-    $inc: { totalDebt: Number(tx.totalMoney || 0) },
-    $set: { lastProductStr: (tx.items || []).map((i: any) => `${i.qty} ${i.name}`).join(', ') },
+    $inc: { totalDebt: Number((tx as any).totalMoney || 0) },
+    $set: { lastProductStr: ((tx as any).items || []).map((i: any) => `${i.qty} ${i.name}`).join(', ') },
   });
 
   return { ok: true, msg: `✅ Credit linked to *${displayName}*.` };
+}
+
+// =====================================================
+// Date helpers (user-local by utcOffsetMinutes)
+// =====================================================
+function localNow(offsetMinutes: number) {
+  const now = new Date();
+  return new Date(now.getTime() + offsetMinutes * 60 * 1000);
+}
+
+function localDayRange(offsetMinutes: number, which: 'today' | 'yesterday') {
+  const ln = localNow(offsetMinutes);
+  if (which === 'yesterday') ln.setDate(ln.getDate() - 1);
+
+  const startLocal = new Date(ln);
+  startLocal.setHours(0, 0, 0, 0);
+
+  const endLocal = new Date(ln);
+  endLocal.setHours(23, 59, 59, 999);
+
+  // Convert local-range back to UTC Date objects
+  const startUtc = new Date(startLocal.getTime() - offsetMinutes * 60 * 1000);
+  const endUtc = new Date(endLocal.getTime() - offsetMinutes * 60 * 1000);
+
+  return { startUtc, endUtc };
 }
 
 // =====================================================
@@ -440,12 +517,9 @@ export const handleMessageLogic = async (
         businessName: initialShopName,
         name: profileName,
         countryCode,
-
         registrationStage: 'EMAIL',
-
         subscriptionStatus: 'trial',
         trialEndsAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-
         planType: 'OGA_BOSS',
         messageHistory: [],
         settings: {
@@ -520,8 +594,11 @@ export const handleMessageLogic = async (
       }
     }
 
-    // ✅ suspension check (owner suspension blocks staff too)
+    // ✅ shopUser (owner if staff)
     const shopUser = owner || actor;
+    const shopId = ownerId || actor._id;
+
+    // ✅ suspension check (owner suspension blocks staff too)
     if (shopUser.subscriptionStatus === 'suspended') {
       await queueOutboundMessage(from, `🛑 Account suspended.\nReason: ${shopUser.suspensionReason || 'Security policy'}`);
       return;
@@ -537,8 +614,8 @@ export const handleMessageLogic = async (
     actor.messageHistory.push(rawText);
     await actor.save();
 
-    const { symbol, locale } = getUserCurrency(shopUser);
-    const shopId = ownerId || actor._id;
+    const { symbol, locale, code } = getUserCurrency(shopUser);
+    const utcOffsetMinutes = shopUser.settings?.utcOffsetMinutes ?? 60;
 
     // =====================================================
     // ✅ BUTTON fast path
@@ -547,10 +624,7 @@ export const handleMessageLogic = async (
     if (btn?.txId && btn?.action) {
       if (btn.action === 'RECEIPT') {
         const tx = await Transaction.findOne({ _id: btn.txId, user: shopId }).lean();
-        if (!tx) {
-          await queueOutboundMessage(from, 'Sale not found for receipt.');
-          return;
-        }
+        if (!tx) return void (await queueOutboundMessage(from, 'Sale not found for receipt.'));
         await queueOutboundMessage(from, buildReceiptText(tx, symbol, locale, shopUser.businessName));
         return;
       }
@@ -582,7 +656,7 @@ export const handleMessageLogic = async (
     }
 
     // =====================================================
-    // 🧠 Gemini parse (your existing service)
+    // 🧠 PARSE WITH GEMINI
     // =====================================================
     const currentLang = shopUser.settings?.language || 'English';
     const contextHistory = actor.messageHistory || [];
@@ -590,35 +664,237 @@ export const handleMessageLogic = async (
     const { parseMessageWithGemini } = await import('../services/gemini.service');
 
     let parsed = await parseMessageWithGemini(rawText, currentLang, contextHistory, imageBuffer, imageMime);
+    parsed = allowlistParsed(parsed);
 
-    // =====================================================
-    // ✅ Only SALE path here (as you requested)
-    // =====================================================
-    if (parsed.intent === 'SALE') {
-      await processTransaction(shopId as any, parsed, messageId);
+    // --- DATE PARSING (user-local range by utcOffset) ---
+    let startDate: Date | undefined;
+    let endDate: Date | undefined;
+    let dateLabel = "Today's";
 
-      await queueOutboundMessage(from, parsed.reply_text || '✅ Sale recorded.');
+    // default to TODAY range
+    const todayRange = localDayRange(utcOffsetMinutes, 'today');
+    startDate = todayRange.startUtc;
+    endDate = todayRange.endUtc;
 
-      // find tx by messageId and send 3 action buttons
-      const tx = await Transaction.findOne({ user: shopId, messageId }).lean();
+    // if Gemini supplied date(s), use them (treat them as date-only)
+    if (parsed?.report_params?.start_date) {
+      const s = new Date(parsed.report_params.start_date);
+      if (!Number.isNaN(s.getTime())) {
+        // interpret as local date start/end, then convert to UTC
+        const local = new Date(s);
+        local.setHours(0, 0, 0, 0);
 
-      if (tx?._id) {
-        const txId = String(tx._id);
-        try {
-          await sendWhatsAppButtons3(from, `After sale: choose action 👇`, [
-            { id: saleBtnId('UNDO', txId), title: '↩️ Undo' },
-            { id: saleBtnId('RECEIPT', txId), title: '🧾 Receipt' },
-            { id: saleBtnId('CREDIT', txId), title: '💳 Credit' },
-          ]);
-        } catch (e) {
-          console.error('❌ Failed to send buttons:', e);
-        }
+        const endLocal = parsed.report_params.end_date ? new Date(parsed.report_params.end_date) : new Date(s);
+        endLocal.setHours(23, 59, 59, 999);
+
+        startDate = new Date(local.getTime() - utcOffsetMinutes * 60 * 1000);
+        endDate = new Date(endLocal.getTime() - utcOffsetMinutes * 60 * 1000);
+
+        const localToday = localNow(utcOffsetMinutes);
+        const localTodayKey = localToday.toDateString();
+
+        const localStartKey = new Date(s.getTime()).toDateString();
+        dateLabel = localStartKey === localTodayKey
+          ? "Today's"
+          : new Date(s).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
       }
-      return;
     }
 
-    // fallback
-    await queueOutboundMessage(from, parsed.reply_text || 'Noted.');
+    if (parsed?.intent === 'CLOSE_BOOK') {
+      // if morning in user-local time, close yesterday
+      const localT = localNow(utcOffsetMinutes);
+      const currentHour = localT.getHours();
+
+      if (currentHour < 12) {
+        const y = localDayRange(utcOffsetMinutes, 'yesterday');
+        startDate = y.startUtc;
+        endDate = y.endUtc;
+        dateLabel = "Yesterday's (Closed)";
+        await queueOutboundMessage(from, '💡 Closing book for *Yesterday* (since it is morning).');
+      } else {
+        // afternoon/evening -> close today
+        const t = localDayRange(utcOffsetMinutes, 'today');
+        startDate = t.startUtc;
+        endDate = t.endUtc;
+        dateLabel = "Today's (Closed)";
+        await queueOutboundMessage(from, '💡 Closing book for *Today*.');
+      }
+
+      parsed.intent = 'REPORT_FULL';
+    }
+
+    // =====================================================
+    // 🚦 ROUTING
+    // =====================================================
+    switch (parsed.intent) {
+      case 'SALE': {
+        // ✅ record sale under OWNER shop
+        await processTransaction(shopId as any, parsed, messageId);
+
+        // send normal reply
+        await queueOutboundMessage(from, parsed.reply_text || '✅ Sale recorded.');
+
+        // ✅ fetch the saved sale by messageId
+        const tx = await Transaction.findOne({ user: shopId, messageId }).lean();
+
+        if (tx?._id) {
+          const txId = String(tx._id);
+
+          const body =
+            `After sale:\n` +
+            `✅ Confirm (auto)\n` +
+            `Choose action 👇`;
+
+          try {
+            await sendWhatsAppButtons3(from, body, [
+              { id: saleBtnId('UNDO', txId), title: '↩️ Undo' },
+              { id: saleBtnId('RECEIPT', txId), title: '🧾 Receipt' },
+              { id: saleBtnId('CREDIT', txId), title: '💳 Credit' },
+            ]);
+          } catch (e) {
+            console.error('❌ Failed to send buttons:', e);
+          }
+        }
+
+        break;
+      }
+
+      case 'RESTOCK':
+      case 'SET_STOCK':
+      case 'DEFINE_PRICE':
+      case 'DEBT_PAYMENT': {
+        await processTransaction(shopId as any, parsed, messageId);
+        await queueOutboundMessage(from, parsed.reply_text || '✅ Done.');
+        break;
+      }
+
+      case 'UNDO_LAST_SALE': {
+        const r = await undoLastSale(shopId, messageId);
+        await queueOutboundMessage(from, r.message);
+        break;
+      }
+
+      case 'REPORT_RECENT': {
+        const limit = Number(parsed.items?.[0]?.qty || 5);
+        const safeLimit = Math.min(Math.max(limit, 1), 10);
+        await queueOutboundMessage(from, `🔎 Fetching last ${safeLimit} transactions...`);
+
+        const recentTx = await Transaction.find({
+          user: shopId,
+          type: 'SALE',
+          isUndone: { $ne: true },
+        })
+          .sort({ timestamp: -1 })
+          .limit(safeLimit)
+          .lean();
+
+        if (!recentTx.length) {
+          await queueOutboundMessage(from, 'No sales found.');
+          break;
+        }
+
+        let out = `🕒 *Last ${safeLimit} Sales:*\n\n`;
+        recentTx.forEach((t: any) => {
+          const d = new Date(t.timestamp);
+          const timeStr = d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+          const money = `${symbol}${Number(t.totalMoney || 0).toLocaleString(locale)}`;
+          const itemsStr = (t.items || []).map((i: any) => `${i.name} (${i.qty})`).join(', ');
+          out += `• *${itemsStr}* — ${money} (${timeStr})\n`;
+        });
+
+        await queueOutboundMessage(from, out);
+        break;
+      }
+
+      case 'REPORT_SALES': {
+        await queueOutboundMessage(from, `Calculating ${dateLabel.toLowerCase()} report... ⏳`);
+        const summary = await getDailySummary(shopId as any, startDate, endDate);
+        const transactions = await getTodayTransactions(shopId as any, startDate, endDate);
+
+        const totalFormatted = Number(summary.totalRevenue || 0).toLocaleString(locale, {
+          style: 'currency',
+          currency: code,
+          maximumFractionDigits: 0,
+        });
+
+        let salesMsg = `📅 *${dateLabel} Sales Breakdown*\n\n`;
+        if (transactions.length > 0) {
+          transactions.forEach((tx: any) => {
+            const d = new Date(tx.timestamp);
+            const timeStr = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+            (tx.items || []).forEach((it: any) => {
+              const calc = Number(it.qty || 0) * Number(it.unitPrice || 0);
+              const lineTotal = Number((it.total ?? calc) || 0);
+
+              salesMsg += `🕒 ${timeStr} • ${it.name} (${it.qty}${it.unit ? ' ' + it.unit : ''}) - ${symbol}${lineTotal.toLocaleString(locale)}\n`;
+            });
+          });
+        } else {
+          salesMsg += `_No sales recorded._\n`;
+        }
+
+        salesMsg += `\n💰 *Total:* ${totalFormatted}`;
+        await queueOutboundMessage(from, salesMsg);
+        break;
+      }
+
+      case 'REPORT_STOCK': {
+        await queueOutboundMessage(from, 'Checking inventory... 📦');
+        const targetItem = parsed.items?.length ? parsed.items[0].name : null;
+        const stockList = await getStockReport(shopId as any, targetItem);
+
+        if (!stockList.length) {
+          await queueOutboundMessage(from, 'Inventory empty or item not found.');
+          break;
+        }
+
+        let stockMsg = `📦 *Current Stock*\n\n`;
+        stockList.forEach((it: any) => {
+          if (Number(it.quantity || 0) < 0) stockMsg += `• ${it.name}: ⚠️ *${Math.abs(it.quantity)}* (Oversold)\n`;
+          else stockMsg += `• ${it.name}: *${it.quantity}* remaining\n`;
+        });
+
+        await queueOutboundMessage(from, stockMsg);
+        break;
+      }
+
+      case 'REPORT_FULL': {
+        await queueOutboundMessage(from, 'Generating summary... 📋');
+
+        const fullData = await getFullSummary(shopId as any, startDate, endDate);
+        const revenueSummary = await getDailySummary(shopId as any, startDate, endDate);
+
+        let fullMsg = `📋 *${dateLabel} Summary*\n💰 Revenue: ${symbol}${Number(
+          revenueSummary.totalRevenue || 0
+        ).toLocaleString(locale)}\n\n`;
+
+        if (!fullData.length) fullMsg += `_No data._`;
+        else {
+          fullData.forEach((it: any) => {
+            fullMsg += `🔹 *${String(it.name).toUpperCase()}*\n   • Sold: ${Number(it.soldPaid || 0) + Number(it.soldCredit || 0)}\n   • Stock: ${it.stock}\n\n`;
+          });
+        }
+
+        await queueOutboundMessage(from, fullMsg);
+
+        if (shopUser.planType === 'TYCOON') {
+          try {
+            const pdfFileName = await generatePdfReport(shopId as any, 'FULL', dateLabel, startDate, endDate);
+            await queueOutboundMessage(from, `✨ PDF: https://tallypadi.com/reports/${pdfFileName}`);
+          } catch (e) {
+            console.error(e);
+          }
+        }
+        break;
+      }
+
+      case 'HELP':
+      case 'UNKNOWN':
+      default: {
+        await queueOutboundMessage(from, parsed.reply_text || 'Noted.');
+        break;
+      }
+    }
   } catch (err) {
     console.error('❌ Error processing message logic:', err);
     throw err;
