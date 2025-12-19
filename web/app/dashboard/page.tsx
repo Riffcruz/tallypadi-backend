@@ -156,95 +156,7 @@ function StatCard({
   );
 }
 
-// --- CHAT DOCK (admin-like helper) ---
-function ChatDock({
-  open,
-  onToggle,
-  onSend,
-  sending,
-  placeholder,
-}: {
-  open: boolean;
-  onToggle: () => void;
-  onSend: (text: string) => Promise<void>;
-  sending: boolean;
-  placeholder?: string;
-}) {
-  const [text, setText] = useState('');
 
-  const send = async () => {
-    const t = text.trim();
-    if (!t) return;
-    await onSend(t);
-    setText('');
-  };
-
-  return (
-    <>
-      {/* Floating Button */}
-      <button
-        onClick={onToggle}
-        className="fixed bottom-5 right-5 z-[60] md:bottom-6 md:right-6 rounded-2xl shadow-lg border bg-slate-900 text-white px-4 py-3 flex items-center gap-2 hover:bg-slate-800 active:scale-95 transition"
-        aria-label="Open chat"
-      >
-        <MessageSquare className="w-5 h-5" />
-        <span className="text-sm font-extrabold hidden sm:block">Chat</span>
-        <Sparkles className="w-4 h-4 opacity-70" />
-      </button>
-
-      {/* Panel */}
-      <div
-        className={`fixed z-[70] left-0 right-0 bottom-0 md:left-auto md:right-6 md:bottom-20 md:w-[420px] transition-all duration-300 ${
-          open ? 'translate-y-0 opacity-100' : 'translate-y-6 opacity-0 pointer-events-none'
-        }`}
-      >
-        <div className="mx-auto md:mx-0 rounded-t-3xl md:rounded-3xl border border-slate-200 bg-white shadow-2xl overflow-hidden">
-          <div className="px-4 py-3 border-b bg-slate-50 flex items-center justify-between">
-            <div className="min-w-0">
-              <p className="text-xs font-black uppercase tracking-widest text-slate-500">Quick Chat</p>
-              <p className="text-sm font-extrabold text-slate-900 truncate">Send message to TallyPadi</p>
-            </div>
-            <button
-              onClick={onToggle}
-              className="p-2 rounded-xl hover:bg-black/5 active:scale-95 transition"
-              aria-label="Close chat"
-            >
-              <X className="w-5 h-5 text-slate-600" />
-            </button>
-          </div>
-
-          <div className="p-4 space-y-3">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 leading-relaxed">
-              Tip: Type like <span className="font-bold">“Report today”</span> or <span className="font-bold">“Stock remaining”</span>.
-            </div>
-
-            <textarea
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              placeholder={placeholder || 'Type a message...'}
-              className="w-full h-28 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-emerald-300 resize-none"
-            />
-
-            <button
-              disabled={sending || !text.trim()}
-              onClick={send}
-              className="w-full rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white py-3 font-extrabold flex items-center justify-center gap-2 disabled:opacity-60"
-            >
-              {sending ? (
-                <span className="text-sm">Sending...</span>
-              ) : (
-                <>
-                  <Send className="w-4 h-4" />
-                  Send
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-      </div>
-    </>
-  );
-}
 
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardResponse | null>(null);
@@ -648,14 +560,7 @@ const topTransactions = filteredTransactions.slice(0, 6);
         </div>
       </main>
 
-      {/* ✅ Chat Dock */}
-      <ChatDock
-        open={chatOpen}
-        onToggle={() => setChatOpen((v) => !v)}
-        onSend={sendChat}
-        sending={chatSending}
-        placeholder="Type message (e.g. Report today, Stock remaining, Sales this week...)"
-      />
+    
     </div>
   );
 }
