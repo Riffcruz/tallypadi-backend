@@ -45,17 +45,19 @@ export default function SalesHistory({ user }: { user: UserProfile | null }) {
     if (dates.start) params.startDate = dates.start;
     if (dates.end) params.endDate = dates.end;
 
-    axios
-      .get(`${API_URL}/sales`, { headers: { Authorization: `Bearer ${token}` }, params })
-      .then((res) => {
-  const rows = Array.isArray(res.data) ? res.data : [];
+   axios
+  .get(`${API_URL}/sales`, { headers: { Authorization: `Bearer ${token}` }, params })
+  .then((res) => {
+    const rows = Array.isArray(res.data) ? res.data : [];
+    const filtered = rows.filter((sale: any) => !isUndoneSale(sale) && !isUnknownItemSale(sale));
+    setHistory(filtered);
+  })
+  .catch((err) => {
+    console.error('History Error', err);
+    setHistory([]);
+  })
+  .finally(() => setLoading(false));
 
-  // ✅ hide undone + unknown
-  const filtered = rows.filter((sale: any) => !isUndoneSale(sale) && !isUnknownItemSale(sale));
-
-  setHistory(filtered);
-  setLoading(false);
-});
   };
 
   const isUnknownItemSale = (sale: any) => {
@@ -72,7 +74,19 @@ export default function SalesHistory({ user }: { user: UserProfile | null }) {
   });
 };
 
-const isUndoneSale = (sale: any) => sale?.isUndone === true || sale?.isUndone === 'true';
+const isUndoneSale = (sale: any) => {
+  const raw =
+    sale?.isUndone ??
+    sale?.is_undone ??
+    sale?.undone ??
+    sale?.is_undone_sale ??
+    sale?.meta?.isUndone;
+
+  if (raw === true) return true;
+
+  const s = String(raw ?? '').trim().toLowerCase();
+  return s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'undone';
+};
 
 
   const downloadPDF = async () => {
@@ -189,19 +203,35 @@ const isUndoneSale = (sale: any) => sale?.isUndone === true || sale?.isUndone ==
   };
 
   const getSaleStatus = (sale: any): { type: SaleStatusType; balance: number; paid: number; total: number } => {
-    const { total, paid, balance } = getSaleTotals(sale);
+  const { total, paid, balance } = getSaleTotals(sale);
 
-    // also respect explicit flags if they exist
-    const paymentStatus = String(sale?.paymentStatus || '').toUpperCase(); // e.g. PAID / CREDIT
-    const explicitCredit = sale?.is_credit === true || sale?.isCredit === true || paymentStatus === 'CREDIT';
+  const paymentStatus = String(sale?.paymentStatus || '').toUpperCase(); // PAID / CREDIT / PART_PAYMENT
+  const explicitCreditFlag = sale?.is_credit === true || sale?.isCredit === true;
 
-    if (balance > 0 || explicitCredit) {
-      if (paid > 0 && balance > 0) return { type: 'PART_PAYMENT', balance, paid, total };
-      return { type: 'CREDIT', balance, paid, total };
-    }
-
+  // ✅ If fully settled, ALWAYS PAID
+  if (balance <= 0 && paid >= total && total > 0) {
     return { type: 'PAID', balance: 0, paid, total };
-  };
+  }
+
+  // ✅ If backend explicitly says PAID, trust it (unless balance > 0)
+  if (paymentStatus === 'PAID' && balance <= 0) {
+    return { type: 'PAID', balance: 0, paid, total };
+  }
+
+  // ✅ Now decide credit/part-payment ONLY if there is balance
+  if (balance > 0) {
+    if (paid > 0) return { type: 'PART_PAYMENT', balance, paid, total };
+    return { type: 'CREDIT', balance, paid, total };
+  }
+
+  // ✅ Edge: no balance but flags still say credit -> treat as PAID
+  if (explicitCreditFlag || paymentStatus === 'CREDIT') {
+    return { type: 'PAID', balance: 0, paid, total };
+  }
+
+  return { type: 'PAID', balance: 0, paid, total };
+};
+
 
   const getItemQty = (item: any) => {
     // supports both quantity and qty

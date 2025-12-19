@@ -39,6 +39,43 @@ const normalizeSalePayload = (body: any): SaleItemInput[] => {
 
   return clean;
 };
+const buildNotUndoneMatch = () => ({
+  $or: [
+    { isUndone: { $exists: false } },
+    { isUndone: false },
+    { isUndone: 0 },
+    { isUndone: 'false' },
+    { isUndone: '0' },
+    { isUndone: null },
+  ],
+});
+
+const computePaidBalanceStatus = (t: any) => {
+  const total = Number(t?.totalMoney || 0);
+
+  const paid = Number(
+    t?.amountPaid ??
+      t?.paidAmount ??
+      t?.paid ??
+      t?.totalPaid ??
+      t?.paymentsTotal ?? // optional if you later add it
+      0
+  );
+
+  // If DB already has balance, trust it, else compute
+  const balanceRaw = t?.balance;
+  const balance = balanceRaw !== undefined && balanceRaw !== null
+    ? Math.max(Number(balanceRaw || 0), 0)
+    : Math.max(total - paid, 0);
+
+  // If fully settled -> PAID no matter what old flags say
+  let paymentStatus: 'PAID' | 'CREDIT' | 'PART_PAYMENT' = 'PAID';
+  if (balance > 0 && paid > 0) paymentStatus = 'PART_PAYMENT';
+  else if (balance > 0) paymentStatus = 'CREDIT';
+
+  return { total, paid, balance, paymentStatus };
+};
+
 
 // ✅ Currency Mapping
 const COUNTRY_CURRENCY_CODE: Record<string, string> = {
@@ -175,37 +212,55 @@ export const recordSale = async (req: Request | any, res: Response) => {
 // =====================================================
 export const getSalesHistory = async (req: Request | any, res: Response) => {
   try {
-    // 🛑 FIX: Get User ID from Token
     const userId = req.user?.id || req.user?._id;
     if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
-    const startDate = String(req.query.startDate || '');
-    const endDate = String(req.query.endDate || '');
+    const startDate = String(req.query.startDate || '').trim();
+    const endDate = String(req.query.endDate || '').trim();
 
-    // ✅ Query MUST include user: userId
-    const query: any = { user: userId, type: 'SALE' };
-    
+    const query: any = {
+      user: userId,
+      type: 'SALE',
+      ...buildNotUndoneMatch(), // ✅ hide undone
+    };
+
+    // ✅ Prefer timestamp filtering (more reliable than `date` string)
     if (startDate || endDate) {
-      // Logic for filtering by date string (YYYY-MM-DD) or timestamp
-      if (startDate && endDate) {
-         query.date = { $gte: startDate, $lte: endDate };
-      } else if (startDate) {
-         query.date = { $gte: startDate };
-      }
+      const start = startDate ? new Date(`${startDate}T00:00:00.000Z`) : null;
+      const end = endDate ? new Date(`${endDate}T23:59:59.999Z`) : null;
+
+      query.timestamp = {};
+      if (start) query.timestamp.$gte = start;
+      if (end) query.timestamp.$lte = end;
+
+      // if timestamp filter is empty, delete it
+      if (!Object.keys(query.timestamp).length) delete query.timestamp;
     }
 
     const sales = await Transaction.find(query).sort({ timestamp: -1 });
 
-    const formatted = sales.map((t: any) => ({
-      id: t._id,
-      date: t.timestamp || t.date || new Date(),
-      totalAmount: t.totalMoney || 0,
-      items: (t.items || []).map((i: any) => ({
-        name: i.name,
-        quantity: i.qty ?? i.quantity ?? 0,
-        price: i.unitPrice ?? i.price ?? 0
-      }))
-    }));
+    const formatted = sales.map((t: any) => {
+      const { total, paid, balance, paymentStatus } = computePaidBalanceStatus(t);
+
+      return {
+        id: t._id,
+        timestamp: t.timestamp,
+        date: t.timestamp || t.date || new Date(),
+
+        totalAmount: total,
+
+        // ✅ IMPORTANT: send these so frontend won’t guess wrongly
+        paidAmount: paid,
+        balance,
+        paymentStatus,
+
+        items: (t.items || []).map((i: any) => ({
+          name: i.name,
+          quantity: i.qty ?? i.quantity ?? 0,
+          price: i.unitPrice ?? i.price ?? 0,
+        })),
+      };
+    });
 
     res.json(formatted);
   } catch (error: any) {
@@ -213,6 +268,7 @@ export const getSalesHistory = async (req: Request | any, res: Response) => {
     res.status(500).json({ error: "Server Error" });
   }
 };
+
 
 
 // =====================================================
@@ -240,8 +296,22 @@ export const generateSalesReport = async (req: Request | any, res: Response) => 
     const endDate = String(req.query.endDate || '');
 
     // ✅ Query MUST include user: userId
-    const query: any = { user: userId, type: 'SALE' };
-    if (startDate && endDate) query.date = { $gte: startDate, $lte: endDate };
+    const query: any = {
+      user: userId,
+      type: 'SALE',
+      ...buildNotUndoneMatch(), // ✅ exclude undone from PDF + totals
+    };
+
+    if (startDate || endDate) {
+  const start = startDate ? new Date(`${startDate}T00:00:00.000Z`) : null;
+  const end = endDate ? new Date(`${endDate}T23:59:59.999Z`) : null;
+
+  query.timestamp = {};
+  if (start) query.timestamp.$gte = start;
+  if (end) query.timestamp.$lte = end;
+  if (!Object.keys(query.timestamp).length) delete query.timestamp;
+}
+
 
     const transactions = await Transaction.find(query).sort({ timestamp: 1 });
     const totalRevenue = transactions.reduce((sum: number, t: any) => sum + (t.totalMoney || 0), 0);
