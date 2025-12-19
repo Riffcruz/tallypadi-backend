@@ -372,6 +372,8 @@ If the user says:
 - "without undone"
 then include_undone MUST be false.
 
+if the user says nothing about undone sales, include_undone MUST be false.
+
 
 *** 6. REPLY TEXT RULE (IMPORTANT) ***
 In reply_text:
