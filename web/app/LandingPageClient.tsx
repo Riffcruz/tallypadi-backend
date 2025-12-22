@@ -315,8 +315,10 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-20 items-center">
             {/* Logo */}
-            <div className="flex items-center gap-3 cursor-pointer group">
+           import Image from "next/image";
 
+<div className="cursor-pointer group">
+  <div className="relative w-12 h-12 overflow-hidden group-hover:scale-105 transition-transform duration-300">
     <Image
       src="/tallypadi-logo.png"
       alt="TallyPadi logo"
@@ -324,10 +326,9 @@ export default function LandingPage() {
       className="object-contain"
       priority
     />
-  
-
-
+  </div>
 </div>
+
 
             {/* Desktop Links */}
             <div className="hidden md:flex space-x-8 items-center">
