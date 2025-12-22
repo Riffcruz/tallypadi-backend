@@ -316,7 +316,7 @@ export default function LandingPage() {
           <div className="flex justify-between h-20 items-center">
             {/* Logo */}
             <div className="flex items-center gap-3 cursor-pointer group">
-  <div className="relative w-10 h-10 rounded-xl overflow-hidden shadow-lg shadow-emerald-500/20 group-hover:rotate-6 transition-transform duration-300">
+
     <Image
       src="/tallypadi-logo.png"
       alt="TallyPadi logo"
@@ -324,9 +324,9 @@ export default function LandingPage() {
       className="object-contain"
       priority
     />
-  </div>
+  
 
-  <span className="font-bold text-2xl tracking-tight text-white">Tallypadi</span>
+
 </div>
 
             {/* Desktop Links */}
