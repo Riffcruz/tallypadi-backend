@@ -1,19 +1,29 @@
 // src/controllers/receipt.controller.ts
 import { Request, Response } from 'express';
 import PDFDocument from 'pdfkit';
-import fs from 'fs';
 import path from 'path';
+import fs from 'fs';
 import { Transaction } from '../models/transaction.model';
 import { User } from '../models/user.model';
-type PDFKitDoc = InstanceType<typeof PDFDocument>;
 
+// ✅ Currency Mapping (same style as sales.controller)
+const COUNTRY_CURRENCY_CODE: Record<string, string> = {
+  NG: 'NGN', GH: 'GHS', US: 'USD', GB: 'GBP', EU: 'EUR',
+  KE: 'KES', ZA: 'ZAR', IN: 'INR', CN: 'CNY', CA: 'CAD',
+  AU: 'AUD', JP: 'JPY', AE: 'AED', RW: 'RWF', TZ: 'TZS', UG: 'UGX',
+};
 
-
-
-function pickFirstExisting(paths: string[]) {
-  for (const p of paths) if (fs.existsSync(p)) return p;
-  return null;
-}
+const THEME = {
+  primary: '#0F766E',
+  accent: '#14B8A6',
+  dark: '#0F172A',       // slate-900
+  text: '#0F172A',
+  muted: '#64748B',
+  border: '#E2E8F0',
+  bg: '#FFFFFF',
+  bgSoft: '#F8FAFC',
+  bgHeader: '#F1F5F9',
+};
 
 function toUserLocalDate(d: any, offsetMinutes: number) {
   return new Date(new Date(d).getTime() + offsetMinutes * 60_000);
@@ -30,8 +40,8 @@ function fmtDDMMYYYY_HHMM(d: Date, offsetMinutes: number) {
   return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
 }
 
-
-function dashedLine(doc: PDFKitDoc, x1: number, x2: number, y: number, dash = 3, gap = 2) {
+// ✅ POS-style dashed divider (no type error)
+function dashedLine(doc: PDFKit.PDFDocument, x1: number, x2: number, y: number, dash = 3, gap = 2) {
   let x = x1;
   doc.save();
   doc.lineWidth(1);
@@ -42,57 +52,13 @@ function dashedLine(doc: PDFKitDoc, x1: number, x2: number, y: number, dash = 3,
   doc.restore();
 }
 
-function safeEllipsis(s: string, max = 40) {
-  const t = String(s || '');
-  if (t.length <= max) return t;
-  return t.slice(0, max - 1) + '…';
-}
-
-function fitTextRight(
-  doc: PDFKitDoc,
-  text: string,
-  x: number,
-  y: number,
-  width: number,
-  maxFontSize: number,
-  minFontSize: number
-) {
-  let size = maxFontSize;
-  doc.fontSize(size);
-  while (size > minFontSize && doc.widthOfString(text) > width) {
-    size -= 1;
-    doc.fontSize(size);
-  }
-  doc.text(text, x, y, { width, align: 'right', lineBreak: false, ellipsis: true });
-}
-
-function drawBadge(doc: PDFKitDoc, x: number, y: number, text: string) {
-  const padX = 8;
-  const padY = 4;
-  doc.save();
-  doc.fontSize(9).font('Bold');
-  const w = doc.widthOfString(text) + padX * 2;
-  const h = 18;
-
-  doc.roundedRect(x, y, w, h, 9).fill('#ECFDF5'); // emerald-50
-  doc.fillColor('#065F46'); // emerald-800
-  doc.text(text, x + padX, y + padY, { lineBreak: false });
-  doc.restore();
-
-  return { w, h };
-}
-
-function drawCheckIcon(doc: PDFKitDoc, cx: number, cy: number, r: number) {
-  // circle + check mark
-  doc.save();
-  doc.circle(cx, cy, r).fill('#10B981'); // emerald-500
-  doc.lineWidth(2).strokeColor('#FFFFFF');
-
-  doc.moveTo(cx - r * 0.4, cy);
-  doc.lineTo(cx - r * 0.1, cy + r * 0.35);
-  doc.lineTo(cx + r * 0.45, cy - r * 0.35);
-  doc.stroke();
-  doc.restore();
+// ✅ Text clamp to avoid overflow
+function ellipsize(doc: PDFKit.PDFDocument, text: string, maxWidth: number) {
+  const s = String(text || '');
+  if (doc.widthOfString(s) <= maxWidth) return s;
+  let out = s;
+  while (out.length > 2 && doc.widthOfString(out + '…') > maxWidth) out = out.slice(0, -1);
+  return out + '…';
 }
 
 export const generateSaleReceiptPdf = async (req: Request | any, res: Response) => {
@@ -106,6 +72,7 @@ export const generateSaleReceiptPdf = async (req: Request | any, res: Response) 
     const user: any = await User.findById(userId).lean();
     if (!user) return res.status(404).json({ error: 'User not found' });
 
+    // ✅ Only THIS sale, for THIS user, not undone
     const tx: any = await Transaction.findOne({
       _id: saleId,
       user: userId,
@@ -116,213 +83,279 @@ export const generateSaleReceiptPdf = async (req: Request | any, res: Response) 
     if (!tx) return res.status(404).json({ error: 'Sale not found' });
 
     const offsetMinutes = user?.settings?.utcOffsetMinutes ?? 60;
-    const businessName = user?.businessName || 'My Shop';
+    const businessName = String(user?.businessName || 'My Shop');
 
-    // ✅ Always show currency as CODE to avoid “gibberish” symbols
-    const currencyCode = String(user?.currencyCode || 'NGN').toUpperCase();
-    const locale = user?.locale || 'en-NG';
+    // ✅ currency based on user, fallback to country map (NO hardcoded ₦)
+    const userCountry = String(user?.countryCode || 'NG').toUpperCase();
+    const currencyCode = String(user?.currencyCode || COUNTRY_CURRENCY_CODE[userCountry] || 'NGN').toUpperCase();
 
-    const money = (n: any) => {
-      const amt = Number(n || 0);
-      const formatted = amt.toLocaleString(locale, { maximumFractionDigits: 0 });
-      return `${currencyCode} ${formatted}`;
-    };
+    // ✅ locale if present
+    const locale = String(user?.locale || 'en-NG');
+
+    // ✅ Use currency CODE display to avoid broken ₦ glyph in some PDF fonts
+    const formatMoney = (n: any) =>
+      new Intl.NumberFormat(locale, {
+        style: 'currency',
+        currency: currencyCode,
+        currencyDisplay: 'code',
+        maximumFractionDigits: 0,
+      }).format(Number(n || 0));
 
     const receiptDate = fmtDDMMYYYY_HHMM(new Date(tx.timestamp || tx.createdAt || Date.now()), offsetMinutes);
 
-    // ✅ Headers
+    // -------------------------------------------------
+    // ✅ PDF Setup
+    // -------------------------------------------------
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename=Receipt_${saleId}.pdf`);
 
     const doc = new PDFDocument({
       size: 'A4',
-      margins: { top: 36, bottom: 36, left: 36, right: 36 },
-      compress: true,
+      margins: { top: 40, bottom: 40, left: 40, right: 40 },
+      bufferPages: true,
+      autoFirstPage: false,
     });
-
     doc.pipe(res);
+    doc.addPage();
 
-    // ✅ Fonts (use NotoSans if available; avoids weird glyphs)
-    const noto = pickFirstExisting([
+    // ✅ Register Noto font if available (for better unicode; still we use currency codes)
+    const fontPaths = [
       path.join(process.cwd(), 'assets', 'fonts', 'NotoSans-Regular.ttf'),
       '/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf',
       '/usr/share/fonts/opentype/noto/NotoSans-Regular.ttf',
-    ]);
-    const notoBold = pickFirstExisting([
-      path.join(process.cwd(), 'assets', 'fonts', 'NotoSans-Bold.ttf'),
-      '/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf',
-      '/usr/share/fonts/opentype/noto/NotoSans-Bold.ttf',
-    ]);
+    ];
+    let hasNoto = false;
+    for (const p of fontPaths) {
+      if (fs.existsSync(p)) {
+        doc.registerFont('Noto', p);
+        hasNoto = true;
+        break;
+      }
+    }
+    const regFont = hasNoto ? 'Noto' : 'Helvetica';
+    const boldFont = hasNoto ? 'Noto' : 'Helvetica-Bold';
 
-    if (noto) doc.registerFont('Regular', noto);
-    else doc.registerFont('Regular', 'Helvetica');
+    doc.font(regFont);
 
-    if (notoBold) doc.registerFont('Bold', notoBold);
-    else doc.registerFont('Bold', 'Helvetica-Bold');
-
-    // =========================
-    // ✅ POS RECEIPT LAYOUT (centered card)
-    // =========================
+    // -------------------------------------------------
+    // ✅ Layout Constants
+    // -------------------------------------------------
     const pageW = doc.page.width;
-    const pageH = doc.page.height;
+    const margin = doc.page.margins.left;
+    const contentW = pageW - margin * 2;
 
-    const receiptW = 380; // modern POS width feel
-    const rx = (pageW - receiptW) / 2;
-    let y = doc.page.margins.top;
+    // Receipt “card” (POS style centered with shadow-like border)
+    const cardX = margin;
+    const cardY = margin;
+    const cardW = contentW;
+    const cardPad = 18;
 
-    const pad = 16;
-    const innerX = rx + pad;
-    const innerW = receiptW - pad * 2;
+    // We’ll compute height dynamically (we draw background blocks as we go).
+    let y = cardY;
 
-    // Card container
-    doc.roundedRect(rx, y, receiptW, pageH - y - doc.page.margins.bottom, 18).fill('#FFFFFF');
-    doc.roundedRect(rx, y, receiptW, pageH - y - doc.page.margins.bottom, 18).strokeColor('#E2E8F0').lineWidth(1).stroke();
+    // Card background
+    doc.save();
+    doc.roundedRect(cardX, y, cardW, doc.page.height - margin * 2, 18).fill(THEME.bg);
+    doc.restore();
 
-    // Header area
-    y += 14;
+    // -------------------------------------------------
+    // ✅ HEADER (Modern POS)
+    // -------------------------------------------------
+    // Top bar
+    doc.save();
+    doc.roundedRect(cardX, y, cardW, 72, 18).fill(THEME.dark);
+    // mask lower corners so only top corners are rounded
+    doc.rect(cardX, y + 36, cardW, 40).fill(THEME.dark);
+    doc.restore();
 
-    // Brand row
-    doc.font('Bold').fontSize(18).fillColor('#0F172A').text('TallyPadi', innerX, y, { width: innerW, align: 'left' });
-    drawCheckIcon(doc, rx + receiptW - pad - 10, y + 10, 7);
+    // Brand
+    doc.fillColor('#FFFFFF').font(boldFont).fontSize(16).text('TallyPadi', cardX + cardPad, y + 18);
 
-    y += 22;
-    doc.font('Regular').fontSize(10).fillColor('#475569').text(businessName, innerX, y, { width: innerW });
+    doc.fillColor('#CBD5E1').font(regFont).fontSize(9).text('POS RECEIPT', cardX + cardPad, y + 40);
 
-    y += 14;
-    const badge = drawBadge(doc, innerX, y, 'PAID');
-    doc.font('Regular').fontSize(9).fillColor('#64748B').text('POS Receipt', innerX + badge.w + 10, y + 5, {
-      width: innerW - badge.w - 10,
-    });
+    // Right badge: PAID
+    const badgeText = String(tx.paymentStatus || 'PAID').toUpperCase();
+    const badgeW = 64;
+    const badgeH = 24;
+    doc.save();
+    doc.roundedRect(cardX + cardW - cardPad - badgeW, y + 22, badgeW, badgeH, 8).fill(THEME.primary);
+    doc.fillColor('#FFFFFF').font(boldFont).fontSize(9).text(
+      badgeText.length > 8 ? badgeText.slice(0, 8) : badgeText,
+      cardX + cardW - cardPad - badgeW,
+      y + 28,
+      { width: badgeW, align: 'center' }
+    );
+    doc.restore();
 
-    y += 26;
-    dashedLine(doc, innerX, innerX + innerW, y, 3, 3);
-    y += 14;
+    y += 72 + 14;
 
-    // ✅ Date + SaleId boxes (padded, contained)
-    const boxH = 44;
-    const gap = 10;
-    const boxW = (innerW - gap) / 2;
+    // -------------------------------------------------
+    // ✅ INFO BOX (Date + Sale ID) padded and contained
+    // -------------------------------------------------
+    const infoH = 58;
+    doc.save();
+    doc.roundedRect(cardX + cardPad, y, cardW - cardPad * 2, infoH, 14).fill(THEME.bgSoft);
+    doc.restore();
 
-    // Date box
-    doc.roundedRect(innerX, y, boxW, boxH, 12).fill('#F8FAFC').strokeColor('#E2E8F0').lineWidth(1).stroke();
-    doc.font('Bold').fontSize(9).fillColor('#64748B').text('DATE/TIME', innerX + 10, y + 8, { width: boxW - 20 });
-    doc.font('Bold').fontSize(10).fillColor('#0F172A').text(receiptDate, innerX + 10, y + 22, {
-      width: boxW - 20,
-      lineBreak: false,
-      ellipsis: true,
-    });
+    const infoX = cardX + cardPad + 12;
+    const infoW = cardW - cardPad * 2 - 24;
 
-    // Sale ID box
-    const idX = innerX + boxW + gap;
-    doc.roundedRect(idX, y, boxW, boxH, 12).fill('#F8FAFC').strokeColor('#E2E8F0').lineWidth(1).stroke();
-    doc.font('Bold').fontSize(9).fillColor('#64748B').text('SALE ID', idX + 10, y + 8, { width: boxW - 20 });
-    doc.font('Bold').fontSize(10).fillColor('#0F172A').text(safeEllipsis(saleId, 22), idX + 10, y + 22, {
-      width: boxW - 20,
-      lineBreak: false,
-      ellipsis: true,
-    });
+    doc.fillColor(THEME.muted).font(boldFont).fontSize(8).text('BUSINESS', infoX, y + 10);
+    doc.fillColor(THEME.text).font(boldFont).fontSize(11).text(
+      ellipsize(doc, businessName, infoW),
+      infoX,
+      y + 22,
+      { width: infoW }
+    );
 
-    y += boxH + 14;
+    doc.fillColor(THEME.muted).font(boldFont).fontSize(8).text('DATE', infoX, y + 38);
+    doc.fillColor(THEME.text).font(regFont).fontSize(10).text(receiptDate, infoX + 36, y + 36);
 
-    // Items Header row
-    doc.font('Bold').fontSize(9).fillColor('#64748B').text('ITEM', innerX, y, { width: innerW * 0.52 });
-    doc.text('QTY', innerX + innerW * 0.52, y, { width: innerW * 0.12, align: 'right' });
-    doc.text('PRICE', innerX + innerW * 0.64, y, { width: innerW * 0.18, align: 'right' });
-    doc.text('TOTAL', innerX + innerW * 0.82, y, { width: innerW * 0.18, align: 'right' });
+    // Sale ID on right inside same box
+    doc.fillColor(THEME.muted).font(boldFont).fontSize(8).text(
+      'SALE ID',
+      infoX,
+      y + 38,
+      { width: infoW, align: 'right' }
+    );
+    doc.fillColor(THEME.text).font(regFont).fontSize(10).text(
+      ellipsize(doc, saleId, 160),
+      infoX,
+      y + 36,
+      { width: infoW, align: 'right' }
+    );
 
+    y += infoH + 16;
+
+    // -------------------------------------------------
+    // ✅ ITEMS HEADER
+    // -------------------------------------------------
+    doc.fillColor(THEME.text).font(boldFont).fontSize(11).text('ITEMS', cardX + cardPad, y);
     y += 10;
-    dashedLine(doc, innerX, innerX + innerW, y, 2, 2);
+
+    dashedLine(doc, cardX + cardPad, cardX + cardW - cardPad, y, 3, 3);
+    y += 12;
+
+    // Columns
+    const colQtyW = 40;
+    const colPriceW = 90;
+    const colTotalW = 95;
+    const colNameW = cardW - cardPad * 2 - colQtyW - colPriceW - colTotalW;
+
+    doc.fillColor(THEME.muted).font(boldFont).fontSize(8);
+    doc.text('QTY', cardX + cardPad, y, { width: colQtyW, align: 'left' });
+    doc.text('ITEM', cardX + cardPad + colQtyW, y, { width: colNameW, align: 'left' });
+    doc.text('PRICE', cardX + cardPad + colQtyW + colNameW, y, { width: colPriceW, align: 'right' });
+    doc.text('TOTAL', cardX + cardPad + colQtyW + colNameW + colPriceW, y, { width: colTotalW, align: 'right' });
+
+    y += 14;
+    doc.fillColor(THEME.border).moveTo(cardX + cardPad, y).lineTo(cardX + cardW - cardPad, y).stroke();
     y += 10;
 
+    // Items
     const items = Array.isArray(tx.items) ? tx.items : [];
-    doc.font('Regular').fontSize(10).fillColor('#0F172A');
+    let computedTotal = 0;
 
-    for (let i = 0; i < items.length; i++) {
-      const it: any = items[i];
+    doc.font(regFont).fontSize(10).fillColor(THEME.text);
+
+    for (const it of items) {
       const qty = Number(it.qty ?? it.quantity ?? 0);
       const name = String(it.name || 'Item');
       const unitPrice = Number(it.unitPrice ?? it.price ?? 0);
       const lineTotal = Number(it.total ?? qty * unitPrice);
 
-      const colItemW = innerW * 0.52;
-      const colQtyW = innerW * 0.12;
-      const colPriceW = innerW * 0.18;
-      const colTotalW = innerW * 0.18;
+      computedTotal += lineTotal;
 
-      // name can wrap but keep neat
-      const nameH = doc.heightOfString(name, { width: colItemW, ellipsis: true });
-      const rowH = Math.max(18, nameH);
+      const nameText = ellipsize(doc, name, colNameW);
 
-      // soft row background every other
-      if (i % 2 === 1) {
-        doc.roundedRect(innerX - 6, y - 4, innerW + 12, rowH + 8, 10).fill('#F8FAFC');
-      }
+      // Row height based on name wrap (keep single line for POS clean)
+      const rowH = 18;
 
-      doc.fillColor('#0F172A').font('Bold').fontSize(10).text(name, innerX, y, {
-        width: colItemW,
-        ellipsis: true,
-      });
-
-      doc.font('Regular').fontSize(10).fillColor('#0F172A').text(String(qty), innerX + colItemW, y, {
+      // Qty
+      doc.fillColor(THEME.text).font(boldFont).text(String(qty), cardX + cardPad, y, {
         width: colQtyW,
-        align: 'right',
+        align: 'left',
       });
 
-      doc.fillColor('#334155').text(money(unitPrice), innerX + colItemW + colQtyW, y, {
+      // Item name
+      doc.fillColor(THEME.text).font(regFont).text(nameText, cardX + cardPad + colQtyW, y, {
+        width: colNameW,
+        align: 'left',
+      });
+
+      // Unit price
+      doc.fillColor(THEME.muted).font(regFont).text(formatMoney(unitPrice), cardX + cardPad + colQtyW + colNameW, y, {
         width: colPriceW,
         align: 'right',
-        ellipsis: true,
       });
 
-      doc.fillColor('#0F172A').font('Bold').text(money(lineTotal), innerX + colItemW + colQtyW + colPriceW, y, {
+      // Line total
+      doc.fillColor(THEME.text).font(boldFont).text(formatMoney(lineTotal), cardX + cardPad + colQtyW + colNameW + colPriceW, y, {
         width: colTotalW,
         align: 'right',
-        ellipsis: true,
       });
 
-      y += rowH + 10;
+      y += rowH;
+
+      // light divider
+      doc.save();
+      doc.strokeColor(THEME.border).lineWidth(0.5);
+      doc.moveTo(cardX + cardPad, y).lineTo(cardX + cardW - cardPad, y).stroke();
+      doc.restore();
+
+      y += 6;
     }
 
-    y += 2;
-    dashedLine(doc, innerX, innerX + innerW, y, 3, 3);
+    // -------------------------------------------------
+    // ✅ TOTAL BOX (fix overflow + keep value inside)
+    // -------------------------------------------------
+    y += 4;
+    dashedLine(doc, cardX + cardPad, cardX + cardW - cardPad, y, 3, 3);
     y += 14;
 
-    // TOTAL BOX (fixed width, contained, auto-fit)
-    const totalMoney = Number(tx.totalMoney || 0);
-    const totalText = money(totalMoney);
+    const totalBoxH = 58;
+    const totalBoxW = cardW - cardPad * 2;
+    const totalBoxX = cardX + cardPad;
 
-    const totalBoxH = 54;
-    doc.roundedRect(innerX, y, innerW, totalBoxH, 14).fill('#0F172A'); // slate-900
+    doc.save();
+    doc.roundedRect(totalBoxX, y, totalBoxW, totalBoxH, 16).fill('#ECFDF5'); // emerald-50
+    doc.restore();
 
-    doc.font('Bold').fillColor('#CBD5E1').fontSize(10).text('TOTAL', innerX + 14, y + 18, {
-      width: innerW * 0.35,
-      lineBreak: false,
-    });
+    const totalLabelY = y + 12;
+    const totalValueY = y + 28;
 
-    // ✅ Keep total value inside box (fit-to-width)
-    doc.font('Bold').fillColor('#FFFFFF');
-    fitTextRight(
-      doc,
-      totalText,
-      innerX + innerW * 0.35,
-      y + 14,
-      innerW * 0.65 - 14,
-      20, // max
-      12  // min
+    // Use tx.totalMoney if present, else computed
+    const totalMoney = Number(tx.totalMoney ?? computedTotal ?? 0);
+
+    doc.fillColor('#065F46').font(boldFont).fontSize(9).text('TOTAL AMOUNT', totalBoxX + 14, totalLabelY);
+
+    // ✅ Keep inside box with width + right align
+    doc.fillColor('#064E3B').font(boldFont).fontSize(16).text(
+      formatMoney(totalMoney),
+      totalBoxX + 14,
+      totalValueY,
+      { width: totalBoxW - 28, align: 'right' }
     );
 
     y += totalBoxH + 16;
 
-    // Footer
-    doc.font('Regular').fontSize(9).fillColor('#64748B').text('Thanks for your purchase!', innerX, y, {
-      width: innerW,
-      align: 'center',
-    });
-    y += 12;
-    doc.font('Regular').fontSize(8).fillColor('#94A3B8').text('Generated by TallyPadi', innerX, y, {
-      width: innerW,
-      align: 'center',
-    });
+    // -------------------------------------------------
+    // ✅ FOOTER NOTE (no emoji, because PDF fonts may not support it)
+    // -------------------------------------------------
+    doc.fillColor(THEME.muted).font(regFont).fontSize(9).text(
+      'Thank you for your purchase.',
+      cardX + cardPad,
+      y,
+      { width: cardW - cardPad * 2, align: 'center' }
+    );
+
+    doc.moveDown(0.3);
+    doc.fillColor('#94A3B8').font(regFont).fontSize(8).text(
+      'Generated by TallyPadi POS',
+      cardX + cardPad,
+      y + 14,
+      { width: cardW - cardPad * 2, align: 'center' }
+    );
 
     doc.end();
   } catch (e: any) {
