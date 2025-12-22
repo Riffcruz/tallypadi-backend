@@ -315,7 +315,7 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-20 items-center">
             {/* Logo */}
-           import Image from "next/image";
+
 
 <div className="cursor-pointer group">
   <div className="relative w-12 h-12 overflow-hidden group-hover:scale-105 transition-transform duration-300">
