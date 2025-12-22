@@ -35,6 +35,10 @@ export default function SalesHistory({ user }: { user: UserProfile | null }) {
   const [history, setHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [pdfLoading, setPdfLoading] = useState(false);
+
+  // ✅ NEW: per-row pdf loading
+  const [rowPdfLoading, setRowPdfLoading] = useState<Record<string, boolean>>({});
+
   const [dates, setDates] = useState({ start: '', end: '' });
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
 
@@ -45,137 +49,81 @@ export default function SalesHistory({ user }: { user: UserProfile | null }) {
     if (dates.start) params.startDate = dates.start;
     if (dates.end) params.endDate = dates.end;
 
-   axios
-  .get(`${API_URL}/sales`, { headers: { Authorization: `Bearer ${token}` }, params })
-  .then((res) => {
-    const rows = Array.isArray(res.data) ? res.data : [];
-    const filtered = rows.filter((sale: any) => !isUndoneSale(sale) && !isUnknownItemSale(sale));
-    setHistory(filtered);
-  })
-  .catch((err) => {
-    console.error('History Error', err);
-    setHistory([]);
-  })
-  .finally(() => setLoading(false));
-
+    axios
+      .get(`${API_URL}/sales`, { headers: { Authorization: `Bearer ${token}` }, params })
+      .then((res) => {
+        const rows = Array.isArray(res.data) ? res.data : [];
+        const filtered = rows.filter((sale: any) => !isUndoneSale(sale) && !isUnknownItemSale(sale));
+        setHistory(filtered);
+      })
+      .catch((err) => {
+        console.error('History Error', err);
+        setHistory([]);
+      })
+      .finally(() => setLoading(false));
   };
 
   const isUnknownItemSale = (sale: any) => {
-  const items = Array.isArray(sale?.items) ? sale.items : [];
+    const items = Array.isArray(sale?.items) ? sale.items : [];
 
-  // no items at all = unknown
-  if (!items.length) return true;
+    // no items at all = unknown
+    if (!items.length) return true;
 
-  // any item with empty/null/unknown-ish name = unknown
-  const unknownNames = new Set(['unknown_item', 'unknown', 'item', 'null', 'undefined']);
-  return items.some((i: any) => {
-    const name = String(i?.name ?? '').trim().toLowerCase();
-    return !name || unknownNames.has(name);
-  });
-};
-
-const isUndoneSale = (sale: any) => {
-  const raw =
-    sale?.isUndone ??
-    sale?.is_undone ??
-    sale?.undone ??
-    sale?.is_undone_sale ??
-    sale?.meta?.isUndone;
-
-  if (raw === true) return true;
-
-  const s = String(raw ?? '').trim().toLowerCase();
-  return s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'undone';
-};
-
-
- const downloadPDF = async () => {
-  // ✅ Gate: TYCOON only
-  if (String(user?.planType || '').toUpperCase() !== 'TYCOON') {
-    Swal.fire({
-      title: 'Upgrade to Tycoon ✨',
-      html: `
-        <div style="text-align:left;line-height:1.45">
-          <p style="margin:0 0 8px 0">
-            PDF reports are available only on the <b>Tycoon Plan</b>.
-          </p>
-          <p style="margin:0;color:#64748b;font-size:13px">
-            Upgrade now to download sales reports as PDF.
-          </p>
-        </div>
-      `,
-      icon: 'info',
-      showCancelButton: true,
-      confirmButtonText: 'Upgrade to Tycoon',
-      confirmButtonColor: '#0F766E',
-      cancelButtonText: 'Not now',
-      cancelButtonColor: '#64748b',
-      reverseButtons: true,
-      focusConfirm: false,
-    }).then((result) => {
-      if (result.isConfirmed) router.push('/payment?plan=TYCOON');
+    // any item with empty/null/unknown-ish name = unknown
+    const unknownNames = new Set(['unknown_item', 'unknown', 'item', 'null', 'undefined']);
+    return items.some((i: any) => {
+      const name = String(i?.name ?? '').trim().toLowerCase();
+      return !name || unknownNames.has(name);
     });
-    return;
+  };
+
+  const isUndoneSale = (sale: any) => {
+    const raw =
+      sale?.isUndone ??
+      sale?.is_undone ??
+      sale?.undone ??
+      sale?.is_undone_sale ??
+      sale?.meta?.isUndone;
+
+    if (raw === true) return true;
+
+    const s = String(raw ?? '').trim().toLowerCase();
+    return s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'undone';
+  };
+
+  // ✅ helper: open/preview pdf
+  function openPdfInNewTab(url: string) {
+    const win = window.open(url, '_blank', 'noopener,noreferrer');
+    if (!win) {
+      const a = document.createElement('a');
+      a.href = url;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
   }
 
-  const token = localStorage.getItem('tallyToken');
-  if (!token) {
-    Swal.fire({
-      title: 'Session expired',
-      text: 'Please login again to download your report.',
-      icon: 'warning',
-      confirmButtonColor: '#0F766E',
-    });
-    return;
-  }
-
-  setPdfLoading(true);
-
-  // ✅ Loading modal
-  Swal.fire({
-    title: 'Generating PDF…',
-    html: 'Please wait while we prepare your report.',
-    allowOutsideClick: false,
-    allowEscapeKey: false,
-    didOpen: () => Swal.showLoading(),
-  });
-
-  try {
-    const params: any = {};
-    if (dates?.start) params.startDate = dates.start;
-    if (dates?.end) params.endDate = dates.end;
-
-    const res = await axios.get(`${API_URL}/sales/report`, {
-      headers: { Authorization: `Bearer ${token}` },
-      params,
-      responseType: 'blob',
-      timeout: 60_000,
-    });
-
-    // ✅ Filename
-    const todayStr = new Date().toISOString().split('T')[0];
-    const rangeStr =
-      dates?.start && dates?.end
-        ? `${String(dates.start).slice(0, 10)}_to_${String(dates.end).slice(0, 10)}`
-        : dates?.start
-        ? `${String(dates.start).slice(0, 10)}`
-        : dates?.end
-        ? `${String(dates.end).slice(0, 10)}`
-        : todayStr;
-
-    const fileName = `TallyPadi_Sales_Report_${rangeStr}.pdf`;
-
-    // ✅ PDF blob
-    const blob = new Blob([res.data], { type: 'application/pdf' });
+  // ✅ helper: preview/download/both modal
+  async function presentPdfActions(blob: Blob, fileName: string) {
     const url = window.URL.createObjectURL(blob);
 
-    // ✅ Ask: preview / download / both
+    const doDownload = () => {
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    };
+
+    const doPreview = () => openPdfInNewTab(url);
+
     const result = await Swal.fire({
       icon: 'success',
       title: 'PDF is ready ✅',
-      html: `<p style="margin:0;color:#475569;font-size:13px">
-        Would you like to preview it first, download it, or both?
-      </p>`,
+      html: `<p style="margin:0;color:#475569;font-size:13px">Would you like to preview it, download it, or both?</p>`,
       showCancelButton: true,
       showDenyButton: true,
       confirmButtonText: 'Preview',
@@ -188,87 +136,307 @@ const isUndoneSale = (sale: any) => {
       focusConfirm: false,
     });
 
-    const doDownload = () => {
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-    };
-
-    const doPreview = () => {
-      const win = window.open(url, '_blank', 'noopener,noreferrer');
-      if (!win) {
-        // popup blocked fallback
-        const a = document.createElement('a');
-        a.href = url;
-        a.target = '_blank';
-        a.rel = 'noopener noreferrer';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-      }
-    };
-
-    if (result.isConfirmed) {
-      // Preview
-      doPreview();
-    } else if (result.isDenied) {
-      // Download
-      doDownload();
-    } else {
-      // Both (cancel button)
+    if (result.isConfirmed) doPreview();
+    else if (result.isDenied) doDownload();
+    else {
       doPreview();
       doDownload();
     }
 
-    // ✅ Small toast confirmation
     Swal.fire({
       toast: true,
       icon: 'success',
       title: 'Done',
-      text: result.isConfirmed
-        ? 'Opened preview.'
-        : result.isDenied
-        ? 'Download started.'
-        : 'Preview opened + download started.',
+      text: result.isConfirmed ? 'Opened preview.' : result.isDenied ? 'Download started.' : 'Preview + download started.',
       position: 'top-end',
       showConfirmButton: false,
       timer: 2400,
       timerProgressBar: true,
     });
 
-    // ✅ cleanup later (don’t revoke immediately or preview/download may break)
+    // ✅ cleanup later
     setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
-  } catch (err: any) {
-    console.error('PDF Download Error', err);
+  }
 
-    const status = err?.response?.status;
-    if (status === 401) {
+  // ✅ NEW: download single transaction receipt pdf
+  const downloadSingleReceiptPdf = async (sale: any) => {
+    const saleId = String(sale?.id || sale?._id || '').trim();
+    if (!saleId) return;
+
+    // ✅ Gate: TYCOON only (same as report)
+    if (String(user?.planType || '').toUpperCase() !== 'TYCOON') {
+      Swal.fire({
+        title: 'Upgrade to Tycoon ✨',
+        html: `
+          <div style="text-align:left;line-height:1.45">
+            <p style="margin:0 0 8px 0">
+              Receipt PDFs are available only on the <b>Tycoon Plan</b>.
+            </p>
+            <p style="margin:0;color:#64748b;font-size:13px">
+              Upgrade now to download single transaction receipts.
+            </p>
+          </div>
+        `,
+        icon: 'info',
+        showCancelButton: true,
+        confirmButtonText: 'Upgrade to Tycoon',
+        confirmButtonColor: '#0F766E',
+        cancelButtonText: 'Not now',
+        cancelButtonColor: '#64748b',
+        reverseButtons: true,
+        focusConfirm: false,
+      }).then((result) => {
+        if (result.isConfirmed) router.push('/payment?plan=TYCOON');
+      });
+      return;
+    }
+
+    const token = localStorage.getItem('tallyToken');
+    if (!token) {
       Swal.fire({
         title: 'Session expired',
-        text: 'Please login again and retry.',
+        text: 'Please login again to download your receipt.',
         icon: 'warning',
         confirmButtonColor: '#0F766E',
       });
-    } else {
+      return;
+    }
+
+    setRowPdfLoading((p) => ({ ...p, [saleId]: true }));
+
+    Swal.fire({
+      title: 'Generating receipt…',
+      html: 'Only this transaction will be included.',
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      didOpen: () => Swal.showLoading(),
+    });
+
+    try {
+      const res = await axios.get(`${API_URL}/sales/${encodeURIComponent(saleId)}/receipt`, {
+        headers: { Authorization: `Bearer ${token}` },
+        responseType: 'blob',
+        timeout: 60_000,
+      });
+
+      Swal.close();
+
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+
+      // filename: TallyPadi_Receipt_YYYY-MM-DD_<saleId>.pdf
+      const d = new Date(sale?.timestamp || sale?.date || Date.now());
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      const fileName = `TallyPadi_Receipt_${yyyy}-${mm}-${dd}_${saleId}.pdf`;
+
+      await presentPdfActions(blob, fileName);
+    } catch (err: any) {
+      console.error('Single Receipt Error', err);
+      try {
+        Swal.close();
+      } catch {}
+
+      const status = err?.response?.status;
+      if (status === 401) {
+        Swal.fire({
+          title: 'Session expired',
+          text: 'Please login again and retry.',
+          icon: 'warning',
+          confirmButtonColor: '#0F766E',
+        });
+      } else {
+        Swal.fire({
+          title: 'Receipt failed',
+          text: err?.response?.data?.error || 'Could not generate receipt PDF. Please try again.',
+          icon: 'error',
+          confirmButtonColor: '#0F766E',
+        });
+      }
+    } finally {
+      setRowPdfLoading((p) => ({ ...p, [saleId]: false }));
+    }
+  };
+
+  const downloadPDF = async () => {
+    // ✅ Gate: TYCOON only
+    if (String(user?.planType || '').toUpperCase() !== 'TYCOON') {
       Swal.fire({
-        title: 'Download failed',
-        text: err?.response?.data?.message || 'Could not generate the report. Please try again.',
-        icon: 'error',
+        title: 'Upgrade to Tycoon ✨',
+        html: `
+        <div style="text-align:left;line-height:1.45">
+          <p style="margin:0 0 8px 0">
+            PDF reports are available only on the <b>Tycoon Plan</b>.
+          </p>
+          <p style="margin:0;color:#64748b;font-size:13px">
+            Upgrade now to download sales reports as PDF.
+          </p>
+        </div>
+      `,
+        icon: 'info',
+        showCancelButton: true,
+        confirmButtonText: 'Upgrade to Tycoon',
+        confirmButtonColor: '#0F766E',
+        cancelButtonText: 'Not now',
+        cancelButtonColor: '#64748b',
+        reverseButtons: true,
+        focusConfirm: false,
+      }).then((result) => {
+        if (result.isConfirmed) router.push('/payment?plan=TYCOON');
+      });
+      return;
+    }
+
+    const token = localStorage.getItem('tallyToken');
+    if (!token) {
+      Swal.fire({
+        title: 'Session expired',
+        text: 'Please login again to download your report.',
+        icon: 'warning',
         confirmButtonColor: '#0F766E',
       });
+      return;
     }
-  } finally {
-    setPdfLoading(false);
-    // if loading modal is still open, close it
-    try {
-      Swal.close();
-    } catch {}
-  }
-};
 
+    setPdfLoading(true);
+
+    // ✅ Loading modal
+    Swal.fire({
+      title: 'Generating PDF…',
+      html: 'Please wait while we prepare your report.',
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      didOpen: () => Swal.showLoading(),
+    });
+
+    try {
+      const params: any = {};
+      if (dates?.start) params.startDate = dates.start;
+      if (dates?.end) params.endDate = dates.end;
+
+      const res = await axios.get(`${API_URL}/sales/report`, {
+        headers: { Authorization: `Bearer ${token}` },
+        params,
+        responseType: 'blob',
+        timeout: 60_000,
+      });
+
+      // ✅ Filename
+      const todayStr = new Date().toISOString().split('T')[0];
+      const rangeStr =
+        dates?.start && dates?.end
+          ? `${String(dates.start).slice(0, 10)}_to_${String(dates.end).slice(0, 10)}`
+          : dates?.start
+          ? `${String(dates.start).slice(0, 10)}`
+          : dates?.end
+          ? `${String(dates.end).slice(0, 10)}`
+          : todayStr;
+
+      const fileName = `TallyPadi_Sales_Report_${rangeStr}.pdf`;
+
+      // ✅ PDF blob
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+
+      // ✅ Ask: preview / download / both
+      const result = await Swal.fire({
+        icon: 'success',
+        title: 'PDF is ready ✅',
+        html: `<p style="margin:0;color:#475569;font-size:13px">
+        Would you like to preview it first, download it, or both?
+      </p>`,
+        showCancelButton: true,
+        showDenyButton: true,
+        confirmButtonText: 'Preview',
+        denyButtonText: 'Download',
+        cancelButtonText: 'Both',
+        confirmButtonColor: '#0F766E',
+        denyButtonColor: '#111827',
+        cancelButtonColor: '#64748b',
+        reverseButtons: true,
+        focusConfirm: false,
+      });
+
+      const doDownload = () => {
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      };
+
+      const doPreview = () => {
+        const win = window.open(url, '_blank', 'noopener,noreferrer');
+        if (!win) {
+          // popup blocked fallback
+          const a = document.createElement('a');
+          a.href = url;
+          a.target = '_blank';
+          a.rel = 'noopener noreferrer';
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+        }
+      };
+
+      if (result.isConfirmed) {
+        // Preview
+        doPreview();
+      } else if (result.isDenied) {
+        // Download
+        doDownload();
+      } else {
+        // Both (cancel button)
+        doPreview();
+        doDownload();
+      }
+
+      // ✅ Small toast confirmation
+      Swal.fire({
+        toast: true,
+        icon: 'success',
+        title: 'Done',
+        text: result.isConfirmed
+          ? 'Opened preview.'
+          : result.isDenied
+          ? 'Download started.'
+          : 'Preview opened + download started.',
+        position: 'top-end',
+        showConfirmButton: false,
+        timer: 2400,
+        timerProgressBar: true,
+      });
+
+      // ✅ cleanup later (don’t revoke immediately or preview/download may break)
+      setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
+    } catch (err: any) {
+      console.error('PDF Download Error', err);
+
+      const status = err?.response?.status;
+      if (status === 401) {
+        Swal.fire({
+          title: 'Session expired',
+          text: 'Please login again and retry.',
+          icon: 'warning',
+          confirmButtonColor: '#0F766E',
+        });
+      } else {
+        Swal.fire({
+          title: 'Download failed',
+          text: err?.response?.data?.message || 'Could not generate the report. Please try again.',
+          icon: 'error',
+          confirmButtonColor: '#0F766E',
+        });
+      }
+    } finally {
+      setPdfLoading(false);
+      // if loading modal is still open, close it
+      try {
+        Swal.close();
+      } catch {}
+    }
+  };
 
   useEffect(() => {
     fetchHistory();
@@ -321,35 +489,34 @@ const isUndoneSale = (sale: any) => {
   };
 
   const getSaleStatus = (sale: any): { type: SaleStatusType; balance: number; paid: number; total: number } => {
-  const { total, paid, balance } = getSaleTotals(sale);
+    const { total, paid, balance } = getSaleTotals(sale);
 
-  const paymentStatus = String(sale?.paymentStatus || '').toUpperCase(); // PAID / CREDIT / PART_PAYMENT
-  const explicitCreditFlag = sale?.is_credit === true || sale?.isCredit === true;
+    const paymentStatus = String(sale?.paymentStatus || '').toUpperCase(); // PAID / CREDIT / PART_PAYMENT
+    const explicitCreditFlag = sale?.is_credit === true || sale?.isCredit === true;
 
-  // ✅ If fully settled, ALWAYS PAID
-  if (balance <= 0 && paid >= total && total > 0) {
+    // ✅ If fully settled, ALWAYS PAID
+    if (balance <= 0 && paid >= total && total > 0) {
+      return { type: 'PAID', balance: 0, paid, total };
+    }
+
+    // ✅ If backend explicitly says PAID, trust it (unless balance > 0)
+    if (paymentStatus === 'PAID' && balance <= 0) {
+      return { type: 'PAID', balance: 0, paid, total };
+    }
+
+    // ✅ Now decide credit/part-payment ONLY if there is balance
+    if (balance > 0) {
+      if (paid > 0) return { type: 'PART_PAYMENT', balance, paid, total };
+      return { type: 'CREDIT', balance, paid, total };
+    }
+
+    // ✅ Edge: no balance but flags still say credit -> treat as PAID
+    if (explicitCreditFlag || paymentStatus === 'CREDIT') {
+      return { type: 'PAID', balance: 0, paid, total };
+    }
+
     return { type: 'PAID', balance: 0, paid, total };
-  }
-
-  // ✅ If backend explicitly says PAID, trust it (unless balance > 0)
-  if (paymentStatus === 'PAID' && balance <= 0) {
-    return { type: 'PAID', balance: 0, paid, total };
-  }
-
-  // ✅ Now decide credit/part-payment ONLY if there is balance
-  if (balance > 0) {
-    if (paid > 0) return { type: 'PART_PAYMENT', balance, paid, total };
-    return { type: 'CREDIT', balance, paid, total };
-  }
-
-  // ✅ Edge: no balance but flags still say credit -> treat as PAID
-  if (explicitCreditFlag || paymentStatus === 'CREDIT') {
-    return { type: 'PAID', balance: 0, paid, total };
-  }
-
-  return { type: 'PAID', balance: 0, paid, total };
-};
-
+  };
 
   const getItemQty = (item: any) => {
     // supports both quantity and qty
@@ -388,7 +555,7 @@ const isUndoneSale = (sale: any) => {
       <div className="bg-white p-4 md:p-5 rounded-3xl border border-gray-200 shadow-sm flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 md:gap-6">
         <div className="flex items-center gap-3 md:gap-4">
           <div className="w-10 h-10 md:w-12 md:h-12 rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-100 flex items-center justify-center text-emerald-600 shadow-sm shrink-0">
-            <Receipt className="w-5 h-5 md:w-6 md:h-6" />
+            <Receipt className="w-5 h-5 md:w-6 h-6" />
           </div>
           <div>
             <h2 className="text-base md:text-lg font-black text-gray-900 tracking-tight">Transaction History</h2>
@@ -494,6 +661,10 @@ const isUndoneSale = (sale: any) => {
                 <th className="py-4 px-6 text-xs font-extrabold text-blue-600 uppercase tracking-wider text-right min-w-[160px]">
                   Total Amount
                 </th>
+                {/* ✅ NEW */}
+                <th className="py-4 px-6 text-xs font-extrabold text-blue-600 uppercase tracking-wider text-right min-w-[140px]">
+                  Receipt
+                </th>
               </tr>
             </thead>
 
@@ -511,11 +682,14 @@ const isUndoneSale = (sale: any) => {
                     <td className="px-6 py-4 text-right">
                       <div className="h-6 bg-gray-100 rounded w-24 ml-auto"></div>
                     </td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="h-9 bg-gray-100 rounded w-24 ml-auto"></div>
+                    </td>
                   </tr>
                 ))
               ) : history.length === 0 ? (
                 <tr>
-                  <td colSpan={3}>
+                  <td colSpan={4}>
                     <div className="py-24 flex flex-col items-center justify-center text-center">
                       <div className="w-20 h-20 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-full flex items-center justify-center mb-4 border border-blue-100 shadow-sm">
                         <Search className="w-10 h-10 text-blue-300" />
@@ -544,7 +718,7 @@ const isUndoneSale = (sale: any) => {
                 history.map((sale: any) => {
                   const { day, fullDate, time, weekday } = formatDate(sale.date || sale.timestamp);
                   const status = getSaleStatus(sale);
-                  const id = sale.id || sale._id;
+                  const id = String(sale.id || sale._id || '');
 
                   return (
                     <tr
@@ -603,6 +777,29 @@ const isUndoneSale = (sale: any) => {
                           ) : null}
                         </div>
                       </td>
+
+                      {/* ✅ NEW: per-transaction receipt pdf */}
+                      <td className="px-6 py-5 text-right align-top">
+                        <button
+                          onClick={() => downloadSingleReceiptPdf(sale)}
+                          disabled={!!rowPdfLoading[id] || loading}
+                          className={`inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl font-extrabold text-xs transition ${
+                            user?.planType === 'TYCOON'
+                              ? 'bg-white border border-gray-200 text-gray-900 hover:bg-gray-50'
+                              : 'bg-gray-100 border border-gray-200 text-gray-400 cursor-not-allowed'
+                          }`}
+                          title={user?.planType === 'TYCOON' ? 'Download receipt PDF' : 'Upgrade to Tycoon to download receipts'}
+                        >
+                          {rowPdfLoading[id] ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : user?.planType === 'TYCOON' ? (
+                            <FileDown className="w-4 h-4" />
+                          ) : (
+                            <Lock className="w-4 h-4" />
+                          )}
+                          PDF
+                        </button>
+                      </td>
                     </tr>
                   );
                 })
@@ -660,7 +857,7 @@ const isUndoneSale = (sale: any) => {
         ) : (
           history.map((sale: any) => {
             const { day, fullDate, time, weekday } = formatDate(sale.date || sale.timestamp);
-            const id = sale.id || sale._id;
+            const id = String(sale.id || sale._id || '');
             const isExpanded = expandedRows[id];
             const status = getSaleStatus(sale);
 
@@ -725,6 +922,27 @@ const isUndoneSale = (sale: any) => {
                     )}
                   </button>
                 )}
+
+                {/* ✅ NEW: per-transaction receipt pdf (mobile) */}
+                <button
+                  onClick={() => downloadSingleReceiptPdf(sale)}
+                  disabled={!!rowPdfLoading[id] || loading}
+                  className={`w-full mt-3 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl font-extrabold text-xs transition ${
+                    user?.planType === 'TYCOON'
+                      ? 'bg-gray-900 hover:bg-black text-white'
+                      : 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed'
+                  }`}
+                  title={user?.planType === 'TYCOON' ? 'Download receipt PDF' : 'Upgrade to Tycoon to download receipts'}
+                >
+                  {rowPdfLoading[id] ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : user?.planType === 'TYCOON' ? (
+                    <FileDown className="w-4 h-4" />
+                  ) : (
+                    <Lock className="w-4 h-4" />
+                  )}
+                  Download Receipt PDF
+                </button>
               </div>
             );
           })
