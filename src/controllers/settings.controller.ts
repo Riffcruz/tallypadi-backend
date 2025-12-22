@@ -3,149 +3,168 @@ import { User } from '../models/user.model';
 import { AdminSettings } from '../models/adminSettings.model';
 
 // --- Security Helpers ---
-
-/**
- * Validates that the input is a valid string and not an object.
- * Returns the trimmed string or null if invalid.
- */
 const sanitizeString = (input: unknown): string | null => {
-    if (typeof input !== 'string') return null;
-    return input.trim();
+  if (typeof input !== 'string') return null;
+  return input.trim();
 };
 
 const validateBoolean = (input: unknown): boolean | undefined => {
-    if (typeof input === 'boolean') return input;
-    return undefined;
+  if (typeof input === 'boolean') return input;
+  return undefined;
 };
 
 const validateNumber = (input: unknown): number | undefined => {
-    if (typeof input === 'number' && !isNaN(input)) return input;
-    return undefined;
+  if (typeof input === 'number' && !isNaN(input)) return input;
+  return undefined;
 };
 
-// --- Controller ---
+type AuthReq = Request & { user?: { id?: string; _id?: string } };
 
-export const updateSettings = async (req: Request, res: Response) => {
-    try {
-        const body = req.body || {};
-        const responseData: any = {};
+export const updateSettings = async (req: AuthReq, res: Response) => {
+  try {
+    const body = req.body || {};
+    const responseData: any = {};
 
-        // ---------------------------------------------------------
-        // 1. Handle User-Specific Settings
-        // ---------------------------------------------------------
-        if (body.businessName !== undefined || body.settings !== undefined) {
-            const user = await User.findOne();
-            if (user) {
-                if (body.businessName !== undefined) {
-                    const safeName = sanitizeString(body.businessName);
-                    if (safeName !== null && safeName.length <= 100) {
-                         user.businessName = safeName;
-                    }
-                }
+    // ✅ Get the LOGGED-IN user
+    const userId = req.user?.id || (req.user as any)?._id;
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-                if (body.settings && typeof body.settings === 'object' && !Array.isArray(body.settings)) {
-                    const userSettings = user.settings as any;
-                    const inputSettings = body.settings;
+    // ---------------------------------------------------------
+    // 1) Handle User-Specific Settings (logged-in user)
+    // ---------------------------------------------------------
+    if (body.businessName !== undefined || body.shopName !== undefined || body.settings !== undefined) {
+      const user = await User.findById(userId);
+      if (!user) return res.status(404).json({ error: 'User not found' });
 
-                    if (inputSettings.closingTime !== undefined) {
-                        const safeTime = sanitizeString(inputSettings.closingTime);
-                        if (safeTime) userSettings.closingTime = safeTime;
-                    }
+      const $set: any = {};
 
-                    if (inputSettings.language !== undefined) {
-                        const safeLang = sanitizeString(inputSettings.language);
-                        if (safeLang) userSettings.language = safeLang;
-                    }
-                    
-                    if (inputSettings.pdfReportsEnabled !== undefined) {
-                        const isEnabled = validateBoolean(inputSettings.pdfReportsEnabled);
-                        if (isEnabled !== undefined) {
-                            if (user.planType === 'TYCOON') {
-                                userSettings.pdfReportsEnabled = isEnabled;
-                            } else if (isEnabled === true) {
-                                return res.status(403).json({ error: "PDF Reports are for Tycoon Plan only." });
-                            } else {
-                                userSettings.pdfReportsEnabled = false;
-                            }
-                        }
-                    }
-                    
-                    if (inputSettings.utcOffsetMinutes !== undefined) {
-                        const offset = validateNumber(inputSettings.utcOffsetMinutes);
-                        if (offset !== undefined) userSettings.utcOffsetMinutes = offset;
-                    }
-                }
-                
-                user.markModified('settings');
-                await user.save();
-                responseData.user = { businessName: user.businessName, settings: user.settings };
-            }
+      // ✅ accept businessName OR shopName from frontend, and update BOTH
+      const incomingName =
+        body.businessName !== undefined ? body.businessName :
+        body.shopName !== undefined ? body.shopName :
+        undefined;
+
+      if (incomingName !== undefined) {
+        const safeName = sanitizeString(incomingName);
+        if (safeName !== null && safeName.length <= 100) {
+          $set['businessName'] = safeName;
+          $set['shopName'] = safeName; // ✅ important (your UI uses shopName)
+        }
+      }
+
+      if (body.settings && typeof body.settings === 'object' && !Array.isArray(body.settings)) {
+        const inputSettings = body.settings;
+
+        if (inputSettings.closingTime !== undefined) {
+          const safeTime = sanitizeString(inputSettings.closingTime);
+          if (safeTime) $set['settings.closingTime'] = safeTime;
         }
 
-        // ---------------------------------------------------------
-        // 2. Handle Global Admin Settings
-        // ---------------------------------------------------------
-        if (
-            body.whatsappUrl !== undefined || 
-            body.autoSuspendOnJailbreak !== undefined || 
-            body.maxMessageHistory !== undefined || 
-            body.maxStaffAccounts !== undefined
-        ) {
-            // 🟢 DEBUG LOG: View schema paths in terminal
-            console.log('DEBUG: Registered AdminSettings Schema Paths:', Object.keys(AdminSettings.schema.paths));
-
-            let adminSettings = await AdminSettings.findOne();
-            if (!adminSettings) {
-                adminSettings = new AdminSettings({
-                    security: { autoSuspendOnJailbreak: true, maxLoginAttempts: 5 },
-                    limits: { maxMessageHistory: 5, maxStaffAccounts: 5 },
-                    system: { maintenanceMode: false, allowNewRegistrations: true }
-                });
-            }
-
-            // 🟢 Update WhatsApp URL (Relaxed Validation)
-            if (body.whatsappUrl !== undefined) {
-                const safeUrl = sanitizeString(body.whatsappUrl);
-                if (safeUrl !== null) {
-                    adminSettings.whatsappUrl = safeUrl;
-                }
-            }
-
-            // Update Security
-            if (body.autoSuspendOnJailbreak !== undefined) {
-                const autoSuspend = validateBoolean(body.autoSuspendOnJailbreak);
-                if (autoSuspend !== undefined) {
-                    adminSettings.security.autoSuspendOnJailbreak = autoSuspend;
-                }
-            }
-
-            // Update Limits
-            if (body.maxMessageHistory !== undefined) {
-                const hist = validateNumber(body.maxMessageHistory);
-                if (hist !== undefined) {
-                    adminSettings.limits.maxMessageHistory = hist;
-                }
-            }
-
-            if (body.maxStaffAccounts !== undefined) {
-                const staff = validateNumber(body.maxStaffAccounts);
-                if (staff !== undefined) {
-                    adminSettings.limits.maxStaffAccounts = staff;
-                }
-            }
-
-            await adminSettings.save();
-            responseData.adminSettings = adminSettings;
+        if (inputSettings.language !== undefined) {
+          const safeLang = sanitizeString(inputSettings.language);
+          if (safeLang) {
+            $set['settings.language'] = safeLang;
+            $set['settings.botLanguage'] = safeLang; // ✅ optional compatibility
+          }
         }
 
-        res.json({
-            success: true,
-            message: "Settings updated successfully",
-            ...responseData
-        });
+        if (inputSettings.pdfReportsEnabled !== undefined) {
+          const isEnabled = validateBoolean(inputSettings.pdfReportsEnabled);
+          if (isEnabled !== undefined) {
+            if (String((user as any).planType || '').toUpperCase() === 'TYCOON') {
+              $set['settings.pdfReportsEnabled'] = isEnabled;
+            } else if (isEnabled === true) {
+              return res.status(403).json({ error: 'PDF Reports are for Tycoon Plan only.' });
+            } else {
+              $set['settings.pdfReportsEnabled'] = false;
+            }
+          }
+        }
 
-    } catch (error) {
-        console.error("Settings Update Error:", error);
-        res.status(500).json({ error: "Server Error" });
+        if (inputSettings.utcOffsetMinutes !== undefined) {
+          const offset = validateNumber(inputSettings.utcOffsetMinutes);
+          if (offset !== undefined) $set['settings.utcOffsetMinutes'] = offset;
+        }
+      }
+
+      // ✅ Only update if we actually have fields to set
+      if (Object.keys($set).length) {
+        const updated = await User.findByIdAndUpdate(userId, { $set }, { new: true, runValidators: true }).lean();
+        responseData.user = {
+          businessName: (updated as any)?.businessName,
+          shopName: (updated as any)?.shopName,
+          settings: (updated as any)?.settings,
+          planType: (updated as any)?.planType,
+          subscriptionStatus: (updated as any)?.subscriptionStatus,
+          trialEndsAt: (updated as any)?.trialEndsAt,
+        };
+      } else {
+        responseData.user = {
+          businessName: (user as any)?.businessName,
+          shopName: (user as any)?.shopName,
+          settings: (user as any)?.settings,
+        };
+      }
     }
+
+    // ---------------------------------------------------------
+    // 2) Handle Global Admin Settings (protected)
+    // ---------------------------------------------------------
+    const adminKeysUsed =
+      body.whatsappUrl !== undefined ||
+      body.autoSuspendOnJailbreak !== undefined ||
+      body.maxMessageHistory !== undefined ||
+      body.maxStaffAccounts !== undefined;
+
+    if (adminKeysUsed) {
+      // ✅ Protect global updates
+      const adminSecret = String(req.headers['x-admin-secret'] || '');
+      if (!process.env.ADMIN_SECRET || adminSecret !== process.env.ADMIN_SECRET) {
+        return res.status(403).json({ error: 'Forbidden (admin only)' });
+      }
+
+      console.log('DEBUG: Registered AdminSettings Schema Paths:', Object.keys(AdminSettings.schema.paths));
+
+      let adminSettings = await AdminSettings.findOne();
+      if (!adminSettings) {
+        adminSettings = new AdminSettings({
+          security: { autoSuspendOnJailbreak: true, maxLoginAttempts: 5 },
+          limits: { maxMessageHistory: 5, maxStaffAccounts: 5 },
+          system: { maintenanceMode: false, allowNewRegistrations: true },
+        });
+      }
+
+      if (body.whatsappUrl !== undefined) {
+        const safeUrl = sanitizeString(body.whatsappUrl);
+        if (safeUrl !== null) adminSettings.whatsappUrl = safeUrl;
+      }
+
+      if (body.autoSuspendOnJailbreak !== undefined) {
+        const autoSuspend = validateBoolean(body.autoSuspendOnJailbreak);
+        if (autoSuspend !== undefined) adminSettings.security.autoSuspendOnJailbreak = autoSuspend;
+      }
+
+      if (body.maxMessageHistory !== undefined) {
+        const hist = validateNumber(body.maxMessageHistory);
+        if (hist !== undefined) adminSettings.limits.maxMessageHistory = hist;
+      }
+
+      if (body.maxStaffAccounts !== undefined) {
+        const staff = validateNumber(body.maxStaffAccounts);
+        if (staff !== undefined) adminSettings.limits.maxStaffAccounts = staff;
+      }
+
+      await adminSettings.save();
+      responseData.adminSettings = adminSettings;
+    }
+
+    return res.json({
+      success: true,
+      message: 'Settings updated successfully',
+      ...responseData,
+    });
+  } catch (error: any) {
+    console.error('Settings Update Error:', error?.stack || error);
+    return res.status(500).json({ error: 'Server Error' });
+  }
 };
