@@ -89,68 +89,186 @@ const isUndoneSale = (sale: any) => {
 };
 
 
-  const downloadPDF = async () => {
-    if (user?.planType !== 'TYCOON') {
-      Swal.fire({
-        title: 'Upgrade Required',
-        text: 'PDF Reports are available exclusively for Tycoon Plan users.',
-        icon: 'info',
-        showCancelButton: true,
-        confirmButtonText: 'Upgrade to Tycoon',
-        confirmButtonColor: '#0F766E',
-        cancelButtonText: 'Close',
-        cancelButtonColor: '#64748b'
-      }).then((result) => {
-        if (result.isConfirmed) router.push('/payment?plan=TYCOON');
-      });
-      return;
-    }
+ const downloadPDF = async () => {
+  // ✅ Gate: TYCOON only
+  if (String(user?.planType || '').toUpperCase() !== 'TYCOON') {
+    Swal.fire({
+      title: 'Upgrade to Tycoon ✨',
+      html: `
+        <div style="text-align:left;line-height:1.45">
+          <p style="margin:0 0 8px 0">
+            PDF reports are available only on the <b>Tycoon Plan</b>.
+          </p>
+          <p style="margin:0;color:#64748b;font-size:13px">
+            Upgrade now to download sales reports as PDF.
+          </p>
+        </div>
+      `,
+      icon: 'info',
+      showCancelButton: true,
+      confirmButtonText: 'Upgrade to Tycoon',
+      confirmButtonColor: '#0F766E',
+      cancelButtonText: 'Not now',
+      cancelButtonColor: '#64748b',
+      reverseButtons: true,
+      focusConfirm: false,
+    }).then((result) => {
+      if (result.isConfirmed) router.push('/payment?plan=TYCOON');
+    });
+    return;
+  }
 
-    setPdfLoading(true);
-    const token = localStorage.getItem('tallyToken');
+  const token = localStorage.getItem('tallyToken');
+  if (!token) {
+    Swal.fire({
+      title: 'Session expired',
+      text: 'Please login again to download your report.',
+      icon: 'warning',
+      confirmButtonColor: '#0F766E',
+    });
+    return;
+  }
 
-    try {
-      const params: any = {};
-      if (dates.start) params.startDate = dates.start;
-      if (dates.end) params.endDate = dates.end;
+  setPdfLoading(true);
 
-      const res = await axios.get(`${API_URL}/sales/report`, {
-        headers: { Authorization: `Bearer ${token}` },
-        params,
-        responseType: 'blob'
-      });
+  // ✅ Loading modal
+  Swal.fire({
+    title: 'Generating PDF…',
+    html: 'Please wait while we prepare your report.',
+    allowOutsideClick: false,
+    allowEscapeKey: false,
+    didOpen: () => Swal.showLoading(),
+  });
 
-      const dateStr = new Date().toISOString().split('T')[0];
-      const fileName = `TallyPadi_Sales_Report_${dateStr}.pdf`;
+  try {
+    const params: any = {};
+    if (dates?.start) params.startDate = dates.start;
+    if (dates?.end) params.endDate = dates.end;
 
-      const url = window.URL.createObjectURL(new Blob([res.data]));
+    const res = await axios.get(`${API_URL}/sales/report`, {
+      headers: { Authorization: `Bearer ${token}` },
+      params,
+      responseType: 'blob',
+      timeout: 60_000,
+    });
+
+    // ✅ Filename
+    const todayStr = new Date().toISOString().split('T')[0];
+    const rangeStr =
+      dates?.start && dates?.end
+        ? `${String(dates.start).slice(0, 10)}_to_${String(dates.end).slice(0, 10)}`
+        : dates?.start
+        ? `${String(dates.start).slice(0, 10)}`
+        : dates?.end
+        ? `${String(dates.end).slice(0, 10)}`
+        : todayStr;
+
+    const fileName = `TallyPadi_Sales_Report_${rangeStr}.pdf`;
+
+    // ✅ PDF blob
+    const blob = new Blob([res.data], { type: 'application/pdf' });
+    const url = window.URL.createObjectURL(blob);
+
+    // ✅ Ask: preview / download / both
+    const result = await Swal.fire({
+      icon: 'success',
+      title: 'PDF is ready ✅',
+      html: `<p style="margin:0;color:#475569;font-size:13px">
+        Would you like to preview it first, download it, or both?
+      </p>`,
+      showCancelButton: true,
+      showDenyButton: true,
+      confirmButtonText: 'Preview',
+      denyButtonText: 'Download',
+      cancelButtonText: 'Both',
+      confirmButtonColor: '#0F766E',
+      denyButtonColor: '#111827',
+      cancelButtonColor: '#64748b',
+      reverseButtons: true,
+      focusConfirm: false,
+    });
+
+    const doDownload = () => {
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', fileName);
+      link.download = fileName;
       document.body.appendChild(link);
       link.click();
       link.remove();
-      window.URL.revokeObjectURL(url);
+    };
 
-      Swal.fire({
-        toast: true,
-        icon: 'success',
-        title: 'Report Downloaded Successfully',
-        position: 'top-end',
-        showConfirmButton: false,
-        timer: 3000
-      });
-    } catch (err) {
-      console.error('PDF Download Error', err);
-      Swal.fire({
-        title: 'Download Failed',
-        text: 'Could not generate the report. Please try again.',
-        icon: 'error'
-      });
-    } finally {
-      setPdfLoading(false);
+    const doPreview = () => {
+      const win = window.open(url, '_blank', 'noopener,noreferrer');
+      if (!win) {
+        // popup blocked fallback
+        const a = document.createElement('a');
+        a.href = url;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }
+    };
+
+    if (result.isConfirmed) {
+      // Preview
+      doPreview();
+    } else if (result.isDenied) {
+      // Download
+      doDownload();
+    } else {
+      // Both (cancel button)
+      doPreview();
+      doDownload();
     }
-  };
+
+    // ✅ Small toast confirmation
+    Swal.fire({
+      toast: true,
+      icon: 'success',
+      title: 'Done',
+      text: result.isConfirmed
+        ? 'Opened preview.'
+        : result.isDenied
+        ? 'Download started.'
+        : 'Preview opened + download started.',
+      position: 'top-end',
+      showConfirmButton: false,
+      timer: 2400,
+      timerProgressBar: true,
+    });
+
+    // ✅ cleanup later (don’t revoke immediately or preview/download may break)
+    setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
+  } catch (err: any) {
+    console.error('PDF Download Error', err);
+
+    const status = err?.response?.status;
+    if (status === 401) {
+      Swal.fire({
+        title: 'Session expired',
+        text: 'Please login again and retry.',
+        icon: 'warning',
+        confirmButtonColor: '#0F766E',
+      });
+    } else {
+      Swal.fire({
+        title: 'Download failed',
+        text: err?.response?.data?.message || 'Could not generate the report. Please try again.',
+        icon: 'error',
+        confirmButtonColor: '#0F766E',
+      });
+    }
+  } finally {
+    setPdfLoading(false);
+    // if loading modal is still open, close it
+    try {
+      Swal.close();
+    } catch {}
+  }
+};
+
 
   useEffect(() => {
     fetchHistory();

@@ -16,6 +16,9 @@ import { InventoryItem, UserProfile } from './page';
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 
 interface ProductGridProps {
+
+
+  
   user: UserProfile | null;
   onAddToCart: (item: InventoryItem) => void;
   currencyCode: string;
@@ -179,7 +182,7 @@ export default function ProductGrid({ user, onAddToCart, currencyCode }: Product
 
               const badge =
                 tone === 'OUT' ? (
-                  <span className="text-[10px] font-extrabold px-2.5 py-1 rounded-full bg-slate-900 text-white">
+                  <span className="text-[10px] font-extrabold px-2.5 py-1 rounded-full bg-red-900 text-white">
                     Out of stock
                   </span>
                 ) : tone === 'LOW' ? (
