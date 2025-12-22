@@ -1088,12 +1088,17 @@ export default function LandingPage() {
       <footer className="bg-slate-950 text-slate-400 py-12 border-t border-slate-900">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row justify-between items-center gap-8">
-            <div className="flex items-center gap-2">
-              <div className="bg-slate-900 p-2 rounded-lg border border-slate-800">
-                <Phone className="text-emerald-500" size={20} />
-              </div>
-              <span className="font-bold text-xl text-slate-200">Tallypadi</span>
-            </div>
+           <div className="cursor-pointer">
+  <div className="relative w-[180px] h-[44px] sm:w-[220px] sm:h-[54px] lg:w-[250px] lg:h-[60px]">
+    <Image
+      src="/tallypadi-logo.png"
+      alt="TallyPadi logo"
+      fill
+      className="object-contain"
+      priority
+    />
+  </div>
+</div>
 
             <div className="flex gap-8 text-sm font-medium">
               <a href="/policy" className="hover:text-emerald-400 transition">
@@ -1108,7 +1113,7 @@ export default function LandingPage() {
             </div>
           </div>
           <div className="mt-12 text-center text-xs text-slate-600 border-t border-slate-900 pt-8">
-            &copy; {new Date().getFullYear()} Tallypadi. Built with ❤️ for Nigerian SMEs.
+            &copy; {new Date().getFullYear()} Tallypadi. Built for SMEs.
           </div>
         </div>
       </footer>
