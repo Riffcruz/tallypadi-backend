@@ -96,6 +96,17 @@ function fmtUserDate(d: Date, offsetMinutes: number, locale: string) {
   });
 }
 
+// ✅ REQUIRED: Time column format: 22/12/2025 14:05 (DD/MM/YYYY HH:mm)
+function fmtDDMMYYYY_HHMM(d: Date, offsetMinutes: number) {
+  const local = toUserLocalDate(d, offsetMinutes);
+  const dd = String(local.getDate()).padStart(2, '0');
+  const mm = String(local.getMonth() + 1).padStart(2, '0');
+  const yyyy = String(local.getFullYear());
+  const hh = String(local.getHours()).padStart(2, '0');
+  const min = String(local.getMinutes()).padStart(2, '0');
+  return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
+}
+
 export const generatePdfReport = async (
   userId: Types.ObjectId,
   reportType: 'SALES' | 'FULL',
@@ -374,15 +385,16 @@ export const generatePdfReport = async (
       doc.fillColor(THEME.dark).fontSize(12).font('Bold').text('Transaction History', margin, doc.y);
       doc.y += 10;
 
-      const fixedW = 60 + 50 + 90 + 90;
+      // ✅ UPDATED: Time column now contains "22/12/2025 14:05" so widen it
+      const fixedW = 120 + 50 + 90 + 90; // Date/Time + Qty + Amount + Staff
       const itemW = contentWidth - fixedW;
 
-      const headers = ['Time', 'Item Details', 'Qty', 'Amount', 'Staff'];
-      const widths = [60, itemW, 50, 90, 90];
+      const headers = ['Date/Time', 'Item Details', 'Qty', 'Amount', 'Staff'];
+      const widths = [120, itemW, 50, 90, 90];
 
       const rows = transactions.flatMap((t: any) => {
-        const local = toUserLocalDate(t.timestamp, offsetMinutes);
-        const timeStr = local.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+        // ✅ REQUIRED: DD/MM/YYYY HH:mm
+        const timeStr = fmtDDMMYYYY_HHMM(new Date(t.timestamp), offsetMinutes);
 
         const staffName = getStaffName(t);
 

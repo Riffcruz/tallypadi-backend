@@ -467,6 +467,9 @@ Rules:
 - "this month" → start_date = first day of current month, end_date = currentDate
 - "last month" → start_date = first day of previous month, end_date = last day of previous month
 - "from 10th to 15th" → infer month/year from currentDate and output exact ISO dates
+- "from YYYY-MM-DD to YYYY-MM-DD" → use those exact dates
+- "for DATE" → set both start_date and end_date to that DATE
+- "between DATE1 and DATE2" → set start_date=DATE1, end_date=DATE2
 - If user gives only one date (e.g., "report for 2025-12-10"):
   set start_date=end_date=that date.
 
@@ -492,6 +495,11 @@ When intent is any REPORT_*:
 - needs_clarification should be false unless the user’s request is truly ambiguous.
 
 If user says just "report" (no extra info):
+- intent MUST be REPORT_SALES
+- report_params MUST default to today (start_date=currentDate, end_date=currentDate)
+- reply_text should clearly confirm: "Here is your sales report for today (DATE)."
+
+If user says just "sales" (no extra info):
 - intent MUST be REPORT_SALES
 - report_params MUST default to today (start_date=currentDate, end_date=currentDate)
 - reply_text should clearly confirm: "Here is your sales report for today (DATE)."
