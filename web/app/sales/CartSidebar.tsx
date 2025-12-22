@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import Swal from 'sweetalert2';
 import { useRouter } from 'next/navigation';
@@ -45,7 +45,7 @@ function currencyPrefix(code?: string) {
   return map[c] || c;
 }
 
-// ✅ filename with date + time: 22-12-2025_14-05
+// 22-12-2025_14-05
 function buildStamp() {
   const now = new Date();
   const dd = String(now.getDate()).padStart(2, '0');
@@ -56,9 +56,20 @@ function buildStamp() {
   return `${dd}-${mm}-${yyyy}_${hh}-${mi}`;
 }
 
-async function presentPdfActions(blob: Blob, fileName: string) {
-  const url = window.URL.createObjectURL(blob);
+function openPdfInNewTab(url: string) {
+  const win = window.open(url, '_blank', 'noopener,noreferrer');
+  if (!win) {
+    const a = document.createElement('a');
+    a.href = url;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+}
 
+async function presentPdfActions(url: string, fileName: string) {
   const doDownload = () => {
     const link = document.createElement('a');
     link.href = url;
@@ -68,18 +79,7 @@ async function presentPdfActions(blob: Blob, fileName: string) {
     link.remove();
   };
 
-  const doPreview = () => {
-    const win = window.open(url, '_blank', 'noopener,noreferrer');
-    if (!win) {
-      const a = document.createElement('a');
-      a.href = url;
-      a.target = '_blank';
-      a.rel = 'noopener noreferrer';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-    }
-  };
+  const doPreview = () => openPdfInNewTab(url);
 
   const result = await Swal.fire({
     icon: 'success',
@@ -114,64 +114,77 @@ async function presentPdfActions(blob: Blob, fileName: string) {
     timer: 2200,
     timerProgressBar: true,
   });
-
-  // ✅ don’t revoke immediately (preview/download may break)
-  setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
 }
 
-async function fetchReceiptOrTodayReportPdf(token: string, saleId?: string, directReceiptUrl?: string) {
-  // 1) If server already gave us a direct URL, try to fetch it as blob
+/**
+ * ✅ IMPORTANT:
+ * Fetch receipt ONLY for this saleId (NOT /sales/report).
+ */
+async function fetchReceiptPdfForSale(token: string, saleId?: string, directReceiptUrl?: string) {
+  if (!saleId && !directReceiptUrl) {
+    throw new Error('Missing saleId from checkout response. Backend must return saleId.');
+  }
+
+  // 1) If backend returned a direct receipt URL
   if (directReceiptUrl) {
+    // if relative, make absolute
+    const url = directReceiptUrl.startsWith('/') ? `${window.location.origin}${directReceiptUrl}` : directReceiptUrl;
+
+    // try with auth
     try {
-      const res = await axios.get(directReceiptUrl, { responseType: 'blob', timeout: 60_000 });
-      return new Blob([res.data], { type: 'application/pdf' });
+      const r = await axios.get(url, {
+        responseType: 'blob',
+        headers: { Authorization: `Bearer ${token}` },
+        timeout: 60_000,
+      });
+      return new Blob([r.data], { type: 'application/pdf' });
     } catch {
-      // ignore, fallback
+      // try without auth (if public link)
+      const r = await axios.get(url, { responseType: 'blob', timeout: 60_000 });
+      return new Blob([r.data], { type: 'application/pdf' });
     }
   }
 
-  // 2) Try common “receipt per sale” endpoints (adjust to your real route if you have one)
-  if (saleId) {
-    const endpoints = [
-      `${API_URL}/sales/${saleId}/receipt`,
-      `${API_URL}/sales/${saleId}/pdf`,
-      `${API_URL}/receipts/${saleId}`,
-      `${API_URL}/sales/receipt?saleId=${encodeURIComponent(saleId)}`,
-    ];
+  // 2) Otherwise call your receipt endpoint
+  const endpoints = [
+    `${API_URL}/sales/${saleId}/receipt`, // ✅ your real route
+    `${API_URL}/sales/${saleId}/pdf`, // optional fallback if you add it later
+    `${API_URL}/sales/receipt?saleId=${encodeURIComponent(String(saleId))}`, // optional fallback
+  ];
 
-    for (const url of endpoints) {
-      try {
-        const res = await axios.get(url, {
-          headers: { Authorization: `Bearer ${token}` },
-          responseType: 'blob',
-          timeout: 60_000,
-        });
+  let lastErr: any = null;
 
-        const ct = String(res.headers?.['content-type'] || '');
-        if (ct.includes('application/pdf')) {
-          return new Blob([res.data], { type: 'application/pdf' });
-        }
-      } catch {
-        // try next
-      }
+  for (const url of endpoints) {
+    try {
+      const res = await axios.get(url, {
+        headers: { Authorization: `Bearer ${token}` },
+        responseType: 'blob',
+        timeout: 60_000,
+      });
+
+      return new Blob([res.data], { type: 'application/pdf' });
+    } catch (e) {
+      lastErr = e;
     }
   }
 
-  // 3) Fallback to today report endpoint you already have
-  const today = new Date();
-  const yyyy = today.getFullYear();
-  const mm = String(today.getMonth() + 1).padStart(2, '0');
-  const dd = String(today.getDate()).padStart(2, '0');
-  const dateStr = `${yyyy}-${mm}-${dd}`;
+  throw lastErr || new Error('Receipt endpoint failed');
+}
 
-  const reportRes = await axios.get(`${API_URL}/sales/report`, {
-    headers: { Authorization: `Bearer ${token}` },
-    params: { startDate: dateStr, endDate: dateStr },
-    responseType: 'blob',
-    timeout: 60_000,
-  });
+function extractSaleId(data: any): string | undefined {
+  // ✅ Handles: { saleId }, { transaction: { _id } }, etc.
+  const raw =
+    data?.saleId ||
+    data?.transactionId ||
+    data?.txId ||
+    data?.id ||
+    data?._id ||
+    data?.transaction?._id ||
+    data?.transaction?.id ||
+    data?.transaction?.saleId;
 
-  return new Blob([reportRes.data], { type: 'application/pdf' });
+  const s = String(raw || '').trim();
+  return s ? s : undefined;
 }
 
 export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: CartSidebarProps) {
@@ -180,12 +193,23 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<{ text: string; type: 'success' | 'error' | '' }>({ text: '', type: '' });
 
-  // ✅ confirm + receipt state
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [printReceipt, setPrintReceipt] = useState(true);
 
-  // ✅ used for UI quick actions (print/download/share link)
+  // store blob url + saleId so buttons work after generation
   const [receipt, setReceipt] = useState<{ saleId?: string; url?: string } | null>(null);
+
+  // ✅ cleanup old blob urls
+  useEffect(() => {
+    return () => {
+      if (receipt?.url && receipt.url.startsWith('blob:')) {
+        try {
+          URL.revokeObjectURL(receipt.url);
+        } catch {}
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [receipt?.url]);
 
   const total = useMemo(() => cart.reduce((acc, item) => acc + item.sellQty * item.sellPrice, 0), [cart]);
 
@@ -209,23 +233,28 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
 
   const remove = (id: string) => setCart((prev) => prev.filter((i) => i.id !== id));
 
-  const openPdfInNewTab = (url: string) => {
-    const win = window.open(url, '_blank', 'noopener,noreferrer');
-    if (!win) {
-      const a = document.createElement('a');
-      a.href = url;
-      a.target = '_blank';
-      a.rel = 'noopener noreferrer';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-    }
-  };
-
   const handleShareReceipt = async () => {
     if (!receipt?.url) return;
 
     try {
+      // Prefer file share when available
+      if ((navigator as any).canShare) {
+        const r = await fetch(receipt.url);
+        const blob = await r.blob();
+        const file = new File([blob], `TallyPadi_Receipt_${buildStamp()}_${receipt.saleId || ''}.pdf`, {
+          type: 'application/pdf',
+        });
+
+        if ((navigator as any).canShare({ files: [file] }) && navigator.share) {
+          await navigator.share({
+            title: 'TallyPadi Receipt',
+            text: 'Receipt PDF',
+            files: [file],
+          });
+          return;
+        }
+      }
+
       if (navigator.share) {
         await navigator.share({
           title: 'TallyPadi Receipt',
@@ -239,12 +268,11 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
       setMsg({ type: 'success', text: '✅ Receipt link copied.' });
       setTimeout(() => setMsg({ text: '', type: '' }), 2500);
     } catch {
-      setMsg({ type: 'error', text: 'Could not share/copy receipt link.' });
+      setMsg({ type: 'error', text: 'Could not share/copy receipt.' });
       setTimeout(() => setMsg({ text: '', type: '' }), 2500);
     }
   };
 
-  // ✅ Checkout (optionally generate/print receipt PDF)
   const doCheckout = async (alsoPrint: boolean) => {
     if (cart.length === 0) return;
 
@@ -274,21 +302,23 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
       });
 
       const data = res.data || {};
-      const saleId = String(data.saleId || data.txId || data.id || data._id || '') || undefined;
 
+      // ✅ FIX: robust saleId parsing
+      const saleId = extractSaleId(data);
+
+      // optional if backend returns direct receipt url
       const directReceiptUrl =
         (typeof data.receiptUrl === 'string' && data.receiptUrl) ||
         (typeof data.pdfUrl === 'string' && data.pdfUrl) ||
-        (typeof data.url === 'string' && data.url) ||
+        (typeof data.transaction?.receiptUrl === 'string' && data.transaction.receiptUrl) ||
         undefined;
 
       setMsg({ text: '✅ Sale recorded successfully!', type: 'success' });
       onCheckoutSuccess();
 
-      // ✅ receipt prompt
       if (!alsoPrint) return;
 
-      // ✅ TYCOON gate (client side)
+      // client-side gate (server should also gate)
       if (String(user?.planType || '').toUpperCase() !== 'TYCOON') {
         Swal.fire({
           title: 'Upgrade Required',
@@ -305,37 +335,34 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
         return;
       }
 
-      // ✅ generating modal
       Swal.fire({
-        title: 'Generating PDF…',
-        html: 'Please wait while we prepare your receipt.',
+        title: 'Generating receipt PDF…',
+        html: 'Only this checkout items will be included.',
         allowOutsideClick: false,
         allowEscapeKey: false,
         didOpen: () => Swal.showLoading(),
       });
 
-      const pdfBlob = await fetchReceiptOrTodayReportPdf(token, saleId, directReceiptUrl);
+      const pdfBlob = await fetchReceiptPdfForSale(token, saleId, directReceiptUrl);
 
       Swal.close();
 
-      // ✅ Also store a URL for UI buttons (print/download/share)
       const blobUrl = URL.createObjectURL(pdfBlob);
       setReceipt({ saleId, url: blobUrl });
 
-      // ✅ Ask Preview / Download / Both
-      const fileName = saleId
-        ? `TallyPadi_Receipt_${buildStamp()}_${saleId}.pdf`
-        : `TallyPadi_Sales_Report_${buildStamp()}.pdf`;
-
-      await presentPdfActions(pdfBlob, fileName);
+      const fileName = `TallyPadi_Receipt_${buildStamp()}_${saleId || 'sale'}.pdf`;
+      await presentPdfActions(blobUrl, fileName);
     } catch (err: any) {
       console.error('Checkout Error:', err);
-      const errorMsg = err.response?.data?.message || err.response?.data?.error || 'Checkout failed';
+      const errorMsg = err.response?.data?.message || err.response?.data?.error || err.message || 'Checkout failed';
       setMsg({ text: errorMsg, type: 'error' });
 
       Swal.fire({
-        title: 'Checkout Failed',
-        text: errorMsg,
+        title: 'Receipt/Checkout Failed',
+        text:
+          String(errorMsg).includes('Missing saleId')
+            ? 'Backend must return saleId from POST /api/sales so we can generate a receipt for only this checkout.'
+            : errorMsg,
         icon: 'error',
         confirmButtonColor: '#0F766E',
       });
@@ -354,7 +381,6 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
 
   return (
     <div className="relative bg-white rounded-3xl border border-slate-200 shadow-xl shadow-slate-900/5 flex flex-col h-[calc(100vh-6rem)] sticky top-4 overflow-hidden">
-      {/* Top glow */}
       <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-emerald-500/10 to-transparent" />
 
       {/* Header */}
@@ -414,12 +440,10 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
               </div>
 
               <div className="flex items-center justify-between gap-2">
-                {/* Quantity */}
                 <div className="flex items-center bg-slate-50 rounded-2xl border border-slate-200 p-1">
                   <button
                     onClick={() => updateQty(item.id, -1)}
                     className="p-2 hover:bg-white hover:shadow-sm rounded-xl text-slate-700 transition-all"
-                    title="Decrease quantity"
                   >
                     <Minus className="w-3.5 h-3.5" />
                   </button>
@@ -429,7 +453,6 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
                   <button
                     onClick={() => updateQty(item.id, 1)}
                     className="p-2 hover:bg-white hover:shadow-sm rounded-xl text-slate-700 transition-all"
-                    title="Increase quantity"
                   >
                     <Plus className="w-3.5 h-3.5" />
                   </button>
@@ -437,19 +460,13 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
 
                 <span className="text-slate-300 text-xs font-bold">×</span>
 
-                {/* Price Input */}
                 <div className="relative flex-1">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[11px] font-extrabold">
                     {prefix}
                   </span>
                   <input
                     type="number"
-                    className="
-                      w-full pl-10 pr-3 py-2.5 text-sm font-extrabold
-                      border border-slate-200 rounded-2xl outline-none
-                      focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10
-                      text-right bg-white
-                    "
+                    className="w-full pl-10 pr-3 py-2.5 text-sm font-extrabold border border-slate-200 rounded-2xl outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 text-right bg-white"
                     value={item.sellPrice}
                     onChange={(e) => updatePrice(item.id, Number(e.target.value))}
                   />
@@ -468,23 +485,24 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
 
       {/* Footer */}
       <div className="p-5 bg-slate-50 border-t border-slate-200 z-10">
-        {/* Toast */}
         {msg.text && (
           <div
-            className={`mb-4 p-3.5 rounded-2xl text-xs font-extrabold flex items-center gap-2 animate-in slide-in-from-bottom-2
-              ${
-                msg.type === 'success'
-                  ? 'bg-emerald-100 text-emerald-900 border border-emerald-200'
-                  : 'bg-red-100 text-red-900 border border-red-200'
-              }
-            `}
+            className={`mb-4 p-3.5 rounded-2xl text-xs font-extrabold flex items-center gap-2 animate-in slide-in-from-bottom-2 ${
+              msg.type === 'success'
+                ? 'bg-emerald-100 text-emerald-900 border border-emerald-200'
+                : 'bg-red-100 text-red-900 border border-red-200'
+            }`}
           >
-            {msg.type === 'success' ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
+            {msg.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+            ) : (
+              <AlertCircle className="w-4 h-4 shrink-0" />
+            )}
             <span className="min-w-0">{msg.text}</span>
           </div>
         )}
 
-        {/* Receipt actions (after success) */}
+        {/* Receipt actions */}
         {receipt?.url && (
           <div className="mb-4 flex items-center gap-2">
             <button
@@ -497,7 +515,7 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
 
             <a
               href={receipt.url}
-              download={`TallyPadi_Receipt_${buildStamp()}_${receipt.saleId || ''}.pdf`}
+              download={`TallyPadi_Receipt_${buildStamp()}_${receipt.saleId || 'sale'}.pdf`}
               className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2.5 rounded-2xl bg-white border border-slate-200 text-slate-900 font-extrabold text-xs hover:bg-slate-100 transition"
             >
               <FileDown className="w-4 h-4" />
@@ -522,13 +540,7 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
         <button
           onClick={handleCheckoutClick}
           disabled={loading || cart.length === 0}
-          className="
-            group w-full py-4 rounded-2xl font-extrabold
-            bg-slate-900 hover:bg-black text-white
-            shadow-lg shadow-slate-900/20 transition-all
-            active:scale-[0.98] disabled:opacity-50 disabled:shadow-none
-            flex justify-center items-center gap-3
-          "
+          className="group w-full py-4 rounded-2xl font-extrabold bg-slate-900 hover:bg-black text-white shadow-lg shadow-slate-900/20 transition-all active:scale-[0.98] disabled:opacity-50 disabled:shadow-none flex justify-center items-center gap-3"
         >
           {loading ? (
             <Loader2 className="animate-spin w-5 h-5" />
@@ -540,7 +552,7 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
         </button>
       </div>
 
-      {/* ✅ Confirmation Modal */}
+      {/* Confirmation Modal */}
       {confirmOpen && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
           <div
@@ -558,7 +570,6 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
               <button
                 className="w-10 h-10 rounded-2xl border border-slate-200 bg-white hover:bg-slate-50 flex items-center justify-center"
                 onClick={() => (!loading ? setConfirmOpen(false) : null)}
-                title="Close"
               >
                 <X className="w-4 h-4 text-slate-700" />
               </button>
@@ -574,9 +585,9 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
                     className="mt-1 h-4 w-4 accent-emerald-600"
                   />
                   <div>
-                    <p className="font-extrabold text-slate-900">Generate receipt PDF after confirmation</p>
+                    <p className="font-extrabold text-slate-900">Generate receipt PDF</p>
                     <p className="text-xs font-semibold text-slate-600 mt-1">
-                      If enabled, we’ll prepare a receipt PDF and let you preview/download/share it.
+                      This will generate a PDF for ONLY this checkout items.
                     </p>
                   </div>
                 </label>
@@ -604,9 +615,7 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
                 </button>
               </div>
 
-              <p className="text-[11px] text-slate-500 font-semibold">
-                Note: Receipt PDF availability depends on your server route + plan settings.
-              </p>
+              
             </div>
           </div>
         </div>

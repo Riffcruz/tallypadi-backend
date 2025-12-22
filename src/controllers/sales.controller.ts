@@ -195,7 +195,12 @@ export const recordSale = async (req: Request | any, res: Response) => {
       timestamp: new Date()
     });
 
-    return res.json({ success: true, transaction: createdTx });
+    return res.json({
+  success: true,
+  saleId: createdTx._id,         // ✅ IMPORTANT for receipt download
+  transaction: createdTx
+});
+
 
   } catch (error: any) {
     console.error("Record Sale Error:", error?.stack || error);

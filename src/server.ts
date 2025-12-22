@@ -10,6 +10,11 @@ import crypto from 'crypto';
 import path from 'path';
 import jwt from 'jsonwebtoken';
 
+import { generateSaleReceiptPdf } from './controllers/receipt.controller';
+
+
+
+
 // --- ROUTERS ---
 import whatsappRouter from './routes/whatsapp.routes';
 import paymentRouter from './routes/payment.routes';
@@ -270,6 +275,8 @@ app.delete('/api/debtors/:id', authRequired, deleteDebtor);
 
 // --- DEBTOR PAYMENTS ---
 app.post('/api/debtors/payment', authRequired, recordDebtPayment);
+
+app.get('/api/sales/:saleId/receipt', authRequired, generateSaleReceiptPdf);
 
 // --- SETTINGS & STAFF ---
 app.put('/api/settings', authRequired, updateSettings);
