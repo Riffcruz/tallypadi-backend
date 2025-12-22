@@ -25,6 +25,7 @@ import {
   ChevronDown,
   HelpCircle,
 } from 'lucide-react';
+import Image from 'next/image';
 
 // --- TYPES & INTERFACES ---
 
@@ -314,12 +315,19 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-20 items-center">
             {/* Logo */}
-            <div className="flex items-center gap-2 cursor-pointer group">
-              <div className="w-10 h-10 bg-gradient-to-tr from-emerald-500 to-green-400 rounded-xl flex items-center justify-center text-white shadow-lg shadow-emerald-500/20 group-hover:rotate-12 transition-transform duration-300">
-                <Phone fill="currentColor" size={20} />
-              </div>
-              <span className="font-bold text-2xl tracking-tight text-white">Tallypadi</span>
-            </div>
+            <div className="flex items-center gap-3 cursor-pointer group">
+  <div className="relative w-10 h-10 rounded-xl overflow-hidden shadow-lg shadow-emerald-500/20 group-hover:rotate-6 transition-transform duration-300">
+    <Image
+      src="/tallypadi-logo.png"
+      alt="TallyPadi logo"
+      fill
+      className="object-contain"
+      priority
+    />
+  </div>
+
+  <span className="font-bold text-2xl tracking-tight text-white">Tallypadi</span>
+</div>
 
             {/* Desktop Links */}
             <div className="hidden md:flex space-x-8 items-center">
