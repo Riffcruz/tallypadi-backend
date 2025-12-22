@@ -436,6 +436,9 @@ C. PRICE/MONEY EXTRACTION (POSITION-INDEPENDENT & SMART SCALING)
       total_money = sum(qty * unit_price) across all items (minus discount if any).
     Never set total_money equal to unit_price in "each/per" cases.
   - If user explicitly says "total" → treat as total_money (do NOT multiply).
+  - Words like "for", "total", "in total" → total_money
+  - Support multipliers: k = thousand, m = million (e.g., 5k = 5000).
+  - Report sales with user's currency symbol in reply_text.
 
 *** 2. CONTEXTUAL COMPLETION ***
 - Use conversation history to complete partial inputs across turns.
