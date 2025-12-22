@@ -1,3 +1,4 @@
+// src/services/pdf.service.ts
 import PDFDocument from 'pdfkit';
 import fs from 'fs';
 import path from 'path';
@@ -38,6 +39,24 @@ const COUNTRY_CURRENCY_CODE: Record<string, string> = {
   AU: 'AUD', JP: 'JPY', AE: 'AED', RW: 'RWF', TZ: 'TZS', UG: 'UGX',
 };
 
+const COUNTRY_LOCALE: Record<string, string> = {
+  NG: 'en-NG',
+  GH: 'en-GH',
+  US: 'en-US',
+  GB: 'en-GB',
+  EU: 'en-IE',
+  KE: 'en-KE',
+  ZA: 'en-ZA',
+  IN: 'en-IN',
+  CA: 'en-CA',
+  AU: 'en-AU',
+  JP: 'ja-JP',
+  AE: 'en-AE',
+  RW: 'en-RW',
+  TZ: 'en-TZ',
+  UG: 'en-UG',
+};
+
 // ✅ Robust font resolver
 const pickFirstExisting = (paths: string[]) => {
   for (const p of paths) {
@@ -55,6 +74,28 @@ function toUserLocalDate(d: any, offsetMinutes: number) {
   return new Date(new Date(d).getTime() + offsetMinutes * 60_000);
 }
 
+// ✅ DateTime formatting (date + time)
+function fmtUserDateTime(d: Date, offsetMinutes: number, locale: string) {
+  const local = toUserLocalDate(d, offsetMinutes);
+  return local.toLocaleString(locale, {
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+// ✅ Date-only formatting (kept for compact places if needed)
+function fmtUserDate(d: Date, offsetMinutes: number, locale: string) {
+  const local = toUserLocalDate(d, offsetMinutes);
+  return local.toLocaleDateString(locale, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
 export const generatePdfReport = async (
   userId: Types.ObjectId,
   reportType: 'SALES' | 'FULL',
@@ -68,7 +109,10 @@ export const generatePdfReport = async (
 
   const businessName = user.businessName || 'Business Report';
   const rawCountry = (user as any).countryCode || (user as any).profile?.countryCode || 'NG';
-  const currencyCode = COUNTRY_CURRENCY_CODE[String(rawCountry).toUpperCase()] || 'NGN';
+  const cc = String(rawCountry).toUpperCase();
+
+  const currencyCode = COUNTRY_CURRENCY_CODE[cc] || 'NGN';
+  const locale = COUNTRY_LOCALE[cc] || 'en-NG';
 
   // ✅ Use user's offset for display (times + date period)
   const offsetMinutes = (user as any)?.settings?.utcOffsetMinutes ?? 60;
@@ -118,29 +162,28 @@ export const generatePdfReport = async (
   const formatMoney = (amount: any) => {
     const safe = isValidNumber(amount) ? Number(amount) : 0;
 
-    // ✅ Match WhatsApp style more closely (no decimals)
-    return `${currencyCode} ${safe.toLocaleString('en-NG', {
+    // ✅ Match WhatsApp style (no decimals)
+    return `${currencyCode} ${safe.toLocaleString(locale, {
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     })}`;
   };
 
-  const fmtUserDate = (d?: Date) => {
-    if (!d) return '';
-    const local = toUserLocalDate(d, offsetMinutes);
-    return local.toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' });
-  };
-
-  const getPeriodText = () => {
-    if (startDate && endDate) return `${fmtUserDate(startDate)} — ${fmtUserDate(endDate)}`;
-    if (startDate) return `From ${fmtUserDate(startDate)}`;
-    if (endDate) return `Until ${fmtUserDate(endDate)}`;
+  const getPeriodTextWithTime = () => {
+    if (startDate && endDate) {
+      return `${fmtUserDateTime(startDate, offsetMinutes, locale)}  →  ${fmtUserDateTime(endDate, offsetMinutes, locale)}`;
+    }
+    if (startDate) return `From ${fmtUserDateTime(startDate, offsetMinutes, locale)}`;
+    if (endDate) return `Until ${fmtUserDateTime(endDate, offsetMinutes, locale)}`;
     return dateLabel || 'All Time';
   };
 
-  // ✅ Per-line amount fallback (this fixes your “wrong calculation”)
+  const getGeneratedText = () => {
+    return fmtUserDateTime(new Date(), offsetMinutes, locale);
+  };
+
+  // ✅ Per-line amount fallback (fixes wrong calculation)
   const computeLineTotal = (t: any, item: any) => {
-    // prefer stored total
     if (isValidNumber(item?.total)) return Number(item.total);
 
     const qty = isValidNumber(item?.qty) ? Number(item.qty) : 0;
@@ -149,13 +192,10 @@ export const generatePdfReport = async (
 
     if (Number.isFinite(computed) && computed > 0) return computed;
 
-    // last resort: if transaction has totalMoney but item totals are missing,
-    // don't lie — return 0 for that line; the SUMMARY will still be correct.
     return 0;
   };
 
   const getStaffName = (t: any) => {
-    // Sometimes report.service returns t.user populated, sometimes not.
     return (
       t?.staffName ||
       (t?.user && typeof t.user === 'object' && ((t.user as any).name || (t.user as any).businessName)) ||
@@ -175,22 +215,35 @@ export const generatePdfReport = async (
     doc.restore();
   };
 
+  // ✅ Header now includes Period (with time) + Generated time
   const drawHeader = (title: string) => {
-    doc.rect(0, 0, pageWidth, 60).fill(THEME.dark);
+    const HEADER_H = 78; // was 60 — increased to fit period + generated
+    doc.rect(0, 0, pageWidth, HEADER_H).fill(THEME.dark);
 
     doc.circle(margin + 15, 30, 12).fill(THEME.primary);
     doc.fillColor(THEME.white).font('Bold').fontSize(10).text('TP', margin + 8, 26.5);
 
-    doc.fillColor(THEME.white).font('Bold').fontSize(16).text(title, margin + 40, 18);
-    doc.fillColor(THEME.muted).font('Regular').fontSize(9).text('TallyPadi Business Intelligence', margin + 40, 38);
+    doc.fillColor(THEME.white).font('Bold').fontSize(16).text(title, margin + 40, 16);
+    doc.fillColor(THEME.muted).font('Regular').fontSize(9).text('TallyPadi Business Intelligence', margin + 40, 36);
 
     doc.fillColor(THEME.white).font('Bold').fontSize(12)
-      .text(businessName, margin, 18, { width: contentWidth, align: 'right' });
+      .text(businessName, margin, 16, { width: contentWidth, align: 'right' });
 
-    doc.fillColor('#94a3b8').font('Regular').fontSize(9)
-      .text(getPeriodText(), margin, 36, { width: contentWidth, align: 'right' });
+    // ✅ Period with time
+    doc.fillColor('#94a3b8').font('Regular').fontSize(8)
+      .text(`Period: ${getPeriodTextWithTime()}`, margin, 34, { width: contentWidth, align: 'right' });
 
-    doc.y = 80;
+    // ✅ Generated with time
+    doc.fillColor('#94a3b8').font('Regular').fontSize(8)
+      .text(`Generated: ${getGeneratedText()}`, margin, 48, { width: contentWidth, align: 'right' });
+
+    // ✅ keep label too (optional, but helps "Today's" / "Weekly")
+    if (dateLabel) {
+      doc.fillColor('#94a3b8').font('Regular').fontSize(8)
+        .text(`Label: ${String(dateLabel).replace(/\s+/g, ' ').trim()}`, margin, 62, { width: contentWidth, align: 'right' });
+    }
+
+    doc.y = HEADER_H + 20;
   };
 
   const drawFooter = (page: number, total: number) => {
@@ -250,7 +303,7 @@ export const generatePdfReport = async (
         doc.addPage();
         drawWatermark();
         drawHeader(reportType === 'SALES' ? 'Sales Report' : 'Full Business Report');
-        currentY = 80;
+        currentY = doc.y; // start after header
         currentY = drawTableHeader(currentY, headers, widths);
         doc.font('Regular').fontSize(9);
       }
@@ -300,7 +353,10 @@ export const generatePdfReport = async (
     }
 
     // ✅ Ensure summary card matches table (recompute revenue from same tx list)
-    const revenueFromTx = (transactions || []).reduce((sum: number, t: any) => sum + (isValidNumber(t?.totalMoney) ? Number(t.totalMoney) : 0), 0);
+    const revenueFromTx = (transactions || []).reduce(
+      (sum: number, t: any) => sum + (isValidNumber(t?.totalMoney) ? Number(t.totalMoney) : 0),
+      0
+    );
 
     // (Still call summary if you need other fields in future)
     await getDailySummary(userId, startDate, endDate);
@@ -325,14 +381,13 @@ export const generatePdfReport = async (
       const widths = [60, itemW, 50, 90, 90];
 
       const rows = transactions.flatMap((t: any) => {
-        // ✅ show time in user local time
         const local = toUserLocalDate(t.timestamp, offsetMinutes);
-        const timeStr = local.toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit' });
+        const timeStr = local.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
 
         const staffName = getStaffName(t);
 
         return (t.items || []).map((item: any) => {
-          const lineTotal = computeLineTotal(t, item); // ✅ FIXED
+          const lineTotal = computeLineTotal(t, item);
           const qtyText = `${item.qty ?? 0} ${item.unit || ''}`.trim();
 
           return [
@@ -360,7 +415,10 @@ export const generatePdfReport = async (
     let txForRevenue = await getTodayTransactions(userId, startDate, endDate);
     if (!options.includeUndone) txForRevenue = (txForRevenue || []).filter((t: any) => !t?.isUndone);
 
-    const periodRevenue = (txForRevenue || []).reduce((sum: number, t: any) => sum + (isValidNumber(t?.totalMoney) ? Number(t.totalMoney) : 0), 0);
+    const periodRevenue = (txForRevenue || []).reduce(
+      (sum: number, t: any) => sum + (isValidNumber(t?.totalMoney) ? Number(t.totalMoney) : 0),
+      0
+    );
 
     const revenueSummary = await getDailySummary(userId, startDate, endDate);
 
