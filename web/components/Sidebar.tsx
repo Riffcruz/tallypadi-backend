@@ -18,7 +18,7 @@ export default function Sidebar() {
   const menuItems = [
     { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { href: '/sales', icon: ShoppingCart, label: 'Sales' },
-    { href: '/inventory', icon: Package, label: 'Inventory' },
+    { href: '/inventory', icon: Package, label: 'Product/Stocks' },
     // ✅ New Debtors Navigation Item
     { href: '/debtors', icon: Users, label: 'Debtors' },
     { href: '/settings', icon: Settings, label: 'Settings' },
@@ -30,7 +30,7 @@ export default function Sidebar() {
       {/* Brand Header */}
       <div className="p-6 border-b border-gray-100 flex items-center gap-2 shrink-0">
         <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center text-white font-bold text-xl">T</div>
-        <span className="font-bold text-xl text-emerald-700">Tallypadi</span>
+        <span className="font-bold text-xl text-emerald-700">TallyPadi</span>
       </div>
       
       {/* Navigation Links */}

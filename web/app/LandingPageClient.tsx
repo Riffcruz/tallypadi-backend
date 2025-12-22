@@ -96,12 +96,68 @@ const TESTIMONIALS: Testimonial[] = [
 
 const FAQS: Faq[] = [
   {
-    q: 'Do I need to download any app?',
-    a: 'Nope. You use Tallypadi directly inside WhatsApp. Setup is quick and you start recording immediately.',
+  q: 'Do I need to download any app?',
+  a: 'No. You can use TallyPadi directly inside WhatsApp—no app required. If you want an app-like experience, you can also install TallyPadi as a PWA (Add to Home Screen) and use it like a normal mobile app.',
+},
+{
+    q: 'What is a PWA and how do I install it?',
+    a: 'A PWA is a “website that behaves like an app.” Open TallyPadi in your browser, then tap “Add to Home Screen” (Android/Chrome) or “Share” → “Add to Home Screen” (iPhone/Safari). It will appear on your phone like a normal app.',
+  },
+  {
+    q: 'Can I use TallyPadi on Android and iPhone?',
+    a: 'Yes. TallyPadi works on Android, iPhone, and desktop. You can run it in WhatsApp, and you can also use the PWA on any phone.',
+  },
+  {
+    q: 'How does it work inside WhatsApp?',
+    a: 'You simply chat with TallyPadi like a person. Send messages like “Sold 2 bags of rice for 100k” or “Stock remaining” and it records your sales, stock, and profit automatically.',
+  },
+  {
+    q: 'Can I record sales in Nigerian formats like 50k, 120k, 1.5m?',
+    a: 'Yes. TallyPadi understands common formats like “50k”, “120k”, “1.5m”, and normal figures too.',
+  },
+  {
+    q: 'Does it track stock automatically?',
+    a: 'Yes. When you record a sale, stock reduces automatically. When you restock, it updates your quantity instantly.',
+  },
+  {
+    q: 'Can I see my sales report anytime?',
+    a: 'Yes. You can request daily/weekly/monthly reports inside WhatsApp or view your dashboard for a full breakdown.',
+  },
+  {
+    q: 'Can I download receipts and PDFs?',
+    a: 'Yes. You can download receipts for single transactions, and you can also download PDF reports when you need them.',
+  },
+  {
+    q: 'Can multiple staff use the same shop account?',
+    a: 'Yes. You can add staff and control what they can do, while everything still records into the same business account.',
+  },
+  {
+    q: 'Is my data safe?',
+    a: 'Yes. Your data is tied to your account and protected with secure authentication. Only you (and the staff you approve) can access it.',
+  },
+  {
+    q: 'Do I need internet to use it?',
+    a: 'Yes. Since it works through WhatsApp and the web dashboard, you’ll need an internet connection.',
+  },
+  {
+    q: 'Can I use it for any kind of business?',
+    a: 'Yes. It works for mini marts, provision shops, cosmetics, phone accessories, POS agents, pharmacies, fashion stores, and more.',
+  },
+  {
+    q: 'How long does setup take?',
+    a: 'Usually 2–5 minutes. Once you register, you can start recording immediately.',
+  },
+  {
+    q: 'Can I change my currency?',
+    a: 'Yes. You can set your currency (NGN, USD, GBP, etc.) in settings and all reports/receipts will follow it.',
+  },
+  {
+    q: 'What if I make a mistake in a sale entry?',
+    a: 'You can correct it by editing the transaction (or marking it undone if enabled). Your reports will stay accurate.',
   },
   {
     q: 'Can I record sales in Pidgin?',
-    a: 'Yes. You can chat naturally (English / Pidgin) and the bot understands common sales and restock phrasing.',
+    a: 'Yes. You can chat naturally (English / Pidgin or any Language) and the bot understands common sales and restock phrasing.',
   },
   {
     q: 'What happens after my 7-day trial?',

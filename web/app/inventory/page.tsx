@@ -354,7 +354,7 @@ export default function InventoryPage() {
 
               <div>
                 <div className="flex items-center gap-2">
-                  <h1 className="text-2xl md:text-3xl font-black tracking-tight">Inventory</h1>
+                  <h1 className="text-2xl md:text-3xl font-black tracking-tight">Stocks</h1>
                   <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-extrabold uppercase tracking-wide rounded-full">
                     <Sparkles className="w-3 h-3" /> Live
                   </span>
