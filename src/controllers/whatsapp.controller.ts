@@ -1021,87 +1021,98 @@ export const handleMessageLogic = async (
       }
 
       case 'REPORT_SALES': {
-        await queueOutboundMessage(from, `Calculating ${String(dateLabel || "Today's").toLowerCase()} report... ⏳`);
+  await queueOutboundMessage(from, `Calculating ${String(dateLabel || "Today's").toLowerCase()} report... ⏳`);
 
-        // ✅ 1) Get the correct UTC range for the user's requested period
-        const { startUtc, endUtc } = getUtcRangeForUser(offsetMinutes, startDate, endDate);
+  // ✅ 1) Get the correct UTC range for the user's requested period
+  const { startUtc, endUtc } = getUtcRangeForUser(offsetMinutes, startDate, endDate);
 
-        // ✅ 2) Pull transactions (so we can decide empty BEFORE doing anything else)
-        const salesTx = await Transaction.find({
-          user: shopId,
-          type: 'SALE',
-          timestamp: { $gte: startUtc, $lte: endUtc },
-          ...buildUndoneFilter(includeUndoneRequestedByOwner),
-        })
-          .sort({ timestamp: 1 })
-          .lean();
+  // ✅ 2) Pull transactions (so we can decide empty BEFORE doing anything else)
+  const salesTx = await Transaction.find({
+    user: shopId,
+    type: 'SALE',
+    timestamp: { $gte: startUtc, $lte: endUtc },
+    ...buildUndoneFilter(includeUndoneRequestedByOwner),
+  })
+    .sort({ timestamp: 1 })
+    .lean();
 
-        // ✅ 3) If empty: do NOT generate PDF, do NOT continue
-        if (!salesTx.length) {
-          await queueOutboundMessage(from, `📭 No sales found for *${dateLabel}*.`);
-          break;
-        }
-
-        // ✅ 4) Use same service as old version for correct totals/summary
-        const summary = await getDailySummary(shopId as any, startUtc, endUtc);
-
-        const totalFormatted = Number(summary?.totalRevenue || 0).toLocaleString(locale, {
-          style: 'currency',
-          currency: code,
-          maximumFractionDigits: 0,
-        });
-
-        // ✅ 5) Build breakdown message (from salesTx — consistent with undone filter)
-        let salesMsg = `📅 *${dateLabel} Sales Breakdown*${suffixReportScope(includeUndoneRequestedByOwner)}\n\n`;
-
-        salesTx.forEach((tx: any) => {
-          const local = toUserLocalDate(tx.timestamp, offsetMinutes);
-          const timeStr = `${String(local.getHours()).padStart(2, '0')}:${String(local.getMinutes()).padStart(2, '0')}`;
-          const undoneTag = tx.isUndone ? ' ⚠️UNDONE' : '';
-
-          (tx.items || []).forEach((it: any) => {
-            const qty = Number(it.qty || 0);
-            const unitPrice = Number(it.unitPrice || 0);
-
-            // ✅ fallback for line total
-            const line =
-              it.total != null && Number.isFinite(Number(it.total))
-                ? Number(it.total)
-                : qty * unitPrice;
-
-            salesMsg += `🕒 ${timeStr} • ${it.name} (${qty}${it.unit ? ' ' + it.unit : ''}) - ${symbol}${Number(line || 0).toLocaleString(locale)}${undoneTag}\n`;
-          });
-        });
-
-        salesMsg += `\n💰 *Total Money:* ${totalFormatted}`;
-        salesMsg += `\n📉 *Total Transactions:* ${salesTx.length}`;
-
-        await queueOutboundMessage(from, salesMsg);
-
-        // ✅ Auto-send PDF for TYCOON users who enabled PDF reports
-if (String(shopUser?.planType || '').toUpperCase() === 'TYCOON' && shopUser?.settings?.pdfReportsEnabled === true) {
-  try {
-    await queueOutboundMessage(from, '📄 Generating your SALES PDF...');
-
-    const pdfFileName = await generatePdfReport(
-      shopId as any,
-      'SALES', // ✅ important: match sales report type
-      `${dateLabel}${suffixReportScope(includeUndoneRequestedByOwner)}`,
-      startUtc,
-      endUtc
-    );
-
-    await queueOutboundMessage(from, `📄 PDF: ${REPORT_BASE_URL}${pdfFileName}`);
-  } catch (e) {
-    console.error('PDF gen error (REPORT_SALES):', e);
-    await queueOutboundMessage(from, '⚠️ Could not generate PDF right now. Please try again.');
+  // ✅ 3) If empty: do NOT generate PDF, do NOT continue
+  if (!salesTx.length) {
+    await queueOutboundMessage(from, `📭 No sales found for *${dateLabel}*.`);
+    break;
   }
+
+  // ✅ 4) Use same service as old version for correct totals/summary
+  const summary = await getDailySummary(shopId as any, startUtc, endUtc);
+
+  const totalFormatted = Number(summary?.totalRevenue || 0).toLocaleString(locale, {
+    style: 'currency',
+    currency: code,
+    maximumFractionDigits: 0,
+  });
+
+  // ✅ 5) Build breakdown message (from salesTx — consistent with undone filter)
+  let salesMsg = `📅 *${dateLabel} Sales Breakdown*${suffixReportScope(includeUndoneRequestedByOwner)}\n\n`;
+
+  salesTx.forEach((tx: any) => {
+    const local = toUserLocalDate(tx.timestamp, offsetMinutes);
+    const timeStr = `${String(local.getHours()).padStart(2, '0')}:${String(local.getMinutes()).padStart(2, '0')}`;
+    const undoneTag = tx.isUndone ? ' ⚠️UNDONE' : '';
+
+    (tx.items || []).forEach((it: any) => {
+      const qty = Number(it.qty || 0);
+      const unitPrice = Number(it.unitPrice || 0);
+
+      // ✅ fallback for line total
+      const line =
+        it.total != null && Number.isFinite(Number(it.total))
+          ? Number(it.total)
+          : qty * unitPrice;
+
+      salesMsg += `🕒 ${timeStr} • ${it.name} (${qty}${it.unit ? ' ' + it.unit : ''}) - ${symbol}${Number(line || 0).toLocaleString(locale)}${undoneTag}\n`;
+    });
+  });
+
+  salesMsg += `\n💰 *Total Money:* ${totalFormatted}`;
+  salesMsg += `\n📉 *Total Transactions:* ${salesTx.length}`;
+
+  await queueOutboundMessage(from, salesMsg);
+
+  // ✅ Auto-send PDF for TYCOON users who enabled PDF reports
+  if (String(shopUser?.planType || '').toUpperCase() === 'TYCOON' && shopUser?.settings?.pdfReportsEnabled === true) {
+    try {
+      await queueOutboundMessage(from, '📄 Generating your SALES PDF...');
+
+      // ✅ Add "Generated date + time" in user's local timezone
+      const nowLocal = toUserLocalDate(new Date(), offsetMinutes);
+      const generatedAt =
+        nowLocal.toLocaleDateString(locale, { year: 'numeric', month: 'short', day: '2-digit' }) +
+        ' ' +
+        nowLocal.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+
+      // ✅ Label that appears in PDF header (depending on your pdf.service implementation)
+      const pdfLabel =
+        `Sales Report — ${dateLabel}${suffixReportScope(includeUndoneRequestedByOwner)}\n` +
+        `Generated: ${generatedAt}`;
+
+      const pdfFileName = await generatePdfReport(
+        shopId as any,
+        'SALES', // ✅ important: match sales report type
+        pdfLabel,
+        startUtc,
+        endUtc
+      );
+
+      await queueOutboundMessage(from, `📄 PDF: ${REPORT_BASE_URL}${pdfFileName}`);
+    } catch (e) {
+      console.error('PDF gen error (REPORT_SALES):', e);
+      await queueOutboundMessage(from, '⚠️ Could not generate PDF right now. Please try again.');
+    }
+  }
+
+  break;
 }
 
-
-        // ✅ IMPORTANT: no PDF auto-send here unless you explicitly want it
-        break;
-      }
 
       case 'REPORT_STOCK': {
         await queueOutboundMessage(from, 'Checking inventory... 📦');
