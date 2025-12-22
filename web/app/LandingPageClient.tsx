@@ -1104,7 +1104,7 @@ export default function LandingPage() {
               <a href="/policy" className="hover:text-emerald-400 transition">
                 Privacy Policy
               </a>
-              <a href="/terms" className="hover:text-emerald-400 transition">
+              <a href="/policy#terms" className="hover:text-emerald-400 transition">
                 Terms of Service
               </a>
               <a href={whatsappLink} className="hover:text-emerald-400 transition">
