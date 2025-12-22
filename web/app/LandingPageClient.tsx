@@ -318,7 +318,7 @@ export default function LandingPage() {
 
 
 <div className="cursor-pointer group">
-  <div className="relative w-12 h-12 overflow-hidden group-hover:scale-105 transition-transform duration-300">
+  <div className="relative w-[180px] h-[44px] sm:w-[220px] sm:h-[54px] lg:w-[250px] lg:h-[60px] group-hover:scale-[1.02] transition-transform duration-300">
     <Image
       src="/tallypadi-logo.png"
       alt="TallyPadi logo"
