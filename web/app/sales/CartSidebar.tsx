@@ -2,6 +2,8 @@
 
 import React, { useMemo, useState } from 'react';
 import axios from 'axios';
+import Swal from 'sweetalert2';
+import { useRouter } from 'next/navigation';
 import {
   Trash2,
   Plus,
@@ -43,7 +45,138 @@ function currencyPrefix(code?: string) {
   return map[c] || c;
 }
 
+// ✅ filename with date + time: 22-12-2025_14-05
+function buildStamp() {
+  const now = new Date();
+  const dd = String(now.getDate()).padStart(2, '0');
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const yyyy = now.getFullYear();
+  const hh = String(now.getHours()).padStart(2, '0');
+  const mi = String(now.getMinutes()).padStart(2, '0');
+  return `${dd}-${mm}-${yyyy}_${hh}-${mi}`;
+}
+
+async function presentPdfActions(blob: Blob, fileName: string) {
+  const url = window.URL.createObjectURL(blob);
+
+  const doDownload = () => {
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  };
+
+  const doPreview = () => {
+    const win = window.open(url, '_blank', 'noopener,noreferrer');
+    if (!win) {
+      const a = document.createElement('a');
+      a.href = url;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
+  };
+
+  const result = await Swal.fire({
+    icon: 'success',
+    title: 'Receipt PDF is ready ✅',
+    html: `<p style="margin:0;color:#475569;font-size:13px">What do you want to do?</p>`,
+    showCancelButton: true,
+    showDenyButton: true,
+    confirmButtonText: 'Preview',
+    denyButtonText: 'Download',
+    cancelButtonText: 'Both',
+    confirmButtonColor: '#0F766E',
+    denyButtonColor: '#111827',
+    cancelButtonColor: '#64748b',
+    reverseButtons: true,
+    focusConfirm: false,
+  });
+
+  if (result.isConfirmed) doPreview();
+  else if (result.isDenied) doDownload();
+  else {
+    doPreview();
+    doDownload();
+  }
+
+  Swal.fire({
+    toast: true,
+    icon: 'success',
+    title: 'Done',
+    text: result.isConfirmed ? 'Opened preview.' : result.isDenied ? 'Download started.' : 'Preview + download started.',
+    position: 'top-end',
+    showConfirmButton: false,
+    timer: 2200,
+    timerProgressBar: true,
+  });
+
+  // ✅ don’t revoke immediately (preview/download may break)
+  setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
+}
+
+async function fetchReceiptOrTodayReportPdf(token: string, saleId?: string, directReceiptUrl?: string) {
+  // 1) If server already gave us a direct URL, try to fetch it as blob
+  if (directReceiptUrl) {
+    try {
+      const res = await axios.get(directReceiptUrl, { responseType: 'blob', timeout: 60_000 });
+      return new Blob([res.data], { type: 'application/pdf' });
+    } catch {
+      // ignore, fallback
+    }
+  }
+
+  // 2) Try common “receipt per sale” endpoints (adjust to your real route if you have one)
+  if (saleId) {
+    const endpoints = [
+      `${API_URL}/sales/${saleId}/receipt`,
+      `${API_URL}/sales/${saleId}/pdf`,
+      `${API_URL}/receipts/${saleId}`,
+      `${API_URL}/sales/receipt?saleId=${encodeURIComponent(saleId)}`,
+    ];
+
+    for (const url of endpoints) {
+      try {
+        const res = await axios.get(url, {
+          headers: { Authorization: `Bearer ${token}` },
+          responseType: 'blob',
+          timeout: 60_000,
+        });
+
+        const ct = String(res.headers?.['content-type'] || '');
+        if (ct.includes('application/pdf')) {
+          return new Blob([res.data], { type: 'application/pdf' });
+        }
+      } catch {
+        // try next
+      }
+    }
+  }
+
+  // 3) Fallback to today report endpoint you already have
+  const today = new Date();
+  const yyyy = today.getFullYear();
+  const mm = String(today.getMonth() + 1).padStart(2, '0');
+  const dd = String(today.getDate()).padStart(2, '0');
+  const dateStr = `${yyyy}-${mm}-${dd}`;
+
+  const reportRes = await axios.get(`${API_URL}/sales/report`, {
+    headers: { Authorization: `Bearer ${token}` },
+    params: { startDate: dateStr, endDate: dateStr },
+    responseType: 'blob',
+    timeout: 60_000,
+  });
+
+  return new Blob([reportRes.data], { type: 'application/pdf' });
+}
+
 export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: CartSidebarProps) {
+  const router = useRouter();
+
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<{ text: string; type: 'success' | 'error' | '' }>({ text: '', type: '' });
 
@@ -51,12 +184,10 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [printReceipt, setPrintReceipt] = useState(true);
 
+  // ✅ used for UI quick actions (print/download/share link)
   const [receipt, setReceipt] = useState<{ saleId?: string; url?: string } | null>(null);
 
-  const total = useMemo(
-    () => cart.reduce((acc, item) => acc + item.sellQty * item.sellPrice, 0),
-    [cart]
-  );
+  const total = useMemo(() => cart.reduce((acc, item) => acc + item.sellQty * item.sellPrice, 0), [cart]);
 
   const formatMoney = (amount: number) => {
     return new Intl.NumberFormat(user?.locale || 'en-NG', {
@@ -68,9 +199,7 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
 
   const updateQty = (id: string, delta: number) => {
     setCart((prev) =>
-      prev.map((item) =>
-        item.id === id ? { ...item, sellQty: Math.max(1, item.sellQty + delta) } : item
-      )
+      prev.map((item) => (item.id === id ? { ...item, sellQty: Math.max(1, item.sellQty + delta) } : item))
     );
   };
 
@@ -80,50 +209,9 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
 
   const remove = (id: string) => setCart((prev) => prev.filter((i) => i.id !== id));
 
-  // ✅ Best-effort: try to get a receipt PDF URL/blob
-  const fetchReceiptPdf = async (token: string, saleId?: string, directUrl?: string) => {
-    if (directUrl) return { saleId, url: directUrl };
-
-    if (!saleId) return null;
-
-    // Try common endpoints (adjust if your backend differs)
-    const endpoints = [
-      `${API_URL}/sales/${saleId}/receipt`,
-      `${API_URL}/sales/${saleId}/pdf`,
-      `${API_URL}/receipts/${saleId}`,
-    ];
-
-    for (const url of endpoints) {
-      try {
-        const res = await axios.get(url, {
-          headers: { Authorization: `Bearer ${token}` },
-          responseType: 'blob',
-        });
-
-        const contentType = res.headers?.['content-type'] || '';
-        if (String(contentType).includes('application/pdf')) {
-          const blobUrl = URL.createObjectURL(res.data);
-          return { saleId, url: blobUrl };
-        }
-
-        // maybe API returns JSON { url: "https://..." }
-        try {
-          const text = await res.data.text?.();
-          const json = text ? JSON.parse(text) : null;
-          if (json?.url) return { saleId, url: String(json.url) };
-        } catch {}
-      } catch {
-        // try next endpoint
-      }
-    }
-
-    return null;
-  };
-
   const openPdfInNewTab = (url: string) => {
     const win = window.open(url, '_blank', 'noopener,noreferrer');
     if (!win) {
-      // popup blocked fallback
       const a = document.createElement('a');
       a.href = url;
       a.target = '_blank';
@@ -156,6 +244,7 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
     }
   };
 
+  // ✅ Checkout (optionally generate/print receipt PDF)
   const doCheckout = async (alsoPrint: boolean) => {
     if (cart.length === 0) return;
 
@@ -163,14 +252,14 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
     setMsg({ text: '', type: '' });
     setReceipt(null);
 
-    try {
-      const token = localStorage.getItem('tallyToken');
-      if (!token) {
-        setMsg({ text: 'You are not logged in.', type: 'error' });
-        setLoading(false);
-        return;
-      }
+    const token = localStorage.getItem('tallyToken');
+    if (!token) {
+      setLoading(false);
+      setMsg({ text: 'You are not logged in.', type: 'error' });
+      return;
+    }
 
+    try {
       const payload = {
         items: cart.map((i) => ({
           itemId: i.id,
@@ -181,12 +270,11 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
 
       const res = await axios.post(`${API_URL}/sales`, payload, {
         headers: { Authorization: `Bearer ${token}` },
+        timeout: 60_000,
       });
 
-      // Try to read any useful fields from backend response
       const data = res.data || {};
-      const saleId =
-        String(data.saleId || data.txId || data.id || data._id || '') || undefined;
+      const saleId = String(data.saleId || data.txId || data.id || data._id || '') || undefined;
 
       const directReceiptUrl =
         (typeof data.receiptUrl === 'string' && data.receiptUrl) ||
@@ -197,26 +285,60 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
       setMsg({ text: '✅ Sale recorded successfully!', type: 'success' });
       onCheckoutSuccess();
 
-      // ✅ Ask/print receipt PDF (TYCOON etc. is enforced server-side ideally)
-      if (alsoPrint) {
-        setMsg({ text: '✅ Sale recorded. Preparing receipt PDF…', type: 'success' });
+      // ✅ receipt prompt
+      if (!alsoPrint) return;
 
-        const r = await fetchReceiptPdf(token, saleId, directReceiptUrl);
-        if (r?.url) {
-          setReceipt(r);
-          openPdfInNewTab(r.url); // user can print from browser PDF viewer
-          setMsg({ text: '✅ Receipt PDF opened. You can print or download.', type: 'success' });
-        } else {
-          setMsg({
-            text: '✅ Sale recorded. Receipt PDF not available from server yet.',
-            type: 'success',
-          });
-        }
+      // ✅ TYCOON gate (client side)
+      if (String(user?.planType || '').toUpperCase() !== 'TYCOON') {
+        Swal.fire({
+          title: 'Upgrade Required',
+          text: 'Receipt PDFs are available exclusively for Tycoon Plan users.',
+          icon: 'info',
+          showCancelButton: true,
+          confirmButtonText: 'Upgrade to Tycoon',
+          confirmButtonColor: '#0F766E',
+          cancelButtonText: 'Close',
+          cancelButtonColor: '#64748b',
+        }).then((r) => {
+          if (r.isConfirmed) router.push('/payment?plan=TYCOON');
+        });
+        return;
       }
+
+      // ✅ generating modal
+      Swal.fire({
+        title: 'Generating PDF…',
+        html: 'Please wait while we prepare your receipt.',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        didOpen: () => Swal.showLoading(),
+      });
+
+      const pdfBlob = await fetchReceiptOrTodayReportPdf(token, saleId, directReceiptUrl);
+
+      Swal.close();
+
+      // ✅ Also store a URL for UI buttons (print/download/share)
+      const blobUrl = URL.createObjectURL(pdfBlob);
+      setReceipt({ saleId, url: blobUrl });
+
+      // ✅ Ask Preview / Download / Both
+      const fileName = saleId
+        ? `TallyPadi_Receipt_${buildStamp()}_${saleId}.pdf`
+        : `TallyPadi_Sales_Report_${buildStamp()}.pdf`;
+
+      await presentPdfActions(pdfBlob, fileName);
     } catch (err: any) {
       console.error('Checkout Error:', err);
       const errorMsg = err.response?.data?.message || err.response?.data?.error || 'Checkout failed';
       setMsg({ text: errorMsg, type: 'error' });
+
+      Swal.fire({
+        title: 'Checkout Failed',
+        text: errorMsg,
+        icon: 'error',
+        confirmButtonColor: '#0F766E',
+      });
     } finally {
       setLoading(false);
       setTimeout(() => setMsg({ text: '', type: '' }), 4500);
@@ -248,7 +370,6 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
             </p>
           </div>
 
-          {/* quick clear */}
           {cart.length > 0 && (
             <button
               onClick={() => setCart([])}
@@ -269,9 +390,7 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
               <ShoppingCart className="w-8 h-8 text-slate-300" />
             </div>
             <p className="text-slate-900 font-extrabold">Your cart is empty</p>
-            <p className="text-xs text-slate-500 mt-1 font-medium">
-              Tap items from the grid to add them here.
-            </p>
+            <p className="text-xs text-slate-500 mt-1 font-medium">Tap items from the grid to add them here.</p>
           </div>
         ) : (
           cart.map((item) => (
@@ -281,12 +400,8 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
             >
               <div className="flex justify-between items-start mb-3 gap-2">
                 <div className="min-w-0">
-                  <span className="block font-extrabold text-sm text-slate-900 capitalize truncate">
-                    {item.name}
-                  </span>
-                  <span className="text-[11px] font-semibold text-slate-500">
-                    {formatMoney(item.sellPrice)} each
-                  </span>
+                  <span className="block font-extrabold text-sm text-slate-900 capitalize truncate">{item.name}</span>
+                  <span className="text-[11px] font-semibold text-slate-500">{formatMoney(item.sellPrice)} each</span>
                 </div>
 
                 <button
@@ -357,14 +472,14 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
         {msg.text && (
           <div
             className={`mb-4 p-3.5 rounded-2xl text-xs font-extrabold flex items-center gap-2 animate-in slide-in-from-bottom-2
-              ${msg.type === 'success' ? 'bg-emerald-100 text-emerald-900 border border-emerald-200' : 'bg-red-100 text-red-900 border border-red-200'}
+              ${
+                msg.type === 'success'
+                  ? 'bg-emerald-100 text-emerald-900 border border-emerald-200'
+                  : 'bg-red-100 text-red-900 border border-red-200'
+              }
             `}
           >
-            {msg.type === 'success' ? (
-              <CheckCircle2 className="w-4 h-4 shrink-0" />
-            ) : (
-              <AlertCircle className="w-4 h-4 shrink-0" />
-            )}
+            {msg.type === 'success' ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
             <span className="min-w-0">{msg.text}</span>
           </div>
         )}
@@ -382,7 +497,7 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
 
             <a
               href={receipt.url}
-              download={`tallypadi-receipt-${receipt.saleId || Date.now()}.pdf`}
+              download={`TallyPadi_Receipt_${buildStamp()}_${receipt.saleId || ''}.pdf`}
               className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2.5 rounded-2xl bg-white border border-slate-200 text-slate-900 font-extrabold text-xs hover:bg-slate-100 transition"
             >
               <FileDown className="w-4 h-4" />
@@ -425,7 +540,7 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
         </button>
       </div>
 
-      {/* ✅ Confirmation Modal (asks about printing receipt PDF) */}
+      {/* ✅ Confirmation Modal */}
       {confirmOpen && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
           <div
@@ -459,9 +574,9 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
                     className="mt-1 h-4 w-4 accent-emerald-600"
                   />
                   <div>
-                    <p className="font-extrabold text-slate-900">Print receipt after confirmation</p>
+                    <p className="font-extrabold text-slate-900">Generate receipt PDF after confirmation</p>
                     <p className="text-xs font-semibold text-slate-600 mt-1">
-                      If enabled, we’ll generate a PDF receipt and open it so you can print/download/share.
+                      If enabled, we’ll prepare a receipt PDF and let you preview/download/share it.
                     </p>
                   </div>
                 </label>
@@ -490,7 +605,7 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
               </div>
 
               <p className="text-[11px] text-slate-500 font-semibold">
-                Note: Receipt PDF availability depends on your server/plan settings.
+                Note: Receipt PDF availability depends on your server route + plan settings.
               </p>
             </div>
           </div>
