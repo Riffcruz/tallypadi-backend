@@ -976,8 +976,8 @@ export const handleMessageLogic = async (
       }
 
       case 'REPORT_RECENT': {
-        const limit = parsed.items?.[0]?.qty || 5;
-        const safeLimit = Math.min(Math.max(Number(limit) || 5, 1), 10);
+        const limit = parsed.items?.[0]?.qty || 10;
+        const safeLimit = Math.min(Math.max(Number(limit) || 10, 1), 10);
 
         await queueOutboundMessage(from, `🔎 Fetching last ${safeLimit} transactions...`);
 
@@ -1077,6 +1077,27 @@ export const handleMessageLogic = async (
         salesMsg += `\n📉 *Total Transactions:* ${salesTx.length}`;
 
         await queueOutboundMessage(from, salesMsg);
+
+        // ✅ Auto-send PDF for TYCOON users who enabled PDF reports
+if (String(shopUser?.planType || '').toUpperCase() === 'TYCOON' && shopUser?.settings?.pdfReportsEnabled === true) {
+  try {
+    await queueOutboundMessage(from, '📄 Generating your SALES PDF...');
+
+    const pdfFileName = await generatePdfReport(
+      shopId as any,
+      'SALES', // ✅ important: match sales report type
+      `${dateLabel}${suffixReportScope(includeUndoneRequestedByOwner)}`,
+      startUtc,
+      endUtc
+    );
+
+    await queueOutboundMessage(from, `📄 PDF: ${REPORT_BASE_URL}${pdfFileName}`);
+  } catch (e) {
+    console.error('PDF gen error (REPORT_SALES):', e);
+    await queueOutboundMessage(from, '⚠️ Could not generate PDF right now. Please try again.');
+  }
+}
+
 
         // ✅ IMPORTANT: no PDF auto-send here unless you explicitly want it
         break;

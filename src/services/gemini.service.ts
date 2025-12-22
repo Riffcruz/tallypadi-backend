@@ -448,12 +448,12 @@ Report-like keywords include: "report", "reports", "summary", "statement", "hist
 
 B. WHICH REPORT INTENT TO USE
 - Use REPORT_SALES when user asks for:
-  "report", "sales report", "sales summary", "sales statement", "transaction history", "transactions", "sales history"
+  "report", "sales report", "sales summary", "sales statement", "transaction history", "transactions", "sales history", "sales"
   (Default "report" alone MUST map to REPORT_SALES)
 - Use REPORT_STOCK when user asks for:
   "stock report", "inventory report", "items left", "stock remaining"
 - Use REPORT_FULL when user asks for:
-  "full report", "full summary", "business report", "everything", "all reports"
+  "full report", "full summary", "business report", "everything", "all reports", "complete report", "summary", "statement", "history", "transactions"
 - Use REPORT_RECENT when user asks for:
   "recent", "latest", "last 5", "last 10", "recent transactions", "recent sales"
 
