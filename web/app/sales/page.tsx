@@ -11,6 +11,21 @@ import ProductGrid from './ProductGrid';
 import CartSidebar from './CartSidebar';
 import SalesHistory from './SalesHistory';
 
+import Swal from 'sweetalert2';
+
+const toast = Swal.mixin({
+  toast: true,
+  position: 'top-end',
+  showConfirmButton: false,
+  timer: 1800,
+  timerProgressBar: true,
+  didOpen: (t) => {
+    t.addEventListener('mouseenter', Swal.stopTimer);
+    t.addEventListener('mouseleave', Swal.resumeTimer);
+  },
+});
+
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 
 // --- SHARED TYPES ---
@@ -62,15 +77,34 @@ export default function SalesPage() {
       });
   }, [router]);
 
-  const handleAddToCart = (item: InventoryItem) => {
-    setCart((prev) => {
-      const existing = prev.find((i) => i.id === item.id);
-      if (existing) {
-        return prev.map((i) => (i.id === item.id ? { ...i, sellQty: i.sellQty + 1 } : i));
-      }
-      return [...prev, { ...item, sellQty: 1, sellPrice: item.price || 0 }];
-    });
-  };
+const handleAddToCart = (item: InventoryItem) => {
+  setCart((prev) => {
+    const existing = prev.find((i) => i.id === item.id);
+
+    if (existing) {
+      // ✅ Toast for increment
+      toast.fire({
+        icon: 'success',
+        title: `+1 added • ${item.name}`,
+      });
+
+      return prev.map((i) =>
+        i.id === item.id ? { ...i, sellQty: i.sellQty + 1 } : i
+      );
+    }
+
+    // ✅ Toast for new item
+    toast.fire({
+  icon: 'success',
+  title: `Added • ${item.name}`,
+  text: `Qty: 1 • Price: ${item.price}`,
+});
+
+
+    return [...prev, { ...item, sellQty: 1, sellPrice: item.price || 0 }];
+  });
+};
+
 
   const handleClearCart = () => setCart([]);
 

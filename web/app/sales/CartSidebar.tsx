@@ -79,6 +79,8 @@ async function presentPdfActions(url: string, fileName: string) {
     link.remove();
   };
 
+
+
   const doPreview = () => openPdfInNewTab(url);
 
   const result = await Swal.fire({
@@ -115,6 +117,8 @@ async function presentPdfActions(url: string, fileName: string) {
     timerProgressBar: true,
   });
 }
+
+
 
 /**
  * ✅ IMPORTANT:
