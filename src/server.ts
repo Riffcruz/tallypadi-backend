@@ -79,7 +79,13 @@ app.use((req, _res, next) => {
 // ==========================================
 // 🔐 WEBHOOK SIGNATURE VERIFICATION (SAFE HEX COMPARE)
 // ==========================================
+
+
 const verifySignature = (req: any, _res: any, buf: Buffer) => {
+  // ✅ Always store raw body for ANY route that needs HMAC verification later (Paystack, etc.)
+  req.rawBody = buf;
+
+  // Only verify WhatsApp signature on WhatsApp webhook routes
   if (!req.originalUrl.startsWith('/api/whatsapp') || req.method !== 'POST') return;
 
   const header = req.headers['x-hub-signature-256'];

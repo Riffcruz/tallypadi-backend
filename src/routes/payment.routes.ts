@@ -1,12 +1,16 @@
 import { Router } from 'express';
-import { startPayment, verifyPayment } from '../controllers/payment.controller';
+import {
+  startPayment,
+  verifyPayment,
+  handlePaystackWebhook,
+} from '../controllers/payment.controller';
 
 const router = Router();
 
-// POST /api/payment/initialize - Start transaction
+// POST /api/payment/initialize
 router.post('/initialize', startPayment);
 
-// GET /api/payment/verify/:reference - Verify transaction (Callback)
+// GET /api/payment/verify/:reference
 router.get('/verify/:reference', verifyPayment);
 
 export default router;
