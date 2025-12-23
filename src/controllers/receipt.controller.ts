@@ -1,4 +1,5 @@
 // src/controllers/receipt.controller.ts
+
 import { Request, Response } from 'express';
 import PDFDocument from 'pdfkit';
 import path from 'path';
@@ -15,28 +16,32 @@ const COUNTRY_CURRENCY_CODE: Record<string, string> = {
   AU: 'AUD', JP: 'JPY', AE: 'AED', RW: 'RWF', TZ: 'TZS', UG: 'UGX',
 };
 
-// ✅ Modern Theme (Slate & Emerald)
+// Modern color palette
 const THEME = {
-  primary: '#10B981',    // Emerald 500
-  primaryDark: '#047857', // Emerald 700
-  bgCanvas: '#F1F5F9',   // Slate 100
-  bgCard: '#FFFFFF',
-  textMain: '#1E293B',   // Slate 800
-  textMuted: '#64748B',  // Slate 500
-  border: '#E2E8F0',     // Slate 200
-  headerBg: '#F8FAFC',   // Slate 50
+  primary: '#0F766E',
+  primaryLight: '#14B8A6',
+  accent: '#8B5CF6',
+  dark: '#1E293B',
+  text: '#0F172A',
+  textLight: '#475569',
+  muted: '#64748B',
+  border: '#E2E8F0',
+  bg: '#FFFFFF',
+  bgSoft: '#F8FAFC',
+  bgHeader: '#F1F5F9',
+  success: '#10B981',
+  warning: '#F59E0B',
+  error: '#EF4444',
+  info: '#3B82F6',
 };
 
 type PdfDoc = InstanceType<typeof PDFDocument>;
-
-// ------------------------------------------------------------------
-// 🛠 HELPER FUNCTIONS
-// ------------------------------------------------------------------
 
 function toUserLocalDate(d: any, offsetMinutes: number) {
   return new Date(new Date(d).getTime() + offsetMinutes * 60_000);
 }
 
+// ✅ REQUIRED FORMAT: 22/12/2025 14:05
 function fmtDDMMYYYY_HHMM(d: Date, offsetMinutes: number) {
   const local = toUserLocalDate(d, offsetMinutes);
   const dd = String(local.getDate()).padStart(2, '0');
@@ -47,273 +52,479 @@ function fmtDDMMYYYY_HHMM(d: Date, offsetMinutes: number) {
   return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
 }
 
+// ✅ Receipt number (short & readable)
 function makeReceiptNo(saleId: string, when: Date, offsetMinutes: number) {
   const local = toUserLocalDate(when, offsetMinutes);
   const y = local.getFullYear();
   const m = String(local.getMonth() + 1).padStart(2, '0');
   const d = String(local.getDate()).padStart(2, '0');
-  const tail = String(saleId || '').replace(/[^a-zA-Z0-9]/g, '').slice(-6).toUpperCase().padStart(6, '0');
+  const tail = String(saleId || '')
+    .replace(/[^a-zA-Z0-9]/g, '')
+    .slice(-6)
+    .toUpperCase()
+    .padStart(6, '0');
   return `TP-${y}${m}${d}-${tail}`;
 }
 
-/**
- * Calculates the necessary height for a row based on text wrapping
- */
-function getRowHeight(doc: PdfDoc, text: string, width: number, fontSize: number, padding: number) {
-  doc.fontSize(fontSize);
-  const h = doc.heightOfString(text, { width });
-  return h + padding;
+// ✅ Wrap long IDs into multiple lines
+function wrapIdLines(id: string, lineLen = 30) {
+  const clean = String(id || '').trim();
+  if (!clean) return '';
+  const parts = clean.match(new RegExp(`.{1,${lineLen}}`, 'g'));
+  return parts ? parts.join('\n') : clean;
 }
 
+// ✅ POS-style dashed divider
+function dashedLine(doc: PdfDoc, x1: number, x2: number, y: number, dash = 3, gap = 2) {
+  let x = x1;
+  doc.save();
+  doc.lineWidth(1);
+  doc.strokeColor(THEME.border);
+  while (x < x2) {
+    doc.moveTo(x, y).lineTo(Math.min(x + dash, x2), y).stroke();
+    x += dash + gap;
+  }
+  doc.restore();
+}
+
+// ✅ Text clamp to avoid overflow
+function ellipsize(doc: PdfDoc, text: string, maxWidth: number) {
+  const s = String(text || '');
+  if (doc.widthOfString(s) <= maxWidth) return s;
+  let out = s;
+  while (out.length > 2 && doc.widthOfString(out + '…') > maxWidth) out = out.slice(0, -1);
+  return out + '…';
+}
+
+// ✅ Fit text inside width by reducing font size
+function fitTextWidth(doc: PdfDoc, text: string, maxWidth: number, maxSize: number = 12, minSize: number = 8) {
+  let size = maxSize;
+  doc.fontSize(size);
+  while (size > minSize && doc.widthOfString(text) > maxWidth) {
+    size -= 1;
+    doc.fontSize(size);
+  }
+  return size;
+}
+
+// ✅ Register fonts
 function registerFonts(doc: PdfDoc) {
-  // Define font paths (adjust based on your project structure)
-  const fontPaths = [
-    path.join(process.cwd(), 'assets', 'fonts'),
-    path.join(__dirname, '..', 'assets', 'fonts'),
-    '/usr/share/fonts/truetype/noto',
+  const candidates = [
+    path.join(process.cwd(), 'assets', 'fonts', 'NotoSans-Regular.ttf'),
+    path.join(process.cwd(), 'src', 'assets', 'fonts', 'NotoSans-Regular.ttf'),
+    path.join(__dirname, '..', 'assets', 'fonts', 'NotoSans-Regular.ttf'),
+    '/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf',
+    '/usr/share/fonts/opentype/noto/NotoSans-Regular.ttf',
   ];
 
-  const findFont = (name: string) => {
-    for (const p of fontPaths) {
-      const fullPath = path.join(p, name);
-      if (fs.existsSync(fullPath)) return fullPath;
+  const candidatesBold = [
+    path.join(process.cwd(), 'assets', 'fonts', 'NotoSans-Bold.ttf'),
+    path.join(process.cwd(), 'src', 'assets', 'fonts', 'NotoSans-Bold.ttf'),
+    path.join(__dirname, '..', 'assets', 'fonts', 'NotoSans-Bold.ttf'),
+    '/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf',
+    '/usr/share/fonts/opentype/noto/NotoSans-Bold.ttf',
+  ];
+
+  let hasNoto = false;
+  for (const p of candidates) {
+    if (fs.existsSync(p)) {
+      doc.registerFont('Noto', p);
+      hasNoto = true;
+      break;
     }
-    return null;
-  };
-
-  const regularPath = findFont('NotoSans-Regular.ttf');
-  const boldPath = findFont('NotoSans-Bold.ttf');
-
-  if (regularPath) doc.registerFont('Noto', regularPath);
-  if (boldPath) doc.registerFont('NotoBold', boldPath);
-
-  return {
-    regFont: regularPath ? 'Noto' : 'Helvetica',
-    boldFont: boldPath ? 'NotoBold' : regularPath ? 'Noto' : 'Helvetica-Bold',
-    hasNoto: !!regularPath
-  };
-}
-
-// ------------------------------------------------------------------
-// 🎨 MAIN RENDERER
-// ------------------------------------------------------------------
-
-function renderReceiptPdf(doc: PdfDoc, payload: {
-  saleId: string; receiptNo: string; businessName: string;
-  receiptDate: string; currencyCode: string; locale: string;
-  hasSymbolFont: boolean; regFont: string; boldFont: string; tx: any;
-}) {
-  const {
-    saleId, receiptNo, businessName, receiptDate,
-    currencyCode, locale, hasSymbolFont, regFont, boldFont, tx
-  } = payload;
-
-  const currencyDisplay = hasSymbolFont ? 'symbol' : 'code';
-  const formatMoney = (n: any) => new Intl.NumberFormat(locale, {
-    style: 'currency', currency: currencyCode, currencyDisplay,
-    maximumFractionDigits: 0,
-  }).format(Number(n || 0));
-
-  // -- Layout Constants --
-  const pageWidth = doc.page.width;
-  const pageHeight = doc.page.height;
-  const margin = 40;
-  
-  // Card dimensions (Centered on A4)
-  const cardWidth = 480; 
-  const cardX = (pageWidth - cardWidth) / 2;
-  const contentWidth = cardWidth - 40; // 20px padding left/right
-  const contentX = cardX + 20;
-
-  let y = margin + 20;
-
-  // -- Background Canvas --
-  doc.rect(0, 0, pageWidth, pageHeight).fill(THEME.bgCanvas);
-
-  // -- Draw Card Background (Initially) --
-  // We draw a long white rectangle. We will close it at the end or on page break.
-  const drawCardBackground = () => {
-    doc.save();
-    // Shadow simulation
-    doc.roundedRect(cardX + 2, margin + 22, cardWidth, pageHeight - margin * 2, 4).fill('#CBD5E1');
-    // Main Card
-    doc.roundedRect(cardX, margin + 20, cardWidth, pageHeight - margin * 2, 4).fill(THEME.bgCard);
-    doc.restore();
-  };
-  
-  drawCardBackground();
-
-  // ----------------------------------
-  // 1. HEADER
-  // ----------------------------------
-  // Business Name
-  doc.font(boldFont).fontSize(16).fillColor(THEME.textMain)
-     .text(businessName, contentX, y, { width: contentWidth, align: 'center' });
-  y += 24;
-
-  // Subtitle
-  doc.font(regFont).fontSize(9).fillColor(THEME.textMuted)
-     .text('SALES RECEIPT', contentX, y, { width: contentWidth, align: 'center' });
-  y += 20;
-
-  // Divider
-  doc.strokeColor(THEME.border).lineWidth(1)
-     .moveTo(contentX, y).lineTo(contentX + contentWidth, y).stroke();
-  y += 15;
-
-  // ----------------------------------
-  // 2. META DATA GRID
-  // ----------------------------------
-  const col1X = contentX;
-  const col2X = contentX + (contentWidth / 2);
-  
-  doc.fontSize(8).fillColor(THEME.textMuted).text('RECEIPT NO', col1X, y);
-  doc.fontSize(8).fillColor(THEME.textMuted).text('DATE', col2X, y);
-  y += 12;
-
-  doc.font(boldFont).fontSize(10).fillColor(THEME.textMain).text(receiptNo, col1X, y);
-  doc.font(regFont).fontSize(10).fillColor(THEME.textMain).text(receiptDate, col2X, y);
-  y += 20;
-
-  // Payment Status Badge
-  const status = String(tx.paymentStatus || 'PAID').toUpperCase();
-  const badgeColor = status === 'PAID' ? THEME.primary : '#EF4444'; // Green or Red
-  
-  doc.save();
-  doc.roundedRect(col1X, y, 60, 18, 9).fill(badgeColor);
-  doc.fillColor('#FFFFFF').fontSize(8).font(boldFont)
-     .text(status, col1X, y + 5, { width: 60, align: 'center' });
-  doc.restore();
-  
-  y += 30;
-
-  // ----------------------------------
-  // 3. ITEMS TABLE (The Robust Part)
-  // ----------------------------------
-  
-  // Table Configuration
-  const colQtyW = 40;
-  const colTotalW = 80;
-  const colNameW = contentWidth - colQtyW - colTotalW; // Remaining space
-  
-  const xQty = contentX;
-  const xName = contentX + colQtyW;
-  const xTotal = contentX + colQtyW + colNameW;
-
-  // Table Header
-  doc.save();
-  doc.rect(contentX, y, contentWidth, 24).fill(THEME.headerBg);
-  doc.fillColor(THEME.textMain).font(boldFont).fontSize(9);
-  doc.text('QTY', xQty + 5, y + 7, { width: colQtyW });
-  doc.text('ITEM', xName + 5, y + 7, { width: colNameW });
-  doc.text('TOTAL', xTotal - 5, y + 7, { width: colTotalW, align: 'right' });
-  doc.restore();
-  y += 24;
-
-  const items = Array.isArray(tx.items) ? tx.items : [];
-  let computedTotal = 0;
-
-  doc.font(regFont).fontSize(9).fillColor(THEME.textMain);
-
-  for (const it of items) {
-    const qty = Number(it.qty ?? it.quantity ?? 0);
-    const name = String(it.name || 'Item');
-    const unitPrice = Number(it.unitPrice ?? it.price ?? 0);
-    const lineTotal = Number(it.total ?? qty * unitPrice);
-    computedTotal += lineTotal;
-
-    // ✅ DYNAMIC HEIGHT CALCULATION
-    // Calculate how tall the name text is given the column width
-    const nameHeight = doc.heightOfString(name, { width: colNameW - 10 }); 
-    const rowHeight = Math.max(nameHeight, 20) + 14; // Add padding
-
-    // Check for page break
-    if (y + rowHeight > pageHeight - margin - 40) {
-      doc.addPage();
-      doc.rect(0, 0, pageWidth, pageHeight).fill(THEME.bgCanvas);
-      drawCardBackground();
-      y = margin + 40;
-    }
-
-    // Draw Qty
-    doc.text(String(qty), xQty + 5, y + 7, { width: colQtyW, align: 'left' });
-
-    // Draw Name (allow wrapping)
-    doc.text(name, xName + 5, y + 7, { width: colNameW - 10, align: 'left' });
-
-    // Draw Price (Top aligned)
-    doc.text(formatMoney(lineTotal), xTotal - 5, y + 7, { width: colTotalW, align: 'right' });
-
-    // Subtitle for Unit Price (Optional, below name)
-    if (qty > 1) {
-        doc.fontSize(7).fillColor(THEME.textMuted)
-           .text(`@ ${formatMoney(unitPrice)}`, xName + 5, y + 7 + nameHeight + 2);
-        doc.fontSize(9).fillColor(THEME.textMain); // Reset
-    }
-
-    // Border Bottom
-    doc.save();
-    doc.strokeColor(THEME.border).lineWidth(0.5)
-       .moveTo(contentX, y + rowHeight)
-       .lineTo(contentX + contentWidth, y + rowHeight).stroke();
-    doc.restore();
-
-    y += rowHeight;
   }
 
-  y += 10;
+  let hasNotoBold = false;
+  for (const p of candidatesBold) {
+    if (fs.existsSync(p)) {
+      doc.registerFont('NotoBold', p);
+      hasNotoBold = true;
+      break;
+    }
+  }
 
-  // ----------------------------------
-  // 4. TOTALS
-  // ----------------------------------
-  const totalMoney = Number(tx.totalMoney ?? computedTotal ?? 0);
-  const totalBoxX = contentX + (contentWidth / 2); // Start at middle
-  const totalBoxW = contentWidth / 2;
+  const regFont = hasNoto ? 'Noto' : 'Helvetica';
+  const boldFont = hasNotoBold ? 'NotoBold' : hasNoto ? 'Noto' : 'Helvetica-Bold';
 
-  // Total Label
-  doc.font(boldFont).fontSize(10).text('TOTAL AMOUNT', totalBoxX, y, { width: totalBoxW, align: 'left' });
-  
-  // Total Value
-  doc.fontSize(14).fillColor(THEME.primaryDark)
-     .text(formatMoney(totalMoney), totalBoxX, y - 2, { width: totalBoxW, align: 'right' });
-
-  y += 30;
-
-  // ----------------------------------
-  // 5. FOOTER
-  // ----------------------------------
-  // Transaction ID Box
-  doc.save();
-  doc.roundedRect(contentX, y, contentWidth, 30, 4).fill(THEME.headerBg);
-  doc.restore();
-
-  const fullId = String(saleId || tx?._id || '');
-  doc.font('Courier').fontSize(8).fillColor(THEME.textMuted)
-     .text(`TX: ${fullId}`, contentX + 10, y + 10, { width: contentWidth - 20, align: 'center', lineBreak: false });
-
-  y += 40;
-
-  doc.font(regFont).fontSize(8).fillColor(THEME.textMuted)
-     .text('Thank you for your patronage.', contentX, y, { width: contentWidth, align: 'center' });
+  return { regFont, boldFont, hasNoto };
 }
 
+// ✅ Calculate optimal column widths for items table
+function calculateColumnWidths(availableWidth: number) {
+  return {
+    qty: 60,          // Fixed width for quantity
+    price: 100,       // Fixed width for price
+    total: 100,       // Fixed width for total
+    item: availableWidth - 60 - 100 - 100 - 20, // Remaining width for item name (minus padding)
+  };
+}
 
-// ------------------------------------------------------------------
-// 🚀 CONTROLLERS
-// ------------------------------------------------------------------
+// ✅ Draw modern table header
+function drawTableHeader(doc: PdfDoc, x: number, y: number, colWidths: any, regFont: string) {
+  doc.save();
+  
+  // Header background
+  doc.rect(x, y, colWidths.qty + colWidths.item + colWidths.price + colWidths.total, 24)
+    .fill(THEME.bgHeader);
+  
+  // Header text
+  doc.font(regFont).fontSize(9).fillColor(THEME.textLight);
+  
+  // QTY
+  doc.text('QTY', x + 8, y + 8, { width: colWidths.qty - 16, align: 'left' });
+  
+  // ITEM
+  doc.text('ITEM', x + colWidths.qty + 8, y + 8, { width: colWidths.item - 16, align: 'left' });
+  
+  // PRICE
+  doc.text('PRICE', x + colWidths.qty + colWidths.item + 8, y + 8, { 
+    width: colWidths.price - 16, 
+    align: 'right' 
+  });
+  
+  // TOTAL
+  doc.text('TOTAL', x + colWidths.qty + colWidths.item + colWidths.price + 8, y + 8, { 
+    width: colWidths.total - 16, 
+    align: 'right' 
+  });
+  
+  // Bottom border
+  doc.strokeColor(THEME.border).lineWidth(1);
+  doc.moveTo(x, y + 24).lineTo(x + colWidths.qty + colWidths.item + colWidths.price + colWidths.total, y + 24).stroke();
+  
+  doc.restore();
+  return y + 24;
+}
 
+// ✅ Draw table row
+function drawTableRow(
+  doc: PdfDoc, 
+  x: number, 
+  y: number, 
+  colWidths: any, 
+  item: any, 
+  formatMoney: (n: any) => string,
+  regFont: string,
+  boldFont: string
+): number {
+  const qty = Number(item.qty ?? item.quantity ?? 0);
+  const name = String(item.name || 'Item');
+  const unitPrice = Number(item.unitPrice ?? item.price ?? 0);
+  const lineTotal = Number(item.total ?? qty * unitPrice);
+  
+  // Calculate row height based on item name wrapping
+  doc.font(regFont).fontSize(10);
+  const nameHeight = doc.heightOfString(name, {
+    width: colWidths.item - 16,
+    ellipsis: true
+  });
+  const rowHeight = Math.max(20, nameHeight + 8);
+  
+  // Draw row background (alternating for better readability)
+  doc.save();
+  doc.fillColor('#FFFFFF');
+  doc.rect(x, y, colWidths.qty + colWidths.item + colWidths.price + colWidths.total, rowHeight).fill();
+  doc.restore();
+  
+  // Draw item name with wrapping
+  doc.font(regFont).fontSize(10).fillColor(THEME.text);
+  doc.text(name, x + colWidths.qty + 8, y + 4, {
+    width: colWidths.item - 16,
+    ellipsis: true,
+    lineGap: 2
+  });
+  
+  // Draw quantity
+  doc.text(qty.toString(), x + 8, y + 4, {
+    width: colWidths.qty - 16,
+    align: 'left'
+  });
+  
+  // Draw price
+  doc.fontSize(9).fillColor(THEME.textLight);
+  doc.text(formatMoney(unitPrice), x + colWidths.qty + colWidths.item + 8, y + 4, {
+    width: colWidths.price - 16,
+    align: 'right'
+  });
+  
+  // Draw total
+  doc.fontSize(10).fillColor(THEME.text);
+  doc.text(formatMoney(lineTotal), x + colWidths.qty + colWidths.item + colWidths.price + 8, y + 4, {
+    width: colWidths.total - 16,
+    align: 'right'
+  });
+  
+  // Bottom border
+  doc.save();
+  doc.strokeColor(THEME.border).lineWidth(0.5);
+  doc.moveTo(x, y + rowHeight).lineTo(x + colWidths.qty + colWidths.item + colWidths.price + colWidths.total, y + rowHeight).stroke();
+  doc.restore();
+  
+  return rowHeight;
+}
+
+// ✅ Shared render function
+function renderReceiptPdf(doc: PdfDoc, payload: {
+  saleId: string;
+  receiptNo: string;
+  businessName: string;
+  receiptDate: string;
+  currencyCode: string;
+  locale: string;
+  hasSymbolFont: boolean;
+  regFont: string;
+  boldFont: string;
+  tx: any;
+}) {
+  const {
+    saleId,
+    receiptNo,
+    businessName,
+    receiptDate,
+    currencyCode,
+    locale,
+    hasSymbolFont,
+    regFont,
+    boldFont,
+    tx,
+  } = payload;
+
+  // ✅ Currency formatter
+  const currencyDisplay = hasSymbolFont ? 'symbol' : 'code';
+  const formatMoney = (n: any) =>
+    new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency: currencyCode,
+      currencyDisplay,
+      maximumFractionDigits: 0,
+    }).format(Number(n || 0));
+
+  // -------------------------------------------------
+  // ✅ Page Setup
+  // -------------------------------------------------
+  doc.addPage();
+  const pageW = doc.page.width;
+  const margin = 48; // Increased margin for better spacing
+  const contentW = pageW - margin * 2;
+
+  let y = margin;
+
+  // -------------------------------------------------
+  // ✅ HEADER (Modern Design)
+  // -------------------------------------------------
+  doc.save();
+  
+  // Header background with gradient effect
+  doc.rect(margin, y, contentW, 80)
+    .fill(THEME.dark);
+  
+  // Logo/Title
+  doc.font(boldFont).fillColor('#FFFFFF').fontSize(20);
+  doc.text('TallyPadi', margin + 24, y + 20);
+  
+  doc.font(regFont).fillColor('#CBD5E1').fontSize(11);
+  doc.text('POS RECEIPT', margin + 24, y + 48);
+  
+  // Receipt number badge
+  const badgeW = doc.widthOfString(receiptNo) + 32;
+  const badgeH = 28;
+  
+  doc.save();
+  doc.roundedRect(margin + contentW - badgeW - 24, y + 20, badgeW, badgeH, 6)
+    .fill(THEME.primaryLight);
+  doc.fillColor('#FFFFFF').fontSize(10).font(boldFont);
+  doc.text(receiptNo, margin + contentW - badgeW - 24, y + 26, {
+    width: badgeW,
+    align: 'center'
+  });
+  doc.restore();
+  
+  y += 80 + 24;
+
+  // -------------------------------------------------
+  // ✅ BUSINESS INFO CARD
+  // -------------------------------------------------
+  const infoCardH = 70;
+  
+  doc.save();
+  doc.roundedRect(margin, y, contentW, infoCardH, 12)
+    .fill(THEME.bgSoft);
+  
+  // Add subtle border
+  doc.strokeColor(THEME.border).lineWidth(1);
+  doc.roundedRect(margin, y, contentW, infoCardH, 12)
+    .stroke();
+  doc.restore();
+  
+  // Business name
+  doc.font(boldFont).fillColor(THEME.text).fontSize(14);
+  const businessNameSize = fitTextWidth(doc, businessName, contentW - 48, 14, 10);
+  doc.fontSize(businessNameSize);
+  doc.text(businessName, margin + 24, y + 16, {
+    width: contentW - 48,
+    ellipsis: true
+  });
+  
+  // Date and Receipt info
+  doc.font(regFont).fontSize(10).fillColor(THEME.textLight);
+  doc.text('Date:', margin + 24, y + 42);
+  doc.fillColor(THEME.text).text(receiptDate, margin + 60, y + 42);
+  
+  doc.fillColor(THEME.textLight).text('Receipt No:', margin + contentW - 160, y + 42);
+  doc.fillColor(THEME.text).text(receiptNo, margin + contentW - 100, y + 42, {
+    width: 100,
+    align: 'right'
+  });
+  
+  y += infoCardH + 20;
+
+  // -------------------------------------------------
+  // ✅ TRANSACTION ID SECTION
+  // -------------------------------------------------
+  const fullId = String(saleId || tx?._id || '');
+  const wrappedId = wrapIdLines(fullId, 32);
+  
+  doc.font(regFont).fontSize(9).fillColor(THEME.textLight);
+  doc.text('TRANSACTION ID', margin, y);
+  
+  y += 14;
+  
+  // ID box with proper height calculation
+  doc.font('Courier').fontSize(9);
+  const idBoxH = Math.max(28, doc.heightOfString(wrappedId, {
+    width: contentW,
+    lineGap: 4
+  }) + 16);
+  
+  doc.save();
+  doc.roundedRect(margin, y, contentW, idBoxH, 8)
+    .fill('#F0F9FF');
+  doc.strokeColor(THEME.border).lineWidth(1);
+  doc.roundedRect(margin, y, contentW, idBoxH, 8)
+    .stroke();
+  doc.restore();
+  
+  doc.fillColor(THEME.text);
+  doc.text(wrappedId, margin + 16, y + 8, {
+    width: contentW - 32,
+    lineGap: 4
+  });
+  
+  y += idBoxH + 24;
+
+  // -------------------------------------------------
+  // ✅ ITEMS TABLE
+  // -------------------------------------------------
+  const items = Array.isArray(tx.items) ? tx.items : [];
+  const colWidths = calculateColumnWidths(contentW);
+  const tableX = margin;
+  
+  // Table header
+  y = drawTableHeader(doc, tableX, y, colWidths, regFont);
+  
+  // Table rows
+  let computedTotal = 0;
+  
+  for (const item of items) {
+    const qty = Number(item.qty ?? item.quantity ?? 0);
+    const unitPrice = Number(item.unitPrice ?? item.price ?? 0);
+    const lineTotal = Number(item.total ?? qty * unitPrice);
+    computedTotal += lineTotal;
+    
+    const rowHeight = drawTableRow(doc, tableX, y, colWidths, item, formatMoney, regFont, boldFont);
+    y += rowHeight;
+  }
+  
+  // Add some spacing after the table
+  y += 16;
+
+  // -------------------------------------------------
+  // ✅ TOTAL SECTION (Modern Card)
+  // -------------------------------------------------
+  const totalMoney = Number(tx.totalMoney ?? computedTotal ?? 0);
+  const totalBoxH = 60;
+  
+  doc.save();
+  // Gradient-like background
+  const gradient = doc.linearGradient(margin, y, margin + contentW, y + totalBoxH);
+  gradient.stop(0, THEME.primaryLight + '20'); // 20% opacity
+  gradient.stop(1, THEME.primary + '10');
+  
+  doc.roundedRect(margin, y, contentW, totalBoxH, 12)
+    .fill(gradient);
+  
+  // Border
+  doc.strokeColor(THEME.primaryLight).lineWidth(1);
+  doc.roundedRect(margin, y, contentW, totalBoxH, 12)
+    .stroke();
+  doc.restore();
+  
+  // Total label
+  doc.font(boldFont).fontSize(12).fillColor(THEME.primary);
+  doc.text('TOTAL AMOUNT', margin + 24, y + 16);
+  
+  // Total value
+  const totalValue = formatMoney(totalMoney);
+  doc.font(boldFont).fillColor(THEME.dark);
+  
+  // Fit text to avoid overflow
+  const totalSize = fitTextWidth(doc, totalValue, contentW - 100, 24, 16);
+  doc.fontSize(totalSize);
+  doc.text(totalValue, margin + 24, y + 36, {
+    width: contentW - 48,
+    align: 'right'
+  });
+  
+  y += totalBoxH + 32;
+
+  // -------------------------------------------------
+  // ✅ FOOTER
+  // -------------------------------------------------
+  const footerY = doc.page.height - margin - 40;
+  
+  // Divider
+  dashedLine(doc, margin, margin + contentW, footerY, 4, 3);
+  
+  doc.font(regFont).fontSize(10).fillColor(THEME.textLight);
+  doc.text('Thank you for your business!', margin, footerY + 12, {
+    width: contentW,
+    align: 'center'
+  });
+  
+  doc.fontSize(8).fillColor(THEME.muted);
+  doc.text('Generated by TallyPadi POS • This is an official receipt', margin, footerY + 28, {
+    width: contentW,
+    align: 'center'
+  });
+
+  // Add page number if multiple pages
+  const pageNumber = doc.bufferedPageRange().count;
+  if (pageNumber > 1) {
+    doc.font(regFont).fontSize(8).fillColor(THEME.muted);
+    doc.text(`Page 1 of ${pageNumber}`, margin, doc.page.height - margin + 20, {
+      width: contentW,
+      align: 'center'
+    });
+  }
+}
+
+// ✅ Buffer generator for WhatsApp (unchanged, but uses updated render function)
 export const generateSaleReceiptPdfBuffer = async (userId: string, saleId: string) => {
   const user: any = await User.findById(userId).lean();
   if (!user) throw new Error('User not found');
 
   const tx: any = await Transaction.findOne({
-    _id: saleId, user: userId, type: 'SALE', isUndone: { $ne: true },
+    _id: saleId,
+    user: userId,
+    type: 'SALE',
+    isUndone: { $ne: true },
   }).lean();
+
   if (!tx) throw new Error('Sale not found');
 
-  // Config
   const offsetMinutes = user?.settings?.utcOffsetMinutes ?? 60;
   const businessName = String(user?.businessName || user?.shopName || 'My Shop');
+
   const userCountry = String(user?.countryCode || 'NG').toUpperCase();
   const currencyCode = String(user?.currencyCode || COUNTRY_CURRENCY_CODE[userCountry] || 'NGN').toUpperCase();
   const locale = String(user?.locale || 'en-NG');
@@ -322,10 +533,11 @@ export const generateSaleReceiptPdfBuffer = async (userId: string, saleId: strin
   const receiptDate = fmtDDMMYYYY_HHMM(when, offsetMinutes);
   const receiptNo = makeReceiptNo(saleId, when, offsetMinutes);
 
-  // Doc setup
   const doc = new PDFDocument({
-    size: 'A4', margin: 0, // Manual margins for full canvas control
-    autoFirstPage: true, bufferPages: true,
+    size: 'A4',
+    margins: { top: 40, bottom: 40, left: 40, right: 40 },
+    autoFirstPage: false,
+    bufferPages: true,
   }) as unknown as PdfDoc;
 
   const { regFont, boldFont, hasNoto } = registerFonts(doc);
@@ -342,16 +554,27 @@ export const generateSaleReceiptPdfBuffer = async (userId: string, saleId: strin
   });
 
   renderReceiptPdf(doc, {
-    saleId, receiptNo, businessName, receiptDate,
-    currencyCode, locale, hasSymbolFont: hasNoto,
-    regFont, boldFont, tx,
+    saleId,
+    receiptNo,
+    businessName,
+    receiptDate,
+    currencyCode,
+    locale,
+    hasSymbolFont: hasNoto,
+    regFont,
+    boldFont,
+    tx,
   });
 
   doc.end();
+
   const buffer = await done;
-  return { buffer, filename: `Receipt_${String(saleId).slice(-6)}.pdf`, mimeType: 'application/pdf' };
+  const filename = `Receipt_${String(saleId).slice(-6)}.pdf`;
+
+  return { buffer, filename, mimeType: 'application/pdf' };
 };
 
+// ✅ EXISTING: Web dashboard download endpoint
 export const generateSaleReceiptPdf = async (req: Request | any, res: Response) => {
   try {
     const userId = req.user?.id || req.user?._id;
@@ -364,16 +587,21 @@ export const generateSaleReceiptPdf = async (req: Request | any, res: Response) 
     if (!user) return res.status(404).json({ error: 'User not found' });
 
     const tx: any = await Transaction.findOne({
-      _id: saleId, user: userId, type: 'SALE', isUndone: { $ne: true },
+      _id: saleId,
+      user: userId,
+      type: 'SALE',
+      isUndone: { $ne: true },
     }).lean();
 
     if (!tx) return res.status(404).json({ error: 'Sale not found' });
 
     const offsetMinutes = user?.settings?.utcOffsetMinutes ?? 60;
     const businessName = String(user?.businessName || user?.shopName || 'My Shop');
+
     const userCountry = String(user?.countryCode || 'NG').toUpperCase();
     const currencyCode = String(user?.currencyCode || COUNTRY_CURRENCY_CODE[userCountry] || 'NGN').toUpperCase();
     const locale = String(user?.locale || 'en-NG');
+
     const when = new Date(tx.timestamp || tx.createdAt || Date.now());
     const receiptDate = fmtDDMMYYYY_HHMM(when, offsetMinutes);
     const receiptNo = makeReceiptNo(saleId, when, offsetMinutes);
@@ -382,8 +610,10 @@ export const generateSaleReceiptPdf = async (req: Request | any, res: Response) 
     res.setHeader('Content-Disposition', `attachment; filename=Receipt_${saleId}.pdf`);
 
     const doc = new PDFDocument({
-      size: 'A4', margin: 0, 
-      autoFirstPage: true, bufferPages: true,
+      size: 'A4',
+      margins: { top: 40, bottom: 40, left: 40, right: 40 },
+      autoFirstPage: false,
+      bufferPages: true,
     }) as unknown as PdfDoc;
 
     const { regFont, boldFont, hasNoto } = registerFonts(doc);
@@ -392,9 +622,16 @@ export const generateSaleReceiptPdf = async (req: Request | any, res: Response) 
     doc.pipe(res);
 
     renderReceiptPdf(doc, {
-      saleId, receiptNo, businessName, receiptDate,
-      currencyCode, locale, hasSymbolFont: hasNoto,
-      regFont, boldFont, tx,
+      saleId,
+      receiptNo,
+      businessName,
+      receiptDate,
+      currencyCode,
+      locale,
+      hasSymbolFont: hasNoto,
+      regFont,
+      boldFont,
+      tx,
     });
 
     doc.end();
