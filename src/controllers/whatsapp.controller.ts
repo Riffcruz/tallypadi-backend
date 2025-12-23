@@ -286,6 +286,92 @@ function parseReportDateToUtc(input: any, offsetMinutes: number, isEnd: boolean)
   return d;
 }
 
+function normalizeSettingsUpdate(parsed: any) {
+  const su = parsed?.settings_update;
+  if (!su || !su.key) return parsed;
+
+  const rawKey = String(su.key || '').trim();
+  const rawVal = su.value;
+
+  const keyMap: Record<string, string> = {
+    // closing time
+    closing_time: 'closingTime',
+    closingtime: 'closingTime',
+    close_time: 'closingTime',
+
+    // daily summary
+    daily_summary: 'dailySummaryEnabled',
+    dailySummary: 'dailySummaryEnabled',
+    daily_summary_enabled: 'dailySummaryEnabled',
+
+    // pdf reports
+    pdf: 'pdfReportsEnabled',
+    pdf_reports: 'pdfReportsEnabled',
+    pdfReports: 'pdfReportsEnabled',
+    pdf_reports_enabled: 'pdfReportsEnabled',
+
+    // timezone
+    timezone: 'utcOffsetMinutes',
+    utc_offset: 'utcOffsetMinutes',
+    utcOffset: 'utcOffsetMinutes',
+    offsetMinutes: 'utcOffsetMinutes',
+
+    // language
+    lang: 'language',
+    userLanguage: 'language',
+  };
+
+  const normalizedKey = keyMap[rawKey] || rawKey;
+  parsed.settings_update.key = normalizedKey;
+
+  // normalize value types
+  if (normalizedKey === 'dailySummaryEnabled' || normalizedKey === 'pdfReportsEnabled') {
+    const v = String(rawVal).toLowerCase();
+    parsed.settings_update.value =
+      rawVal === true ||
+      v === 'true' || v === 'on' || v === 'enable' || v === 'enabled' || v === 'yes';
+  }
+
+  if (normalizedKey === 'utcOffsetMinutes') {
+    // Accept "+1", "UTC+1", "+01:30", "-2", etc.
+    const s = String(rawVal ?? '').replace(/utc|gmt/gi, '').trim();
+    const m = s.match(/^([+-])\s*(\d{1,2})(?::(\d{1,2}))?$/);
+    if (m) {
+      const sign = m[1] === '-' ? -1 : 1;
+      const hh = Number(m[2] || 0);
+      const mm = Number(m[3] || 0);
+      parsed.settings_update.value = sign * (hh * 60 + mm);
+    } else if (Number.isFinite(Number(rawVal))) {
+      parsed.settings_update.value = Number(rawVal);
+    }
+  }
+
+  if (normalizedKey === 'closingTime') {
+    let t = String(rawVal ?? '').trim();
+
+    // supports "8pm" / "8:15pm"
+    const pm = t.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)$/i);
+    if (pm) {
+      let hh = Number(pm[1]);
+      const mm = Number(pm[2] || '00');
+      const ap = pm[3].toLowerCase();
+      if (ap === 'pm' && hh < 12) hh += 12;
+      if (ap === 'am' && hh === 12) hh = 0;
+      t = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+    }
+
+    parsed.settings_update.value = t;
+  }
+
+  if (normalizedKey === 'language') {
+    parsed.settings_update.value = String(rawVal ?? 'English');
+  }
+
+  return parsed;
+}
+
+
+
 /**
  * Make labels like your older logic:
  * - Today/Yesterday
@@ -512,13 +598,28 @@ export async function attachCreditNameToLatest(
 // Allowlist parsed
 // =====================================================
 function allowlistParsed(parsed: any) {
-  if (!parsed || typeof parsed !== 'object') return { intent: 'UNKNOWN', items: [], report_params: {}, settings_update: {} };
+  if (!parsed || typeof parsed !== 'object') {
+    return {
+      intent: 'UNKNOWN',
+      items: [],
+      report_params: { start_date: null, end_date: null, category_filter: null, include_undone: false },
+      settings_update: { key: null, value: null },
+      reply_text: '',
+    };
+  }
+
   parsed.items = Array.isArray(parsed.items) ? parsed.items : [];
-  parsed.report_params = parsed.report_params || { start_date: null, end_date: null };
+  parsed.report_params = parsed.report_params || {};
+  parsed.report_params.start_date ??= null;
+  parsed.report_params.end_date ??= null;
+  parsed.report_params.category_filter ??= null;
+  parsed.report_params.include_undone ??= false;
+
   parsed.settings_update = parsed.settings_update || { key: null, value: null };
   parsed.reply_text = typeof parsed.reply_text === 'string' ? parsed.reply_text : '';
   return parsed;
 }
+
 
 // =====================================================
 // 1) VERIFY WEBHOOK
@@ -886,6 +987,8 @@ if (btn?.txId && btn?.action) {
 
     let parsed = await parseMessageWithGemini(rawText, currentLang, contextHistory, imageBuffer, imageMime);
     parsed = allowlistParsed(parsed);
+    parsed = normalizeSettingsUpdate(parsed);
+
 
     // =====================================================
     // ✅ undone scope

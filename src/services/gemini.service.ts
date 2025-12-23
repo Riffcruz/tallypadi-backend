@@ -680,6 +680,75 @@ These intents MUST be detected correctly and MUST NOT be mistaken as SALE:
   total_money = null
   needs_clarification = true ONLY if item name is missing.
 
+*** 5C. SETTINGS COMMANDS (CRITICAL) ***
+
+These commands MUST map to intent SETTINGS (or CHANGE_LANGUAGE) and MUST output settings_update with EXACT keys supported by backend.
+
+✅ Allowed settings_update.key values (MUST MATCH EXACTLY):
+- "closingTime" (value: string "HH:MM" 24-hour, e.g. "20:00")
+- "dailySummaryEnabled" (value: boolean true/false)
+- "pdfReportsEnabled" (value: boolean true/false)
+- "utcOffsetMinutes" (value: number minutes, e.g. +1 hour -> 60, -2 -> -120)
+- "language" (value: string like "English", "Pidgin", "French", "Spanish")
+
+A) closingTime
+Triggers:
+- "set closing time to 20:00"
+- "closing time 8pm"
+- "close shop by 9:30pm"
+Output:
+intent = SETTINGS
+settings_update = { "key": "closingTime", "value": "HH:MM" }
+items = []
+total_money = null
+
+Rules:
+- Convert "8pm" -> "20:00"
+- Convert "8:15pm" -> "20:15"
+- If time is unclear, needs_clarification=true and ask for HH:MM.
+
+B) dailySummaryEnabled
+Triggers:
+- "turn daily summary on/off"
+- "enable/disable daily summary"
+- "daily summary yes/no"
+Output:
+intent = SETTINGS
+settings_update = { "key": "dailySummaryEnabled", "value": true/false }
+
+C) pdfReportsEnabled
+Triggers:
+- "enable/disable pdf reports"
+- "turn pdf on/off"
+- "pdf reports yes/no"
+Output:
+intent = SETTINGS
+settings_update = { "key": "pdfReportsEnabled", "value": true/false }
+
+D) utcOffsetMinutes (timezone offset)
+Triggers:
+- "set my timezone to +1"
+- "timezone UTC+1"
+- "set timezone to GMT+2"
+Output:
+intent = SETTINGS
+settings_update = { "key": "utcOffsetMinutes", "value": <minutes> }
+
+Rules:
+- +1 => 60, +1:30 => 90, -2 => -120
+- If user says "Nigeria/Lagos", assume +1 => 60 (unless user specifies otherwise)
+
+E) language
+Triggers:
+- "change language to pidgin/english/french/spanish"
+Output:
+intent = CHANGE_LANGUAGE (or SETTINGS is acceptable)
+settings_update = { "key": "language", "value": "<LanguageName>" }
+
+*** SETTINGS PRIORITY OVERRIDE ***
+If the message matches any settings triggers above, DO NOT return SALE/REPORT intents.
+
+
 ✅ EXTRA CLARITY (IMPORTANT)
 - If user says "set <item> to 0" / "make <item> 0" / "remaining 0", that is SET_STOCK (qty=0), NOT DELETED_STOCK.
 - Only use DELETED_STOCK when user clearly means remove the item record entirely: "delete/remove/drop from inventory list".
