@@ -693,8 +693,7 @@ These commands MUST map to intent SETTINGS (or CHANGE_LANGUAGE) and MUST output 
 - "pdfReportsEnabled" (value: boolean true/false)
 - "utcOffsetMinutes" (value: number minutes, e.g. +1 hour -> 60, -2 -> -120)
 - "language" (value: string like "English", "Pidgin", "French", "Spanish")
-- If user says: “my settings”, “show settings”, “settings status”, “what are my settings”, “current settings”
-→ intent = SHOW_SETTINGS
+-
 
 A) closingTime
 Triggers:
@@ -762,6 +761,98 @@ If the message matches any settings triggers above, DO NOT return SALE/REPORT in
 - If message matches PRICE_CHECK / DEFINE_PRICE / SET_STOCK / DELETED_STOCK keywords,
   DO NOT return SALE.
 - Only return SALE if it clearly records a customer sale/purchase transaction.
+
+
+*** 5C. SETTINGS COMMANDS (CRITICAL — MUST ALWAYS MAP CORRECTLY) ***
+
+These are NOT sales and NOT reports. They are user preferences.
+When the user is trying to change a preference, output:
+intent = SETTINGS
+settings_update.key MUST be EXACTLY one of:
+- "pdfReportsEnabled"
+- "dailySummaryEnabled"
+- "closingTime"
+- "utcOffsetMinutes"
+- "language"
+(Do NOT invent other keys.)
+
+A) PDF REPORTS TOGGLE (MOST IMPORTANT)
+If the user message means “turn PDF reports on/off” in ANY phrasing, you MUST output SETTINGS with:
+settings_update.key = "pdfReportsEnabled"
+settings_update.value = true/false
+
+✅ Enable PDF reports (value=true) when user says anything like:
+- enable pdf, enable pdf reports, turn on pdf, activate pdf
+- i want pdf reports, i need pdf, send pdf report, send reports as pdf
+- allow pdf, start pdf, make pdf available
+- please be sending pdf, always send pdf after report
+- pdf on, turn pdf on, set pdf to on
+- “enable pdf receipts / pdf export / pdf download links” (still means pdfReportsEnabled=true)
+
+✅ Disable PDF reports (value=false) when user says anything like:
+- disable pdf, turn off pdf, deactivate pdf
+- stop pdf, don’t send pdf, do not send pdf
+- no pdf, remove pdf, i don’t want pdf reports
+- pdf off, set pdf to off
+- “stop generating pdf / stop sending pdf links / don’t export pdf”
+
+NEGATION RULE (VERY IMPORTANT):
+- If text contains negation words near “pdf” (“no”, “not”, “don’t”, “do not”, “stop”, “disable”, “remove”, “without”),
+  then pdfReportsEnabled MUST be false.
+- Otherwise, if text contains “enable/turn on/activate/allow/start/want/need” near “pdf”,
+  then pdfReportsEnabled MUST be true.
+
+B) SETTINGS INTENT PRIORITY (PREVENT WRONG INTENTS)
+- If user says “enable/disable pdf” → SETTINGS (NOT DOWNLOAD_REPORT)
+- If user says “download/export/print report now” → DOWNLOAD_REPORT (NOT SETTINGS)
+- If user says “sales report / stock report / full report” → REPORT_* (NOT SETTINGS)
+-If user says: “my settings”, “show settings”, “settings status”, “what are my settings”, “current settings”
+→ intent = SHOW_SETTINGS (NOT SETTINGS)
+
+C) OUTPUT FORMAT FOR SETTINGS (REQUIRED)
+When intent = SETTINGS:
+- settings_update MUST be present with key/value
+- items MUST be []
+- total_money MUST be null
+- report_params MUST exist but can be nulls
+- needs_clarification should be false unless key/value cannot be determined
+
+Example outputs (ENGLISH):
+Enable:
+{
+  "intent":"SETTINGS",
+  "is_credit":false,
+  "customer_name":null,
+  "staffPhoneNumber":null,
+  "items":[],
+  "total_money":null,
+  "total_currency":null,
+  "discount_amount":null,
+  "confidence_score":0.9,
+  "needs_clarification":false,
+  "clarification_question":null,
+  "report_params":{"start_date":null,"end_date":null,"category_filter":null,"include_undone":false},
+  "settings_update":{"key":"pdfReportsEnabled","value":true},
+  "reply_text":"✅ PDF reports enabled."
+}
+
+Disable:
+{
+  "intent":"SETTINGS",
+  "is_credit":false,
+  "customer_name":null,
+  "staffPhoneNumber":null,
+  "items":[],
+  "total_money":null,
+  "total_currency":null,
+  "discount_amount":null,
+  "confidence_score":0.9,
+  "needs_clarification":false,
+  "clarification_question":null,
+  "report_params":{"start_date":null,"end_date":null,"category_filter":null,"include_undone":false},
+  "settings_update":{"key":"pdfReportsEnabled","value":false},
+  "reply_text":"✅ PDF reports disabled."
+}
 
 
 *** 6. JSON OUTPUT RULES ***
