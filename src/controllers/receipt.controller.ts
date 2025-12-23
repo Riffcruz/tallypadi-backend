@@ -76,28 +76,6 @@ function wrapIdLines(id: string, lineLen = 30) {
   return parts ? parts.join('\n') : clean;
 }
 
-// ✅ POS-style dashed divider
-function dashedLine(doc: PdfDoc, x1: number, x2: number, y: number, dash = 3, gap = 2) {
-  let x = x1;
-  doc.save();
-  doc.lineWidth(1);
-  doc.strokeColor(THEME.border);
-  while (x < x2) {
-    doc.moveTo(x, y).lineTo(Math.min(x + dash, x2), y).stroke();
-    x += dash + gap;
-  }
-  doc.restore();
-}
-
-// ✅ Text clamp to avoid overflow
-function ellipsize(doc: PdfDoc, text: string, maxWidth: number) {
-  const s = String(text || '');
-  if (doc.widthOfString(s) <= maxWidth) return s;
-  let out = s;
-  while (out.length > 2 && doc.widthOfString(out + '…') > maxWidth) out = out.slice(0, -1);
-  return out + '…';
-}
-
 // ✅ Fit text inside width by reducing font size
 function fitTextWidth(doc: PdfDoc, text: string, maxWidth: number, maxSize: number = 12, minSize: number = 8) {
   let size = maxSize;
@@ -447,49 +425,56 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
   y += 20;
 
   // -------------------------------------------------
-  // ✅ TOTAL SECTION (Fixed alignment - stays within background)
+  // ✅ TOTAL SECTION (Vertically Centered Fix)
   // -------------------------------------------------
   const totalMoney = Number(tx.totalMoney ?? computedTotal ?? 0);
   const totalBoxH = 68;
-  
+  const innerBoxMargin = 12;
+  const innerBoxH = totalBoxH - (innerBoxMargin * 2); // 44px height
+
   // Ensure we have enough space at the bottom
   const minBottomSpace = 60;
   if (y + totalBoxH + minBottomSpace > doc.page.height - margin) {
-    // Add new page if not enough space
     doc.addPage();
     y = margin;
   }
   
-  // Total box with WhatsApp green
+  // 1. Draw Green Background
   doc.save();
-  doc.roundedRect(margin, y, contentW, totalBoxH, 12)
-    .fill(THEME.primary);
+  doc.roundedRect(margin, y, contentW, totalBoxH, 12).fill(THEME.primary);
   
-  // Inner white box for text (keeps text readable)
+  // 2. Draw White Inner Box
+  const innerBoxY = y + innerBoxMargin;
   const innerBoxW = contentW - 24;
-  doc.roundedRect(margin + 12, y + 12, innerBoxW, totalBoxH - 24, 8)
-    .fill('#FFFFFF');
+  doc.roundedRect(margin + 12, innerBoxY, innerBoxW, innerBoxH, 8).fill('#FFFFFF');
   doc.restore();
   
-  // Total label
+  // 3. Draw "TOTAL AMOUNT" Label (Vertically Centered)
   doc.font(boldFont).fontSize(12).fillColor(THEME.primaryDark);
-  doc.text('TOTAL AMOUNT', margin + 24, y + 22);
+  const labelText = 'TOTAL AMOUNT';
+  const labelHeight = doc.heightOfString(labelText, { width: innerBoxW / 2 });
+  const labelY = innerBoxY + (innerBoxH - labelHeight) / 2; // Mathematical Center
+
+  doc.text(labelText, margin + 24, labelY);
   
-  // Total value - FIXED: Ensure it stays within the white background
+  // 4. Draw Total Value (Vertically Centered & Auto-Sized)
   const totalValue = formatMoney(totalMoney);
   doc.font(boldFont).fillColor(THEME.text);
   
-  // Calculate available width for total value
-  const totalValueWidth = innerBoxW - 40; // 20px padding on each side
+  // Calculate available width (Right half of the white box minus padding)
+  const totalValueAvailableWidth = (innerBoxW / 2) + 40; 
   
-  // Fit text to avoid overflow
-  const totalSize = fitTextWidth(doc, totalValue, totalValueWidth, 22, 14);
+  // Fit text size
+  const totalSize = fitTextWidth(doc, totalValue, totalValueAvailableWidth, 22, 14);
   doc.fontSize(totalSize);
   
-  // Position text correctly within the white box
-  const totalX = margin + 12 + innerBoxW - 20; // Right edge minus padding
-  doc.text(totalValue, margin + 24, y + 42, {
-    width: totalValueWidth,
+  // Calculate Text Height & Centered Y Position
+  const valHeight = doc.heightOfString(totalValue, { width: totalValueAvailableWidth });
+  const valY = innerBoxY + (innerBoxH - valHeight) / 2; 
+  
+  // Draw Text
+  doc.text(totalValue, margin + 24, valY - 1, { // -1 optical adjustment
+    width: innerBoxW - 24, 
     align: 'right'
   });
   
@@ -529,7 +514,7 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
   }
 }
 
-// ✅ Buffer generator for WhatsApp
+// ... (Exports remain the same)
 export const generateSaleReceiptPdfBuffer = async (userId: string, saleId: string) => {
   const user: any = await User.findById(userId).lean();
   if (!user) throw new Error('User not found');
@@ -595,7 +580,6 @@ export const generateSaleReceiptPdfBuffer = async (userId: string, saleId: strin
   return { buffer, filename, mimeType: 'application/pdf' };
 };
 
-// ✅ EXISTING: Web dashboard download endpoint
 export const generateSaleReceiptPdf = async (req: Request | any, res: Response) => {
   try {
     const userId = req.user?.id || req.user?._id;
