@@ -16,23 +16,25 @@ const COUNTRY_CURRENCY_CODE: Record<string, string> = {
   AU: 'AUD', JP: 'JPY', AE: 'AED', RW: 'RWF', TZ: 'TZS', UG: 'UGX',
 };
 
-// Modern color palette
+// WhatsApp-inspired color palette
 const THEME = {
-  primary: '#0F766E',
-  primaryLight: '#14B8A6',
-  accent: '#8B5CF6',
-  dark: '#1E293B',
-  text: '#0F172A',
-  textLight: '#475569',
-  muted: '#64748B',
-  border: '#E2E8F0',
-  bg: '#FFFFFF',
-  bgSoft: '#F8FAFC',
-  bgHeader: '#F1F5F9',
-  success: '#10B981',
-  warning: '#F59E0B',
-  error: '#EF4444',
-  info: '#3B82F6',
+  primary: '#25D366',      // WhatsApp green
+  primaryLight: '#DCF8C6', // WhatsApp light green (message bubble)
+  primaryDark: '#128C7E',  // Dark WhatsApp green
+  secondary: '#34B7F1',    // WhatsApp blue (calls/status)
+  accent: '#075E54',       // Dark teal
+  dark: '#0C151C',         // Very dark blue/black
+  text: '#111B21',         // WhatsApp dark text
+  textLight: '#667781',    // WhatsApp gray text
+  muted: '#8696A0',        // Medium gray
+  border: '#E6E6E6',       // Light border
+  bg: '#FFFFFF',           // White background
+  bgSoft: '#F0F2F5',       // WhatsApp chat background
+  bgHeader: '#F0F2F5',     // Light gray header
+  success: '#25D366',      // Green for success
+  warning: '#FFC107',      // Amber
+  error: '#FF3B30',        // Red
+  info: '#34B7F1',         // Blue
 };
 
 type PdfDoc = InstanceType<typeof PDFDocument>;
@@ -152,10 +154,10 @@ function registerFonts(doc: PdfDoc) {
 // ✅ Calculate optimal column widths for items table
 function calculateColumnWidths(availableWidth: number) {
   return {
-    qty: 60,          // Fixed width for quantity
-    price: 100,       // Fixed width for price
-    total: 100,       // Fixed width for total
-    item: availableWidth - 60 - 100 - 100 - 20, // Remaining width for item name (minus padding)
+    qty: 50,          // Fixed width for quantity
+    price: 85,        // Fixed width for price
+    total: 95,        // Fixed width for total
+    item: availableWidth - 50 - 85 - 95 - 15, // Remaining width for item name
   };
 }
 
@@ -163,37 +165,37 @@ function calculateColumnWidths(availableWidth: number) {
 function drawTableHeader(doc: PdfDoc, x: number, y: number, colWidths: any, regFont: string) {
   doc.save();
   
-  // Header background
-  doc.rect(x, y, colWidths.qty + colWidths.item + colWidths.price + colWidths.total, 24)
+  // Header background - WhatsApp light gray
+  doc.rect(x, y, colWidths.qty + colWidths.item + colWidths.price + colWidths.total, 28)
     .fill(THEME.bgHeader);
   
   // Header text
   doc.font(regFont).fontSize(9).fillColor(THEME.textLight);
   
   // QTY
-  doc.text('QTY', x + 8, y + 8, { width: colWidths.qty - 16, align: 'left' });
+  doc.text('QTY', x + 10, y + 9, { width: colWidths.qty - 20, align: 'left' });
   
   // ITEM
-  doc.text('ITEM', x + colWidths.qty + 8, y + 8, { width: colWidths.item - 16, align: 'left' });
+  doc.text('ITEM', x + colWidths.qty + 10, y + 9, { width: colWidths.item - 20, align: 'left' });
   
   // PRICE
-  doc.text('PRICE', x + colWidths.qty + colWidths.item + 8, y + 8, { 
-    width: colWidths.price - 16, 
+  doc.text('PRICE', x + colWidths.qty + colWidths.item + 10, y + 9, { 
+    width: colWidths.price - 20, 
     align: 'right' 
   });
   
   // TOTAL
-  doc.text('TOTAL', x + colWidths.qty + colWidths.item + colWidths.price + 8, y + 8, { 
-    width: colWidths.total - 16, 
+  doc.text('TOTAL', x + colWidths.qty + colWidths.item + colWidths.price + 10, y + 9, { 
+    width: colWidths.total - 20, 
     align: 'right' 
   });
   
   // Bottom border
   doc.strokeColor(THEME.border).lineWidth(1);
-  doc.moveTo(x, y + 24).lineTo(x + colWidths.qty + colWidths.item + colWidths.price + colWidths.total, y + 24).stroke();
+  doc.moveTo(x, y + 28).lineTo(x + colWidths.qty + colWidths.item + colWidths.price + colWidths.total, y + 28).stroke();
   
   doc.restore();
-  return y + 24;
+  return y + 28;
 }
 
 // ✅ Draw table row
@@ -215,12 +217,12 @@ function drawTableRow(
   // Calculate row height based on item name wrapping
   doc.font(regFont).fontSize(10);
   const nameHeight = doc.heightOfString(name, {
-    width: colWidths.item - 16,
+    width: colWidths.item - 20,
     ellipsis: true
   });
-  const rowHeight = Math.max(20, nameHeight + 8);
+  const rowHeight = Math.max(24, nameHeight + 8);
   
-  // Draw row background (alternating for better readability)
+  // Draw row background
   doc.save();
   doc.fillColor('#FFFFFF');
   doc.rect(x, y, colWidths.qty + colWidths.item + colWidths.price + colWidths.total, rowHeight).fill();
@@ -228,29 +230,29 @@ function drawTableRow(
   
   // Draw item name with wrapping
   doc.font(regFont).fontSize(10).fillColor(THEME.text);
-  doc.text(name, x + colWidths.qty + 8, y + 4, {
-    width: colWidths.item - 16,
+  doc.text(name, x + colWidths.qty + 10, y + 6, {
+    width: colWidths.item - 20,
     ellipsis: true,
     lineGap: 2
   });
   
   // Draw quantity
-  doc.text(qty.toString(), x + 8, y + 4, {
-    width: colWidths.qty - 16,
+  doc.text(qty.toString(), x + 10, y + 6, {
+    width: colWidths.qty - 20,
     align: 'left'
   });
   
   // Draw price
   doc.fontSize(9).fillColor(THEME.textLight);
-  doc.text(formatMoney(unitPrice), x + colWidths.qty + colWidths.item + 8, y + 4, {
-    width: colWidths.price - 16,
+  doc.text(formatMoney(unitPrice), x + colWidths.qty + colWidths.item + 10, y + 6, {
+    width: colWidths.price - 20,
     align: 'right'
   });
   
   // Draw total
   doc.fontSize(10).fillColor(THEME.text);
-  doc.text(formatMoney(lineTotal), x + colWidths.qty + colWidths.item + colWidths.price + 8, y + 4, {
-    width: colWidths.total - 16,
+  doc.text(formatMoney(lineTotal), x + colWidths.qty + colWidths.item + colWidths.price + 10, y + 6, {
+    width: colWidths.total - 20,
     align: 'right'
   });
   
@@ -304,51 +306,56 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
   // -------------------------------------------------
   doc.addPage();
   const pageW = doc.page.width;
-  const margin = 48; // Increased margin for better spacing
+  const margin = 40;
   const contentW = pageW - margin * 2;
 
   let y = margin;
 
   // -------------------------------------------------
-  // ✅ HEADER (Modern Design)
+  // ✅ HEADER (WhatsApp-style)
   // -------------------------------------------------
   doc.save();
   
-  // Header background with gradient effect
-  doc.rect(margin, y, contentW, 80)
-    .fill(THEME.dark);
+  // Header background with WhatsApp green gradient
+  const headerGradient = doc.linearGradient(margin, y, margin + contentW, y + 80);
+  headerGradient.stop(0, THEME.primary);      // Bright WhatsApp green
+  headerGradient.stop(1, THEME.primaryDark);  // Darker green
+  
+  doc.roundedRect(margin, y, contentW, 80, 12)
+    .fill(headerGradient);
   
   // Logo/Title
   doc.font(boldFont).fillColor('#FFFFFF').fontSize(20);
   doc.text('TallyPadi', margin + 24, y + 20);
   
-  doc.font(regFont).fillColor('#CBD5E1').fontSize(11);
+  doc.font(regFont).fillColor('#E8FFF3').fontSize(11);
   doc.text('POS RECEIPT', margin + 24, y + 48);
   
-  // Receipt number badge
-  const badgeW = doc.widthOfString(receiptNo) + 32;
-  const badgeH = 28;
+  // Payment status badge
+  const paymentStatus = String(tx.paymentStatus || 'PAID').toUpperCase();
+  const badgeW = Math.max(70, doc.widthOfString(paymentStatus) + 20);
+  const badgeH = 26;
   
   doc.save();
   doc.roundedRect(margin + contentW - badgeW - 24, y + 20, badgeW, badgeH, 6)
-    .fill(THEME.primaryLight);
-  doc.fillColor('#FFFFFF').fontSize(10).font(boldFont);
-  doc.text(receiptNo, margin + contentW - badgeW - 24, y + 26, {
+    .fill('#FFFFFF');
+  doc.fillColor(THEME.primary).fontSize(9).font(boldFont);
+  doc.text(paymentStatus, margin + contentW - badgeW - 24, y + 28, {
     width: badgeW,
     align: 'center'
   });
   doc.restore();
   
-  y += 80 + 24;
+  y += 80 + 20;
 
   // -------------------------------------------------
-  // ✅ BUSINESS INFO CARD
+  // ✅ BUSINESS INFO CARD (WhatsApp light gray)
   // -------------------------------------------------
-  const infoCardH = 70;
+  const infoCardH = 72;
   
   doc.save();
   doc.roundedRect(margin, y, contentW, infoCardH, 12)
-    .fill(THEME.bgSoft);
+    .fill(THEME.bgHeader);
   
   // Add subtle border
   doc.strokeColor(THEME.border).lineWidth(1);
@@ -360,23 +367,26 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
   doc.font(boldFont).fillColor(THEME.text).fontSize(14);
   const businessNameSize = fitTextWidth(doc, businessName, contentW - 48, 14, 10);
   doc.fontSize(businessNameSize);
-  doc.text(businessName, margin + 24, y + 16, {
-    width: contentW - 48,
+  doc.text(businessName, margin + 20, y + 16, {
+    width: contentW - 40,
     ellipsis: true
   });
   
   // Date and Receipt info
   doc.font(regFont).fontSize(10).fillColor(THEME.textLight);
-  doc.text('Date:', margin + 24, y + 42);
-  doc.fillColor(THEME.text).text(receiptDate, margin + 60, y + 42);
   
-  doc.fillColor(THEME.textLight).text('Receipt No:', margin + contentW - 160, y + 42);
-  doc.fillColor(THEME.text).text(receiptNo, margin + contentW - 100, y + 42, {
-    width: 100,
+  // Left side: Date
+  doc.text('Date Issued:', margin + 20, y + 44);
+  doc.fillColor(THEME.text).text(receiptDate, margin + 85, y + 44);
+  
+  // Right side: Receipt No
+  doc.fillColor(THEME.textLight).text('Receipt No:', margin + contentW - 140, y + 44);
+  doc.fillColor(THEME.text).text(receiptNo, margin + contentW - 60, y + 44, {
+    width: 60,
     align: 'right'
   });
   
-  y += infoCardH + 20;
+  y += infoCardH + 24;
 
   // -------------------------------------------------
   // ✅ TRANSACTION ID SECTION
@@ -389,23 +399,20 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
   
   y += 14;
   
-  // ID box with proper height calculation
+  // ID box with WhatsApp message bubble style
   doc.font('Courier').fontSize(9);
-  const idBoxH = Math.max(28, doc.heightOfString(wrappedId, {
-    width: contentW,
+  const idBoxH = Math.max(32, doc.heightOfString(wrappedId, {
+    width: contentW - 32,
     lineGap: 4
   }) + 16);
   
   doc.save();
   doc.roundedRect(margin, y, contentW, idBoxH, 8)
-    .fill('#F0F9FF');
-  doc.strokeColor(THEME.border).lineWidth(1);
-  doc.roundedRect(margin, y, contentW, idBoxH, 8)
-    .stroke();
+    .fill(THEME.primaryLight); // WhatsApp message bubble color
   doc.restore();
   
   doc.fillColor(THEME.text);
-  doc.text(wrappedId, margin + 16, y + 8, {
+  doc.text(wrappedId, margin + 16, y + 10, {
     width: contentW - 32,
     lineGap: 4
   });
@@ -425,7 +432,8 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
   // Table rows
   let computedTotal = 0;
   
-  for (const item of items) {
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
     const qty = Number(item.qty ?? item.quantity ?? 0);
     const unitPrice = Number(item.unitPrice ?? item.price ?? 0);
     const lineTotal = Number(item.total ?? qty * unitPrice);
@@ -436,57 +444,70 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
   }
   
   // Add some spacing after the table
-  y += 16;
+  y += 20;
 
   // -------------------------------------------------
-  // ✅ TOTAL SECTION (Modern Card)
+  // ✅ TOTAL SECTION (Fixed alignment - stays within background)
   // -------------------------------------------------
   const totalMoney = Number(tx.totalMoney ?? computedTotal ?? 0);
-  const totalBoxH = 60;
+  const totalBoxH = 68;
   
+  // Ensure we have enough space at the bottom
+  const minBottomSpace = 60;
+  if (y + totalBoxH + minBottomSpace > doc.page.height - margin) {
+    // Add new page if not enough space
+    doc.addPage();
+    y = margin;
+  }
+  
+  // Total box with WhatsApp green
   doc.save();
-  // Gradient-like background
-  const gradient = doc.linearGradient(margin, y, margin + contentW, y + totalBoxH);
-  gradient.stop(0, THEME.primaryLight + '20'); // 20% opacity
-  gradient.stop(1, THEME.primary + '10');
-  
   doc.roundedRect(margin, y, contentW, totalBoxH, 12)
-    .fill(gradient);
+    .fill(THEME.primary);
   
-  // Border
-  doc.strokeColor(THEME.primaryLight).lineWidth(1);
-  doc.roundedRect(margin, y, contentW, totalBoxH, 12)
-    .stroke();
+  // Inner white box for text (keeps text readable)
+  const innerBoxW = contentW - 24;
+  doc.roundedRect(margin + 12, y + 12, innerBoxW, totalBoxH - 24, 8)
+    .fill('#FFFFFF');
   doc.restore();
   
   // Total label
-  doc.font(boldFont).fontSize(12).fillColor(THEME.primary);
-  doc.text('TOTAL AMOUNT', margin + 24, y + 16);
+  doc.font(boldFont).fontSize(12).fillColor(THEME.primaryDark);
+  doc.text('TOTAL AMOUNT', margin + 24, y + 22);
   
-  // Total value
+  // Total value - FIXED: Ensure it stays within the white background
   const totalValue = formatMoney(totalMoney);
-  doc.font(boldFont).fillColor(THEME.dark);
+  doc.font(boldFont).fillColor(THEME.text);
+  
+  // Calculate available width for total value
+  const totalValueWidth = innerBoxW - 40; // 20px padding on each side
   
   // Fit text to avoid overflow
-  const totalSize = fitTextWidth(doc, totalValue, contentW - 100, 24, 16);
+  const totalSize = fitTextWidth(doc, totalValue, totalValueWidth, 22, 14);
   doc.fontSize(totalSize);
-  doc.text(totalValue, margin + 24, y + 36, {
-    width: contentW - 48,
+  
+  // Position text correctly within the white box
+  const totalX = margin + 12 + innerBoxW - 20; // Right edge minus padding
+  doc.text(totalValue, margin + 24, y + 42, {
+    width: totalValueWidth,
     align: 'right'
   });
   
-  y += totalBoxH + 32;
+  y += totalBoxH + 28;
 
   // -------------------------------------------------
-  // ✅ FOOTER
+  // ✅ FOOTER (WhatsApp-style)
   // -------------------------------------------------
-  const footerY = doc.page.height - margin - 40;
+  const footerY = doc.page.height - margin - 50;
   
-  // Divider
-  dashedLine(doc, margin, margin + contentW, footerY, 4, 3);
+  // WhatsApp-style divider line
+  doc.save();
+  doc.strokeColor(THEME.border).lineWidth(1);
+  doc.moveTo(margin + 60, footerY).lineTo(margin + contentW - 60, footerY).stroke();
+  doc.restore();
   
   doc.font(regFont).fontSize(10).fillColor(THEME.textLight);
-  doc.text('Thank you for your business!', margin, footerY + 12, {
+  doc.text('Thank you for your purchase!', margin, footerY + 12, {
     width: contentW,
     align: 'center'
   });
@@ -508,7 +529,7 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
   }
 }
 
-// ✅ Buffer generator for WhatsApp (unchanged, but uses updated render function)
+// ✅ Buffer generator for WhatsApp
 export const generateSaleReceiptPdfBuffer = async (userId: string, saleId: string) => {
   const user: any = await User.findById(userId).lean();
   if (!user) throw new Error('User not found');
