@@ -399,9 +399,48 @@ function fallbackParse(message: string): ParsedResult | null {
     return safeParsedResult({ intent: 'UNDO_LAST_SALE', reply_text: '✅ Last transaction cancelled.' });
   }
 
-  if (/\b(download|pdf|export|send report)\b/i.test(m)) {
-    return safeParsedResult({ intent: 'DOWNLOAD_REPORT', reply_text: '📄 Generating PDF report...' });
-  }
+// ✅ SETTINGS OVERRIDE for PDF enable/disable (must come BEFORE DOWNLOAD_REPORT)
+if (
+  /\b(pdf|pdfs)\b/i.test(m) &&
+  /\b(report|reports)\b/i.test(m) &&
+  /\b(disable|turn\s*off|switch\s*off|deactivate|stop|dont|don't|do\s*not|no)\b/i.test(m)
+) {
+  return safeParsedResult({
+    intent: 'SETTINGS',
+    settings_update: { key: 'pdfReportsEnabled', value: false },
+    reply_text: '✅ PDF reports disabled.',
+  });
+}
+
+if (
+  /\b(pdf|pdfs)\b/i.test(m) &&
+  /\b(report|reports)\b/i.test(m) &&
+  /\b(enable|turn\s*on|switch\s*on|activate|start|allow)\b/i.test(m)
+) {
+  return safeParsedResult({
+    intent: 'SETTINGS',
+    settings_update: { key: 'pdfReportsEnabled', value: true },
+    reply_text: '✅ PDF reports enabled.',
+  });
+}
+
+// ✅ DOWNLOAD_REPORT (only if user is asking to generate/export/download NOW)
+const wantsDownload =
+  /\b(download|export|print|generate|create|send)\b/i.test(m) &&
+  /\b(pdf|report|reports)\b/i.test(m);
+
+// extra safety: don't treat "enable/disable pdf" as download
+const isToggle =
+  /\b(enable|disable|turn\s*on|turn\s*off|switch\s*on|switch\s*off|activate|deactivate)\b/i.test(m) &&
+  /\bpdf\b/i.test(m);
+
+if (wantsDownload && !isToggle) {
+  return safeParsedResult({
+    intent: 'DOWNLOAD_REPORT',
+    reply_text: '📄 Generating PDF report...',
+  });
+}
+
 
   if (/\b(debtors?|owing|who owes|credit list)\b/i.test(m) && !/\b(paid|pay)\b/i.test(m)) {
     return safeParsedResult({ intent: 'REPORT_DEBTS', reply_text: 'Fetching debtors list...' });
@@ -528,6 +567,12 @@ C. PRICE/MONEY EXTRACTION (POSITION-INDEPENDENT & SMART SCALING)
   - Words like "for", "total", "in total" → total_money
   - Support multipliers: k = thousand, m = million (e.g., 5k = 5000).
   - Report sales with user's currency symbol in reply_text.
+
+  PDF TOGGLE PRIORITY OVERRIDE:
+- If the user says "disable/turn off/stop/don't send" AND mentions "pdf", intent MUST be SETTINGS with key "pdfReportsEnabled" value=false.
+- If the user says "enable/turn on/start/activate" AND mentions "pdf", intent MUST be SETTINGS with key "pdfReportsEnabled" value=true.
+- DOWNLOAD_REPORT is ONLY when the user asks to generate/export/download/print a report NOW.
+- The phrase "disable pdf report(s)" MUST NEVER be DOWNLOAD_REPORT.
 
 *** 2. CONTEXTUAL COMPLETION ***
 - Use conversation history to complete partial inputs across turns.
