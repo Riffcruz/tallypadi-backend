@@ -1067,7 +1067,11 @@ if (btn?.txId && btn?.action) {
 
   salesTx.forEach((tx: any) => {
     const local = toUserLocalDate(tx.timestamp, offsetMinutes);
-    const timeStr = `${String(local.getHours()).padStart(2, '0')}:${String(local.getMinutes()).padStart(2, '0')}`;
+    const dateTimeStr =
+  local.toLocaleDateString(locale, { day: '2-digit', month: '2-digit', year: 'numeric' }) +
+  ' ' +
+  local.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+
     const undoneTag = tx.isUndone ? ' ⚠️UNDONE' : '';
 
     (tx.items || []).forEach((it: any) => {
@@ -1080,7 +1084,8 @@ if (btn?.txId && btn?.action) {
           ? Number(it.total)
           : qty * unitPrice;
 
-      salesMsg += `🕒 ${timeStr} • ${it.name} (${qty}${it.unit ? ' ' + it.unit : ''}) - ${symbol}${Number(line || 0).toLocaleString(locale)}${undoneTag}\n`;
+      salesMsg += `🕒 ${dateTimeStr} • ${it.name} (${qty}${it.unit ? ' ' + it.unit : ''}) - ${symbol}${Number(line || 0).toLocaleString(locale)}${undoneTag}\n`;
+
     });
   });
 
