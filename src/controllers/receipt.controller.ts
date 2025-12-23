@@ -44,6 +44,28 @@ function fmtDDMMYYYY_HHMM(d: Date, offsetMinutes: number) {
   return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
 }
 
+// ✅ Receipt number (short & readable)
+function makeReceiptNo(saleId: string, when: Date, offsetMinutes: number) {
+  const local = toUserLocalDate(when, offsetMinutes);
+  const y = local.getFullYear();
+  const m = String(local.getMonth() + 1).padStart(2, '0');
+  const d = String(local.getDate()).padStart(2, '0');
+  const tail = String(saleId || '')
+    .replace(/[^a-zA-Z0-9]/g, '')
+    .slice(-6)
+    .toUpperCase()
+    .padStart(6, '0');
+  return `TP-${y}${m}${d}-${tail}`;
+}
+
+// ✅ Wrap long IDs into multiple lines (prevents overlap)
+function wrapIdLines(id: string, lineLen = 26) {
+  const clean = String(id || '').trim();
+  if (!clean) return '';
+  const parts = clean.match(new RegExp(`.{1,${lineLen}}`, 'g'));
+  return parts ? parts.join('\n') : clean;
+}
+
 // ✅ POS-style dashed divider (NO TS error)
 function dashedLine(doc: PdfDoc, x1: number, x2: number, y: number, dash = 3, gap = 2) {
   let x = x1;
@@ -120,29 +142,31 @@ function registerFonts(doc: PdfDoc) {
   return { regFont, boldFont, hasNoto };
 }
 
-// function docToBuffer(doc: PdfDoc): Promise<Buffer> {
-//   return new Promise((resolve, reject) => {
-//     const stream = new PassThrough();
-//     const chunks: Buffer[] = [];
-//     stream.on('data', (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
-//     stream.on('end', () => resolve(Buffer.concat(chunks)));
-//     stream.on('error', reject);
-//     doc.pipe(stream);
-//     doc.end();
-//   });
-// }
-
 // ✅ Shared render (used by both web download + WhatsApp buffer)
 function renderReceiptPdf(doc: PdfDoc, payload: {
   saleId: string;
+  receiptNo: string;
   businessName: string;
   receiptDate: string;
   currencyCode: string;
   locale: string;
   hasSymbolFont: boolean;
+  regFont: string;
+  boldFont: string;
   tx: any;
 }) {
-  const { saleId, businessName, receiptDate, currencyCode, locale, hasSymbolFont, tx } = payload;
+  const {
+    saleId,
+    receiptNo,
+    businessName,
+    receiptDate,
+    currencyCode,
+    locale,
+    hasSymbolFont,
+    regFont,
+    boldFont,
+    tx,
+  } = payload;
 
   // ✅ If we have Noto, we can safely use symbol. If not, use CODE to avoid gibberish.
   const currencyDisplay = hasSymbolFont ? 'symbol' : 'code';
@@ -183,8 +207,8 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
   doc.rect(cardX, y + 36, cardW, 40).fill(THEME.dark);
   doc.restore();
 
-  doc.fillColor('#FFFFFF').fontSize(16).text('TallyPadi', cardX + cardPad, y + 18);
-  doc.fillColor('#CBD5E1').fontSize(9).text('POS RECEIPT', cardX + cardPad, y + 40);
+  doc.font(boldFont).fillColor('#FFFFFF').fontSize(16).text('TallyPadi', cardX + cardPad, y + 18);
+  doc.font(regFont).fillColor('#CBD5E1').fontSize(9).text('POS RECEIPT', cardX + cardPad, y + 40);
 
   const badgeText = String(tx.paymentStatus || 'PAID').toUpperCase();
   const badgeW = 74;
@@ -203,9 +227,9 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
   y += 72 + 14;
 
   // -------------------------------------------------
-  // ✅ INFO BOX (Date + Sale ID) contained
+  // ✅ INFO BOX (Business + Date + Receipt No)
   // -------------------------------------------------
-  const infoH = 58;
+  const infoH = 62;
   doc.save();
   doc.roundedRect(cardX + cardPad, y, cardW - cardPad * 2, infoH, 14).fill(THEME.bgSoft);
   doc.restore();
@@ -213,18 +237,59 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
   const infoX = cardX + cardPad + 12;
   const infoW = cardW - cardPad * 2 - 24;
 
-  doc.fillColor(THEME.muted).fontSize(8).text('BUSINESS', infoX, y + 10);
+  doc.font(regFont).fillColor(THEME.muted).fontSize(8).text('BUSINESS', infoX, y + 10);
   doc.fillColor(THEME.text).fontSize(11).text(ellipsize(doc, businessName, infoW), infoX, y + 22, { width: infoW });
 
-  doc.fillColor(THEME.muted).fontSize(8).text('DATE', infoX, y + 38);
-  doc.fillColor(THEME.text).fontSize(10).text(receiptDate, infoX + 36, y + 36);
+  doc.fillColor(THEME.muted).fontSize(8).text('DATE', infoX, y + 40);
+  doc.fillColor(THEME.text).fontSize(10).text(receiptDate, infoX + 36, y + 38);
 
-  doc.fillColor(THEME.muted).fontSize(8).text('SALE ID', infoX, y + 38, { width: infoW, align: 'right' });
+  doc.fillColor(THEME.muted).fontSize(8).text('RECEIPT NO', infoX, y + 40, { width: infoW, align: 'right' });
+  doc.font(boldFont).fillColor(THEME.text).fontSize(10).text(receiptNo, infoX, y + 38, { width: infoW, align: 'right' });
 
-  const paddedId = String(saleId).replace(/[^a-zA-Z0-9]/g, '').slice(-10).padStart(10, '0');
-  doc.fillColor(THEME.text).fontSize(10).text(paddedId, infoX, y + 36, { width: infoW, align: 'right' });
+  y += infoH + 10;
 
-  y += infoH + 16;
+  // -------------------------------------------------
+  // ✅ INTERNAL TX ID BLOCK (FULL ID, WRAPPED, NO OVERLAP)
+  // -------------------------------------------------
+  const fullId = String(saleId || tx?._id || '');
+  const wrappedId = wrapIdLines(fullId, 28);
+
+  doc.save();
+  doc.roundedRect(cardX + cardPad, y, cardW - cardPad * 2, 14, 10).fill('#EEF2FF'); // subtle tint
+  doc.restore();
+
+  doc.font(regFont).fillColor(THEME.muted).fontSize(8).text('TRANSACTION ID (COPY)', cardX + cardPad + 12, y + 4);
+
+  y += 18;
+
+  // Height depends on wrapping; calculate and draw background box
+  const idBoxX = cardX + cardPad;
+  const idBoxW = cardW - cardPad * 2;
+  const idTextX = idBoxX + 12;
+  const idTextW = idBoxW - 24;
+
+  doc.font('Courier').fontSize(8);
+  const idTextH = doc.heightOfString(wrappedId, { width: idTextW, lineGap: 2 });
+
+  const idBoxH = Math.max(24, idTextH + 14);
+
+  doc.save();
+  doc.roundedRect(idBoxX, y, idBoxW, idBoxH, 12).fill(THEME.bgSoft);
+  doc.restore();
+
+  doc
+    .fillColor(THEME.text)
+    .font('Courier')
+    .fontSize(8)
+    .text(wrappedId, idTextX, y + 8, {
+      width: idTextW,
+      lineGap: 2, // ✅ prevents “sitting on top of each other”
+    });
+
+  y += idBoxH + 14;
+
+  // Reset font back
+  doc.font(regFont).fillColor(THEME.text);
 
   // -------------------------------------------------
   // ✅ ITEMS HEADER
@@ -316,7 +381,7 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
   y += totalBoxH + 16;
 
   // Footer
-  doc.fillColor(THEME.muted).fontSize(9).text(
+  doc.font(regFont).fillColor(THEME.muted).fontSize(9).text(
     'Thank you for your purchase.',
     cardX + cardPad,
     y,
@@ -329,36 +394,6 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
     y + 14,
     { width: cardW - cardPad * 2, align: 'center' }
   );
-}
-
-/**
- * ✅ NEW: Buffer generator for WhatsApp
- * You can call this from your button handler and send the PDF.
- */
-function docToBufferWithRender(render: (doc: PdfDoc) => void): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    const stream = new PassThrough();
-    const chunks: Buffer[] = [];
-
-    stream.on('data', (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
-    stream.on('end', () => resolve(Buffer.concat(chunks)));
-    stream.on('error', reject);
-
-    const doc = new PDFDocument({
-      size: 'A4',
-      margins: { top: 40, bottom: 40, left: 40, right: 40 },
-    }) as unknown as PdfDoc;
-
-    // ✅ MUST pipe before render
-    doc.pipe(stream);
-
-    try {
-      render(doc);
-      doc.end();
-    } catch (e) {
-      reject(e);
-    }
-  });
 }
 
 /**
@@ -384,22 +419,23 @@ export const generateSaleReceiptPdfBuffer = async (userId: string, saleId: strin
   const currencyCode = String(user?.currencyCode || COUNTRY_CURRENCY_CODE[userCountry] || 'NGN').toUpperCase();
   const locale = String(user?.locale || 'en-NG');
 
-  const receiptDate = fmtDDMMYYYY_HHMM(new Date(tx.timestamp || tx.createdAt || Date.now()), offsetMinutes);
+  const when = new Date(tx.timestamp || tx.createdAt || Date.now());
+  const receiptDate = fmtDDMMYYYY_HHMM(when, offsetMinutes);
+  const receiptNo = makeReceiptNo(saleId, when, offsetMinutes);
 
   const doc = new PDFDocument({
     size: 'A4',
     margins: { top: 40, bottom: 40, left: 40, right: 40 },
-    autoFirstPage: false,     // ✅ IMPORTANT (prevents blank page)
+    autoFirstPage: false, // ✅ IMPORTANT (prevents blank page)
     bufferPages: true,
   }) as unknown as PdfDoc;
 
-  const { regFont, hasNoto } = registerFonts(doc);
+  const { regFont, boldFont, hasNoto } = registerFonts(doc);
   doc.font(regFont);
 
   // ✅ Pipe BEFORE rendering
   const stream = new PassThrough();
   const chunks: Buffer[] = [];
-
   doc.pipe(stream);
 
   const done = new Promise<Buffer>((resolve, reject) => {
@@ -408,14 +444,16 @@ export const generateSaleReceiptPdfBuffer = async (userId: string, saleId: strin
     stream.on('error', reject);
   });
 
-  // Render (renderReceiptPdf still uses doc.addPage() inside)
   renderReceiptPdf(doc, {
     saleId,
+    receiptNo,
     businessName,
     receiptDate,
     currencyCode,
     locale,
     hasSymbolFont: hasNoto,
+    regFont,
+    boldFont,
     tx,
   });
 
@@ -426,8 +464,6 @@ export const generateSaleReceiptPdfBuffer = async (userId: string, saleId: strin
 
   return { buffer, filename, mimeType: 'application/pdf' };
 };
-
-
 
 /**
  * ✅ EXISTING: Web dashboard download endpoint
@@ -459,7 +495,9 @@ export const generateSaleReceiptPdf = async (req: Request | any, res: Response) 
     const currencyCode = String(user?.currencyCode || COUNTRY_CURRENCY_CODE[userCountry] || 'NGN').toUpperCase();
     const locale = String(user?.locale || 'en-NG');
 
-    const receiptDate = fmtDDMMYYYY_HHMM(new Date(tx.timestamp || tx.createdAt || Date.now()), offsetMinutes);
+    const when = new Date(tx.timestamp || tx.createdAt || Date.now());
+    const receiptDate = fmtDDMMYYYY_HHMM(when, offsetMinutes);
+    const receiptNo = makeReceiptNo(saleId, when, offsetMinutes);
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename=Receipt_${saleId}.pdf`);
@@ -467,22 +505,25 @@ export const generateSaleReceiptPdf = async (req: Request | any, res: Response) 
     const doc = new PDFDocument({
       size: 'A4',
       margins: { top: 40, bottom: 40, left: 40, right: 40 },
-      autoFirstPage: false,     // ✅ IMPORTANT (prevents blank page)
+      autoFirstPage: false, // ✅ IMPORTANT (prevents blank page)
       bufferPages: true,
     }) as unknown as PdfDoc;
 
-    const { regFont, hasNoto } = registerFonts(doc);
+    const { regFont, boldFont, hasNoto } = registerFonts(doc);
     doc.font(regFont);
 
     doc.pipe(res);
 
     renderReceiptPdf(doc, {
       saleId,
+      receiptNo,
       businessName,
       receiptDate,
       currencyCode,
       locale,
       hasSymbolFont: hasNoto,
+      regFont,
+      boldFont,
       tx,
     });
 
@@ -492,4 +533,3 @@ export const generateSaleReceiptPdf = async (req: Request | any, res: Response) 
     if (!res.headersSent) res.status(500).json({ error: 'Could not generate receipt' });
   }
 };
-
