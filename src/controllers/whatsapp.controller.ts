@@ -445,7 +445,6 @@ async function markSaleCredit(ownerId: any, txId: string) {
 // =====================================================
 // Attach "credit John" to latest credit sale missing name
 // =====================================================
-async function attachCreditNameToLatest(shopUserId: any, rawName: string) {
   const name = String(rawName || '').trim();
   if (!name) return { ok: false, msg: 'Reply like: credit John' };
 

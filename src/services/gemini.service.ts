@@ -301,10 +301,96 @@ function fallbackParse(message: string): ParsedResult | null {
 
   if (/\b(help|menu|commands|guide|options)\b/i.test(m)) {
     return safeParsedResult({
-      intent: 'HELP',
-      reply_text:
-        '🤖 *TallyPadi Menu*\n1. Sales: "Sold 2 rice 5k"\n2. Stock: "Add 10 sugar"\n3. Reports: "Sales today"',
-    });
+  intent: 'HELP',
+  reply_text:
+    '🤖 *TallyPadi Help Menu*\n' +
+    '\n' +
+    '✅ *1) Record Sales*\n' +
+    '• "Sold 2 rice for 5000"\n' +
+    '• "Sold 3 bags of cement 45k"\n' +
+    '• "Customer bought 1 milk 1200"\n' +
+    '• "Sold 2 rice 2500 each"\n' +
+    '• "Sold 2 rice 2500 each, 1 beans 3000"\n' +
+    '\n' +
+    '💳 *2) Credit (Owe / Pay Later)*\n' +
+    '• "Sold 2 rice to Emeka on credit"\n' +
+    '• "Emeka owes me 15000 for rice"\n' +
+    '• "Paid: Emeka paid 5000"\n' +
+    '• "Emeka settled 15000"\n' +
+    'Tip: After a sale, you can tap the buttons: *Undo / Receipt / Credit*\n' +
+    '\n' +
+    '📦 *3) Restock (Add Stock)*\n' +
+    '• "Restock 10 rice"\n' +
+    '• "I bought 2 cartons of milk"\n' +
+    '• "Supplier brought 5 bags of sugar"\n' +
+    '• "Restock 10 indomie at 150 each"\n' +
+    '\n' +
+    '🧮 *4) Set Stock (Exact Quantity)*\n' +
+    '• "Set rice stock to 20"\n' +
+    '• "Rice remaining is 12"\n' +
+    '• "Update stock bread 0"\n' +
+    '\n' +
+    '🗑️ *5) Delete Stock Item (Owner only)*\n' +
+    '• "Delete rice"\n' +
+    '• "Remove bread"\n' +
+    '• "Clear indomie from stock"\n' +
+    '\n' +
+    '💰 *6) Set Price (Define Price)*\n' +
+    '• "Rice price is 1200"\n' +
+    '• "Set bread price to 800"\n' +
+    '• "Change indomie price to 250"\n' +
+    '\n' +
+    '🔎 *7) Check Price (Price Check)*\n' +
+    '• "Price of rice"\n' +
+    '• "How much is bread?"\n' +
+    '• "Cost of indomie"\n' +
+    '\n' +
+    '📊 *8) Reports*\n' +
+    '• "Report" (today)\n' +
+    '• "Sales today"\n' +
+    '• "Sales yesterday"\n' +
+    '• "This week report"\n' +
+    '• "Last week report"\n' +
+    '• "This month report"\n' +
+    '• "From 2025-12-01 to 2025-12-10 report"\n' +
+    '• "Recent sales" / "Last 10 sales"\n' +
+    '\n' +
+    '📦 *9) Stock Report*\n' +
+    '• "Stock report"\n' +
+    '• "Items left"\n' +
+    '• "Stock remaining"\n' +
+    '• "Stock report for rice"\n' +
+    '\n' +
+    '📄 *10) PDF / Download (TYCOON)*\n' +
+    '• "Download report"\n' +
+    '• "Export sales report"\n' +
+    '• "Print report"\n' +
+    '\n' +
+    '↩️ *11) Undo*\n' +
+    '• Tap *Undo* after a sale\n' +
+    '• "Undo last sale"\n' +
+    '\n' +
+    '👥 *12) Staff (Owner only)*\n' +
+    '• "Add staff 08012345678"\n' +
+    '\n' +
+    '⚙️ *13) Settings (Owner only)*\n' +
+    '• "Change language to English"\n' +
+    '• "Change language to Pidgin"\n' +
+    '• "Set closing time to 20:00"\n' +
+    '• "Turn daily summary on"\n' +
+    '• "Turn daily summary off"\n' +
+    '• "Enable PDF reports"\n' +
+    '• "Disable PDF reports"\n' +
+    '• "Set my timezone to +1"\n' +
+    '\n' +
+    '🧾 *Tips*\n' +
+    '• You can type: 5k = 5000, 2m = 2,000,000\n' +
+    '• If you don’t type a price, I’ll use your saved last price (if available)\n' +
+    '• If I ask “Which item did you mean?”, reply with the full item name\n' +
+    '\n' +
+    'Type any example above to get started ✅',
+});
+
   }
 
   if (/\b(undo|cancel last|mistake|delete last)\b/i.test(m)) {
