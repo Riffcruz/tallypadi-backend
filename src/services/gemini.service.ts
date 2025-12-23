@@ -27,6 +27,7 @@ export type ParsedIntent =
   | 'UNDO_LAST_SALE'
   | 'REPORT_DEBTS'
   | 'REPORT_RECENT'
+  | 'SHOW_SETTINGS'
   | 'HELP'
   | 'UNKNOWN';
 
@@ -213,6 +214,7 @@ function safeParsedResult(p: any): ParsedResult {
     'REPORT_RECENT',
     'HELP',
     'UNKNOWN',
+    'SHOW_SETTINGS'
   ];
 
   const intent: ParsedIntent = allowedIntents.includes(p?.intent) ? p.intent : 'UNKNOWN';
@@ -509,6 +511,7 @@ A. QUANTITY & UNIT EXTRACTION (HIGHLY FLEXIBLE ORDER)
 - ✅ CRITICAL: Always extract quantity as a NUMBER (e.g., "two" → 2, "half dozen" → 6).
 - Default quantity: 1 if not specified.
 
+
 B. ITEM NAME EXTRACTION & NORMALIZATION (ROBUST CLEANING)
 - Extract the core generic product name; aggressively remove noise.
 - Normalize plurals to singular where reasonable.
@@ -690,6 +693,8 @@ These commands MUST map to intent SETTINGS (or CHANGE_LANGUAGE) and MUST output 
 - "pdfReportsEnabled" (value: boolean true/false)
 - "utcOffsetMinutes" (value: number minutes, e.g. +1 hour -> 60, -2 -> -120)
 - "language" (value: string like "English", "Pidgin", "French", "Spanish")
+- If user says: “my settings”, “show settings”, “settings status”, “what are my settings”, “current settings”
+→ intent = SHOW_SETTINGS
 
 A) closingTime
 Triggers:

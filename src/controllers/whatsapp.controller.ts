@@ -1407,6 +1407,34 @@ if (btn?.txId && btn?.action) {
         break;
       }
 
+      case 'SHOW_SETTINGS': {
+  // shopUser is owner||actor already in your code ✅
+  const s = shopUser.settings || {};
+  const lang = s.language || 'English';
+  const closing = s.closingTime || '20:00';
+  const daily = s.dailySummaryEnabled === true ? 'ON ✅' : 'OFF ❌';
+  const pdf = s.pdfReportsEnabled === true ? 'ON ✅' : 'OFF ❌';
+
+  const offMin = Number(s.utcOffsetMinutes ?? 60);
+  const sign = offMin >= 0 ? '+' : '-';
+  const abs = Math.abs(offMin);
+  const hh = String(Math.floor(abs / 60)).padStart(2, '0');
+  const mm = String(abs % 60).padStart(2, '0');
+  const tz = `UTC${sign}${hh}:${mm}`;
+
+  const msg =
+    `⚙️ *Your Current Settings*\n\n` +
+    `• Language: *${lang}*\n` +
+    `• Closing Time: *${closing}*\n` +
+    `• Daily Summary: *${daily}*\n` +
+    `• PDF Reports: *${pdf}*\n` +
+    `• Timezone: *${tz}*`;
+
+  await queueOutboundMessage(from, msg);
+  break;
+}
+
+
       case 'HELP':
       case 'UNKNOWN':
       default: {
