@@ -10,7 +10,7 @@ export const connection = new IORedis(process.env.REDIS_URL || 'redis://127.0.0.
 });
 
 // ============================================================
-// ✅ OUTBOUND: FAST (replies + interactive buttons)
+// ✅ OUTBOUND: FAST (replies + interactive buttons + receipt pdf)
 // Queue name: outbound-replies
 // ============================================================
 export const replyQueue = new Queue('outbound-replies', {
@@ -55,43 +55,37 @@ export const messageQueue = new Queue('incoming-messages', {
 // ✅ HELPERS (Controller uses these)
 // ============================================================
 
+export type OutboundButton = { id: string; title: string };
+
+function safeJobId(id: string) {
+  // BullMQ custom id: keep it clean + short
+  return String(id || '')
+    .replace(/[:\s]/g, '_')        // replace colon + spaces
+    .replace(/[^\w.-]/g, '_')      // keep only [a-zA-Z0-9_ . -]
+    .slice(0, 240);
+}
+
 // ✅ Text replies (interactive/fast)
 export const queueOutboundMessage = async (phoneNumber: string, message: string, jobId?: string) => {
   const finalJobId = safeJobId(jobId || `reply_${phoneNumber}_${Date.now()}`);
   await replyQueue.add('send-text', { phoneNumber, message }, { jobId: finalJobId });
 };
 
-
 // ✅ Bulk/summaries/pdf links (slower)
 export const queueOutboundBulk = async (phoneNumber: string, message: string, jobId?: string) => {
-  await bulkQueue.add(
-    'send-text',
-    { phoneNumber, message },
-    { jobId: jobId || `bulk:${phoneNumber}:${Date.now()}` }
-  );
+  const finalJobId = safeJobId(jobId || `bulk_${phoneNumber}_${Date.now()}`);
+  await bulkQueue.add('send-text', { phoneNumber, message }, { jobId: finalJobId });
 };
 
 // ============================================================
-// ✅ NEW: Interactive Buttons (QUEUED)
+// ✅ Interactive Buttons (QUEUED)
 // Worker must handle job.name === 'send-buttons'
 // Payload: { phoneNumber, bodyText, buttons }
 // ============================================================
-export type OutboundButton = { id: string; title: string };
-
-// src/services/queue.service.ts
-
-function safeJobId(id: string) {
-  // BullMQ custom id cannot contain ":" (and avoid other weird chars too)
-  return String(id || '')
-    .replace(/[:\s]/g, '_')        // replace colon + spaces
-    .replace(/[^\w.-]/g, '_')      // keep only [a-zA-Z0-9_ . -]
-    .slice(0, 240);                // keep it short
-}
-
 export const queueOutboundButtons = async (
   phoneNumber: string,
   bodyText: string,
-  buttons: { id: string; title: string }[],
+  buttons: OutboundButton[],
   jobId?: string
 ) => {
   const safeButtons = (buttons || [])
@@ -111,10 +105,41 @@ export const queueOutboundButtons = async (
   );
 };
 
-export const queueSaleResponse = async (phoneNumber: string, message: string, bodyText: string, buttons: any[], jobId?: string) => {
+// ============================================================
+// ✅ Sale response (text + buttons)
+// Worker must handle job.name === 'send-sale-response'
+// ============================================================
+export const queueSaleResponse = async (
+  phoneNumber: string,
+  message: string,
+  bodyText: string,
+  buttons: OutboundButton[],
+  jobId?: string
+) => {
+  const finalJobId = safeJobId(jobId || `sale_${phoneNumber}_${Date.now()}`);
+
   await replyQueue.add(
     'send-sale-response',
     { phoneNumber, message, bodyText, buttons },
-    { jobId: jobId || `sale_${phoneNumber}_${Date.now()}` }
+    { jobId: finalJobId }
   );
 };
+
+// ============================================================
+// ✅ Receipt PDF (GENERATE + SEND DOCUMENT)
+// Worker must handle job.name === 'send-sale-receipt'
+// ============================================================
+export async function queueSaleReceipt(
+  phoneNumber: string,
+  userId: string,
+  saleId: string,
+  jobId?: string
+) {
+  const finalJobId = safeJobId(jobId || `receipt_${phoneNumber}_${saleId}_${Date.now()}`);
+
+  await replyQueue.add(
+    'send-sale-receipt',
+    { phoneNumber, userId, saleId },
+    { jobId: finalJobId }
+  );
+}

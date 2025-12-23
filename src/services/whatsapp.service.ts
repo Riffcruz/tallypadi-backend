@@ -1,5 +1,6 @@
 // src/services/whatsapp.service.ts
 import axios from 'axios';
+import FormData from 'form-data';
 import { env } from '../config/env';
 
 /**
@@ -14,6 +15,11 @@ function messagesUrl() {
   return `https://graph.facebook.com/${WHATSAPP_API_VERSION}/${env.whatsappPhoneNumberId}/messages`;
 }
 
+// ✅ Media upload endpoint
+function mediaUrl() {
+  return `https://graph.facebook.com/${WHATSAPP_API_VERSION}/${env.whatsappPhoneNumberId}/media`;
+}
+
 function authHeaders() {
   return {
     Authorization: `Bearer ${env.whatsappToken}`,
@@ -25,6 +31,14 @@ function safeText(s: any, max = 4096) {
   return String(s ?? '')
     .replace(/\u0000/g, '')
     .slice(0, max);
+}
+
+function safeFileName(name: any, fallback = 'document.pdf') {
+  const s = safeText(name, 200)
+    .replace(/[\\/:*?"<>|]+/g, '_')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return s || fallback;
 }
 
 // ============================================================
@@ -46,7 +60,6 @@ export async function sendWhatsAppText(to: string, message: string) {
 
 // ============================================================
 // ✅ SEND: INTERACTIVE BUTTONS (max 3)
-// Job name in queue: 'send-buttons'
 // ============================================================
 export async function sendWhatsAppButtons(
   to: string,
@@ -56,8 +69,8 @@ export async function sendWhatsAppButtons(
   const safeButtons = (buttons || [])
     .slice(0, 3)
     .map((b) => ({
-      id: safeText(b?.id, 256), // safe
-      title: safeText(b?.title, 20), // WhatsApp UI is strict
+      id: safeText(b?.id, 256),
+      title: safeText(b?.title, 20),
     }))
     .filter((b) => b.id && b.title);
 
@@ -84,8 +97,7 @@ export async function sendWhatsAppButtons(
 }
 
 // ============================================================
-// ✅ SEND: MEDIA (image/audio/doc) by MEDIA ID (already uploaded to WhatsApp)
-// Useful if later you queue media responses.
+// ✅ SEND: MEDIA (image/audio/document/video) by MEDIA ID
 // ============================================================
 export async function sendWhatsAppMediaById(opts: {
   to: string;
@@ -100,9 +112,7 @@ export async function sendWhatsAppMediaById(opts: {
     messaging_product: 'whatsapp',
     to,
     type,
-    [type]: {
-      id: mediaId,
-    },
+    [type]: { id: mediaId },
   };
 
   if (caption && (type === 'image' || type === 'document' || type === 'video')) {
@@ -120,7 +130,7 @@ export async function sendWhatsAppMediaById(opts: {
 }
 
 // ============================================================
-// ✅ OPTIONAL: MARK AS READ (useful if you want worker to mark messages read)
+// ✅ OPTIONAL: MARK AS READ
 // ============================================================
 export async function markWhatsAppMessageRead(messageId: string) {
   if (!messageId) return;
@@ -141,8 +151,6 @@ export async function markWhatsAppMessageRead(messageId: string) {
 // ✅ OPTIONAL: HEALTH CHECK
 // ============================================================
 export async function whatsappHealthCheck() {
-  // A lightweight call to validate token & phone ID.
-  // Meta doesn't have a perfect "ping", so we just return config sanity.
   return {
     apiVersion: WHATSAPP_API_VERSION,
     phoneNumberId: env.whatsappPhoneNumberId,
@@ -150,12 +158,14 @@ export async function whatsappHealthCheck() {
   };
 }
 
-
+// ============================================================
+// ✅ SEND: TEMPLATE
+// ============================================================
 export async function sendWhatsAppTemplate(opts: {
   to: string;
-  name: string; // template name in Meta dashboard
-  languageCode?: string; // e.g. "en_US"
-  components?: any[]; // template components (body params, buttons, etc.)
+  name: string;
+  languageCode?: string;
+  components?: any[];
 }) {
   const { to, name, languageCode = 'en_US', components = [] } = opts;
 
@@ -169,12 +179,71 @@ export async function sendWhatsAppTemplate(opts: {
     },
   };
 
-  if (components?.length) {
-    payload.template.components = components;
-  }
+  if (components?.length) payload.template.components = components;
 
   await axios.post(messagesUrl(), payload, {
     headers: authHeaders(),
     timeout: 20_000,
   });
+}
+
+// ============================================================
+// ✅ UPLOAD: MEDIA FROM BUFFER -> returns mediaId
+// Use this for PDF receipts, images, etc.
+// ============================================================
+export async function uploadWhatsAppMediaBuffer(opts: {
+  buffer: Buffer;
+  mimeType: string; // e.g. application/pdf
+  filename: string;
+}) {
+  const safeName = safeFileName(opts.filename, 'document.pdf');
+
+  const form = new FormData();
+  form.append('messaging_product', 'whatsapp');
+  form.append('file', opts.buffer, { filename: safeName, contentType: opts.mimeType });
+
+  const res = await axios.post(mediaUrl(), form, {
+    headers: {
+      Authorization: `Bearer ${env.whatsappToken}`,
+      ...form.getHeaders(),
+    },
+    maxBodyLength: Infinity,
+    maxContentLength: Infinity,
+    timeout: 60_000,
+  });
+
+  const mediaId = res?.data?.id;
+  if (!mediaId) throw new Error('WhatsApp media upload failed (no media id).');
+  return String(mediaId);
+}
+
+// ============================================================
+// ✅ SEND: PDF DOCUMENT FROM BUFFER (receipt)
+// This is the ONE function your worker should call.
+// ============================================================
+export async function sendWhatsAppDocumentBuffer(opts: {
+  to: string;
+  buffer: Buffer;
+  filename: string;
+  caption?: string;
+  mimeType?: string; // default application/pdf
+}) {
+  const mimeType = opts.mimeType || 'application/pdf';
+  const safeName = safeFileName(opts.filename, 'document.pdf');
+
+  const mediaId = await uploadWhatsAppMediaBuffer({
+    buffer: opts.buffer,
+    mimeType,
+    filename: safeName,
+  });
+
+  await sendWhatsAppMediaById({
+    to: opts.to,
+    mediaId,
+    type: 'document',
+    filename: safeName,
+    caption: opts.caption,
+  });
+
+  return { mediaId };
 }

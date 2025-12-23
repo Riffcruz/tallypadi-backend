@@ -521,6 +521,8 @@ Broad matching:
 - Reports: report, summary, history, statement, transactions, recent
 - Download: pdf, export, download, print report
 - Undo: undo, cancel last, reverse last
+- CLOSE_BOOK: close day, close shop, end day, today's report
+
 
 *** 6. JSON OUTPUT RULES ***
 - ALWAYS output strict valid JSON only.

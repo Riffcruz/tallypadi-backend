@@ -1,15 +1,8 @@
-// src/services/queue.worker.ts (or wherever this worker file lives)
+// src/services/queue.worker.ts
 import { Worker } from 'bullmq';
-import { connection,  } from './queue.service';
-import { sendWhatsAppText, sendWhatsAppButtons } from './whatsapp.service';
-
-// ============================================================
-// WORKER: OUTBOUND REPLIES (FAST / interactive)
-// Handles:
-//  - job.name === 'send-text'
-//  - job.name === 'send-buttons' ✅
-// ============================================================
-
+import { connection } from './queue.service';
+import { sendWhatsAppText, sendWhatsAppButtons, sendWhatsAppDocumentBuffer } from './whatsapp.service';
+import { generateSaleReceiptPdfBuffer } from '../controllers/receipt.controller';
 
 export const replyWorker = new Worker(
   'outbound-replies',
@@ -24,21 +17,38 @@ export const replyWorker = new Worker(
 
     if (job.name === 'send-sale-response') {
       const { phoneNumber, message, bodyText, buttons } = job.data;
-      await sendWhatsAppText(phoneNumber, message);         // ✅ first
+      await sendWhatsAppText(phoneNumber, message); // ✅ first
       await sendWhatsAppButtons(phoneNumber, bodyText, buttons); // ✅ then
       return;
+    }
+
+    // ✅ NEW: Send receipt PDF to WhatsApp
+    if (job.name === 'send-sale-receipt') {
+  const { phoneNumber, userId, saleId } = job.data as {
+    phoneNumber: string;
+    userId: string;
+    saleId: string;
+  };
+
+  const { buffer, filename, mimeType } = await generateSaleReceiptPdfBuffer(userId, saleId);
+
+  await sendWhatsAppDocumentBuffer({
+    to: phoneNumber,
+    buffer,
+    filename,
+    mimeType, // optional (defaults to application/pdf if you coded it like we did)
+    caption: '🧾 Receipt PDF (open it → Print).',
+  });
+
+  return;
 }
 
-
-    
 
     if (job.name === 'send-buttons') {
       const { phoneNumber, bodyText, buttons } = job.data;
       await sendWhatsAppButtons(phoneNumber, bodyText, buttons);
       return;
     }
-    console.log('📌 Reply job:', job.name, job.data?.phoneNumber);
-
 
     console.log(`⚠️ Unknown reply job name: ${job.name}`);
   },
@@ -50,10 +60,10 @@ export const replyWorker = new Worker(
   }
 );
 
+replyWorker.on('completed', (job) =>
+  console.log(`✅ Reply sent: ${job.name} -> ${job.data.phoneNumber}`)
+);
 
-
-
-replyWorker.on('completed', (job) => console.log(`✅ Reply sent: ${job.name} -> ${job.data.phoneNumber}`));
 replyWorker.on('failed', (job, err) =>
   console.error(`❌ Reply failed [${job?.name}] [Attempt ${job?.attemptsMade ?? 'N/A'}]: ${err.message}`)
 );

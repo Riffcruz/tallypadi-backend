@@ -17,7 +17,11 @@ import {
   queueOutboundMessage,
   queueOutboundButtons, // ✅ NEW: queued buttons helper
 queueSaleResponse,
+queueSaleReceipt
+
+
 } from '../services/queue.service';
+import { sendWhatsAppDocumentBuffer } from '../services/whatsapp.service';
 
 
 import { undoLastSale } from '../services/undo.service';
@@ -791,7 +795,7 @@ export const handleMessageLogic = async (
 
         await queueOutboundMessage(
           from,
-          `✅ *Setup Complete!*\n\nTry:\n• "Sold 2 rice for ${symbol}5000"\n• "Restock 10 rice at ${symbol}2000"\n• "How much did I make today?"`
+          `✅ *Setup Complete!*\n\nTry:\n• "Sold 2 rice for ${symbol}5000"\n• "Restock 10 rice at ${symbol}2000"\n• "How much did I make today?"\n• "Who owes me money?"\n\nYou can now start recording sales and managing your shop on WhatsApp! 🎉`
         );
         return;
       }
@@ -823,33 +827,40 @@ export const handleMessageLogic = async (
     // =====================================================
     // ✅ BUTTON fast path
     // =====================================================
-    const btn = parseBtnText(rawText);
-    if (btn?.txId && btn?.action) {
-      if (btn.action === 'RECEIPT') {
-        const tx = await Transaction.findOne({ _id: btn.txId, user: shopId }).lean();
-        if (!tx) {
-          await queueOutboundMessage(from, 'Sale not found for receipt.');
-          return;
-        }
-        await queueOutboundMessage(from, buildReceiptText(tx, symbol, locale, shopUser.businessName, offsetMinutes));
-        return;
-      }
+   // ✅ BUTTON fast path
+const btn = parseBtnText(rawText);
 
-      if (btn.action === 'CREDIT') {
-        const r = await markSaleCredit(shopId, btn.txId);
-        await queueOutboundMessage(from, r.msg);
-        return;
-      }
+if (btn?.txId && btn?.action) {
+  if (btn.action === 'RECEIPT') {
+    await queueOutboundMessage(from, '🧾 Generating receipt PDF…');
 
-      if (btn.action === 'UNDO') {
-        const r = await undoSaleById(shopId, btn.txId, messageId);
-        await queueOutboundMessage(from, r.message);
-        return;
-      }
+    // shopId is OWNER id (even if staff is acting) ✅
+    await queueSaleReceipt(
+      from,                    // send to whoever clicked
+      String(shopId),          // owner/user id for fetching tx
+      String(btn.txId),        // sale id
+      `receipt_${btn.txId}_${messageId}`
+    );
 
-      await queueOutboundMessage(from, 'Unknown action.');
-      return;
-    }
+    return;
+  }
+
+  if (btn.action === 'CREDIT') {
+    const r = await markSaleCredit(shopId, btn.txId);
+    await queueOutboundMessage(from, r.msg);
+    return;
+  }
+
+  if (btn.action === 'UNDO') {
+    const r = await undoSaleById(shopId, btn.txId, messageId);
+    await queueOutboundMessage(from, r.message);
+    return;
+  }
+
+  await queueOutboundMessage(from, 'Unknown action.');
+  return;
+}
+
 
     // =====================================================
     // ✅ quick command: "credit John"
