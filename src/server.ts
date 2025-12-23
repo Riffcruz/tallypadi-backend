@@ -316,9 +316,15 @@ mongoose
   .then(() => {
     console.log('✅ MongoDB Connected (Secured)');
     startScheduler();
-    app.listen(env.port, () => console.log(`🚀 Server running on port ${env.port}`));
-    console.log('✅ Scheduler initialized at', new Date().toISOString());
 
+    const PORT = Number(env.port ?? process.env.PORT ?? 5000);
+    if (!Number.isFinite(PORT)) throw new Error(`Invalid PORT: ${env.port}`);
+
+    app.listen(PORT, '127.0.0.1', () => {
+      console.log(`🚀 Server running on http://127.0.0.1:${PORT}`);
+    });
+
+    console.log('✅ Scheduler initialized at', new Date().toISOString());
   })
   .catch((err) => console.error('❌ DB Connection Error:', err));
 
