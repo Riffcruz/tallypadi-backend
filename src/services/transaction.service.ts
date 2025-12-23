@@ -121,7 +121,8 @@ async function findExistingItem(userId: Types.ObjectId, rawName: string) {
 export const processTransaction = async (
   userId: Types.ObjectId,
   parsed: ParsedResult,
-  messageId: string
+  messageId: string,
+  actor?: any // ✅ NEW: pass actor from message handler so we can enforce OWNER-only actions
 ) => {
   // ✅ 0) CLAIM LOCK FIRST (prevents double inventory update)
   try {
@@ -144,6 +145,160 @@ export const processTransaction = async (
     const offset = user?.settings?.utcOffsetMinutes ?? 60;
     const todayString = toISODateForOffset(offset);
     const now = new Date();
+
+    // ✅ Who sent this message (OWNER vs STAFF)
+    const actorRole = String(actor?.role || '').toUpperCase(); // 'OWNER' | 'STAFF' | ''
+    const isActorOwner = actorRole === 'OWNER'; // only reliable if you pass actor in
+
+    // =========================================================
+    // ✅ PRICE CHECK (read-only)
+    // =========================================================
+    if (parsed.intent === 'PRICE_CHECK') {
+      const itemName = String(parsed.items?.[0]?.name || '').trim();
+      if (!itemName) {
+        parsed.reply_text = 'Please tell me the item name. Example: *price of rice*';
+        await ProcessedMessage.updateOne({ user: userId, messageId }, { $set: { status: 'DONE' } });
+        return;
+      }
+
+      const cleanName = normalizeItemName(itemName);
+      const resolved = await findExistingItem(userId, cleanName);
+
+      if (resolved.status === 'ambiguous') {
+        const options = (resolved.options || []).slice(0, 6).map((n, i) => `${i + 1}) ${n}`).join('\n');
+        parsed.reply_text =
+          `I found multiple items that match *"${cleanName}"*.\n` +
+          `Which one did you mean?\n\n${options}\n\n` +
+          `Reply with the full item name.`;
+
+        await ProcessedMessage.updateOne({ user: userId, messageId }, { $set: { status: 'DONE' } });
+        return;
+      }
+
+      const inv = resolved.status === 'found' ? (resolved as any).inv : null;
+      if (!inv) {
+        parsed.reply_text =
+          `I couldn't find *${itemName}* in your inventory.\n` +
+          `To set a price, type: *${itemName} price is 1000*`;
+        await ProcessedMessage.updateOne({ user: userId, messageId }, { $set: { status: 'DONE' } });
+        return;
+      }
+
+      const price = Number(inv.lastUnitPrice || 0);
+      const qty = Number(inv.quantity || 0);
+
+      parsed.reply_text =
+        price > 0
+          ? `💰 *${inv.name}* price is *${price.toLocaleString()}*.\n📦 Stock: *${qty}*`
+          : `⚠️ No saved price for *${inv.name}* yet.\nSet it like: *${inv.name} price is 1000*`;
+
+      await ProcessedMessage.updateOne({ user: userId, messageId }, { $set: { status: 'DONE' } });
+      return;
+    }
+
+    // =========================================================
+    // ✅ DEFINE PRICE (update lastUnitPrice, do NOT touch stock)
+    // =========================================================
+    if (parsed.intent === 'DEFINE_PRICE') {
+      const itemName = String(parsed.items?.[0]?.name || '').trim();
+      const unitPrice = toNumber(parsed.items?.[0]?.unit_price);
+
+      if (!itemName || unitPrice <= 0) {
+        parsed.reply_text = 'To set price, type like: *rice price is 1200*';
+        await ProcessedMessage.updateOne({ user: userId, messageId }, { $set: { status: 'DONE' } });
+        return;
+      }
+
+      const cleanName = normalizeItemName(itemName);
+      const resolved = await findExistingItem(userId, cleanName);
+
+      if (resolved.status === 'ambiguous') {
+        const options = (resolved.options || []).slice(0, 6).map((n, i) => `${i + 1}) ${n}`).join('\n');
+        parsed.reply_text =
+          `I found multiple items that match *"${cleanName}"*.\n` +
+          `Which one did you mean?\n\n${options}\n\n` +
+          `Reply with the full item name.`;
+
+        await ProcessedMessage.updateOne({ user: userId, messageId }, { $set: { status: 'DONE' } });
+        return;
+      }
+
+      let inv = resolved.status === 'found' ? (resolved as any).inv : null;
+
+      // If not found, create item (price-first workflow)
+      if (!inv) {
+        const rootName = (resolved as any).rootName || rootItemName(cleanName) || cleanName;
+        if (!rootName) {
+          parsed.reply_text = 'Please tell me the item name clearly. Example: *rice price is 1200*';
+          await ProcessedMessage.updateOne({ user: userId, messageId }, { $set: { status: 'DONE' } });
+          return;
+        }
+
+        inv = new Inventory({
+          user: userId,
+          name: rootName,
+          quantity: 0,
+          lastUnitPrice: 0,
+        });
+      }
+
+      inv.lastUnitPrice = unitPrice;
+      await inv.save();
+
+      parsed.reply_text = `✅ Price updated: *${inv.name}* is now *${unitPrice.toLocaleString()}* each.`;
+
+      await ProcessedMessage.updateOne({ user: userId, messageId }, { $set: { status: 'DONE' } });
+      return;
+    }
+
+    // =========================================================
+    // ✅ DELETED STOCK (OWNER ONLY)
+    // - default behavior: HARD DELETE the inventory item
+    // - if you prefer "clear only", swap deleteOne -> quantity=0 and save
+    // =========================================================
+    if (parsed.intent === 'DELETED_STOCK') {
+      if (!isActorOwner) {
+        parsed.reply_text = '❌ Only the shop owner can delete stock items.';
+        await ProcessedMessage.updateOne({ user: userId, messageId }, { $set: { status: 'DONE' } });
+        return;
+      }
+
+      const itemName = String(parsed.items?.[0]?.name || '').trim();
+      if (!itemName) {
+        parsed.reply_text = 'Tell me the item to delete. Example: *delete rice*';
+        await ProcessedMessage.updateOne({ user: userId, messageId }, { $set: { status: 'DONE' } });
+        return;
+      }
+
+      const cleanName = normalizeItemName(itemName);
+      const resolved = await findExistingItem(userId, cleanName);
+
+      if (resolved.status === 'ambiguous') {
+        const options = (resolved.options || []).slice(0, 6).map((n, i) => `${i + 1}) ${n}`).join('\n');
+        parsed.reply_text =
+          `I found multiple items that match *"${cleanName}"*.\n` +
+          `Which one did you mean?\n\n${options}\n\n` +
+          `Reply with the full item name.`;
+
+        await ProcessedMessage.updateOne({ user: userId, messageId }, { $set: { status: 'DONE' } });
+        return;
+      }
+
+      const inv = resolved.status === 'found' ? (resolved as any).inv : null;
+      if (!inv) {
+        parsed.reply_text = `I couldn't find *${itemName}* in your inventory.`;
+        await ProcessedMessage.updateOne({ user: userId, messageId }, { $set: { status: 'DONE' } });
+        return;
+      }
+
+      // ✅ Hard delete (removes from inventory list)
+      await Inventory.deleteOne({ _id: inv._id, user: userId });
+
+      parsed.reply_text = `🗑️ Deleted *${inv.name}* from inventory.`;
+
+      await ProcessedMessage.updateOne({ user: userId, messageId }, { $set: { status: 'DONE' } });
+      return;
+    }
 
     // =========================================================
     // ✅ DEBT PAYMENT (PAYMENT_RECEIVED + apply to credit sales)
@@ -320,7 +475,8 @@ export const processTransaction = async (
 
     for (const item of parsed.items || []) {
       const qty = toNumber(item.qty);
-      if (qty <= 0) continue;
+      const allowZero = parsed.intent === 'SET_STOCK'; // allow qty=0 only for SET_STOCK
+      if (allowZero ? qty < 0 : qty <= 0) continue;
 
       const inputName = String(item.name || '').trim();
       const cleanName = normalizeItemName(inputName || 'unknown_item');

@@ -447,6 +447,17 @@ C. PRICE/MONEY EXTRACTION (POSITION-INDEPENDENT & SMART SCALING)
 Credit sale triggers: "on credit", "owe", "pay later", "debt", "balance remaining"
 Debt payment triggers: "paid", "settled", "cleared", "balance paid"
 
+✅ CRITICAL RULES FOR DEBT FEATURES (MUST MATCH BACKEND)
+- If user says they SOLD something "on credit"/"owe"/"pay later":
+  intent MUST be SALE, is_credit=true, and customer_name MUST be extracted.
+  Example: "Sold 2 rice to Emeka on credit" => SALE + is_credit=true + customer_name="Emeka"
+- If user says a person PAID money back / made a payment:
+  intent MUST be DEBT_PAYMENT, customer_name MUST be extracted, total_money MUST be extracted.
+  Examples:
+  "Emeka paid 20000" => DEBT_PAYMENT, customer_name="Emeka", total_money=20000
+  "Emeka settled 5k" => DEBT_PAYMENT, total_money=5000
+- If it is unclear WHO paid or AMOUNT paid, set needs_clarification=true with a clear clarification_question.
+
 *** 4. REPORT & DATE HANDLING (MAKE REPORT ALWAYS VALID) ***
 Your goal: when the user says "report" or asks for reports, return a valid REPORT_* intent with usable report_params.
 DO NOT return SALE for report commands.
@@ -466,6 +477,8 @@ B. WHICH REPORT INTENT TO USE
   "full report", "full summary", "business report", "everything", "all reports", "complete report", "summary", "statement", "history", "transactions"
 - Use REPORT_RECENT when user asks for:
   "recent", "latest", "last 5", "last 10", "recent transactions", "recent sales"
+- Use REPORT_DEBTS when user asks for:
+  "who owes me", "debtors", "creditors", "unpaid", "outstanding debt", "people owing", "credit sales list"
 
 C. DATE RANGE RESOLUTION (RETURN ISO DATES)
 Fill report_params.start_date and report_params.end_date (YYYY-MM-DD) whenever possible.
@@ -492,6 +505,8 @@ If the user does NOT specify a period:
   start_date = currentDate, end_date = currentDate unless user asks otherwise
 - For REPORT_RECENT:
   start_date = null, end_date = null (backend can return recent)
+- For REPORT_DEBTS:
+  start_date = null, end_date = null
 
 D. include_undone DEFAULT
 - report_params.include_undone MUST be false by default.
@@ -522,6 +537,71 @@ Broad matching:
 - Download: pdf, export, download, print report
 - Undo: undo, cancel last, reverse last
 - CLOSE_BOOK: close day, close shop, end day, today's report
+
+*** 5B. INVENTORY + PRICE COMMANDS (CRITICAL FOR NON-SALE ACTIONS) ***
+
+These intents MUST be detected correctly and MUST NOT be mistaken as SALE:
+
+1) PRICE_CHECK
+- User is ASKING for price / cost:
+  Examples:
+  "price of rice", "how much is rice", "what is the price for bread", "cost of indomie"
+- Output:
+  intent = PRICE_CHECK
+  items = [{ name: "<item>", qty: 1, unit: "pcs", unit_price: null, total_price: null, currency: null, category: null }]
+  total_money = null
+  needs_clarification = true ONLY if item name is missing.
+
+2) DEFINE_PRICE
+- User is SETTING/UPDATING price:
+  Examples:
+  "set rice price to 1200", "rice is 1200 each", "bread now 800", "change indomie price to 250"
+- Output:
+  intent = DEFINE_PRICE
+  items MUST include item name + unit_price:
+    items = [{ name: "<item>", qty: 1, unit: "<unit or pcs>", unit_price: <number>, total_price: null, currency: null, category: null }]
+  total_money MUST be null (this is not a sale)
+  needs_clarification = true if price or item name is missing.
+
+3) SET_STOCK
+- User is setting EXACT stock quantity (absolute):
+  Examples:
+  "set rice stock to 20", "rice remaining is 12", "set indomie to 0", "update stock bread 5"
+- Output:
+  intent = SET_STOCK
+  items MUST include item name + qty (allow 0):
+    items = [{ name: "<item>", qty: <number>=0.., unit: "<unit or pcs>", unit_price: null, total_price: null, currency: null, category: null }]
+  total_money = null
+  needs_clarification = true if qty missing or item name missing.
+
+4) RESTOCK
+- User is adding stock (increase inventory):
+  Examples:
+  "restocked 5 bags of rice", "I bought 10 indomie", "supplier brought 3 cartons of milk"
+- Output:
+  intent = RESTOCK
+  items MUST include item name + qty (>0). unit_price may be present if user supplied.
+  total_money = null unless user explicitly provided a total purchase cost (optional).
+
+5) DELETED_STOCK
+- User wants item removed from inventory list or cleared:
+  Examples:
+  "delete rice", "remove bread", "clear indomie", "delete indomie from stock"
+- Output:
+  intent = DELETED_STOCK
+  items MUST include item name. qty can be 0:
+    items = [{ name: "<item>", qty: 0, unit: "pcs", unit_price: null, total_price: null, currency: null, category: null }]
+  total_money = null
+  needs_clarification = true ONLY if item name is missing.
+
+✅ EXTRA CLARITY (IMPORTANT)
+- If user says "set <item> to 0" / "make <item> 0" / "remaining 0", that is SET_STOCK (qty=0), NOT DELETED_STOCK.
+- Only use DELETED_STOCK when user clearly means remove the item record entirely: "delete/remove/drop from inventory list".
+
+*** INTENT PRIORITY OVERRIDE (IMPORTANT) ***
+- If message matches PRICE_CHECK / DEFINE_PRICE / SET_STOCK / DELETED_STOCK keywords,
+  DO NOT return SALE.
+- Only return SALE if it clearly records a customer sale/purchase transaction.
 
 
 *** 6. JSON OUTPUT RULES ***
@@ -563,6 +643,7 @@ Broad matching:
   "reply_text": string
 }
 `;
+
 
 
 export default getSystemPrompt;

@@ -942,7 +942,8 @@ if (btn?.txId && btn?.action) {
     // =====================================================
     switch (parsed.intent) {
       case 'SALE': {
-        await processTransaction(shopId as any, parsed, messageId);
+       await processTransaction(shopId as any, parsed, messageId, actor);
+
        
         const tx = await Transaction.findOne({ user: shopId, messageId }).lean();
         if (tx?._id) {
@@ -975,10 +976,16 @@ if (btn?.txId && btn?.action) {
       case 'DEFINE_PRICE':
       case 'PRICE_CHECK':
       case 'DEBT_PAYMENT': {
-        await processTransaction(shopId as any, parsed, messageId);
-        await queueOutboundMessage(from, parsed.reply_text || '✅ Done.');
-        break;
+        try {
+    await processTransaction(shopId as any, parsed, messageId, actor);
+
+    await queueOutboundMessage(from, parsed.reply_text || '✅ Done.');
+      } catch (e) {
+        console.error('processTransaction error:', e);
+        await queueOutboundMessage(from, '⚠️ Sorry—something went wrong. Please try again.');
       }
+      break;
+    }
 
       case 'UNDO_LAST_SALE': {
         const r = await undoLastSale(shopId, messageId);
