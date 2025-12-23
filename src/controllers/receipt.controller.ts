@@ -386,24 +386,47 @@ export const generateSaleReceiptPdfBuffer = async (userId: string, saleId: strin
 
   const receiptDate = fmtDDMMYYYY_HHMM(new Date(tx.timestamp || tx.createdAt || Date.now()), offsetMinutes);
 
-  const buffer = await docToBufferWithRender((doc) => {
-    const { regFont, hasNoto } = registerFonts(doc);
-    doc.font(regFont);
+  const doc = new PDFDocument({
+    size: 'A4',
+    margins: { top: 40, bottom: 40, left: 40, right: 40 },
+    autoFirstPage: false,     // ✅ IMPORTANT (prevents blank page)
+    bufferPages: true,
+  }) as unknown as PdfDoc;
 
-    renderReceiptPdf(doc, {
-      saleId,
-      businessName,
-      receiptDate,
-      currencyCode,
-      locale,
-      hasSymbolFont: hasNoto,
-      tx,
-    });
+  const { regFont, hasNoto } = registerFonts(doc);
+  doc.font(regFont);
+
+  // ✅ Pipe BEFORE rendering
+  const stream = new PassThrough();
+  const chunks: Buffer[] = [];
+
+  doc.pipe(stream);
+
+  const done = new Promise<Buffer>((resolve, reject) => {
+    stream.on('data', (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
+    stream.on('end', () => resolve(Buffer.concat(chunks)));
+    stream.on('error', reject);
   });
 
+  // Render (renderReceiptPdf still uses doc.addPage() inside)
+  renderReceiptPdf(doc, {
+    saleId,
+    businessName,
+    receiptDate,
+    currencyCode,
+    locale,
+    hasSymbolFont: hasNoto,
+    tx,
+  });
+
+  doc.end();
+
+  const buffer = await done;
   const filename = `Receipt_${String(saleId).slice(-6)}.pdf`;
+
   return { buffer, filename, mimeType: 'application/pdf' };
 };
+
 
 
 /**
@@ -444,6 +467,8 @@ export const generateSaleReceiptPdf = async (req: Request | any, res: Response) 
     const doc = new PDFDocument({
       size: 'A4',
       margins: { top: 40, bottom: 40, left: 40, right: 40 },
+      autoFirstPage: false,     // ✅ IMPORTANT (prevents blank page)
+      bufferPages: true,
     }) as unknown as PdfDoc;
 
     const { regFont, hasNoto } = registerFonts(doc);
@@ -467,3 +492,4 @@ export const generateSaleReceiptPdf = async (req: Request | any, res: Response) 
     if (!res.headersSent) res.status(500).json({ error: 'Could not generate receipt' });
   }
 };
+
