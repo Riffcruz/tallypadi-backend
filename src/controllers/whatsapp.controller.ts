@@ -445,11 +445,15 @@ async function markSaleCredit(ownerId: any, txId: string) {
 // =====================================================
 // Attach "credit John" to latest credit sale missing name
 // =====================================================
+export async function attachCreditNameToLatest(
+  shopId: any,
+  rawName: string
+): Promise<{ ok: boolean; msg: string }> {
   const name = String(rawName || '').trim();
   if (!name) return { ok: false, msg: 'Reply like: credit John' };
 
   const tx = await Transaction.findOne({
-    user: shopUserId,
+    user: shopId,
     type: 'SALE',
     isUndone: { $ne: true },
     paymentStatus: 'CREDIT',
@@ -458,7 +462,7 @@ async function markSaleCredit(ownerId: any, txId: string) {
 
   if (!tx) return { ok: false, msg: 'No pending credit sale found.' };
 
-  const res = await resolveDebtor(shopUserId, name);
+  const res = await resolveDebtor(shopId, name);
 
   if (res.status === 'suggest') {
     const list = res.options.map((o, i) => `${i + 1}) ${o.displayName}`).join('\n');
@@ -474,7 +478,7 @@ async function markSaleCredit(ownerId: any, txId: string) {
 
   if (res.status === 'new') {
     const created = await Debtor.create({
-      user: shopUserId,
+      user: shopId,
       displayName: res.displayName,
       debtorKey: res.debtorKey,
       aliases: [res.debtorKey],
@@ -502,6 +506,7 @@ async function markSaleCredit(ownerId: any, txId: string) {
 
   return { ok: true, msg: `✅ Credit linked to *${displayName}*.` };
 }
+
 
 // =====================================================
 // Allowlist parsed
