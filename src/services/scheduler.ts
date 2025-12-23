@@ -1,3 +1,4 @@
+// src/services/scheduler.service.ts
 import cron from 'node-cron';
 import { User } from '../models/user.model';
 import { Transaction } from '../models/transaction.model';
@@ -6,6 +7,80 @@ import { cleanupPdfReports } from './pdf.service';
 
 const BATCH_SIZE = 2000;
 const SPREAD_MINUTES = 10; // spread sending load (0..9 min) per user deterministically
+
+// ✅ Currency + Locale fallbacks (same idea as your PDF/receipts)
+const COUNTRY_CURRENCY_CODE: Record<string, string> = {
+  NG: 'NGN', GH: 'GHS', US: 'USD', GB: 'GBP', EU: 'EUR',
+  KE: 'KES', ZA: 'ZAR', IN: 'INR', CN: 'CNY', CA: 'CAD',
+  AU: 'AUD', JP: 'JPY', AE: 'AED', RW: 'RWF', TZ: 'TZS', UG: 'UGX',
+};
+
+const COUNTRY_LOCALE: Record<string, string> = {
+  NG: 'en-NG',
+  GH: 'en-GH',
+  US: 'en-US',
+  GB: 'en-GB',
+  EU: 'en-IE',
+  KE: 'en-KE',
+  ZA: 'en-ZA',
+  IN: 'en-IN',
+  CA: 'en-CA',
+  AU: 'en-AU',
+  JP: 'ja-JP',
+  AE: 'en-AE',
+  RW: 'en-RW',
+  TZ: 'en-TZ',
+  UG: 'en-UG',
+};
+
+// ✅ Cache Intl formatters (fast for big batches)
+const moneyFormatterCache = new Map<string, Intl.NumberFormat>();
+
+function resolveUserCountryCode(u: any): string {
+  return String(u?.countryCode || u?.profile?.countryCode || 'NG').toUpperCase();
+}
+
+function resolveCurrencyAndLocale(u: any) {
+  const cc = resolveUserCountryCode(u);
+
+  const currencyCode = String(
+    u?.currencyCode ||
+      u?.settings?.currencyCode ||
+      COUNTRY_CURRENCY_CODE[cc] ||
+      'NGN'
+  ).toUpperCase();
+
+  const locale = String(
+    u?.locale ||
+      u?.settings?.locale ||
+      COUNTRY_LOCALE[cc] ||
+      'en-NG'
+  );
+
+  return { currencyCode, locale };
+}
+
+function formatMoney(amount: any, locale: string, currencyCode: string) {
+  const safe = Number.isFinite(Number(amount)) ? Number(amount) : 0;
+  const key = `${locale}|${currencyCode}`;
+
+  try {
+    let fmt = moneyFormatterCache.get(key);
+    if (!fmt) {
+      fmt = new Intl.NumberFormat(locale, {
+        style: 'currency',
+        currency: currencyCode,
+        currencyDisplay: 'symbol', // ✅ WhatsApp-friendly (₦, $, £, etc)
+        maximumFractionDigits: 0,
+      });
+      moneyFormatterCache.set(key, fmt);
+    }
+    return fmt.format(safe);
+  } catch {
+    // fallback if Intl blows up for any reason
+    return `${currencyCode} ${safe.toLocaleString(locale, { maximumFractionDigits: 0 })}`;
+  }
+}
 
 function parseClosingTime(s?: string) {
   const raw = String(s || '20:00');
@@ -61,12 +136,27 @@ export function startScheduler() {
     const now = new Date();
 
     try {
-      // fetch only due users (fast, indexed)
+      // ✅ fetch only due users (fast, indexed)
+      // ✅ include currency fields so we can format per-user correctly
       const dueUsers = await User.find({
         'settings.dailySummaryEnabled': true,
         nextSummaryAt: { $ne: null, $lte: now },
       })
-        .select('_id phoneNumber settings.closingTime settings.utcOffsetMinutes lastSummaryDateKey')
+        .select(
+          [
+            '_id',
+            'phoneNumber',
+            'settings.closingTime',
+            'settings.utcOffsetMinutes',
+            'lastSummaryDateKey',
+            'currencyCode',
+            'locale',
+            'countryCode',
+            'profile.countryCode',
+            'settings.currencyCode',
+            'settings.locale',
+          ].join(' ')
+        )
         .limit(BATCH_SIZE)
         .lean();
 
@@ -122,10 +212,14 @@ export function startScheduler() {
 
         const total = totals.get(String(u._id)) || 0;
 
+        // ✅ per-user currency formatting
+        const { currencyCode, locale } = resolveCurrencyAndLocale(u);
+        const totalFormatted = formatMoney(total, locale, currencyCode);
+
         if (u.lastSummaryDateKey !== dateKey && total > 0) {
           const message =
             `🏁 *Closing Time!*\n\n` +
-            `Today you made *₦${total.toLocaleString()}*.\n\n` +
+            `Today you made *${totalFormatted}*.\n\n` +
             `Reply *close book* to generate full summary.`;
 
           await queueOutboundMessage(u.phoneNumber, message);
@@ -174,7 +268,7 @@ export function startScheduler() {
       for (const u of expiringUsers) {
         const msg =
           u.subscriptionStatus === 'trial'
-            ? `⏳ Your Tallypadi trial will expire in 3 days on ${new Date(u.trialEndsAt).toDateString()}. Subscribe to continue.`
+            ? `⏳ Your Tallypadi trial will expire in 3 days on ${new Date(u.trialEndsAt as any).toDateString()}. Subscribe to continue.`
             : `⏳ Your Tallypadi subscription renews in 3 days on ${new Date(u.nextBillingDate as any).toDateString()}. Renew to avoid interruption.`;
 
         await queueOutboundMessage(u.phoneNumber, msg);
