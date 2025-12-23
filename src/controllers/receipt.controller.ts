@@ -327,15 +327,13 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
   y += 80 + 20;
 
   // -------------------------------------------------
-  // ✅ BUSINESS INFO CARD (WhatsApp light gray)
+  // ✅ BUSINESS INFO CARD (Fixed Padding)
   // -------------------------------------------------
   const infoCardH = 72;
   
   doc.save();
   doc.roundedRect(margin, y, contentW, infoCardH, 12)
     .fill(THEME.bgHeader);
-  
-  // Add subtle border
   doc.strokeColor(THEME.border).lineWidth(1);
   doc.roundedRect(margin, y, contentW, infoCardH, 12)
     .stroke();
@@ -353,14 +351,25 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
   // Date and Receipt info
   doc.font(regFont).fontSize(10).fillColor(THEME.textLight);
   
-  // Left side: Date
+  // Left side: Date (20px padding)
   doc.text('Date Issued:', margin + 20, y + 44);
   doc.fillColor(THEME.text).text(receiptDate, margin + 85, y + 44);
   
-  // Right side: Receipt No
-  doc.fillColor(THEME.textLight).text('Receipt No:', margin + contentW - 140, y + 44);
-  doc.fillColor(THEME.text).text(receiptNo, margin + contentW - 60, y + 44, {
-    width: 60,
+  // Right side: Receipt No (Fixed: Added 20px padding from right)
+  const rightPadding = 20; 
+  const receiptLabelWidth = 70;
+  const receiptValueWidth = 100; // Increased width for long numbers
+  const rightAnchor = margin + contentW - rightPadding;
+
+  // Draw Label
+  doc.fillColor(THEME.textLight).text('Receipt No:', rightAnchor - receiptValueWidth - receiptLabelWidth, y + 44, {
+    width: receiptLabelWidth,
+    align: 'right'
+  });
+
+  // Draw Value
+  doc.fillColor(THEME.text).text(receiptNo, rightAnchor - receiptValueWidth, y + 44, {
+    width: receiptValueWidth,
     align: 'right'
   });
   
