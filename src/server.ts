@@ -317,6 +317,8 @@ mongoose
     console.log('✅ MongoDB Connected (Secured)');
     startScheduler();
     app.listen(env.port, () => console.log(`🚀 Server running on port ${env.port}`));
+    console.log('✅ Scheduler initialized at', new Date().toISOString());
+
   })
   .catch((err) => console.error('❌ DB Connection Error:', err));
 
