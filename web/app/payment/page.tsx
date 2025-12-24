@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import axios from 'axios';
+import dynamic from 'next/dynamic';
 import {
   CheckCircle2,
   ShieldCheck,
@@ -9,8 +10,14 @@ import {
   AlertCircle,
   Loader2,
   Lock,
-  ArrowRight
+  ArrowRight,
 } from 'lucide-react';
+
+// ✅ IMPORTANT: dynamic import to avoid SSR/window issues
+const PaystackButton = dynamic(
+  () => import('react-paystack').then((m) => m.PaystackButton),
+  { ssr: false }
+);
 
 // --- TYPES ---
 type PlanType = 'OGA_BOSS' | 'TYCOON';
@@ -34,8 +41,8 @@ const PLANS: PlanDetails[] = [
       'Basic Inventory Tracking',
       'Daily Profit Summary',
       '1 User Account',
-      'Standard Support'
-    ]
+      'Standard Support',
+    ],
   },
   {
     id: 'TYCOON',
@@ -46,44 +53,29 @@ const PLANS: PlanDetails[] = [
       'Multi-Staff Login (Up to 5)',
       'Branded PDF Invoices',
       'Advanced Web Dashboard',
-      'Priority VIP Support'
+      'Priority VIP Support',
     ],
-    recommended: true
-  }
+    recommended: true,
+  },
 ];
 
-// Sanitize URL & Handle Localhost/Network Logic
+// Helper to get Backend URL for Verification
 const getApiUrl = () => {
-  // 1. If explicit env var exists, use it
   if (process.env.NEXT_PUBLIC_API_URL) {
     return process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, '');
   }
-
-  // 2. If running locally and no env var, assume local backend
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname;
-    const protocol = window.location.protocol;
-
-    // Check for localhost, 127.0.0.1, or typical local network IPs (192.168..., 10...)
-    const isLocal =
-      hostname === 'localhost' ||
-      hostname === '127.0.0.1' ||
-      hostname.startsWith('192.168.') ||
-      hostname.startsWith('10.');
-
-    if (isLocal) {
-      return `${protocol}//${hostname}:5000/api`;
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return 'http://localhost:5000/api';
     }
   }
-
-  // 3. Fallback to production
   return 'https://tallypadi.com/api';
 };
 
-// very light client normalizer (server does the real validation)
-const normalizePhoneClient = (raw: string) => {
+// Optional: simple phone cleaner (keeps + and digits)
+const normalizePhone = (raw: string) => {
   let p = String(raw || '').trim();
-  // keep + and digits only
   p = p.replace(/[^\d+]/g, '');
   if (p.startsWith('00')) p = '+' + p.slice(2);
   return p;
@@ -92,104 +84,127 @@ const normalizePhoneClient = (raw: string) => {
 export default function PaymentPage() {
   const [selectedPlan, setSelectedPlan] = useState<PlanType>('OGA_BOSS');
   const [email, setEmail] = useState('');
-  const [phoneNumber, setPhoneNumber] = useState(''); // ✅ NEW
-  const [loading, setLoading] = useState(false);
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [userId, setUserId] = useState(''); // optional metadata
+  const [verifying, setVerifying] = useState(false);
+  const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // Auto-select plan from URL query param
-  useEffect(() => {
-    // Only run on client
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      const planParam = params.get('plan');
-      if (planParam === 'TYCOON') setSelectedPlan('TYCOON');
-
-      // Optional: Auto-fill email/phone if stored in local storage
-      const savedUser = localStorage.getItem('tallyUser');
-      if (savedUser) {
-        try {
-          const user = JSON.parse(savedUser);
-          if (user.email) setEmail(String(user.email));
-          if (user.phoneNumber) setPhoneNumber(String(user.phoneNumber));
-        } catch (e) {}
-      }
-    }
-  }, []);
-
-  const handlePayment = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-
-    const API_URL = getApiUrl();
-    const endpoint = `${API_URL}/payment/initialize`;
-
-    try {
-      const cleanEmail = email.trim();
-      const cleanPhone = normalizePhoneClient(phoneNumber);
-
-      console.log(`Connecting to Backend: ${endpoint}`);
-
-      // 1. Call Backend
-      const response = await axios.post(endpoint, {
-        email: cleanEmail,
-        phoneNumber: cleanPhone, // ✅ NEW (required by your backend for non-logged-in payments)
-        targetPlan: selectedPlan
-      });
-
-      const { authorization_url } = response.data;
-
-      // 2. Validate URL before redirecting
-      if (authorization_url && authorization_url.startsWith('http')) {
-        console.log('Redirecting to Paystack:', authorization_url);
-        window.location.href = authorization_url;
-      } else {
-        throw new Error('Received invalid redirect URL from payment provider.');
-      }
-    } catch (err: any) {
-      console.error('Payment Error:', err);
-
-      // Handle 404 specifically (Route not found on server)
-      if (err.response?.status === 404) {
-        setError(
-          `Server Error (404): The payment endpoint was not found.\n\nTarget: ${endpoint}\n\nACTION REQUIRED: \n1. Ensure 'server.ts' includes the payment routes.\n2. RESTART your backend server to load the new code.`
-        );
-        return;
-      }
-
-      // Detailed error message
-      const msg =
-        err.response?.data?.message ||
-        err.message ||
-        'Connection failed. Please check your internet.';
-
-      // Friendly hints
-      if (
-        /phone number is required/i.test(msg) ||
-        /phone number/i.test(msg)
-      ) {
-        setError(
-          `Phone number is required for payment.\nExample: +2348012345678`
-        );
-        return;
-      }
-
-      if (msg.includes('User not found')) {
-        setError('This email is not registered. Please use the email you signed up with.');
-        return;
-      }
-
-      setError(msg);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const currentPlan = PLANS.find((p) => p.id === selectedPlan) || PLANS[0];
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const planParam = params.get('plan');
+    if (planParam === 'TYCOON') setSelectedPlan('TYCOON');
+
+    const savedUser = localStorage.getItem('tallyUser');
+    if (savedUser) {
+      try {
+        const u = JSON.parse(savedUser);
+        if (u.email) setEmail(String(u.email));
+        if (u.phoneNumber) setPhoneNumber(String(u.phoneNumber));
+        if (u.id || u._id) setUserId(String(u.id || u._id));
+      } catch {}
+    }
+  }, []);
+
+  const publicKey = process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY || '';
+
+  // ✅ Build paystack props safely
+  const paystackProps = useMemo(() => {
+    const cleanEmail = email.trim();
+    const cleanPhone = normalizePhone(phoneNumber);
+
+    return {
+      email: cleanEmail,
+      amount: currentPlan.price * 100,
+      publicKey,
+      // Paystack reference: keep it unique
+      reference: `TP_${Date.now()}`,
+      metadata: {
+        planType: selectedPlan,
+        phoneNumber: cleanPhone,
+        userId,
+        custom_fields: [
+          { display_name: 'Plan', variable_name: 'plan', value: selectedPlan },
+          { display_name: 'Phone', variable_name: 'phone', value: cleanPhone },
+        ],
+      },
+      // optional UI text
+      text: verifying ? 'Verifying...' : 'Pay Now',
+      onSuccess: async (refObj: any) => {
+        // refObj usually: { reference: "..." }
+        const ref = String(refObj?.reference || '').trim();
+        if (!ref) {
+          setError('Payment succeeded but reference was missing.');
+          return;
+        }
+
+        setVerifying(true);
+        setError(null);
+
+        try {
+          const API_URL = getApiUrl();
+          await axios.get(`${API_URL}/payment/verify/${encodeURIComponent(ref)}`);
+          setSuccess(true);
+
+          setTimeout(() => {
+            window.location.href = '/dashboard';
+          }, 2500);
+        } catch (e) {
+          console.error(e);
+          setError(
+            'Payment was successful, but server verification failed. Please contact support.'
+          );
+        } finally {
+          setVerifying(false);
+        }
+      },
+      onClose: () => {
+        // user closed payment modal
+      },
+    };
+  }, [email, phoneNumber, currentPlan.price, publicKey, selectedPlan, userId, verifying]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
+    if (!publicKey) {
+      setError('Paystack public key is missing. Set NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY.');
+      return;
+    }
+
+    if (!email.trim() || !phoneNumber.trim()) {
+      setError('Please provide both Email and WhatsApp Number.');
+      return;
+    }
+  };
+
+  if (success) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <div className="bg-white p-8 rounded-3xl shadow-xl text-center max-w-md w-full">
+          <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <CheckCircle2 size={32} className="text-emerald-600" />
+          </div>
+          <h2 className="text-2xl font-bold text-slate-900 mb-2">Payment Successful!</h2>
+          <p className="text-slate-500 mb-6">
+            Your {selectedPlan.replace(/_/g, ' ')} subscription is now active.
+          </p>
+          <a
+            href="/dashboard"
+            className="block w-full bg-emerald-600 text-white font-bold py-3 rounded-xl hover:bg-emerald-700 transition"
+          >
+            Go to Dashboard
+          </a>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 font-sans selection:bg-emerald-500 selection:text-white flex flex-col">
-      {/* Simple Header */}
       <div className="bg-white border-b border-slate-200 py-4 px-6 shadow-sm">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <a
@@ -208,13 +223,10 @@ export default function PaymentPage() {
       </div>
 
       <div className="flex-1 max-w-5xl mx-auto w-full p-4 md:p-8 grid md:grid-cols-12 gap-8">
-        {/* LEFT COLUMN: Plan Selection */}
         <div className="md:col-span-7 space-y-6">
           <div>
             <h1 className="text-2xl font-bold text-slate-900">Select Subscription</h1>
-            <p className="text-slate-500 text-sm mt-1">
-              Upgrade your business today. Cancel anytime.
-            </p>
+            <p className="text-slate-500 text-sm mt-1">Upgrade your business today. Cancel anytime.</p>
           </div>
 
           <div className="space-y-4">
@@ -228,15 +240,12 @@ export default function PaymentPage() {
                     : 'border-slate-200 bg-white hover:border-emerald-200 hover:shadow-sm'
                 }`}
               >
-                {/* Radio Circle */}
                 <div
                   className={`mt-1 w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 ${
                     selectedPlan === plan.id ? 'border-emerald-500' : 'border-slate-300'
                   }`}
                 >
-                  {selectedPlan === plan.id && (
-                    <div className="w-3 h-3 bg-emerald-500 rounded-full" />
-                  )}
+                  {selectedPlan === plan.id && <div className="w-3 h-3 bg-emerald-500 rounded-full" />}
                 </div>
 
                 <div className="flex-1">
@@ -254,21 +263,21 @@ export default function PaymentPage() {
                       </span>
                     )}
                   </div>
+
                   <p className="text-slate-500 text-sm leading-relaxed mb-4">
                     {plan.id === 'OGA_BOSS'
                       ? 'Perfect for solo shop owners managing sales.'
                       : 'For growing businesses needing staff accounts and branding.'}
                   </p>
+
                   <div className="text-2xl font-bold text-slate-900">
-                    ₦{plan.price.toLocaleString()}{' '}
-                    <span className="text-sm font-medium text-slate-400">/ month</span>
+                    ₦{plan.price.toLocaleString()} <span className="text-sm font-medium text-slate-400">/ month</span>
                   </div>
                 </div>
               </div>
             ))}
           </div>
 
-          {/* Features List for Selected Plan */}
           <div className="bg-white p-6 rounded-2xl border border-slate-200">
             <h4 className="font-bold text-slate-900 mb-4 text-sm uppercase tracking-wider">
               What's included in {currentPlan.name}
@@ -284,13 +293,11 @@ export default function PaymentPage() {
           </div>
         </div>
 
-        {/* RIGHT COLUMN: Checkout Form */}
         <div className="md:col-span-5">
           <div className="bg-white p-6 md:p-8 rounded-3xl border border-slate-200 shadow-xl sticky top-8">
             <h2 className="text-xl font-bold text-slate-900 mb-6">Billing Details</h2>
 
-            <form onSubmit={handlePayment} className="space-y-6">
-              {/* Email Input */}
+            <form onSubmit={handleSubmit} className="space-y-6">
               <div className="space-y-2">
                 <label htmlFor="email" className="block text-sm font-medium text-slate-700">
                   Email Address
@@ -304,10 +311,9 @@ export default function PaymentPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition outline-none"
                 />
-                <p className="text-xs text-slate-400">Must match your login email.</p>
+                <p className="text-xs text-slate-400">Receipt will be sent here.</p>
               </div>
 
-              {/* ✅ Phone Number Input (NEW) */}
               <div className="space-y-2">
                 <label htmlFor="phoneNumber" className="block text-sm font-medium text-slate-700">
                   WhatsApp Phone Number
@@ -321,12 +327,9 @@ export default function PaymentPage() {
                   onChange={(e) => setPhoneNumber(e.target.value)}
                   className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition outline-none"
                 />
-                <p className="text-xs text-slate-400">
-                  Use country code format (E.164). Example: +2348012345678
-                </p>
+                <p className="text-xs text-slate-400">Used to link payment to your account.</p>
               </div>
 
-              {/* Summary */}
               <div className="bg-slate-50 p-4 rounded-xl space-y-3">
                 <div className="flex justify-between text-sm text-slate-600">
                   <span>Plan</span>
@@ -344,7 +347,6 @@ export default function PaymentPage() {
                 </div>
               </div>
 
-              {/* Error Message */}
               {error && (
                 <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm flex items-start gap-2 whitespace-pre-wrap">
                   <AlertCircle size={16} className="mt-0.5 shrink-0" />
@@ -352,23 +354,23 @@ export default function PaymentPage() {
                 </div>
               )}
 
-              {/* Submit Button */}
-              <button
-                type="submit"
-                disabled={loading || !email || !phoneNumber}
+              {/* ✅ Paystack button (opens popup) */}
+              <PaystackButton
+                {...paystackProps}
                 className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold py-4 rounded-xl transition-all shadow-lg hover:shadow-emerald-500/20 flex items-center justify-center gap-2"
+                disabled={verifying || !email.trim() || !phoneNumber.trim() || !publicKey}
               >
-                {loading ? (
+                {verifying ? (
                   <>
                     <Loader2 size={20} className="animate-spin" />
-                    Connecting...
+                    Verifying...
                   </>
                 ) : (
                   <>
                     Pay Now <ArrowRight size={18} />
                   </>
                 )}
-              </button>
+              </PaystackButton>
 
               <div className="flex justify-center items-center gap-2 text-slate-400 text-xs mt-4">
                 <ShieldCheck size={12} />
