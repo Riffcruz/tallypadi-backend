@@ -120,17 +120,7 @@ if (!user) {
       return res.status(400).json({ message: 'Could not initialize payment' });
     }
 
-    // after create/find logic…
-if (!user?._id) {
-  return res.status(500).json({ message: 'Could not resolve user for this payment' });
-}
-
-return res.status(200).json({
-  authorization_url: authorizationUrl,
-  userId: String(user._id),
-  planType: plan,
-});
-
+    
   } catch (error: any) {
     console.error('Payment Init Error:', error?.response?.data || error?.message || error);
     return res.status(500).json({ message: 'Internal server error' });
@@ -245,7 +235,7 @@ export const handlePaystackWebhook = async (req: any, res: Response) => {
 
       if (user.phoneNumber) {
         const planName = String(user.planType || '').replace(/_/g, ' ');
-        await sendWhatsAppText(user.phoneNumber, `✅ Payment received! Your *${planName}* subscription is ACTIVE.`);
+        // await sendWhatsAppText(user.phoneNumber, `✅ Payment received! Your *${planName}* subscription is ACTIVE.`);
       }
     }
 
