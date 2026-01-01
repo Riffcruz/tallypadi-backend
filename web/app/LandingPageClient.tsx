@@ -26,6 +26,8 @@ import {
   HelpCircle,
 } from 'lucide-react';
 import Image from 'next/image';
+import { StepShot } from "../components/StepShot";
+
 
 // --- TYPES & INTERFACES ---
 
@@ -661,70 +663,107 @@ export default function LandingPage() {
       </section>
 
       {/* --- How It Works (Dark Theme for Contrast) --- */}
-      <section id="how-it-works" className="py-24 bg-slate-900 relative overflow-hidden text-white">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-600/10 rounded-full blur-[100px]"></div>
-        <div className="absolute bottom-0 left-0 w-96 h-96 bg-blue-600/10 rounded-full blur-[100px]"></div>
+    <section id="how-it-works" className="py-24 bg-slate-900 relative overflow-hidden text-white">
+  <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-600/10 rounded-full blur-[100px]"></div>
+  <div className="absolute bottom-0 left-0 w-96 h-96 bg-blue-600/10 rounded-full blur-[100px]"></div>
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          <AnimatedSection className="text-center mb-16">
-            <span className="text-emerald-400 font-bold tracking-wider uppercase text-xs bg-emerald-950/50 px-3 py-1 rounded-full border border-emerald-900">
-              Simple Process
-            </span>
-            <h2 className="text-3xl md:text-5xl font-bold mt-4">
-              Automate your shop in <span className="text-emerald-400">3 minutes</span>.
-            </h2>
-          </AnimatedSection>
+  <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+    <AnimatedSection className="text-center mb-16">
+      <span className="text-emerald-400 font-bold tracking-wider uppercase text-xs bg-emerald-950/50 px-3 py-1 rounded-full border border-emerald-900">
+        Simple Process
+      </span>
+      <h2 className="text-3xl md:text-5xl font-bold mt-4">
+        Automate your shop in <span className="text-emerald-400">3 minutes</span>.
+      </h2>
+    </AnimatedSection>
 
-          <div className="grid md:grid-cols-3 gap-8">
-            {/* Step 1 */}
-            <AnimatedSection animation="fade-up" className="relative group">
-              <div className="bg-slate-800/50 p-8 rounded-3xl border border-slate-700 hover:border-emerald-500/50 transition-all duration-500 hover:bg-slate-800 relative z-10 h-full">
-                <div className="w-16 h-16 bg-slate-950 text-emerald-400 border border-slate-700 rounded-2xl flex items-center justify-center text-2xl font-bold mb-6 shadow-lg group-hover:scale-110 transition-transform">
-                  1
-                </div>
-                <h3 className="text-xl font-bold text-white mb-3">Add Tallypadi</h3>
-                <p className="text-slate-400 leading-relaxed">
-                  Click the button to open WhatsApp. Save the number. No complex app downloads or installations.
-                </p>
-              </div>
-            </AnimatedSection>
+    <div className="grid md:grid-cols-3 gap-8">
+      {/* Step 1 */}
+      <AnimatedSection animation="fade-up" className="relative group">
+        <div className="bg-slate-800/50 p-8 rounded-3xl border border-slate-700 hover:border-emerald-500/50 transition-all duration-500 hover:bg-slate-800 relative z-10 h-full">
+          <StepShot
+            badge="STEP 1"
+            title="Chat bot on WhatsApp"
+            subtitle="Create account with email + password"
+            // imgSrc="/images/how/step1.png" // add later
+          />
 
-            {/* Step 2 */}
-            <AnimatedSection animation="fade-up" className="relative group">
-              <div className="bg-slate-800/50 p-8 rounded-3xl border border-slate-700 hover:border-emerald-500/50 transition-all duration-500 hover:bg-slate-800 relative z-10 h-full">
-                <div className="w-16 h-16 bg-emerald-600 text-white rounded-2xl flex items-center justify-center text-2xl font-bold mb-6 shadow-lg shadow-emerald-600/20 group-hover:scale-110 transition-transform">
-                  2
-                </div>
-                <h3 className="text-xl font-bold text-white mb-3">Add Your Stock</h3>
-                <p className="text-slate-400 leading-relaxed">
-                  Tell the bot what you sell. E.g.,{' '}
-                  <span className="bg-slate-900 px-1.5 py-0.5 rounded text-emerald-300 font-mono text-xs">
-                    &quot;Add 50 bags of Rice at 40k&quot;
-                  </span>
-                  . It remembers everything instantly.
-                </p>
-              </div>
-            </AnimatedSection>
-
-            {/* Step 3 */}
-            <AnimatedSection animation="fade-up" className="relative group">
-              <div className="bg-slate-800/50 p-8 rounded-3xl border border-slate-700 hover:border-emerald-500/50 transition-all duration-500 hover:bg-slate-800 relative z-10 h-full">
-                <div className="w-16 h-16 bg-blue-600 text-white rounded-2xl flex items-center justify-center text-2xl font-bold mb-6 shadow-lg shadow-blue-600/20 group-hover:scale-110 transition-transform">
-                  3
-                </div>
-                <h3 className="text-xl font-bold text-white mb-3">Chat to Manage</h3>
-                <p className="text-slate-400 leading-relaxed">
-                  Record sales as they happen.{' '}
-                  <span className="bg-slate-900 px-1.5 py-0.5 rounded text-blue-300 font-mono text-xs">
-                    &quot;Sold 2 Rice&quot;
-                  </span>
-                  . We calculate your profit and track inventory.
-                </p>
-              </div>
-            </AnimatedSection>
+          <div className="w-16 h-16 bg-slate-950 text-emerald-400 border border-slate-700 rounded-2xl flex items-center justify-center text-2xl font-bold mb-6 shadow-lg group-hover:scale-110 transition-transform">
+            1
           </div>
+
+          <h3 className="text-xl font-bold text-white mb-3">Chat & Create Account</h3>
+          <p className="text-slate-400 leading-relaxed">
+            Message the bot on WhatsApp and sign up by sending your{' '}
+            <span className="bg-slate-900 px-1.5 py-0.5 rounded text-emerald-300 font-mono text-xs">
+              email
+            </span>{' '}
+            and{' '}
+            <span className="bg-slate-900 px-1.5 py-0.5 rounded text-emerald-300 font-mono text-xs">
+              password
+            </span>
+            .
+          </p>
         </div>
-      </section>
+      </AnimatedSection>
+
+      {/* Step 2 */}
+      <AnimatedSection animation="fade-up" className="relative group">
+        <div className="bg-slate-800/50 p-8 rounded-3xl border border-slate-700 hover:border-emerald-500/50 transition-all duration-500 hover:bg-slate-800 relative z-10 h-full">
+          <StepShot
+            badge="STEP 2"
+            title="Setup shop settings"
+            subtitle='Type: "show my settings"'
+            // imgSrc="/images/how/step2.png" // add later
+          />
+
+          <div className="w-16 h-16 bg-emerald-600 text-white rounded-2xl flex items-center justify-center text-2xl font-bold mb-6 shadow-lg shadow-emerald-600/20 group-hover:scale-110 transition-transform">
+            2
+          </div>
+
+          <h3 className="text-xl font-bold text-white mb-3">Set Shop Name & Settings</h3>
+          <p className="text-slate-400 leading-relaxed">
+            Ask the bot{' '}
+            <span className="bg-slate-900 px-1.5 py-0.5 rounded text-emerald-300 font-mono text-xs">
+              &quot;show my settings&quot;
+            </span>{' '}
+            to see your settings list, then update your shop name and preferences in seconds.
+          </p>
+        </div>
+      </AnimatedSection>
+
+      {/* Step 3 */}
+      <AnimatedSection animation="fade-up" className="relative group">
+        <div className="bg-slate-800/50 p-8 rounded-3xl border border-slate-700 hover:border-emerald-500/50 transition-all duration-500 hover:bg-slate-800 relative z-10 h-full">
+          <StepShot
+            badge="STEP 3"
+            title="Update stock + sales"
+            subtitle="Record effortlessly by chatting"
+            // imgSrc="/images/how/step3.png" // add later
+          />
+
+          <div className="w-16 h-16 bg-blue-600 text-white rounded-2xl flex items-center justify-center text-2xl font-bold mb-6 shadow-lg shadow-blue-600/20 group-hover:scale-110 transition-transform">
+            3
+          </div>
+
+          <h3 className="text-xl font-bold text-white mb-3">Update Stock & Record Sales</h3>
+          <p className="text-slate-400 leading-relaxed">
+            Add stock and record sales naturally. Example:{' '}
+            <span className="bg-slate-900 px-1.5 py-0.5 rounded text-blue-300 font-mono text-xs">
+              &quot;Add 20 cartons of Malt at 2,500&quot;
+            </span>{' '}
+            or{' '}
+            <span className="bg-slate-900 px-1.5 py-0.5 rounded text-blue-300 font-mono text-xs">
+              &quot;Sold 3 Malt&quot;
+            </span>
+            . Tallypadi tracks inventory and totals automatically.
+          </p>
+        </div>
+      </AnimatedSection>
+    </div>
+  </div>
+</section>
+
 
       {/* --- Features Grid --- */}
       <section id="features" className="py-24 bg-slate-50 relative">
@@ -1232,6 +1271,8 @@ export default function LandingPage() {
     </div>
   );
 }
+
+
 
 // --- Sub-components ---
 
