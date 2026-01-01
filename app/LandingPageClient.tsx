@@ -1273,6 +1273,7 @@ export default function LandingPage() {
 }
 
 
+
 // --- Sub-components ---
 
 const FeatureCard: React.FC<FeatureCardProps> = ({ icon, color, title, desc, badge = null }) => {

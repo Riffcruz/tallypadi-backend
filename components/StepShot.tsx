@@ -6,6 +6,7 @@ type StepShotProps = {
   alt?: string;
 };
 
+
 export function StepShot({ title, subtitle, badge, imgSrc, alt }: StepShotProps) {
   return (
     <div className="mb-6">
