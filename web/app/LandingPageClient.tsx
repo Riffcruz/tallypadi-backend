@@ -26,7 +26,7 @@ import {
   HelpCircle,
 } from 'lucide-react';
 import Image from 'next/image';
-import { StepShot } from "../components/StepShot";
+import { StepShotWhatsApp } from "../components/StepShot";
 
 
 // --- TYPES & INTERFACES ---
@@ -681,12 +681,18 @@ export default function LandingPage() {
       {/* Step 1 */}
       <AnimatedSection animation="fade-up" className="relative group">
         <div className="bg-slate-800/50 p-8 rounded-3xl border border-slate-700 hover:border-emerald-500/50 transition-all duration-500 hover:bg-slate-800 relative z-10 h-full">
-          <StepShot
-            badge="STEP 1"
-            title="Chat bot on WhatsApp"
-            subtitle="Create account with email + password"
-            // imgSrc="/images/how/step1.png" // add later
-          />
+          <StepShotWhatsApp
+  badge="STEP 1"
+  title="Chat TallyPadi"
+  subtitle="Create account with email + password"
+  bubbles={[
+    { side: "bot", text: "Welcome 👋 Create your account." },
+    { side: "user", text: "Email: snow@email.com" },
+    { side: "user", text: "Password: ********" },
+    { side: "bot", text: "Account created ✅ Next: your shop name." },
+  ]}
+/>
+
 
           <div className="w-16 h-16 bg-slate-950 text-emerald-400 border border-slate-700 rounded-2xl flex items-center justify-center text-2xl font-bold mb-6 shadow-lg group-hover:scale-110 transition-transform">
             1
@@ -710,12 +716,17 @@ export default function LandingPage() {
       {/* Step 2 */}
       <AnimatedSection animation="fade-up" className="relative group">
         <div className="bg-slate-800/50 p-8 rounded-3xl border border-slate-700 hover:border-emerald-500/50 transition-all duration-500 hover:bg-slate-800 relative z-10 h-full">
-          <StepShot
-            badge="STEP 2"
-            title="Setup shop settings"
-            subtitle='Type: "show my settings"'
-            // imgSrc="/images/how/step2.png" // add later
-          />
+          <StepShotWhatsApp
+  badge="STEP 2"
+  title="Show My Settings"
+  subtitle='Type: "show my settings"'
+  bubbles={[
+    { side: "user", text: "show my settings" },
+    { side: "bot", text: "Shop: Wilson Stores\nCurrency: NGN\nLow-stock alert: ON\nStaff: 2" },
+    { side: "bot", text: "Reply with what to change 👇" },
+  ]}
+/>
+
 
           <div className="w-16 h-16 bg-emerald-600 text-white rounded-2xl flex items-center justify-center text-2xl font-bold mb-6 shadow-lg shadow-emerald-600/20 group-hover:scale-110 transition-transform">
             2
