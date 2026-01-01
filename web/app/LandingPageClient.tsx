@@ -797,7 +797,7 @@ export default function LandingPage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 h-[500px]">
             <AnimatedSection animation="zoom-in" className="col-span-2 row-span-2 relative rounded-3xl overflow-hidden group shadow-lg">
               <img
-                src="https://images.unsplash.com/photo-1525904097878-94fb15817433?q=80&w=2070&auto=format&fit=crop"
+                src="/TTALLYYPAADI BRAND IDENTITYArtboard 9-100.jpg"
                 alt="Inventory"
                 className="w-full h-full object-cover transition duration-700 group-hover:scale-110"
               />
@@ -820,7 +820,7 @@ export default function LandingPage() {
 
             <AnimatedSection animation="zoom-in" className="relative rounded-3xl overflow-hidden group shadow-lg">
               <img
-                src="https://images.unsplash.com/photo-1580519542054-3a227237ce72?q=80&w=2074&auto=format&fit=crop"
+                src="/banner.jpeg"
                 alt="Payment"
                 className="w-full h-full object-cover transition duration-700 group-hover:scale-110"
               />
