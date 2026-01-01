@@ -26,7 +26,7 @@ import {
   HelpCircle,
 } from 'lucide-react';
 import Image from 'next/image';
-import { StepShotWhatsApp } from "../components/StepShot";
+import { StepShotWhatsAppLight } from "../components/StepShot";
 
 
 // --- TYPES & INTERFACES ---
@@ -681,17 +681,15 @@ export default function LandingPage() {
       {/* Step 1 */}
       <AnimatedSection animation="fade-up" className="relative group">
         <div className="bg-slate-800/50 p-8 rounded-3xl border border-slate-700 hover:border-emerald-500/50 transition-all duration-500 hover:bg-slate-800 relative z-10 h-full">
-          <StepShotWhatsApp
-  badge="STEP 1"
-  title="Chat TallyPadi"
-  subtitle="Create account with email + password"
-  bubbles={[
-    { side: "bot", text: "Welcome 👋 Create your account." },
-    { side: "user", text: "Email: snow@email.com" },
-    { side: "user", text: "Password: ********" },
-    { side: "bot", text: "Account created ✅ Next: your shop name." },
-  ]}
-/>
+              <StepShotWhatsAppLight
+        badge="STEP 1"
+        bubbles={[
+          { side: "bot", cardTitle: "Tallypadi", text: "👋 Welcome! Create your account.\nSend your email + password.", time: "9:58 AM" },
+          { side: "user", text: "Email: snow@email.com\nPassword: ********", time: "10:00 AM" },
+          { side: "bot", cardTitle: "Tallypadi", text: "✅ Account created!\nNext: what’s your shop name?", time: "10:00 AM" },
+        ]}
+      />
+
 
 
           <div className="w-16 h-16 bg-slate-950 text-emerald-400 border border-slate-700 rounded-2xl flex items-center justify-center text-2xl font-bold mb-6 shadow-lg group-hover:scale-110 transition-transform">
@@ -716,16 +714,14 @@ export default function LandingPage() {
       {/* Step 2 */}
       <AnimatedSection animation="fade-up" className="relative group">
         <div className="bg-slate-800/50 p-8 rounded-3xl border border-slate-700 hover:border-emerald-500/50 transition-all duration-500 hover:bg-slate-800 relative z-10 h-full">
-          <StepShotWhatsApp
-  badge="STEP 2"
-  title="Show My Settings"
-  subtitle='Type: "show my settings"'
-  bubbles={[
-    { side: "user", text: "show my settings" },
-    { side: "bot", text: "Shop: Wilson Stores\nCurrency: NGN\nLow-stock alert: ON\nStaff: 2" },
-    { side: "bot", text: "Reply with what to change 👇" },
-  ]}
-/>
+              <StepShotWhatsAppLight
+        badge="STEP 2"
+        bubbles={[
+          { side: "user", text: "show my settings", time: "10:05 AM" },
+          { side: "bot", cardTitle: "Tallypadi", text: "⚙️ Settings\nShop: Wilson Furniture\nCurrency: NGN\nLow-stock: ON\nStaff: 2", time: "10:05 AM" },
+        ]}
+        />
+
 
 
           <div className="w-16 h-16 bg-emerald-600 text-white rounded-2xl flex items-center justify-center text-2xl font-bold mb-6 shadow-lg shadow-emerald-600/20 group-hover:scale-110 transition-transform">
@@ -746,12 +742,16 @@ export default function LandingPage() {
       {/* Step 3 */}
       <AnimatedSection animation="fade-up" className="relative group">
         <div className="bg-slate-800/50 p-8 rounded-3xl border border-slate-700 hover:border-emerald-500/50 transition-all duration-500 hover:bg-slate-800 relative z-10 h-full">
-          <StepShot
-            badge="STEP 3"
-            title="Update stock + sales"
-            subtitle="Record effortlessly by chatting"
-            // imgSrc="/images/how/step3.png" // add later
-          />
+         <StepShotWhatsAppLight
+  badge="STEP 3"
+  bubbles={[
+    { side: "user", text: "Add 50 bags of Rice at 40k", time: "10:00 AM" },
+    { side: "bot", cardTitle: "Tallypadi", text: "✅ Stock Added!\nItem: Rice\nQty: 50 Bags\nPrice: ₦40,000/bag", time: "10:00 AM" },
+    { side: "user", text: "Sold 2 Rice", time: "12:30 PM" },
+    { side: "bot", cardTitle: "Tallypadi", text: "💰 Sale Recorded!\nYou made: ₦80,000\nWarning: Stock is low!", time: "12:30 PM" },
+  ]}
+/>
+
 
           <div className="w-16 h-16 bg-blue-600 text-white rounded-2xl flex items-center justify-center text-2xl font-bold mb-6 shadow-lg shadow-blue-600/20 group-hover:scale-110 transition-transform">
             3
