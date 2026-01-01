@@ -26,7 +26,7 @@ import {
   HelpCircle,
 } from 'lucide-react';
 import Image from 'next/image';
-import { StepShotWhatsAppLight } from "../components/StepShot";
+import  StepShotWhatsAppLight  from "../components/StepShot";
 
 
 // --- TYPES & INTERFACES ---
