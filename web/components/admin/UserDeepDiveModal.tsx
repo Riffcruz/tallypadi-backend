@@ -36,14 +36,16 @@ type ViewType = 'info' | 'inventory' | 'sales' | 'staff';
 export default function UserDeepDiveModal({
   user,
   onClose,
-  adminKey,
+  adminToken,
   onAction,
 }: {
   user: any;
   onClose: () => void;
-  adminKey: string;
+  adminToken: string; // ✅ JWT token
   onAction: (userId: string, action: string, payload?: any) => Promise<any>;
 }) {
+  const userId = String(user?.id || user?._id || '').trim();
+
   const [details, setDetails] = useState<any>(null);
   const [view, setView] = useState<ViewType>('info');
   const [salesDate, setSalesDate] = useState({ start: '', end: '' });
@@ -59,21 +61,30 @@ export default function UserDeepDiveModal({
   const [clearingMsgHistory, setClearingMsgHistory] = useState(false);
   const [deletingSales, setDeletingSales] = useState(false);
 
+  const authHeaders = useMemo(
+    () => ({ Authorization: `Bearer ${adminToken}` }),
+    [adminToken]
+  );
+
   // ✅ Central refresh (prevents stale UI after deletes)
   const refreshDetails = useCallback(async () => {
-    if (!user?.id) return;
+    if (!userId) return;
+
     setLoadingDetails(true);
     try {
-      const res = await axios.get(`${API_URL}/admin/users/${user.id}/details`, {
-        headers: { 'x-admin-secret': adminKey },
+      const res = await axios.get(`${API_URL}/admin/users/${userId}/details`, {
+        headers: authHeaders,
       });
       setDetails(res.data);
-    } catch (e) {
-      Swal.fire('Error', 'Failed to load details', 'error');
+    } catch (e: any) {
+      const status = e?.response?.status;
+      if (status === 401) Swal.fire('Unauthorized', 'Your session expired. Please login again.', 'error');
+      else if (status === 403) Swal.fire('Forbidden', 'Admin access required.', 'error');
+      else Swal.fire('Error', 'Failed to load details', 'error');
     } finally {
       setLoadingDetails(false);
     }
-  }, [user?.id, adminKey]);
+  }, [userId, authHeaders]);
 
   useEffect(() => {
     refreshDetails();
@@ -134,9 +145,9 @@ export default function UserDeepDiveModal({
     }
 
     try {
-      await onAction(user.id, 'change_plan', { planType: plan });
-      await onAction(user.id, 'set_expiry', { date: expiryDate });
-      await onAction(user.id, 'activate');
+      await onAction(userId, 'change_plan', { planType: plan });
+      await onAction(userId, 'set_expiry', { date: expiryDate });
+      await onAction(userId, 'activate');
 
       Swal.fire('Success', `Plan set to ${plan} until ${expiryDate.toLocaleDateString()}`, 'success');
 
@@ -164,17 +175,17 @@ export default function UserDeepDiveModal({
     if (!date) return;
 
     const newDate = new Date(date);
-    await onAction(user.id, 'set_expiry', { date: newDate });
+    await onAction(userId, 'set_expiry', { date: newDate });
 
     if (newDate < new Date()) {
-      await onAction(user.id, 'cancel');
+      await onAction(userId, 'cancel');
       setDetails((prev: any) => ({
         ...prev,
         profile: { ...prev.profile, subscriptionStatus: 'cancelled', trialEndsAt: newDate },
       }));
       Swal.fire('Updated', 'Date is in past. User Cancelled.', 'info');
     } else {
-      await onAction(user.id, 'activate');
+      await onAction(userId, 'activate');
       setDetails((prev: any) => ({
         ...prev,
         profile: { ...prev.profile, subscriptionStatus: 'active', trialEndsAt: newDate },
@@ -182,40 +193,39 @@ export default function UserDeepDiveModal({
       Swal.fire('Updated', 'Expiration date extended.', 'success');
     }
   };
+
   const isUnknownItemSale = (s: any) => {
-  const items = Array.isArray(s?.items) ? s.items : [];
-  if (!items.length) return true; // no items => unknown
+    const items = Array.isArray(s?.items) ? s.items : [];
+    if (!items.length) return true;
 
-  return items.some((i: any) => {
-    const name = String(i?.name ?? '').trim().toLowerCase();
-    return (
-      !name ||
-      name === 'unknown_item' ||
-      name === 'unknown' ||
-      name === 'item' ||
-      name === 'null' ||
-      name === 'undefined'
-    );
-  });
-};
+    return items.some((i: any) => {
+      const name = String(i?.name ?? '').trim().toLowerCase();
+      return (
+        !name ||
+        name === 'unknown_item' ||
+        name === 'unknown' ||
+        name === 'item' ||
+        name === 'null' ||
+        name === 'undefined'
+      );
+    });
+  };
 
+  const getFilteredSales = () => {
+    let data = details?.recentSales || [];
 
-const getFilteredSales = () => {
-  let data = details?.recentSales || [];
+    data = data.filter((s: any) => !s?.isUndone && !isUnknownItemSale(s));
 
-  // ✅ hide undone + hide unknown-item sales
-  data = data.filter((s: any) => !s?.isUndone && !isUnknownItemSale(s));
+    if (salesDate.start) data = data.filter((s: any) => new Date(s.timestamp) >= new Date(salesDate.start));
 
-  if (salesDate.start) data = data.filter((s: any) => new Date(s.timestamp) >= new Date(salesDate.start));
+    if (salesDate.end) {
+      const end = new Date(salesDate.end);
+      end.setHours(23, 59, 59);
+      data = data.filter((s: any) => new Date(s.timestamp) <= end);
+    }
 
-  if (salesDate.end) {
-    const end = new Date(salesDate.end);
-    end.setHours(23, 59, 59);
-    data = data.filter((s: any) => new Date(s.timestamp) <= end);
-  }
-
-  return data;
-};
+    return data;
+  };
 
   const exportSales = (format: 'csv' | 'pdf') => {
     const data = getFilteredSales();
@@ -263,7 +273,6 @@ const getFilteredSales = () => {
     doc.save(`${fileName}.pdf`);
   };
 
-  // ✅ Delete SALES history only (not user)
   const handleDeleteSalesHistoryOnly = async () => {
     const res = await Swal.fire({
       title: 'Delete Sales History?',
@@ -277,14 +286,9 @@ const getFilteredSales = () => {
 
     try {
       setDeletingSales(true);
-      await onAction(user.id, 'delete_sales_history');
-
-      // ✅ clear UI immediately
+      await onAction(userId, 'delete_sales_history');
       setDetails((prev: any) => ({ ...prev, recentSales: [] }));
-
-      // ✅ refetch from server to avoid stale cache
       await refreshDetails();
-
       Swal.fire('Deleted', 'Sales history deleted successfully.', 'success');
     } catch (e) {
       Swal.fire('Error', 'Failed to delete sales history', 'error');
@@ -293,7 +297,6 @@ const getFilteredSales = () => {
     }
   };
 
-  // ✅ Delete user + history
   const handleDeleteUserAndHistory = async () => {
     const res = await Swal.fire({
       title: 'Delete User?',
@@ -307,7 +310,7 @@ const getFilteredSales = () => {
 
     try {
       setDeletingUser(true);
-      await onAction(user.id, 'delete_user', { deleteHistory: true });
+      await onAction(userId, 'delete_user', { deleteHistory: true });
       Swal.fire('Deleted', 'User and history deleted successfully.', 'success');
       onClose();
     } catch (e) {
@@ -317,7 +320,6 @@ const getFilteredSales = () => {
     }
   };
 
-  // ✅ Clear only message history (keep user + sales)
   const handleClearHistoryOnly = async () => {
     const res = await Swal.fire({
       title: 'Clear Message History?',
@@ -331,8 +333,7 @@ const getFilteredSales = () => {
 
     try {
       setClearingMsgHistory(true);
-      await onAction(user.id, 'clear_history');
-
+      await onAction(userId, 'clear_history');
       setDetails((prev: any) => ({ ...prev, lastMessages: [] }));
       Swal.fire('Cleared', 'Message history cleared.', 'success');
     } catch (e) {
@@ -342,7 +343,6 @@ const getFilteredSales = () => {
     }
   };
 
-  // ✅ Send message to individual (user or staff)
   const sendIndividualMessage = async (directTo?: string) => {
     const to =
       directTo ||
@@ -365,7 +365,7 @@ const getFilteredSales = () => {
 
     try {
       setSending(true);
-      await onAction(user.id, 'send_message', { to, message: text });
+      await onAction(userId, 'send_message', { to, message: text });
       Swal.fire('Sent', 'Message queued', 'success');
       setMsg('');
     } catch (e) {
@@ -375,7 +375,6 @@ const getFilteredSales = () => {
     }
   };
 
-  // --- Loading state ---
   if (loadingDetails || !details) {
     return (
       <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
@@ -460,7 +459,6 @@ const getFilteredSales = () => {
                   </div>
                 </div>
 
-                {/* Desktop buttons */}
                 <div className="hidden sm:grid grid-cols-2 gap-2 mt-2">
                   <button
                     onClick={handlePlanChange}
@@ -475,15 +473,6 @@ const getFilteredSales = () => {
                     <Calendar size={14} /> Set Expiry
                   </button>
                 </div>
-
-                {details?.profile?.subscriptionStatus === 'suspended' && (
-                  <button
-                    onClick={() => onAction(user.id, 'unsuspend')}
-                    className="hidden sm:block w-full bg-emerald-600 text-white px-3 py-2 rounded-lg text-xs font-extrabold hover:bg-emerald-500 mt-1"
-                  >
-                    Unsuspend User
-                  </button>
-                )}
 
                 {/* ✅ Danger Zone */}
                 <div className="hidden sm:block mt-3 pt-3 border-t border-slate-600/60 space-y-2">
@@ -610,12 +599,10 @@ const getFilteredSales = () => {
           {/* SALES */}
           {view === 'sales' && (
             <div className="space-y-4">
-              {/* ✅ Sales Danger Bar */}
               <div className="bg-slate-900 p-3 rounded-xl border border-slate-700 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                 <div className="text-xs text-slate-300">
                   <span className="font-extrabold text-white">Sales Records:</span>{' '}
                   {getFilteredSales().length.toLocaleString()}
-
                 </div>
 
                 <button
@@ -628,7 +615,6 @@ const getFilteredSales = () => {
                 </button>
               </div>
 
-              {/* Filters */}
               <div className="bg-slate-900 p-3 rounded-xl border border-slate-700">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <input
@@ -671,9 +657,7 @@ const getFilteredSales = () => {
                     <div key={s._id} className="rounded-xl border border-slate-700 bg-slate-900 p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <p className="text-slate-200 font-bold">
-                            {new Date(s.timestamp).toLocaleDateString()}
-                          </p>
+                          <p className="text-slate-200 font-bold">{new Date(s.timestamp).toLocaleDateString()}</p>
                           <p className="text-xs text-slate-500">
                             {new Date(s.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </p>

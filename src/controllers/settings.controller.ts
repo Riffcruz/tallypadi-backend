@@ -9,16 +9,21 @@ const sanitizeString = (input: unknown): string | null => {
 };
 
 const validateBoolean = (input: unknown): boolean | undefined => {
-  if (typeof input === 'boolean') return input;
-  return undefined;
+  return typeof input === 'boolean' ? input : undefined;
 };
 
+// ✅ accepts number OR numeric string
 const validateNumber = (input: unknown): number | undefined => {
-  if (typeof input === 'number' && !isNaN(input)) return input;
-  return undefined;
+  const n = typeof input === 'string' ? Number(input) : input;
+  return typeof n === 'number' && Number.isFinite(n) ? n : undefined;
 };
 
 type AuthReq = Request & { user?: { id?: string; _id?: string } };
+
+const isAdminRole = (role: unknown) => {
+  const r = String(role || '').toUpperCase();
+  return r === 'ADMIN' || r === 'SUPER_ADMIN';
+};
 
 export const updateSettings = async (req: AuthReq, res: Response) => {
   try {
@@ -29,26 +34,31 @@ export const updateSettings = async (req: AuthReq, res: Response) => {
     const userId = req.user?.id || (req.user as any)?._id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
+    // Load user once (used for plan gating + admin role checks)
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
     // ---------------------------------------------------------
     // 1) Handle User-Specific Settings (logged-in user)
     // ---------------------------------------------------------
     if (body.businessName !== undefined || body.shopName !== undefined || body.settings !== undefined) {
-      const user = await User.findById(userId);
-      if (!user) return res.status(404).json({ error: 'User not found' });
-
       const $set: any = {};
 
       // ✅ accept businessName OR shopName from frontend, and update BOTH
       const incomingName =
-        body.businessName !== undefined ? body.businessName :
-        body.shopName !== undefined ? body.shopName :
-        undefined;
+        body.businessName !== undefined
+          ? body.businessName
+          : body.shopName !== undefined
+            ? body.shopName
+            : undefined;
 
       if (incomingName !== undefined) {
         const safeName = sanitizeString(incomingName);
         if (safeName !== null && safeName.length <= 100) {
           $set['businessName'] = safeName;
           $set['shopName'] = safeName; // ✅ important (your UI uses shopName)
+        } else if (safeName !== null && safeName.length > 100) {
+          return res.status(400).json({ error: 'Business name too long (max 100 chars)' });
         }
       }
 
@@ -57,17 +67,18 @@ export const updateSettings = async (req: AuthReq, res: Response) => {
 
         if (inputSettings.closingTime !== undefined) {
           const safeTime = sanitizeString(inputSettings.closingTime);
-          if (safeTime) $set['settings.closingTime'] = safeTime;
+          if (safeTime) $set['settings.closingTime'] = safeTime.slice(0, 40);
         }
 
         if (inputSettings.language !== undefined) {
           const safeLang = sanitizeString(inputSettings.language);
           if (safeLang) {
-            $set['settings.language'] = safeLang;
-            $set['settings.botLanguage'] = safeLang; // ✅ optional compatibility
+            $set['settings.language'] = safeLang.slice(0, 40);
+            $set['settings.botLanguage'] = safeLang.slice(0, 40); // ✅ compatibility
           }
         }
 
+        // ✅ Plan-gated feature
         if (inputSettings.pdfReportsEnabled !== undefined) {
           const isEnabled = validateBoolean(inputSettings.pdfReportsEnabled);
           if (isEnabled !== undefined) {
@@ -83,7 +94,13 @@ export const updateSettings = async (req: AuthReq, res: Response) => {
 
         if (inputSettings.utcOffsetMinutes !== undefined) {
           const offset = validateNumber(inputSettings.utcOffsetMinutes);
-          if (offset !== undefined) $set['settings.utcOffsetMinutes'] = offset;
+          if (offset !== undefined) {
+            // reasonable bounds: -14h to +14h
+            if (offset < -14 * 60 || offset > 14 * 60) {
+              return res.status(400).json({ error: 'utcOffsetMinutes out of range' });
+            }
+            $set['settings.utcOffsetMinutes'] = offset;
+          }
         }
       }
 
@@ -108,7 +125,7 @@ export const updateSettings = async (req: AuthReq, res: Response) => {
     }
 
     // ---------------------------------------------------------
-    // 2) Handle Global Admin Settings (protected)
+    // 2) Handle Global Admin Settings (ADMIN ONLY - JWT + ROLE)
     // ---------------------------------------------------------
     const adminKeysUsed =
       body.whatsappUrl !== undefined ||
@@ -117,13 +134,10 @@ export const updateSettings = async (req: AuthReq, res: Response) => {
       body.maxStaffAccounts !== undefined;
 
     if (adminKeysUsed) {
-      // ✅ Protect global updates
-      const adminSecret = String(req.headers['x-admin-secret'] || '');
-      if (!process.env.ADMIN_SECRET || adminSecret !== process.env.ADMIN_SECRET) {
+      // ✅ role check (NO header secret backdoor)
+      if (!isAdminRole((user as any).role)) {
         return res.status(403).json({ error: 'Forbidden (admin only)' });
       }
-
-      console.log('DEBUG: Registered AdminSettings Schema Paths:', Object.keys(AdminSettings.schema.paths));
 
       let adminSettings = await AdminSettings.findOne();
       if (!adminSettings) {
@@ -136,7 +150,7 @@ export const updateSettings = async (req: AuthReq, res: Response) => {
 
       if (body.whatsappUrl !== undefined) {
         const safeUrl = sanitizeString(body.whatsappUrl);
-        if (safeUrl !== null) adminSettings.whatsappUrl = safeUrl;
+        if (safeUrl !== null) adminSettings.whatsappUrl = safeUrl.slice(0, 300);
       }
 
       if (body.autoSuspendOnJailbreak !== undefined) {
@@ -146,12 +160,18 @@ export const updateSettings = async (req: AuthReq, res: Response) => {
 
       if (body.maxMessageHistory !== undefined) {
         const hist = validateNumber(body.maxMessageHistory);
-        if (hist !== undefined) adminSettings.limits.maxMessageHistory = hist;
+        if (hist !== undefined) {
+          if (hist < 0 || hist > 5000) return res.status(400).json({ error: 'maxMessageHistory out of range' });
+          adminSettings.limits.maxMessageHistory = hist;
+        }
       }
 
       if (body.maxStaffAccounts !== undefined) {
         const staff = validateNumber(body.maxStaffAccounts);
-        if (staff !== undefined) adminSettings.limits.maxStaffAccounts = staff;
+        if (staff !== undefined) {
+          if (staff < 0 || staff > 100) return res.status(400).json({ error: 'maxStaffAccounts out of range' });
+          adminSettings.limits.maxStaffAccounts = staff;
+        }
       }
 
       await adminSettings.save();

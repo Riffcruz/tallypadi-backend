@@ -3,7 +3,11 @@ import React, { useMemo, useState } from 'react';
 import { Search, Filter, Eye, Lock, Unlock } from 'lucide-react';
 import UserDeepDiveModal from './UserDeepDiveModal';
 
-export default function UsersTab({ users, onAction, adminKey }: any) {
+export default function UsersTab({
+  users,
+  onAction,
+  adminToken, // ✅ JWT token (Bearer)
+}: any) {
   const [filterActive, setFilterActive] = useState(true);
   const [search, setSearch] = useState('');
   const [selectedUser, setSelectedUser] = useState<any>(null);
@@ -227,7 +231,7 @@ export default function UsersTab({ users, onAction, adminKey }: any) {
         <UserDeepDiveModal
           user={selectedUser}
           onClose={() => setSelectedUser(null)}
-          adminKey={adminKey}
+          adminToken={adminToken}   // ✅ pass JWT properly
           onAction={onAction}
         />
       )}

@@ -64,7 +64,8 @@ const corsOptions: cors.CorsOptions = {
   origin: process.env.NODE_ENV === 'production' ? 'https://tallypadi.com' : true,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-secret'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+
 };
 
 app.use(cors(corsOptions));
@@ -220,8 +221,10 @@ app.use(xss());
 app.use((req, _res, next) => {
   if (req.body) req.body = sanitize(req.body);
   if (req.params) req.params = sanitize(req.params);
+  if (req.query) req.query = sanitize(req.query);
   next();
 });
+
 
 // ==========================================
 // 🛡️ AUTH MIDDLEWARE (NO jwt.decode FALLBACK)
@@ -296,14 +299,19 @@ app.use('/api/payment', paymentRouter);
 app.use('/api/health', healthRouter);
 
 // --- ADMIN (SITE OWNER) ---
-app.use(
-  '/api/admin',
-  (req, _res, next) => {
-    console.log(`🛡️ Admin API Hit: ${req.method} ${req.originalUrl}`);
-    next();
-  },
-  adminRouter
-);
+const adminLimiterPerUser = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: 'Too many admin requests, slow down.',
+  keyGenerator: (req: any) => (req.user?.id ? `admin:${req.user.id}` : `ip:${req.ip}`),
+});
+
+app.use('/api/admin', authRequired, adminLimiterPerUser, adminRouter);
+
+
+
 
 // ==========================================
 // 📁 STATIC FILES

@@ -70,11 +70,12 @@ export const getInventory = async (req: Request, res: Response) => {
   }
 };
 
-// ✅ GET single inventory item (needed by your SalesPage stock check)
+// ✅ GET single inventory item (needed by SalesPage stock check)
 export const getInventoryItem = async (req: Request, res: Response) => {
   try {
-    const user = await User.findOne(); // TODO: replace with real auth
-    if (!user) return res.status(404).json({ error: 'User not found' });
+    // 🔒 SECURITY FIX: Use getAuthUser instead of User.findOne()
+    const user = await getAuthUser(req);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
 
     const { id } = req.params;
 

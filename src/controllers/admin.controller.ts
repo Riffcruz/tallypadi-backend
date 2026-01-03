@@ -1,4 +1,7 @@
 import { Request, Response } from 'express';
+import mongoose from 'mongoose';
+import { z } from 'zod';
+
 import { User } from '../models/user.model';
 import { Transaction } from '../models/transaction.model';
 import { Inventory } from '../models/inventory.model';
@@ -6,12 +9,16 @@ import { AdminSettings } from '../models/adminSettings.model';
 import { DailyStats } from '../models/dailyStats.model';
 import { ProcessedMessage } from '../models/processedMessage.model';
 import { Debtor } from '../models/debtor.model';
-import { sendWhatsAppText, sendWhatsAppTemplate } from '../services/whatsapp.service';
 
-// Treat these as "unknown item" (invalid sales)
+import { sendWhatsAppText } from '../services/whatsapp.service';
+
+// -------------------------
+// Helpers
+// -------------------------
+const isValidObjectId = (id: string) => mongoose.Types.ObjectId.isValid(id);
+
 const UNKNOWN_ITEM_NAMES = ['unknown_item', 'unknown', 'item', 'null', 'undefined'];
 
-// Matches sales that have no items OR items with missing/invalid name
 const unknownSaleQuery = {
   $or: [
     { items: { $exists: false } },
@@ -31,7 +38,6 @@ const unknownSaleQuery = {
   ],
 };
 
-// “Valid sale” = not undone AND not unknown-item
 const validSaleMatch = {
   $and: [
     { $or: [{ isUndone: { $exists: false } }, { isUndone: false }] },
@@ -39,43 +45,119 @@ const validSaleMatch = {
   ],
 };
 
+// -------------------------
+// Zod Schemas
+// -------------------------
+const analyticsQuerySchema = z.object({
+  range: z.enum(['day', 'week', 'month']).optional(),
+});
 
-// --- ANALYTICS DASHBOARD ---
+const getAllUsersQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(200).optional().default(50),
+  search: z.string().trim().max(60).optional(),
+});
+
+const updateGlobalSettingsSchema = z
+  .object({
+    autoSuspendOnJailbreak: z.boolean().optional(),
+    maxMessageHistory: z.coerce.number().int().min(0).max(5000).optional(),
+    maxStaffAccounts: z.coerce.number().int().min(0).max(100).optional(),
+    whatsappUrl: z.string().trim().max(300).optional(),
+  })
+  .strict();
+
+const broadcastSchema = z
+  .object({
+    target: z.enum(['all', 'tycoon', 'oga_boss', 'active_24h']).default('all'),
+    message: z.string().trim().min(1).max(1500),
+  })
+  .strict();
+
+const manageUserSchema = z
+  .object({
+    action: z.enum([
+      'send_message',
+      'clear_history',
+      'delete_sales_history',
+      'delete_user',
+      'suspend',
+      'unsuspend',
+      'activate',
+      'cancel',
+      'change_plan',
+      'set_expiry',
+    ]),
+    payload: z.any().optional(),
+  })
+  .strict();
+
+const phoneSchema = z
+  .string()
+  .trim()
+  .min(7)
+  .max(20)
+  .refine((v) => /^[+]?[\d\s()-]+$/.test(v), 'Invalid phone number format');
+
+const adminAddStaffSchema = z
+  .object({
+    phoneNumber: phoneSchema,
+  })
+  .strict();
+
+const changePlanSchema = z.object({
+  planType: z.enum(['TYCOON', 'OGA_BOSS']),
+});
+
+const setExpirySchema = z.object({
+  date: z.string().trim().min(1),
+});
+
+const deleteUserPayloadSchema = z.object({
+  deleteHistory: z.boolean().optional(),
+});
+
+const sendMessagePayloadSchema = z.object({
+  to: phoneSchema,
+  message: z.string().trim().min(1).max(1500),
+});
+
+// -------------------------
+// ANALYTICS
+// GET /api/admin/analytics
+// -------------------------
 export const getSystemAnalytics = async (req: Request, res: Response) => {
   try {
-    const { range } = req.query; // 'day', 'week', 'month'
+    const parsedQ = analyticsQuerySchema.safeParse(req.query);
+    if (!parsedQ.success) return res.status(400).json({ error: parsedQ.error.flatten() });
 
-    // Date Logic
+    const range = parsedQ.data.range || 'day';
+
     const now = new Date();
-    let startDate = new Date();
+    const startDate = new Date(now);
     if (range === 'week') startDate.setDate(now.getDate() - 7);
     else if (range === 'month') startDate.setMonth(now.getMonth() - 1);
     else startDate.setHours(0, 0, 0, 0);
 
-    // 1. User Stats (Filtered by Active/Trial for Plans)
     const activeFilter = { subscriptionStatus: { $in: ['active', 'trial'] }, role: 'OWNER' };
 
-    const totalUsers = await User.countDocuments({ role: 'OWNER' }); // All registered
-    const tycoonUsers = await User.countDocuments({ ...activeFilter, planType: 'TYCOON' });
-    const ogaBossUsers = await User.countDocuments({ ...activeFilter, planType: 'OGA_BOSS' });
+    const [totalUsers, tycoonUsers, ogaBossUsers, activeUsers24h] = await Promise.all([
+      User.countDocuments({ role: 'OWNER' }),
+      User.countDocuments({ ...activeFilter, planType: 'TYCOON' }),
+      User.countDocuments({ ...activeFilter, planType: 'OGA_BOSS' }),
+      User.countDocuments({ updatedAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } }),
+    ]);
 
-    const activeUsers24h = await User.countDocuments({
-      updatedAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
-    });
-
-    // 2. Financial Stats (GMV)
-  const salesAgg = await Transaction.aggregate([
-  { $match: { type: 'SALE', ...validSaleMatch } },
-  { $group: { _id: null, total: { $sum: '$totalMoney' }, count: { $sum: 1 } } },
-]);
+    // NOTE: Your original GMV was lifetime; I’m making it RANGE-BASED to match the graph.
+    const salesAgg = await Transaction.aggregate([
+      { $match: { type: 'SALE', timestamp: { $gte: startDate }, ...validSaleMatch } },
+      { $group: { _id: null, total: { $sum: '$totalMoney' }, count: { $sum: 1 } } },
+    ]);
 
     const gmv = salesAgg[0]?.total || 0;
     const txCount = salesAgg[0]?.count || 0;
 
-    // 3. Graph Data
     const graphData = await Transaction.aggregate([
       { $match: { type: 'SALE', timestamp: { $gte: startDate }, ...validSaleMatch } },
-
       {
         $group: {
           _id: { $dateToString: { format: '%Y-%m-%d', date: '$timestamp' } },
@@ -85,15 +167,10 @@ export const getSystemAnalytics = async (req: Request, res: Response) => {
       { $sort: { _id: 1 } },
     ]);
 
-    const formattedGraph = graphData.map((item) => ({
-      date: item._id,
-      sales: item.sales,
-    }));
-
     res.json({
       users: { total: totalUsers, tycoon: tycoonUsers, ogaBoss: ogaBossUsers, active24h: activeUsers24h },
-      financials: { gmv, txCount },
-      graph: formattedGraph,
+      financials: { gmv, txCount, range, startDate: startDate.toISOString() },
+      graph: graphData.map((x) => ({ date: x._id, sales: x.sales })),
     });
   } catch (error) {
     console.error('Admin Analytics Error:', error);
@@ -101,245 +178,261 @@ export const getSystemAnalytics = async (req: Request, res: Response) => {
   }
 };
 
-// --- USER MANAGEMENT ---
+// -------------------------
+// USERS
+// GET /api/admin/users
+// -------------------------
 export const getAllUsers = async (req: Request, res: Response) => {
   try {
-    const { limit = 50, search } = req.query;
-    const query: any = { role: 'OWNER' };
+    const parsed = getAllUsersQuerySchema.safeParse(req.query);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
+    const { limit, search } = parsed.data;
+
+    const match: any = { role: 'OWNER' };
     if (search) {
-      query.$or = [
+      match.$or = [
         { phoneNumber: { $regex: search, $options: 'i' } },
         { businessName: { $regex: search, $options: 'i' } },
       ];
     }
 
-    const users = await User.find(query).sort({ createdAt: -1 }).limit(Number(limit));
+    // Avoid N+1: aggregate sales totals in one go
+    const rows = await User.aggregate([
+      { $match: match },
+      { $sort: { createdAt: -1 } },
+      { $limit: limit },
+      {
+        $lookup: {
+          from: 'transactions',
+          let: { ownerId: '$_id' },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ['$user', '$$ownerId'] },
+                type: 'SALE',
+                ...validSaleMatch,
+              },
+            },
+            { $group: { _id: null, total: { $sum: '$totalMoney' } } },
+          ],
+          as: 'salesAgg',
+        },
+      },
+      {
+        $addFields: {
+          lifetimeSales: { $ifNull: [{ $arrayElemAt: ['$salesAgg.total', 0] }, 0] },
+        },
+      },
+      {
+        $project: {
+          id: '$_id',
+          businessName: 1,
+          phone: '$phoneNumber',
+          plan: '$planType',
+          status: '$subscriptionStatus',
+          joinedAt: '$createdAt',
+          lifetimeSales: 1,
+          lastMessages: { $slice: ['$messageHistory', -3] },
+        },
+      },
+    ]);
 
-    const usersWithStats = await Promise.all(
-      users.map(async (u) => {
-        const salesAgg = await Transaction.aggregate([
-          { $match: { user: u._id, type: 'SALE', ...validSaleMatch } },
-
-          { $group: { _id: null, total: { $sum: '$totalMoney' } } },
-        ]);
-        return {
-          id: u._id,
-          businessName: u.businessName,
-          phone: u.phoneNumber,
-          plan: u.planType,
-          status: u.subscriptionStatus,
-          joinedAt: u.createdAt,
-          lifetimeSales: salesAgg[0]?.total || 0,
-          lastMessages: (u.messageHistory || []).slice(-3),
-        };
-      })
-    );
-
-    res.json(usersWithStats);
+    res.json(rows);
   } catch (error) {
+    console.error('Fetch Users Error:', error);
     res.status(500).json({ error: 'Fetch Users Error' });
   }
 };
 
+// GET /api/admin/users/:id/details
 export const getUserDeepDive = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    if (!isValidObjectId(id)) return res.status(400).json({ error: 'Invalid id' });
 
     const user = await User.findById(id);
-    if (!user) return res.status(404).json({ error: "User not found" });
+    if (!user) return res.status(404).json({ error: 'User not found' });
 
     const ownerId = user.role === 'OWNER' ? user._id : user.ownerId;
-    if (!ownerId) return res.status(400).json({ error: "OwnerId not found" });
+    if (!ownerId) return res.status(400).json({ error: 'OwnerId not found' });
 
     const staff = await User.find({ ownerId });
-
-    const staffIds = staff.map(s => s._id);
+    const staffIds = staff.map((s) => s._id);
     const allUserIds = [ownerId, ...staffIds];
 
-    const inventory = await Inventory.find({ user: ownerId }).limit(100);
-
-    // ✅ include staff sales too
-    const recentSales = await Transaction.find({
-  user: { $in: allUserIds },
-  type: 'SALE',
-  ...validSaleMatch,
-})
-  .sort({ timestamp: -1 })
-  .limit(100);
-
-
-    // ✅ messages are on OWNER (your design)
-    const owner = await User.findById(ownerId);
+    const [inventory, recentSales, owner] = await Promise.all([
+      Inventory.find({ user: ownerId }).limit(100),
+      Transaction.find({ user: { $in: allUserIds }, type: 'SALE', ...validSaleMatch })
+        .sort({ timestamp: -1 })
+        .limit(100),
+      User.findById(ownerId),
+    ]);
 
     res.json({
       profile: owner,
       staff,
       inventory,
       recentSales,
-      lastMessages: owner?.messageHistory?.slice(-10) || []
+      lastMessages: owner?.messageHistory?.slice(-10) || [],
     });
-
   } catch (error) {
-    console.error("getUserDeepDive error:", error);
-    res.status(500).json({ error: "Server Error" });
+    console.error('getUserDeepDive error:', error);
+    res.status(500).json({ error: 'Server Error' });
   }
 };
 
-
+// PUT /api/admin/users/:id
 export const manageUser = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { action, payload } = req.body;
+    if (!isValidObjectId(id)) return res.status(400).json({ error: 'Invalid id' });
+
+    const parsed = manageUserSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+    const { action, payload } = parsed.data;
 
     const user = await User.findById(id);
-    if (!user) return res.status(404).json({ error: "User not found" });
+    if (!user) return res.status(404).json({ error: 'User not found' });
 
     const ownerId = user.role === 'OWNER' ? user._id : user.ownerId;
-    if (!ownerId) return res.status(400).json({ error: "OwnerId not found" });
+    if (!ownerId) return res.status(400).json({ error: 'OwnerId not found' });
 
     const staffIds = await User.find({ ownerId, role: 'STAFF' }).distinct('_id');
     const allUserIds = [ownerId, ...staffIds];
 
-    // ✅ SEND INDIVIDUAL MESSAGE
     if (action === 'send_message') {
-      const to = String(payload?.to || '').trim();
-      const message = String(payload?.message || '').trim();
-      if (!to || !message) return res.status(400).json({ error: "Missing to/message" });
+      const p = sendMessagePayloadSchema.safeParse(payload || {});
+      if (!p.success) return res.status(400).json({ error: p.error.flatten() });
 
-      await sendWhatsAppText(to, message);
-      return res.json({ success: true, message: `Message sent to ${to}` });
+      await sendWhatsAppText(p.data.to, p.data.message);
+      return res.json({ success: true, message: `Message sent to ${p.data.to}` });
     }
 
-    // ✅ CLEAR MESSAGE HISTORY ONLY
     if (action === 'clear_history') {
       await User.updateOne({ _id: ownerId }, { $set: { messageHistory: [] } });
-      return res.json({ success: true, message: "Message history cleared" });
+      return res.json({ success: true, message: 'Message history cleared' });
     }
 
-    // ✅ DELETE SALES HISTORY (OWNER + STAFF)
     if (action === 'delete_sales_history') {
-      const r = await Transaction.deleteMany({
-        user: { $in: allUserIds },
-        type: 'SALE',
-      });
-
-      return res.json({
-        success: true,
-        message: "Sales history deleted",
-        deleted: r.deletedCount || 0,
-      });
+      const r = await Transaction.deleteMany({ user: { $in: allUserIds }, type: 'SALE' });
+      return res.json({ success: true, message: 'Sales history deleted', deleted: r.deletedCount || 0 });
     }
 
-    // ✅ DELETE USER + HISTORY (OWNER + STAFF + ALL DATA)
     if (action === 'delete_user') {
-      const deleteHistory = payload?.deleteHistory !== false; // default true
+      const p = deleteUserPayloadSchema.safeParse(payload || {});
+      if (!p.success) return res.status(400).json({ error: p.error.flatten() });
 
-      // delete staff first
+      const deleteHistory = p.data.deleteHistory !== false;
+
       await User.deleteMany({ ownerId, role: 'STAFF' });
 
       if (deleteHistory) {
-        // ✅ delete ALL transactions for owner + staff (sales, restock, payments etc.)
-        await Transaction.deleteMany({ user: { $in: allUserIds } });
-
-        await Inventory.deleteMany({ user: ownerId });
-        await DailyStats.deleteMany({ user: ownerId });
-        await ProcessedMessage.deleteMany({ user: { $in: allUserIds } });
-        await Debtor.deleteMany({ user: ownerId });
+        await Promise.all([
+          Transaction.deleteMany({ user: { $in: allUserIds } }),
+          Inventory.deleteMany({ user: ownerId }),
+          DailyStats.deleteMany({ user: ownerId }),
+          ProcessedMessage.deleteMany({ user: { $in: allUserIds } }),
+          Debtor.deleteMany({ user: ownerId }),
+        ]);
       }
 
       await User.deleteOne({ _id: ownerId });
-
-      return res.json({ success: true, message: "User + history deleted" });
+      return res.json({ success: true, message: 'User + history deleted' });
     }
 
-    // ✅ EXISTING SUBSCRIPTION ACTIONS (apply to OWNER)
     const owner = await User.findById(ownerId);
-    if (!owner) return res.status(404).json({ error: "Owner not found" });
+    if (!owner) return res.status(404).json({ error: 'Owner not found' });
 
     if (action === 'suspend') owner.subscriptionStatus = 'suspended';
     else if (action === 'unsuspend' || action === 'activate') owner.subscriptionStatus = 'active';
     else if (action === 'cancel') owner.subscriptionStatus = 'cancelled';
     else if (action === 'change_plan') {
-      if (payload?.planType) owner.planType = payload.planType;
+      const p = changePlanSchema.safeParse(payload || {});
+      if (!p.success) return res.status(400).json({ error: p.error.flatten() });
+      owner.planType = p.data.planType;
     } else if (action === 'set_expiry') {
-      if (payload?.date) {
-        const newDate = new Date(payload.date);
-        owner.trialEndsAt = newDate;
-        owner.nextBillingDate = newDate;
-        if (newDate < new Date()) owner.subscriptionStatus = 'cancelled';
-      }
+      const p = setExpirySchema.safeParse(payload || {});
+      if (!p.success) return res.status(400).json({ error: p.error.flatten() });
+
+      const newDate = new Date(p.data.date);
+      if (!Number.isFinite(newDate.getTime())) return res.status(400).json({ error: 'Invalid date' });
+
+      owner.trialEndsAt = newDate;
+      owner.nextBillingDate = newDate;
+      if (newDate < new Date()) owner.subscriptionStatus = 'cancelled';
     }
 
     await owner.save();
     return res.json({ success: true, message: `User updated: ${action}`, user: owner });
-
   } catch (error) {
-    console.error("Update User Error:", error);
-    res.status(500).json({ error: "Update User Error" });
+    console.error('Update User Error:', error);
+    res.status(500).json({ error: 'Update User Error' });
   }
 };
 
-
-
-// --- GLOBAL SETTINGS ---
-export const getGlobalSettings = async (req: Request, res: Response) => {
+// -------------------------
+// SETTINGS
+// GET/PUT /api/admin/settings
+// -------------------------
+export const getGlobalSettings = async (_req: Request, res: Response) => {
   try {
     let settings = await AdminSettings.findOne();
     if (!settings) settings = await AdminSettings.create({});
     res.json(settings);
   } catch (error) {
+    console.error('Get Settings Error:', error);
     res.status(500).json({ error: 'Error' });
   }
 };
 
 export const updateGlobalSettings = async (req: Request, res: Response) => {
   try {
-    const { autoSuspendOnJailbreak, maxMessageHistory, maxStaffAccounts, whatsappUrl } = req.body;
+    const parsed = updateGlobalSettingsSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+    const { autoSuspendOnJailbreak, maxMessageHistory, maxStaffAccounts, whatsappUrl } = parsed.data;
 
     const updatePayload: any = {};
-
-    if (whatsappUrl !== undefined) {
-      updatePayload['whatsappUrl'] = typeof whatsappUrl === 'string' ? whatsappUrl.trim() : whatsappUrl;
-    }
-
-    if (autoSuspendOnJailbreak !== undefined) {
-      updatePayload['security.autoSuspendOnJailbreak'] = autoSuspendOnJailbreak;
-    }
-    if (maxMessageHistory !== undefined) {
-      updatePayload['limits.maxMessageHistory'] = maxMessageHistory;
-    }
-    if (maxStaffAccounts !== undefined) {
-      updatePayload['limits.maxStaffAccounts'] = maxStaffAccounts;
-    }
+    if (whatsappUrl !== undefined) updatePayload.whatsappUrl = whatsappUrl;
+    if (autoSuspendOnJailbreak !== undefined) updatePayload['security.autoSuspendOnJailbreak'] = autoSuspendOnJailbreak;
+    if (maxMessageHistory !== undefined) updatePayload['limits.maxMessageHistory'] = maxMessageHistory;
+    if (maxStaffAccounts !== undefined) updatePayload['limits.maxStaffAccounts'] = maxStaffAccounts;
 
     const settings = await AdminSettings.findOneAndUpdate({}, { $set: updatePayload }, { new: true, upsert: true });
     res.json({ success: true, settings });
   } catch (error) {
+    console.error('Update Settings Error:', error);
     res.status(500).json({ error: 'Error' });
   }
 };
 
-// --- BROADCAST ---
+// -------------------------
+// BROADCAST
+// POST /api/admin/broadcast
+// -------------------------
 export const broadcastMessage = async (req: Request, res: Response) => {
   try {
-    const { target, message } = req.body;
+    const parsed = broadcastSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
-    let query: any = { role: 'OWNER' };
+    const { target, message } = parsed.data;
+
+    const query: any = { role: 'OWNER' };
     if (target === 'tycoon') query.planType = 'TYCOON';
     if (target === 'oga_boss') query.planType = 'OGA_BOSS';
-    if (target === 'active_24h') {
-      query.updatedAt = { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) };
-    }
+    if (target === 'active_24h') query.updatedAt = { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) };
 
-    const recipients = await User.find(query).select('phoneNumber');
+    const recipients = await User.find(query).select('phoneNumber').lean();
 
     (async () => {
       for (const u of recipients) {
         try {
+          if (!u.phoneNumber) continue;
           await sendWhatsAppText(u.phoneNumber, message);
-          await new Promise((r) => setTimeout(r, 100));
-        } catch (e) {
+          await new Promise((r) => setTimeout(r, 150));
+        } catch {
           console.error(`Failed to msg ${u.phoneNumber}`);
         }
       }
@@ -347,22 +440,47 @@ export const broadcastMessage = async (req: Request, res: Response) => {
 
     res.json({ success: true, message: `Broadcast queued for ${recipients.length} users` });
   } catch (error) {
+    console.error('Broadcast Error:', error);
     res.status(500).json({ error: 'Broadcast Error' });
   }
 };
 
+// -------------------------
+// STAFF
+// POST /api/admin/users/:ownerId/staff
+// -------------------------
 export const adminAddStaff = async (req: Request, res: Response) => {
   try {
     const { ownerId } = req.params;
-    const { phoneNumber } = req.body;
+    if (!isValidObjectId(ownerId)) return res.status(400).json({ error: 'Invalid ownerId' });
+
+    const parsed = adminAddStaffSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+    const { phoneNumber } = parsed.data;
+
     const owner = await User.findById(ownerId);
     if (!owner) return res.status(404).json({ error: 'Owner not found' });
+
+    const existing = await User.findOne({ phoneNumber });
+    if (existing) return res.status(409).json({ error: 'Phone number already exists' });
+
+    // Optional: enforce staff limit
+    const settings = await AdminSettings.findOne().lean();
+    const maxStaff = (settings as any)?.limits?.maxStaffAccounts;
+    if (typeof maxStaff === 'number' && maxStaff > 0) {
+      const count = await User.countDocuments({ ownerId: owner._id, role: 'STAFF' });
+      if (count >= maxStaff) return res.status(400).json({ error: `Staff limit reached (${maxStaff})` });
+    }
 
     const newStaff = await User.create({
       phoneNumber,
       role: 'STAFF',
       ownerId: owner._id,
       planType: owner.planType,
+      subscriptionStatus: owner.subscriptionStatus,
+      trialEndsAt: owner.trialEndsAt,
+      nextBillingDate: owner.nextBillingDate,
       registrationStage: 'COMPLETED',
       businessName: owner.businessName,
       settings: owner.settings,
@@ -370,10 +488,11 @@ export const adminAddStaff = async (req: Request, res: Response) => {
 
     try {
       await sendWhatsAppText(phoneNumber, `🔔 Admin has added you to ${owner.businessName}.`);
-    } catch (e) {}
+    } catch {}
 
     res.json({ success: true, staff: newStaff });
   } catch (error) {
+    console.error('Failed to add staff:', error);
     res.status(500).json({ error: 'Failed to add staff' });
   }
 };
