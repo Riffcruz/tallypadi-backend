@@ -9,6 +9,7 @@ import rateLimit from 'express-rate-limit';
 import crypto from 'crypto';
 import path from 'path';
 import jwt from 'jsonwebtoken';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 
 import { generateSaleReceiptPdf } from './controllers/receipt.controller';
 
@@ -149,15 +150,15 @@ const loginLimiterIdentity = rateLimit({
   legacyHeaders: false,
   message: 'Too many login attempts for this account. Try again in 15 minutes.',
   keyGenerator: (req: any) => {
-    // ✅ YOUR FRONTEND/BACKEND USES "identifier"
     const identifier = normalizeStr(req.body?.identifier || req.body?.email || req.body?.phoneNumber);
 
-    if (!identifier) return `ip:${req.ip}`;
+    if (!identifier) return `ip:${ipKeyGenerator(req)}`;
 
     if (looksLikeEmail(identifier)) return `email:${identifier}`;
     return `phone:${normalizePhoneDigits(identifier)}`;
   },
 });
+
 
 // ✅ Separate EMAIL limiter (extra protection)
 const emailLimiter = rateLimit({
@@ -169,9 +170,10 @@ const emailLimiter = rateLimit({
   keyGenerator: (req: any) => {
     const identifier = normalizeStr(req.body?.identifier || req.body?.email);
     if (identifier && looksLikeEmail(identifier)) return `email:${identifier}`;
-    return `ip:${req.ip}`;
+    return `ip:${ipKeyGenerator(req)}`;
   },
 });
+
 
 // ✅ Separate PHONE limiter (extra protection)
 const phoneLimiter = rateLimit({
@@ -182,11 +184,12 @@ const phoneLimiter = rateLimit({
   message: 'Too many login attempts for this phone number. Try again in 15 minutes.',
   keyGenerator: (req: any) => {
     const identifier = normalizeStr(req.body?.identifier || req.body?.phoneNumber);
-    if (!identifier) return `ip:${req.ip}`;
-    if (looksLikeEmail(identifier)) return `ip:${req.ip}`; // not phone
+    if (!identifier) return `ip:${ipKeyGenerator(req)}`;
+    if (looksLikeEmail(identifier)) return `ip:${ipKeyGenerator(req)}`;
     return `phone:${normalizePhoneDigits(identifier)}`;
   },
 });
+
 
 app.use('/api', (req, res, next) => {
   // Skip rate limit for webhooks
@@ -218,12 +221,25 @@ app.use('/api/webhook', webhookRoutes);
 // ==========================================
 app.use(xss());
 
-app.use((req, _res, next) => {
+app.use((req: any, _res, next) => {
   if (req.body) req.body = sanitize(req.body);
-  if (req.params) req.params = sanitize(req.params);
-  if (req.query) req.query = sanitize(req.query);
+
+  // DO NOT reassign req.query / req.params — mutate in place
+  if (req.query && typeof req.query === 'object') {
+    for (const k of Object.keys(req.query)) {
+      (req.query as any)[k] = sanitize((req.query as any)[k]);
+    }
+  }
+
+  if (req.params && typeof req.params === 'object') {
+    for (const k of Object.keys(req.params)) {
+      (req.params as any)[k] = sanitize((req.params as any)[k]);
+    }
+  }
+
   next();
 });
+
 
 
 // ==========================================
@@ -305,8 +321,9 @@ const adminLimiterPerUser = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: 'Too many admin requests, slow down.',
-  keyGenerator: (req: any) => (req.user?.id ? `admin:${req.user.id}` : `ip:${req.ip}`),
+  keyGenerator: (req: any) => (req.user?.id ? `admin:${req.user.id}` : `ip:${ipKeyGenerator(req)}`),
 });
+
 
 app.use('/api/admin', authRequired, adminLimiterPerUser, adminRouter);
 
