@@ -187,4 +187,6 @@ export const updateSettings = async (req: AuthReq, res: Response) => {
     console.error('Settings Update Error:', error?.stack || error);
     return res.status(500).json({ error: 'Server Error' });
   }
+  
 };
+
