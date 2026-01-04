@@ -36,6 +36,7 @@ import {
   getTodayTransactions,
 } from '../services/report.service';
 import { generatePdfReport } from '../services/pdf.service';
+import { toUserLocalDate } from '../utils/dates';
 
 // =====================================================
 // 🌍 Currency
@@ -73,9 +74,7 @@ const getUserCurrency = (user: any) => {
 // =====================================================
 // 🕒 User-local time helpers
 // =====================================================
-function toUserLocalDate(d: any, offsetMinutes: number) {
-  return new Date(new Date(d).getTime() + offsetMinutes * 60_000);
-}
+
 function toISODateForOffset(offsetMinutes: number): string {
   const now = new Date();
   const local = new Date(now.getTime() + offsetMinutes * 60_000);
@@ -1436,23 +1435,33 @@ if (btn?.txId && btn?.action) {
 
 
       case 'REPORT_DEBTS': {
-        const debtors = await Debtor.find({ user: shopId, totalDebt: { $gt: 0 } }).sort({ totalDebt: -1 });
+        const debtors = await Debtor.find({ user: shopId }).sort({ totalDebt: -1 });
 
         if (!debtors.length) {
           await queueOutboundMessage(from, "I don't have any debtor.");
           break;
         }
 
-        let msg = `📉 *Debtors List* (People owing you):\n\n`;
+        let msg = `📉 *Debtors List*:\n\n`;
         let totalOwed = 0;
 
         debtors.forEach((d: any) => {
-          msg += `• *${d.displayName}*: ${symbol}${Number(d.totalDebt).toLocaleString(locale)}\n`;
+          const debt = Number(d.totalDebt || 0);
+          if (debt > 0) {
+            msg += `• *${d.displayName}*: ${symbol}${debt.toLocaleString(locale)}\n`;
+            totalOwed += debt;
+          } else {
+             msg += `• ${d.displayName}: _No debt_\n`;
+          }
           if (d.lastProductStr) msg += `  _Last: ${d.lastProductStr}_\n`;
-          totalOwed += d.totalDebt;
         });
 
-        msg += `\n💰 *Total Outstanding:* ${symbol}${totalOwed.toLocaleString(locale)}`;
+        if (totalOwed > 0) {
+          msg += `\n💰 *Total Outstanding:* ${symbol}${totalOwed.toLocaleString(locale)}`;
+        } else {
+          msg += `\n✨ Everyone is settled!`;
+        }
+        
         await queueOutboundMessage(from, msg);
         break;
       }

@@ -17,6 +17,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
+import { getCookie } from '../../utils/cookies';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 
@@ -112,7 +113,7 @@ export default function InventoryPage() {
   };
 
   useEffect(() => {
-    const token = localStorage.getItem('tallyToken');
+    const token = getCookie('tallyToken');
     if (!token) {
       router.push('/login');
       return;
@@ -183,7 +184,7 @@ export default function InventoryPage() {
 
     if (!newItemName || !newItemStock || !newItemPrice) return;
 
-    const token = localStorage.getItem('tallyToken');
+    const token = getCookie('tallyToken');
     const newItem = {
       name: newItemName,
       stock: parseInt(newItemStock, 10),
@@ -263,7 +264,7 @@ export default function InventoryPage() {
       return;
     }
 
-    const token = localStorage.getItem('tallyToken');
+    const token = getCookie('tallyToken');
     try {
       if (!id) return;
 

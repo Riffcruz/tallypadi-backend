@@ -24,6 +24,7 @@ import {
   Lock,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
+import { getCookie } from '../../utils/cookies';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 
@@ -57,7 +58,7 @@ export default function SettingsPage() {
   const [addingStaff, setAddingStaff] = useState(false);
 
   const getTokenOrRedirect = () => {
-    const token = localStorage.getItem('tallyToken');
+    const token = getCookie('tallyToken');
     if (!token) router.push('/login');
     return token;
   };

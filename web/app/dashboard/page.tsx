@@ -30,6 +30,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
+import { getCookie } from '../../utils/cookies';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 
@@ -171,7 +172,7 @@ export default function DashboardPage() {
   const router = useRouter();
 
   useEffect(() => {
-    const token = localStorage.getItem('tallyToken');
+    const token = getCookie('tallyToken');
     if (!token) {
       router.push('/login');
       return;
@@ -254,7 +255,7 @@ const topTransactions = filteredTransactions.slice(0, 6);
   const chartData = data?.salesChart || [];
 
   const sendChat = async (text: string) => {
-    const token = localStorage.getItem('tallyToken');
+    const token = getCookie('tallyToken');
     if (!token) return;
 
     try {

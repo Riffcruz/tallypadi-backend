@@ -28,3 +28,24 @@ export const getTodayRangeForOffset = (utcOffsetMinutes: number) => {
 
   return { start: startUtc, end: endUtc };
 };
+
+/**
+ * Convert a date to "User Local" date by adding the offset minutes.
+ * Validates offset to prevent overflow (limit +/- 1440 minutes, i.e., 24 hours).
+ */
+export const toUserLocalDate = (d: Date | string | number, offsetMinutes: number): Date => {
+  let offset = offsetMinutes;
+  // Validate offset: limit to +/- 24 hours (1440 minutes)
+  if (typeof offset !== 'number' || Math.abs(offset) > 1440) {
+    offset = 0;
+  }
+  
+  const date = new Date(d);
+  // Check if date is valid
+  if (isNaN(date.getTime())) {
+    // Fallback to current date or could throw, but returning new Date() is safer for now to avoid crashes
+    return new Date();
+  }
+
+  return new Date(date.getTime() + offset * 60 * 1000);
+};

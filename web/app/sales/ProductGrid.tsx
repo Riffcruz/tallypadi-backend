@@ -12,6 +12,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { InventoryItem, UserProfile } from './page';
+import { getCookie } from '../../utils/cookies';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 
@@ -30,7 +31,7 @@ export default function ProductGrid({ user, onAddToCart, currencyCode }: Product
   const [search, setSearch] = useState('');
 
   useEffect(() => {
-    const token = localStorage.getItem('tallyToken');
+    const token = getCookie('tallyToken');
     if (!token) {
       setLoading(false);
       return;

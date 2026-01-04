@@ -10,6 +10,7 @@ import {
   Coins, ShoppingBag, Menu, RefreshCw
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { getCookie } from '../../utils/cookies';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 
@@ -50,7 +51,7 @@ export default function DebtorsPage() {
     // Avoid SSR issues
     if (typeof window === 'undefined') return;
 
-    const token = localStorage.getItem('tallyToken');
+    const token = getCookie('tallyToken');
     if (!token) { 
       router.push('/login'); 
       return;
@@ -113,14 +114,14 @@ export default function DebtorsPage() {
   const closePayment = () => setIsPaymentOpen(false);
 
   const handleRefresh = () => {
-    const token = localStorage.getItem('tallyToken');
+    const token = getCookie('tallyToken');
     fetchDebtors(token || '');
   };
 
   const handleSaveDebtor = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
-    const token = localStorage.getItem('tallyToken');
+    const token = getCookie('tallyToken');
     try {
       const payload = {
         displayName: formData.displayName,
@@ -155,7 +156,7 @@ export default function DebtorsPage() {
     e.preventDefault();
     if (!selectedDebtor) return;
     setSubmitting(true);
-    const token = localStorage.getItem('tallyToken');
+    const token = getCookie('tallyToken');
     try {
       await axios.post(`${API_URL}/debtors/payment`, {
         debtorId: selectedDebtor._id,
@@ -181,7 +182,7 @@ export default function DebtorsPage() {
     });
 
     if (res.isConfirmed) {
-      const token = localStorage.getItem('tallyToken');
+      const token = getCookie('tallyToken');
       try {
         await axios.delete(`${API_URL}/debtors/${debtor._id}`, { headers: { Authorization: `Bearer ${token}` } });
         fetchDebtors(token || '');

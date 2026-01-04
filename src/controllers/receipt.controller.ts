@@ -8,6 +8,7 @@ import { PassThrough } from 'stream';
 
 import { Transaction } from '../models/transaction.model';
 import { User } from '../models/user.model';
+import { toUserLocalDate } from '../utils/dates';
 
 // ✅ Currency Mapping
 const COUNTRY_CURRENCY_CODE: Record<string, string> = {
@@ -38,10 +39,6 @@ const THEME = {
 };
 
 type PdfDoc = InstanceType<typeof PDFDocument>;
-
-function toUserLocalDate(d: any, offsetMinutes: number) {
-  return new Date(new Date(d).getTime() + offsetMinutes * 60_000);
-}
 
 // ✅ REQUIRED FORMAT: 22/12/2025 14:05
 function fmtDDMMYYYY_HHMM(d: Date, offsetMinutes: number) {

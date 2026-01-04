@@ -19,6 +19,7 @@ import {
   X,
 } from 'lucide-react';
 import { CartItem, UserProfile } from './page';
+import { getCookie } from '../../utils/cookies';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 
@@ -284,7 +285,7 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
     setMsg({ text: '', type: '' });
     setReceipt(null);
 
-    const token = localStorage.getItem('tallyToken');
+    const token = getCookie('tallyToken');
     if (!token) {
       setLoading(false);
       setMsg({ text: 'You are not logged in.', type: 'error' });

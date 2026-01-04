@@ -5,13 +5,16 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 // ✅ Added 'Users' icon for Debtors
 import { LayoutDashboard, ShoppingCart, Package, Settings, LogOut, Users } from 'lucide-react';
+import { removeCookie } from '../utils/cookies';
 
 export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
 
   const handleLogout = () => {
-    localStorage.removeItem('tallyToken');
+    removeCookie('tallyToken');
+    // Clear user data as well
+    sessionStorage.removeItem('tallyUser');
     router.push('/login');
   };
 

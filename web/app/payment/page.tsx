@@ -104,8 +104,8 @@ export default function PaymentPage() {
       const planParam = params.get('plan');
       if (planParam === 'TYCOON') setSelectedPlan('TYCOON');
 
-      // Optional: Auto-fill email/phone if stored in local storage
-      const savedUser = localStorage.getItem('tallyUser');
+      // Optional: Auto-fill email/phone if stored in session storage
+      const savedUser = sessionStorage.getItem('tallyUser');
       if (savedUser) {
         try {
           const user = JSON.parse(savedUser);

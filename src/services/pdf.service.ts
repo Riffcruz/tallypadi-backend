@@ -5,6 +5,7 @@ import path from 'path';
 import { Types } from 'mongoose';
 import { getDailySummary, getFullSummary, getTodayTransactions } from './report.service';
 import { User } from '../models/user.model';
+import { toUserLocalDate } from '../utils/dates';
 
 interface ReportOptions {
   includeSummary?: boolean;
@@ -68,10 +69,6 @@ const pickFirstExisting = (paths: string[]) => {
 function isValidNumber(n: any) {
   const x = Number(n);
   return Number.isFinite(x);
-}
-
-function toUserLocalDate(d: any, offsetMinutes: number) {
-  return new Date(new Date(d).getTime() + offsetMinutes * 60_000);
 }
 
 // ✅ DateTime formatting (date + time)

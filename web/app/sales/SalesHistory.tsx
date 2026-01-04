@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { UserProfile } from './page';
 import Swal from 'sweetalert2';
+import { getCookie } from '../../utils/cookies';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 
@@ -44,7 +45,7 @@ export default function SalesHistory({ user }: { user: UserProfile | null }) {
 
   const fetchHistory = () => {
     setLoading(true);
-    const token = localStorage.getItem('tallyToken');
+    const token = getCookie('tallyToken');
     const params: any = {};
     if (dates.start) params.startDate = dates.start;
     if (dates.end) params.endDate = dates.end;
@@ -191,7 +192,7 @@ export default function SalesHistory({ user }: { user: UserProfile | null }) {
       return;
     }
 
-    const token = localStorage.getItem('tallyToken');
+    const token = getCookie('tallyToken');
     if (!token) {
       Swal.fire({
         title: 'Session expired',
@@ -287,7 +288,7 @@ export default function SalesHistory({ user }: { user: UserProfile | null }) {
       return;
     }
 
-    const token = localStorage.getItem('tallyToken');
+    const token = getCookie('tallyToken');
     if (!token) {
       Swal.fire({
         title: 'Session expired',

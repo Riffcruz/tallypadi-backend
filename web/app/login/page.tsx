@@ -14,8 +14,10 @@ import {
   ChevronDown,
   ArrowLeft
 } from 'lucide-react';
+import { setCookie } from '../../utils/cookies';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
+
 
 const COUNTRY_CODES = [
   { code: '+234', flag: '🇳🇬', name: 'Nigeria' },
@@ -123,8 +125,10 @@ export default function LoginPage() {
       );
 
       if (res.data?.success) {
-        localStorage.setItem('tallyToken', res.data.token);
-        localStorage.setItem('tallyUser', JSON.stringify(res.data.user));
+        // ✅ Safer storage: Cookie for token, sessionStorage for user
+        setCookie('tallyToken', res.data.token, 7);
+        sessionStorage.setItem('tallyUser', JSON.stringify(res.data.user));
+        
         router.push('/dashboard');
         return;
       }

@@ -12,6 +12,7 @@ import CartSidebar from './CartSidebar';
 import SalesHistory from './SalesHistory';
 
 import Swal from 'sweetalert2';
+import { getCookie } from '../../utils/cookies';
 
 const toast = Swal.mixin({
   toast: true,
@@ -58,7 +59,7 @@ export default function SalesPage() {
   const [loadingUser, setLoadingUser] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem('tallyToken');
+    const token = getCookie('tallyToken');
     if (!token) {
       router.push('/login');
       return;
