@@ -217,7 +217,7 @@ app.use('/api/webhook', webhookRoutes);
 // ==========================================
 // 🧼 SECURITY SANITIZATION
 // ==========================================
-app.use(xss());
+
 
 app.use((req: any, _res, next) => {
   if (req.body) req.body = sanitize(req.body);
