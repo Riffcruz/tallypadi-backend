@@ -763,7 +763,7 @@ async function addStaffUnderOwner(owner: any, staffPhoneRaw?: string | null) {
     registrationStage: 'COMPLETED',
     subscriptionStatus: owner.subscriptionStatus || 'trial',
     trialEndsAt: owner.trialEndsAt || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-    planType: owner.planType || 'OGA_BOSS',
+    planType: owner.planType || 'TYCOON',
     messageHistory: [],
     settings: owner.settings || {
       dailySummaryEnabled: false,
@@ -833,7 +833,7 @@ export const handleMessageLogic = async (
         subscriptionStatus: 'trial',
         trialEndsAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
 
-        planType: 'OGA_BOSS',
+        planType: 'TYCOON',
         messageHistory: [],
         settings: {
           dailySummaryEnabled: false,

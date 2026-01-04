@@ -93,7 +93,7 @@ const userSchema = new Schema<IUser>(
     planType: {
       type: String,
       enum: ['OGA_BOSS', 'TYCOON'],
-      default: 'OGA_BOSS',
+      default: 'TYCOON',
     },
 
     // schema

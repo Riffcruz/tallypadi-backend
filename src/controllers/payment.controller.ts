@@ -66,61 +66,29 @@ export const startPayment = async (req: Request, res: Response) => {
       });
     }
 
-    // ✅ Create minimal user if not exist
-    
-if (!user) {
-  const doc = new User({
-    phoneNumber: cleanPhone,
-    email: cleanEmail,
+    // ✅ If user exists, use their current plan as fallback if targetPlan is not provided
+    // If user is new (created above), 'plan' variable is already set to targetPlan or OGA_BOSS
+    const finalPlan = safePlan(targetPlan) || user.planType || 'OGA_BOSS';
 
-    role: 'OWNER',
-    businessName: 'My Shop',
-    // ✅ don't set name: null
-    // name: undefined,
-
-    // ✅ required by your schema, so give a default
-    countryCode: 'NG',
-
-    registrationStage: 'COMPLETED',
-    subscriptionStatus: 'past_due',
-    trialEndsAt: new Date(0),
-
-    planType: plan,
-    messageHistory: [],
-    settings: {
-      dailySummaryEnabled: false,
-      closingTime: '20:00',
-      utcOffsetMinutes: 60,
-      language: 'English',
-      pdfReportsEnabled: true,
-    },
-  });
-
-  try {
-    user = await doc.save();
-  } catch (e: any) {
-    // ✅ handle race condition on unique phoneNumber/email
-    if (e?.code === 11000) {
-      user = await User.findOne({ phoneNumber: cleanPhone }) || await User.findOne({ email: cleanEmail });
-    } else {
-      throw e;
+    if (!user.email) {
+       user.email = cleanEmail;
+       await user.save();
     }
-  }
-} else {
-  if (!user.email) user.email = cleanEmail;
-  user.planType = plan;
-  await user.save();
-}
-
+    
+    // Only update plan if explicitly requested and different
+    if (safePlan(targetPlan) && user.planType !== finalPlan) {
+      user.planType = finalPlan;
+      await user.save();
+    }
 
     // ✅ Initialize paystack with strong binding metadata (userId + phone)
-    const authorizationUrl = await initializePayment(user as any, cleanEmail, plan);
+    const authorizationUrl = await initializePayment(user as any, cleanEmail, finalPlan);
 
     if (!authorizationUrl) {
       return res.status(400).json({ message: 'Could not initialize payment' });
     }
 
-    
+    return res.status(200).json({ authorizationUrl });
   } catch (error: any) {
     console.error('Payment Init Error:', error?.response?.data || error?.message || error);
     return res.status(500).json({ message: 'Internal server error' });
