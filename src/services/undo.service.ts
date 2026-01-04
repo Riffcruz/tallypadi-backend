@@ -2,6 +2,7 @@ import { Types } from 'mongoose';
 import { Transaction } from '../models/transaction.model';
 import { Inventory } from '../models/inventory.model';
 import { Debtor } from '../models/debtor.model';
+import { DailyStats } from '../models/dailyStats.model';
 
 function escapeRegex(s: string) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -55,6 +56,7 @@ async function reverseDebtIfAny(tx: any) {
  * - Marks tx as undone (keeps audit trail)
  * - Restores stock
  * - Reverses debtor totalDebt (if CREDIT/PARTIAL)
+ * - Reverses DailyStats (if PAID)
  */
 export async function undoSaleById(userId: Types.ObjectId, txId: string, undoneByMessageId: string) {
   const tx = await Transaction.findOne({ _id: txId, user: userId, type: 'SALE' });
@@ -68,6 +70,14 @@ export async function undoSaleById(userId: Types.ObjectId, txId: string, undoneB
 
   await restoreStock(userId, (tx as any).items || []);
   await reverseDebtIfAny(tx);
+
+  // ✅ Reverse Daily Stats if it was a PAID sale
+  if (tx.paymentStatus === 'PAID' && (tx.totalMoney || 0) > 0 && tx.date) {
+    await DailyStats.updateOne(
+      { user: userId, date: tx.date },
+      { $inc: { totalRevenue: -tx.totalMoney, totalTransactions: -1 } }
+    );
+  }
 
   return { ok: true, message: '✅ Sale undone successfully (transaction reversed + stock restored).' };
 }

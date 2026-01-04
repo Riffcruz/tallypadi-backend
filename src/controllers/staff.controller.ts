@@ -9,10 +9,10 @@ const sanitizeString = (input: unknown) => typeof input === 'string' ? input.tri
 // GET /api/staff
 export const getStaff = async (req: Request, res: Response) => {
     try {
-        const user = await User.findOne(); // Mock Auth: Replace with req.user.id in prod
-        if (!user) return res.status(404).json({ error: "User not found" });
+        const userId = (req as any).user?.id;
+        if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
-        const staffMembers = await User.find({ ownerId: user._id });
+        const staffMembers = await User.find({ ownerId: userId });
 
         res.json(staffMembers.map(s => ({
             id: s._id,
@@ -32,13 +32,16 @@ export const addStaff = async (req: Request, res: Response) => {
     try {
         const { phoneNumber } = req.body;
         const safePhone = sanitizeString(phoneNumber);
+        const userId = (req as any).user?.id;
+
+        if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
         if (!safePhone) {
             return res.status(400).json({ error: "Phone number is required" });
         }
 
         // 1. Identify Owner
-        const owner = await User.findOne(); // Mock Auth: Replace with req.user.id
+        const owner = await User.findById(userId);
         if (!owner) return res.status(404).json({ error: "Owner account not found" });
 
         // 2. CHECK PLAN: Tycoon Only
@@ -107,8 +110,11 @@ export const addStaff = async (req: Request, res: Response) => {
 export const removeStaff = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        const owner = await User.findOne(); // Mock Auth
+        const userId = (req as any).user?.id;
+        
+        if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
+        const owner = await User.findById(userId);
         if (!owner) return res.status(401).json({ error: "Unauthorized" });
 
         const staff = await User.findOne({ _id: id, ownerId: owner._id });
