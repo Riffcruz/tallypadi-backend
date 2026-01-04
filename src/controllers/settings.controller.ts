@@ -38,6 +38,30 @@ export const updateSettings = async (req: AuthReq, res: Response) => {
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
+    // ✅ Helper: entitlement check (Tycoon + active/trial + not expired)
+    const isPdfAllowed = (() => {
+      const plan = String((user as any)?.planType || '').toUpperCase();
+      const status = String((user as any)?.subscriptionStatus || '').toLowerCase();
+
+      const isTycoon = plan === 'TYCOON';
+      const isActiveLike = status === 'active' || status === 'trial';
+
+      const endsAtRaw = (user as any)?.trialEndsAt;
+      if (!endsAtRaw) return isTycoon && isActiveLike; // if you allow no-expiry admins etc
+
+      const endsAt = new Date(endsAtRaw);
+      const notExpired = Number.isFinite(endsAt.getTime()) && endsAt.getTime() > Date.now();
+
+      return isTycoon && isActiveLike && notExpired;
+    })();
+
+    // ✅ HARD ENFORCEMENT: if expired/not allowed, force PDF OFF (even if user enabled it earlier)
+    if ((user as any)?.settings?.pdfReportsEnabled === true && !isPdfAllowed) {
+      await User.updateOne({ _id: userId }, { $set: { 'settings.pdfReportsEnabled': false } });
+      (user as any).settings = (user as any).settings || {};
+      (user as any).settings.pdfReportsEnabled = false;
+    }
+
     // ---------------------------------------------------------
     // 1) Handle User-Specific Settings (logged-in user)
     // ---------------------------------------------------------
@@ -78,15 +102,21 @@ export const updateSettings = async (req: AuthReq, res: Response) => {
           }
         }
 
-        // ✅ Plan-gated feature
+        // ✅ Plan-gated feature (NOW ALSO EXPIRY-GATED)
         if (inputSettings.pdfReportsEnabled !== undefined) {
           const isEnabled = validateBoolean(inputSettings.pdfReportsEnabled);
+
           if (isEnabled !== undefined) {
-            if (String((user as any).planType || '').toUpperCase() === 'TYCOON') {
-              $set['settings.pdfReportsEnabled'] = isEnabled;
-            } else if (isEnabled === true) {
-              return res.status(403).json({ error: 'PDF Reports are for Tycoon Plan only.' });
+            if (isEnabled === true) {
+              // Only allow enabling if entitlement is valid
+              if (!isPdfAllowed) {
+                return res.status(403).json({
+                  error: 'PDF Reports are for active Tycoon Plan only (not expired).',
+                });
+              }
+              $set['settings.pdfReportsEnabled'] = true;
             } else {
+              // Allow disabling always
               $set['settings.pdfReportsEnabled'] = false;
             }
           }
@@ -187,6 +217,6 @@ export const updateSettings = async (req: AuthReq, res: Response) => {
     console.error('Settings Update Error:', error?.stack || error);
     return res.status(500).json({ error: 'Server Error' });
   }
-  
 };
+
 
