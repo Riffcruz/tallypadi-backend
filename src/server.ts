@@ -4,7 +4,6 @@ import dotenv from 'dotenv';
 import helmet from 'helmet';
 import cors from 'cors';
 import sanitize from 'mongo-sanitize';
-import { xss } from 'express-xss-sanitizer';
 import crypto from 'crypto';
 import path from 'path';
 import jwt from 'jsonwebtoken';
