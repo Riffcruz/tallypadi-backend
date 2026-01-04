@@ -1435,6 +1435,28 @@ if (btn?.txId && btn?.action) {
 }
 
 
+      case 'REPORT_DEBTS': {
+        const debtors = await Debtor.find({ user: shopId, totalDebt: { $gt: 0 } }).sort({ totalDebt: -1 });
+
+        if (!debtors.length) {
+          await queueOutboundMessage(from, "I don't have any debtor.");
+          break;
+        }
+
+        let msg = `📉 *Debtors List* (People owing you):\n\n`;
+        let totalOwed = 0;
+
+        debtors.forEach((d: any) => {
+          msg += `• *${d.displayName}*: ${symbol}${Number(d.totalDebt).toLocaleString(locale)}\n`;
+          if (d.lastProductStr) msg += `  _Last: ${d.lastProductStr}_\n`;
+          totalOwed += d.totalDebt;
+        });
+
+        msg += `\n💰 *Total Outstanding:* ${symbol}${totalOwed.toLocaleString(locale)}`;
+        await queueOutboundMessage(from, msg);
+        break;
+      }
+
       case 'HELP':
       case 'UNKNOWN':
       default: {
