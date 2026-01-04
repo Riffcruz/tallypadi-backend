@@ -228,13 +228,14 @@ export default function UsersTab({
       </div>
 
       {selectedUser && (
-        <UserDeepDiveModal
-          user={selectedUser}
-          onClose={() => setSelectedUser(null)}
-          adminToken={adminToken}   // ✅ pass JWT properly
-          onAction={onAction}
-        />
-      )}
+  <UserDeepDiveModal
+  user={selectedUser}
+  onClose={() => setSelectedUser(null)}
+  adminToken={adminToken}
+  onAction={onAction}
+/>
+
+)}
     </div>
   );
 }

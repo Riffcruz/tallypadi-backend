@@ -234,18 +234,28 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 md:p-8">
-          {tab === 'overview' && <OverviewTab stats={stats} />}
-          {tab === 'users' && <UsersTab users={users} onAction={handleUserAction} />}
-          {tab === 'settings' && (
-            <SettingsTab
-              settings={globalSettings}
-              onUpdate={() => loadData(token)}
-              headers={getHeaders()} // keep compatibility if your SettingsTab expects headers
-            />
-          )}
-          {tab === 'broadcast' && <BroadcastTab headers={getHeaders()} />}
-        </div>
+       <div className="flex-1 overflow-y-auto p-4 md:p-8">
+  {tab === 'overview' && <OverviewTab stats={stats} />}
+
+  {tab === 'users' && (
+    <UsersTab
+      users={users}
+      onAction={handleUserAction}
+      adminToken={token}
+    />
+  )}
+
+  {tab === 'settings' && (
+    <SettingsTab
+      settings={globalSettings}
+      onUpdate={() => loadData(token)}
+      headers={getHeaders()}
+    />
+  )}
+
+  {tab === 'broadcast' && <BroadcastTab headers={getHeaders()} />}
+</div>
+
       </main>
     </div>
   );
