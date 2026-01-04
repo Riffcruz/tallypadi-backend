@@ -29,9 +29,9 @@ export const getTodayRangeForOffset = (utcOffsetMinutes: number) => {
   return { start: startUtc, end: endUtc };
 };
 
-/**
- * Convert a date to "User Local" date by adding the offset minutes.
- * Validates offset to prevent overflow (limit +/- 1440 minutes, i.e., 24 hours).
+/*
+  Convert a date to "User Local" date by adding the offset minutes.
+  Validates offset to prevent overflow (limit +/- 1440 minutes, i.e., 24 hours).
  */
 export const toUserLocalDate = (d: Date | string | number, offsetMinutes: number): Date => {
   let offset = offsetMinutes;
