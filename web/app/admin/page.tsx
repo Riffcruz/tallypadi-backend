@@ -111,30 +111,39 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleUserAction = async (userId: string, action: string, payload: any = {}) => {
-    try {
-      await axios.put(`${API_URL}/admin/users/${userId}`, { action, payload }, { headers: getHeaders() });
+ const handleUserAction = async (userId: string, action: string, payload: any = {}) => {
+  try {
+    const res = await axios.put(
+      `${API_URL}/admin/users/${userId}`,
+      { action, payload },
+      { headers: getHeaders() }
+    );
 
-      // Keep your original "silent" behavior for certain actions
-      if (action !== 'set_expiry' && action !== 'change_plan' && action !== 'cancel') {
-        Swal.fire({
-          title: 'Success',
-          text: 'User updated successfully.',
-          icon: 'success',
-          timer: 1500,
-          showConfirmButton: false,
-        });
-      }
-
-      await loadData(token);
-    } catch (e: any) {
-      const status = e?.response?.status;
-      if (status === 401) return logout();
-
-      const msg = e?.response?.data?.error || 'Action failed';
-      Swal.fire('Error', msg, 'error');
+    if (!['set_expiry', 'change_plan', 'cancel'].includes(action)) {
+      Swal.fire({
+        title: 'Success',
+        text: 'User updated successfully.',
+        icon: 'success',
+        timer: 1500,
+        showConfirmButton: false,
+      });
     }
-  };
+
+    await loadData(token);
+    return res.data; // ✅ res exists here
+  } catch (e: any) {
+    const status = e?.response?.status;
+    if (status === 401) {
+      logout();
+      return;
+    }
+
+    const msg = e?.response?.data?.error || 'Action failed';
+    Swal.fire('Error', msg, 'error');
+    throw e; // ✅ lets modal catch it if needed
+  }
+};
+
 
   // ✅ LoginScreen should call onLogin(token)
   if (!isAuthenticated) {

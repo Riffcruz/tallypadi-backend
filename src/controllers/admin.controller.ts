@@ -147,7 +147,7 @@ export const getSystemAnalytics = async (req: Request, res: Response) => {
       User.countDocuments({ updatedAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } }),
     ]);
 
-    // NOTE: Your original GMV was lifetime; I’m making it RANGE-BASED to match the graph.
+    // NOTE: original GMV was lifetime; I’m making it RANGE-BASED to match the graph.
     const salesAgg = await Transaction.aggregate([
       { $match: { type: 'SALE', timestamp: { $gte: startDate }, ...validSaleMatch } },
       { $group: { _id: null, total: { $sum: '$totalMoney' }, count: { $sum: 1 } } },

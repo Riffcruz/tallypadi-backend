@@ -66,6 +66,13 @@ export default function UserDeepDiveModal({
     [adminToken]
   );
 
+  if (!adminToken) {
+  Swal.fire('Auth Error', 'Missing admin token. Please login again.', 'error');
+  onClose();
+  return null;
+}
+
+
   // ✅ Central refresh (prevents stale UI after deletes)
   const refreshDetails = useCallback(async () => {
     if (!userId) return;
