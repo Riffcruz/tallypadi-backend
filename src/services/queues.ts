@@ -24,17 +24,27 @@ export const notificationQueue = new Queue('daily-summary', {
 });
 
 // Helper to queue outbound messages
+// keep IDs BullMQ-safe (no ":" etc)
+function safeJobId(id: string) {
+  return String(id || '')
+    .replace(/[:\s]/g, '_')   // replace colon + spaces
+    .replace(/[^\w.-]/g, '_') // keep only [a-zA-Z0-9_ . -]
+    .slice(0, 240);
+}
+
 export const queueOutboundMessage = async (phoneNumber: string, message: string) => {
-  if (!message || !message.trim()) return;
+  const text = String(message || '').trim();
+  if (!text) return;
+
+  const finalJobId = safeJobId(`outbound_${phoneNumber}_${Date.now()}`);
 
   await notificationQueue.add(
     'send-text',
-    { phoneNumber, message },
-    {
-      jobId: `outbound:${phoneNumber}:${Date.now()}`,
-    }
+    { phoneNumber, message: text },
+    { jobId: finalJobId }
   );
 };
+
 
 // ============================================================
 // QUEUE 2: INBOUND (incoming WhatsApp messages) ✅ EXPORT
