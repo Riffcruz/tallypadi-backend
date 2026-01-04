@@ -12,13 +12,23 @@ async function restoreStock(userId: Types.ObjectId, items: any[]) {
   for (const it of items || []) {
     const name = String(it?.name || '').trim();
     const qty = Number(it?.qty || 0);
-    if (!name || !Number.isFinite(qty) || qty <= 0) continue;
+    const itemId = it?.itemId;
 
-    // IMPORTANT: use your actual stock field (you used `quantity` earlier)
-    await Inventory.updateOne(
-      { user: userId, name: { $regex: `^${escapeRegex(name)}$`, $options: 'i' } },
-      { $inc: { quantity: qty } }
-    );
+    if (!Number.isFinite(qty) || qty <= 0) continue;
+
+    // ✅ Robust Restore: Use ID if available, else Name
+    if (itemId) {
+      await Inventory.updateOne(
+        { _id: itemId, user: userId },
+        { $inc: { quantity: qty } }
+      );
+    } else if (name) {
+      // Legacy fallback
+      await Inventory.updateOne(
+        { user: userId, name: { $regex: `^${escapeRegex(name)}$`, $options: 'i' } },
+        { $inc: { quantity: qty } }
+      );
+    }
   }
 }
 
@@ -80,6 +90,63 @@ export async function undoSaleById(userId: Types.ObjectId, txId: string, undoneB
   }
 
   return { ok: true, message: '✅ Sale undone successfully (transaction reversed + stock restored).' };
+}
+
+/**
+ * Undo a specific PAYMENT transaction.
+ * - Reverses the payment (adds debt back to debtor)
+ * - Reverses DailyStats (deducts revenue)
+ */
+export async function undoPaymentById(userId: Types.ObjectId, txId: string, undoneByMessageId: string) {
+  const tx = await Transaction.findOne({ _id: txId, user: userId, type: 'PAYMENT_RECEIVED' });
+  if (!tx) return { ok: false, message: 'Payment record not found.' };
+  if (tx.isUndone) return { ok: false, message: 'Payment already undone.' };
+
+  tx.isUndone = true;
+  tx.undoneAt = new Date();
+  tx.undoneByMessageId = undoneByMessageId;
+  await tx.save();
+
+  const amount = Number(tx.totalMoney || tx.amountPaid || 0);
+
+  // 1. Add debt back to debtor
+  if (tx.debtorId && amount > 0) {
+    await Debtor.updateOne(
+      { _id: tx.debtorId },
+      { $inc: { totalDebt: amount } }
+    );
+  }
+
+  // 2. Remove revenue from DailyStats
+  if (amount > 0 && tx.date) {
+    await DailyStats.updateOne(
+      { user: userId, date: tx.date },
+      { $inc: { totalRevenue: -amount, totalTransactions: -1 } }
+    );
+  }
+
+  return { ok: true, message: `✅ Payment undone. Debt of ${amount} restored.` };
+}
+
+/**
+ * Undo the last transaction (SALE or PAYMENT)
+ */
+export async function undoLastTransaction(userId: Types.ObjectId, undoneByMessageId: string) {
+  const tx = await Transaction.findOne({
+    user: userId,
+    type: { $in: ['SALE', 'PAYMENT_RECEIVED'] },
+    isUndone: { $ne: true },
+  }).sort({ timestamp: -1 });
+
+  if (!tx) return { ok: false, message: 'No recent transaction found to undo.' };
+
+  if (tx.type === 'SALE') {
+    return undoSaleById(userId, String(tx._id), undoneByMessageId);
+  } else if (tx.type === 'PAYMENT_RECEIVED') {
+    return undoPaymentById(userId, String(tx._id), undoneByMessageId);
+  }
+
+  return { ok: false, message: 'Unknown transaction type.' };
 }
 
 /**

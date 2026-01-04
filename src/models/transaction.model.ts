@@ -3,6 +3,7 @@ import { Schema, model, Document, Types } from 'mongoose';
 // --- SUB-INTERFACES ---
 export interface ITransactionItem {
   name: string;
+  itemId?: Types.ObjectId | null; // ✅ Robust linking
   qty: number;
   unit: string;
   unitPrice: number | null;
@@ -70,6 +71,7 @@ const transactionSchema = new Schema<ITransaction>(
     items: [
       {
         name: { type: String, required: true },
+        itemId: { type: Schema.Types.ObjectId, ref: 'Inventory', default: null },
         qty: { type: Number, required: true },
         unit: { type: String, default: '' },
         unitPrice: { type: Number, default: 0 },

@@ -552,6 +552,7 @@ export const processTransaction = async (
       finalItems.push({
         // ✅ Name consistency: always use the official DB name
         name: inv.name,
+        itemId: inv._id, // ✅ Store ID for robust undo
         qty,
         unit: (item.unit || 'pcs').toString(),
         unitPrice: effectiveUnitPrice,
