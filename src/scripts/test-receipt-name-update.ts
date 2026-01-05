@@ -20,7 +20,7 @@ async function main() {
 
     await User.deleteOne({ phoneNumber: testPhone }); // Cleanup first
 
-    const user = await User.create({
+    const user: any = await User.create({
       phoneNumber: testPhone,
       role: 'OWNER',
       businessName: oldName,
