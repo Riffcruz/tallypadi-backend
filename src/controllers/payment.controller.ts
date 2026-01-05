@@ -130,7 +130,7 @@ export const startPayment = async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'Could not initialize payment' });
     }
 
-    return res.status(200).json({ authorizationUrl });
+    return res.status(200).json({ authorization_url: authorizationUrl });
   } catch (error: any) {
     console.error('Payment Init Error:', error?.response?.data || error?.message || error);
     return res.status(500).json({ message: 'Internal server error' });

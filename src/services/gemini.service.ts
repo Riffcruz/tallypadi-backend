@@ -304,7 +304,7 @@ function fallbackParse(message: string): ParsedResult | null {
   if (/\b(support|contact|customer\s*service|online\s*support)\b/i.test(m)) {
     return safeParsedResult({
       intent: 'HELP',
-      reply_text: '📞 For customer support, please contact us on WhatsApp: wa.me/2349045382250',
+      reply_text: '📞 For customer support, please contact us on WhatsApp: https://wa.me/2349045382250',
     });
   }
 
