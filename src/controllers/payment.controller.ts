@@ -66,41 +66,11 @@ export const startPayment = async (req: Request, res: Response) => {
       });
     }
 
-    // ✅ Create minimal user if not exist
+    // ✅ Stop if user not found (do not auto-create)
     if (!user) {
-      const doc = new User({
-        phoneNumber: cleanPhone,
-        email: cleanEmail,
-
-        role: 'OWNER',
-        businessName: 'My Shop',
-        countryCode: 'NG',
-
-        registrationStage: 'COMPLETED',
-        subscriptionStatus: 'past_due',
-        trialEndsAt: new Date(0),
-
-        planType: plan, // New users get requested plan (or OGA_BOSS default) immediately
-        messageHistory: [],
-        settings: {
-          dailySummaryEnabled: false,
-          closingTime: '20:00',
-          utcOffsetMinutes: 60,
-          language: 'English',
-          pdfReportsEnabled: true,
-        },
+      return res.status(404).json({
+        message: 'User not found. Please create an account first.',
       });
-
-      try {
-        user = await doc.save();
-      } catch (e: any) {
-        // ✅ handle race condition on unique phoneNumber/email
-        if (e?.code === 11000) {
-          user = await User.findOne({ phoneNumber: cleanPhone }) || await User.findOne({ email: cleanEmail });
-        } else {
-          throw e;
-        }
-      }
     }
 
     // 🛡️ TS Guard: Should not happen, but satisfies compiler

@@ -184,8 +184,15 @@ export default function PaymentPage() {
     } catch (err: any) {
       console.error('Payment Error:', err);
 
-      // Handle 404 specifically (Route not found on server)
+      // Handle 404 specifically (Route not found on server OR User not found)
       if (err.response?.status === 404) {
+        const serverMsg = err.response?.data?.message;
+        
+        if (serverMsg && serverMsg.includes('User not found')) {
+           setError('User not registered. Please create an account first.');
+           return;
+        }
+
         setError(
           `Server Error (404): The payment endpoint was not found.\n\nTarget: ${endpoint}\n\nACTION REQUIRED: \n1. Ensure 'server.ts' includes the payment routes.\n2. RESTART your backend server to load the new code.`
         );
