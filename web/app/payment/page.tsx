@@ -151,7 +151,14 @@ export default function PaymentPage() {
       }
       const fullPhone = normalizePhoneClient(`${countryCode}${cleanLocal}`);
 
-      console.log(`Connecting to Backend: ${endpoint}`);
+      // ✅ Client-Side Validation
+      if (fullPhone.length < 9) {
+        setError('Please enter a complete phone number.');
+        setLoading(false);
+        return;
+      }
+
+      console.log(`Connecting to Backend: ${endpoint} with phone: ${fullPhone}`);
 
       // 1. Call Backend
       const response = await axios.post(endpoint, {
