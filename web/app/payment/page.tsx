@@ -302,8 +302,9 @@ export default function PaymentPage() {
     placeholder="you@example.com"
     value={email}
     onChange={(e) => setEmail(e.target.value)}
-    // Added placeholder:font-bold and placeholder:text-black below
-    className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition outline-none placeholder:font-bold placeholder:text-black"
+    // Updated: font-bold text-black applies to what you type.
+    // placeholder:font-normal placeholder:text-slate-400 keeps the sample text light.
+    className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition outline-none font-bold text-black placeholder:font-normal placeholder:text-slate-400"
   />
   <p className="text-xs text-slate-400">Must match your login email.</p>
 </div>
@@ -320,8 +321,9 @@ export default function PaymentPage() {
     placeholder="+2348012345678"
     value={phoneNumber}
     onChange={(e) => setPhoneNumber(e.target.value)}
-    // Added placeholder:font-bold and placeholder:text-black below
-    className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition outline-none placeholder:font-bold placeholder:text-black"
+    // Updated: font-bold text-black applies to what you type.
+    // placeholder:font-normal placeholder:text-slate-400 keeps the sample text light.
+    className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition outline-none font-bold text-black placeholder:font-normal placeholder:text-slate-400"
   />
   <p className="text-xs text-slate-400">
     Use country code format (E.164). Example: +2348012345678
