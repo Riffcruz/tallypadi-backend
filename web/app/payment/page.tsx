@@ -207,9 +207,7 @@ export default function PaymentPage() {
 
       // Friendly hints
       if (/phone number is required/i.test(msg)) {
-        setError(
-          `Phone number is required for payment.\nServer rejected format.\nSent: ${fullPhone}\nExample: +2348012345678`
-        );
+        setError(msg);
         return;
       }
 
