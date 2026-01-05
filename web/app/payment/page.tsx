@@ -206,10 +206,7 @@ export default function PaymentPage() {
         'Connection failed. Please check your internet.';
 
       // Friendly hints
-      if (
-        /phone number is required/i.test(msg) ||
-        /phone number/i.test(msg)
-      ) {
+      if (/phone number is required/i.test(msg)) {
         setError(
           `Phone number is required for payment.\nServer rejected format.\nSent: ${fullPhone}\nExample: +2348012345678`
         );
