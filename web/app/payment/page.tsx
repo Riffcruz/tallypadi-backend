@@ -140,16 +140,21 @@ export default function PaymentPage() {
     const API_URL = getApiUrl();
     const endpoint = `${API_URL}/payment/initialize`;
 
+    // Declared outside to be available in catch block for debugging
+    let fullPhone = '';
+
     try {
       const cleanEmail = email.trim();
       
       // Handle Phone Number Combination
       let cleanLocal = phoneNumber.replace(/\D/g, ''); // strip non-digits
-      // Remove leading zero if present (common in local formats like 080...)
-      if (cleanLocal.startsWith('0')) {
+      
+      // Remove ALL leading zeros (handles 080... or 0090...)
+      while (cleanLocal.startsWith('0')) {
         cleanLocal = cleanLocal.substring(1);
       }
-      const fullPhone = normalizePhoneClient(`${countryCode}${cleanLocal}`);
+
+      fullPhone = normalizePhoneClient(`${countryCode}${cleanLocal}`);
 
       // ✅ Client-Side Validation
       if (fullPhone.length < 9) {
@@ -199,7 +204,7 @@ export default function PaymentPage() {
         /phone number/i.test(msg)
       ) {
         setError(
-          `Phone number is required for payment.\nExample: +2348012345678`
+          `Phone number is required for payment.\nServer rejected format.\nSent: ${fullPhone}\nExample: +2348012345678`
         );
         return;
       }
