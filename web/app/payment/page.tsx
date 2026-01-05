@@ -24,6 +24,19 @@ interface PlanDetails {
 }
 
 // --- CONFIGURATION ---
+const COUNTRY_CODES = [
+  { code: '+234', country: 'NG', label: 'Nigeria (+234)' },
+  { code: '+229', country: 'BJ', label: 'Benin Republic (+229)' },
+  { code: '+228', country: 'TG', label: 'Togo (+228)' },
+  { code: '+237', country: 'CM', label: 'Cameroon (+237)' },
+  { code: '+240', country: 'GQ', label: 'Equatorial Guinea (+240)' },
+  { code: '+233', country: 'GH', label: 'Ghana (+233)' },
+  { code: '+254', country: 'KE', label: 'Kenya (+254)' },
+  { code: '+27', country: 'ZA', label: 'South Africa (+27)' },
+  { code: '+44', country: 'GB', label: 'UK (+44)' },
+  { code: '+1', country: 'US', label: 'US/Canada (+1)' },
+];
+
 const PLANS: PlanDetails[] = [
   {
     id: 'OGA_BOSS',
@@ -92,6 +105,7 @@ const normalizePhoneClient = (raw: string) => {
 export default function PaymentPage() {
   const [selectedPlan, setSelectedPlan] = useState<PlanType>('OGA_BOSS');
   const [email, setEmail] = useState('');
+  const [countryCode, setCountryCode] = useState('+234');
   const [phoneNumber, setPhoneNumber] = useState(''); // ✅ NEW
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -110,7 +124,9 @@ export default function PaymentPage() {
         try {
           const user = JSON.parse(savedUser);
           if (user.email) setEmail(String(user.email));
-          if (user.phoneNumber) setPhoneNumber(String(user.phoneNumber));
+          // Note: Logic to split stored phone into code + number could be complex if not standardized.
+          // For now, if we have a stored number, we might leave it or try to parse.
+          // Let's rely on user input for now to ensure correctness with the new UI.
         } catch (e) {}
       }
     }
@@ -126,14 +142,21 @@ export default function PaymentPage() {
 
     try {
       const cleanEmail = email.trim();
-      const cleanPhone = normalizePhoneClient(phoneNumber);
+      
+      // Handle Phone Number Combination
+      let cleanLocal = phoneNumber.replace(/\D/g, ''); // strip non-digits
+      // Remove leading zero if present (common in local formats like 080...)
+      if (cleanLocal.startsWith('0')) {
+        cleanLocal = cleanLocal.substring(1);
+      }
+      const fullPhone = normalizePhoneClient(`${countryCode}${cleanLocal}`);
 
       console.log(`Connecting to Backend: ${endpoint}`);
 
       // 1. Call Backend
       const response = await axios.post(endpoint, {
         email: cleanEmail,
-        phoneNumber: cleanPhone, // ✅ NEW (required by your backend for non-logged-in payments)
+        phoneNumber: fullPhone, // ✅ NEW (required by your backend for non-logged-in payments)
         targetPlan: selectedPlan
       });
 
@@ -309,24 +332,41 @@ export default function PaymentPage() {
   <p className="text-xs text-slate-400">Must match your login email.</p>
 </div>
 
-{/* ✅ Phone Number Input (NEW) */}
+{/* ✅ Phone Number Input (UPDATED) */}
 <div className="space-y-2">
   <label htmlFor="phoneNumber" className="block text-sm font-medium text-slate-700">
     WhatsApp Phone Number
   </label>
-  <input
-    type="tel"
-    id="phoneNumber"
-    required
-    placeholder="+2348012345678"
-    value={phoneNumber}
-    onChange={(e) => setPhoneNumber(e.target.value)}
-    // Updated: font-bold text-black applies to what you type.
-    // placeholder:font-normal placeholder:text-slate-400 keeps the sample text light.
-    className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition outline-none font-bold text-black placeholder:font-normal placeholder:text-slate-400"
-  />
+  <div className="flex gap-2">
+    {/* Country Code Select */}
+    <div className="relative w-[35%] min-w-[120px]">
+      <select
+        value={countryCode}
+        onChange={(e) => setCountryCode(e.target.value)}
+        className="w-full px-4 py-3 rounded-xl border border-slate-300 bg-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition outline-none font-medium text-slate-900 appearance-none"
+      >
+        {COUNTRY_CODES.map((c) => (
+          <option key={c.code} value={c.code}>
+            {c.label}
+          </option>
+        ))}
+      </select>
+      {/* Custom arrow if needed, but default is usually fine for native select */}
+    </div>
+
+    {/* Phone Number Input */}
+    <input
+      type="tel"
+      id="phoneNumber"
+      required
+      placeholder="9012345678"
+      value={phoneNumber}
+      onChange={(e) => setPhoneNumber(e.target.value)}
+      className="flex-1 w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition outline-none font-bold text-black placeholder:font-normal placeholder:text-slate-400"
+    />
+  </div>
   <p className="text-xs text-slate-400">
-    Use country code format (E.164). Example: +2348012345678
+    Select country code and enter number (e.g., 090123... or 90123...)
   </p>
 </div>
 
