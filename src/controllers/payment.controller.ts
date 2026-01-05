@@ -48,7 +48,7 @@ export const startPayment = async (req: Request, res: Response) => {
     // ✅ Choice A: phone is required for guest checkout
     if (!cleanPhone || cleanPhone.length < 8) {
       return res.status(400).json({
-        message: 'Phone number is required (include country code). Example: +2348012345678',
+        message: `Phone number is required (include country code). ReceivedRaw: '${phoneNumber}', Normalized: '${cleanPhone}' (Len: ${cleanPhone.length}). Example: +2348012345678`,
       });
     }
 
