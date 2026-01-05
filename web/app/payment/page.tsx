@@ -292,39 +292,41 @@ export default function PaymentPage() {
             <form onSubmit={handlePayment} className="space-y-6">
               {/* Email Input */}
               <div className="space-y-2">
-                <label htmlFor="email" className="block text-sm font-medium text-slate-700">
-                  Email Address
-                </label>
-                <input
-                  type="email"
-                  id="email"
-                  required
-                  placeholder="you@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition outline-none"
-                />
-                <p className="text-xs text-slate-400">Must match your login email.</p>
-              </div>
+  <label htmlFor="email" className="block text-sm font-medium text-slate-700">
+    Email Address
+  </label>
+  <input
+    type="email"
+    id="email"
+    required
+    placeholder="you@example.com"
+    value={email}
+    onChange={(e) => setEmail(e.target.value)}
+    // Added placeholder:font-bold and placeholder:text-black below
+    className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition outline-none placeholder:font-bold placeholder:text-black"
+  />
+  <p className="text-xs text-slate-400">Must match your login email.</p>
+</div>
 
-              {/* ✅ Phone Number Input (NEW) */}
-              <div className="space-y-2">
-                <label htmlFor="phoneNumber" className="block text-sm font-medium text-slate-700">
-                  WhatsApp Phone Number
-                </label>
-                <input
-                  type="tel"
-                  id="phoneNumber"
-                  required
-                  placeholder="+2348012345678"
-                  value={phoneNumber}
-                  onChange={(e) => setPhoneNumber(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition outline-none"
-                />
-                <p className="text-xs text-slate-400">
-                  Use country code format (E.164). Example: +2348012345678
-                </p>
-              </div>
+{/* ✅ Phone Number Input (NEW) */}
+<div className="space-y-2">
+  <label htmlFor="phoneNumber" className="block text-sm font-medium text-slate-700">
+    WhatsApp Phone Number
+  </label>
+  <input
+    type="tel"
+    id="phoneNumber"
+    required
+    placeholder="+2348012345678"
+    value={phoneNumber}
+    onChange={(e) => setPhoneNumber(e.target.value)}
+    // Added placeholder:font-bold and placeholder:text-black below
+    className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition outline-none placeholder:font-bold placeholder:text-black"
+  />
+  <p className="text-xs text-slate-400">
+    Use country code format (E.164). Example: +2348012345678
+  </p>
+</div>
 
               {/* Summary */}
               <div className="bg-slate-50 p-4 rounded-xl space-y-3">
