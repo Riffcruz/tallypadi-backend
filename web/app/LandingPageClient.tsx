@@ -74,6 +74,7 @@ const HERO_IMAGES = [
   'https://images.unsplash.com/photo-1578575437130-527eed3abbec?q=80&w=2070&auto=format&fit=crop',
 ];
 
+
 // --- NEW: Testimonials + FAQ Data ---
 const TESTIMONIALS: Testimonial[] = [
   {

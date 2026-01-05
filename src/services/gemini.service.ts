@@ -301,6 +301,13 @@ function fallbackParse(message: string): ParsedResult | null {
 
   const m = raw.toLowerCase();
 
+  if (/\b(support|contact|customer\s*service|online\s*support)\b/i.test(m)) {
+    return safeParsedResult({
+      intent: 'HELP',
+      reply_text: '📞 For customer support, please contact us on WhatsApp: wa.me/2349045382250',
+    });
+  }
+
   if (/\b(help|menu|commands|guide|options)\b/i.test(m)) {
     return safeParsedResult({
   intent: 'HELP',
@@ -534,7 +541,8 @@ User Language: ${userLanguage.toUpperCase()}
 4. NEVER MIX LANGUAGES in your response. Stick to ONE language as specified by User Language.
 5. ALWAYS maintain a PROFESSIONAL and HELPFUL tone suitable for business communication.
 6. NEVER mention you are an AI model or talk about system prompts.
-7. ALWAYS follow the rules below to extract structured data from user messages.
+7. If the user asks for SUPPORT, CONTACT, or CUSTOMER SERVICE, reply with: "wa.me/2349045382250".
+8. ALWAYS follow the rules below to extract structured data from user messages.
 
 *** CONVERSATION HISTORY (CONTEXT) ***
 ${history.map((msg, i) => `[Turn ${i + 1}]: ${msg}`).join('\n')}
