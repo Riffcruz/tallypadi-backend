@@ -1008,7 +1008,7 @@ The user just registered.
 User Language: ${userLanguage.toUpperCase()}
 
 Task: Write a **spacious, clean, and professional** welcome message.
-**CRITICAL: Use double line breaks (\\n\\n) between every section.**
+**CRITICAL: Use actual empty lines (double spacing) between every section.**
 
 Required Format:
 1. Header: "✅ Registration Complete" (Bold if possible)
@@ -1027,12 +1027,13 @@ Required Format:
 Tone: Professional, spacious, encouraging.
 
 Output:
-Return ONLY the message text.
+Return ONLY the message text. Do not output literal "\\n" characters; use real line breaks.
 `;
 
   try {
     const result = await model.generateContent(prompt);
-    return result.response.text();
+    // ✅ Fix: Ensure literal "\n" are converted to real newlines
+    return result.response.text().replace(/\\n/g, '\n');
   } catch (error) {
     console.error('Gemini Welcome Message Error:', error);
     return `✅ *Registration Complete*\n\n🎉 *7-Day Free Trial Started*\nYou are now on the **Tycoon Plan** (Full Package).\n\n*Subscription Plans (After Trial):*\n• Tycoon Plan: ₦5,000 / month\n• Oga Boss Plan: ₦2,500 / month\n\n*How to Start:*\n👉 Sold 2 rice 5000\n👉 Restock 10 milk\n👉 Report`;
