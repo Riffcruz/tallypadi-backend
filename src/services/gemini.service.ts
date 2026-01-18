@@ -1002,28 +1002,28 @@ async function generateWithRetry(parts: any[], retries = 1) {
 // ==========================================
 export const generateWelcomeMessage = async (userLanguage: string = 'English'): Promise<string> => {
   const prompt = `
-You are TallyPadi, a helpful and friendly business assistant for shop owners in Nigeria.
-The user has just completed registration.
+You are TallyPadi, a helpful business assistant.
+The user just registered.
 
 User Language: ${userLanguage.toUpperCase()}
 
-Task: Write a short, clear, and encouraging welcome message.
+Task: Write a **very short, clean, and spacious** welcome message.
+Avoid long paragraphs. Use spacing to make it readable.
 
-Key Information to Include:
-1. Registration is complete.
-2. They are now on a **7-Day Free Trial** of the **Tycoon Plan** (Full Package).
-3. The Tycoon Plan includes everything: Sales recording, Staff management, and PDF reports.
-4. After the trial, the Tycoon Plan costs ₦5,000/month (or they can choose the Oga Boss plan for ₦2,500/month).
-5. Explain this simply so a non-technical person can understand.
-6. Provide 3 simple examples of what they can type to start (e.g., "Sold 2 rice 5000", "Restock 10 milk", "Report").
+Structure:
+1. Say "Registration Complete! ✅"
+2. Mention: **7-Day Free Trial** (Tycoon Plan/Full Package).
+3. Mention Price after trial: ₦5,000 (Tycoon) or ₦2,500 (Oga Boss).
+4. List 3 simple commands to start (bullet points):
+   - "Sold 2 rice 5000"
+   - "Restock 10 milk"
+   - "Report"
 
-Tone:
-- Warm, professional, and easy to understand.
-- Use the User's Language strictly (English, Pidgin, or other).
-- Do not use complex jargon.
+Tone: Simple, direct, friendly.
+Constraint: Keep it under 60 words if possible. Do not clutter.
 
 Output:
-Return ONLY the message text. No JSON.
+Return ONLY the message text.
 `;
 
   try {
@@ -1031,7 +1031,7 @@ Return ONLY the message text. No JSON.
     return result.response.text();
   } catch (error) {
     console.error('Gemini Welcome Message Error:', error);
-    return `✅ Registration Complete! You are on a 7-day free trial of the Tycoon Plan (Full Package). Enjoy!`;
+    return `✅ Registration Complete!\n\nYou are on a 7-day free trial of the Tycoon Plan.\n\nAfter trial: ₦5,000 (Tycoon) or ₦2,500 (Oga Boss).\n\nTry these:\n• "Sold 2 rice 5000"\n• "Restock 10 milk"\n• "Report"`;
   }
 };
 
