@@ -1002,25 +1002,29 @@ async function generateWithRetry(parts: any[], retries = 1) {
 // ==========================================
 export const generateWelcomeMessage = async (userLanguage: string = 'English'): Promise<string> => {
   const prompt = `
-You are TallyPadi, a helpful business assistant.
+You are TallyPadi, a professional business assistant.
 The user just registered.
 
 User Language: ${userLanguage.toUpperCase()}
 
-Task: Write a **very short, clean, and spacious** welcome message.
-Avoid long paragraphs. Use spacing to make it readable.
+Task: Write a **spacious, clean, and professional** welcome message.
+**CRITICAL: Use double line breaks (\\n\\n) between every section.**
 
-Structure:
-1. Say "Registration Complete! ✅"
-2. Mention: **7-Day Free Trial** (Tycoon Plan/Full Package).
-3. Mention Price after trial: ₦5,000 (Tycoon) or ₦2,500 (Oga Boss).
-4. List 3 simple commands to start (bullet points):
-   - "Sold 2 rice 5000"
-   - "Restock 10 milk"
-   - "Report"
+Required Format:
+1. Header: "✅ Registration Complete" (Bold if possible)
+2. (Gap)
+3. Announcement: "🎉 7-Day Free Trial Started"
+   - Explain they are on the **Tycoon Plan** (Full Package).
+4. (Gap)
+5. Pricing (Clean List):
+   - Tycoon Plan: ₦5,000/month
+   - Oga Boss Plan: ₦2,500/month
+6. (Gap)
+7. "How to Start:"
+   - List 3 examples using "👉" bullet points.
+     (e.g., Sold 2 rice 5000, Restock 10 milk, Report)
 
-Tone: Simple, direct, friendly.
-Constraint: Keep it under 60 words if possible. Do not clutter.
+Tone: Professional, spacious, encouraging.
 
 Output:
 Return ONLY the message text.
@@ -1031,7 +1035,7 @@ Return ONLY the message text.
     return result.response.text();
   } catch (error) {
     console.error('Gemini Welcome Message Error:', error);
-    return `✅ Registration Complete!\n\nYou are on a 7-day free trial of the Tycoon Plan.\n\nAfter trial: ₦5,000 (Tycoon) or ₦2,500 (Oga Boss).\n\nTry these:\n• "Sold 2 rice 5000"\n• "Restock 10 milk"\n• "Report"`;
+    return `✅ *Registration Complete*\n\n🎉 *7-Day Free Trial Started*\nYou are now on the **Tycoon Plan** (Full Package).\n\n*Subscription Plans (After Trial):*\n• Tycoon Plan: ₦5,000 / month\n• Oga Boss Plan: ₦2,500 / month\n\n*How to Start:*\n👉 Sold 2 rice 5000\n👉 Restock 10 milk\n👉 Report`;
   }
 };
 
