@@ -404,6 +404,12 @@ export default function LandingPage() {
                 Features
               </a>
               <a
+                href="/help"
+                className="text-sm font-medium text-slate-300 hover:text-emerald-400 transition"
+              >
+                Docs
+              </a>
+              <a
                 href="#pricing"
                 className="text-sm font-medium text-slate-300 hover:text-emerald-400 transition"
               >
@@ -466,6 +472,12 @@ export default function LandingPage() {
               className="block text-slate-300 hover:text-white font-medium p-2 hover:bg-slate-800 rounded"
             >
               Features
+            </a>
+            <a
+              href="/help"
+              className="block text-slate-300 hover:text-white font-medium p-2 hover:bg-slate-800 rounded"
+            >
+              Docs
             </a>
             <a
               href="#pricing"
@@ -1210,6 +1222,9 @@ export default function LandingPage() {
             <div className="flex gap-8 text-sm font-medium">
               <a href="/policy" className="hover:text-emerald-400 transition">
                 Privacy Policy
+              </a>
+              <a href="/help" className="hover:text-emerald-400 transition">
+                Documentation
               </a>
               <a href="/policy#terms" className="hover:text-emerald-400 transition">
                 Terms of Service

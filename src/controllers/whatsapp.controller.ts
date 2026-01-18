@@ -899,7 +899,7 @@ export const handleMessageLogic = async (
 
         await queueOutboundMessage(
           from,
-          `✅ *Setup Complete!*\n\nTry:\n• "Sold 2 rice for ${symbol}5000"\n• "Restock 10 rice at ${symbol}2000"\n• "How much did I make today?"\n• "Who owes me money?"\n\nYou can now start recording sales and managing your shop on WhatsApp! 🎉`
+          `✅ *Setup Complete!*\n\n🎉 *7 Days Free Trial Started!*\n\nTry:\n• "Sold 2 rice for ${symbol}5000"\n• "Restock 10 rice at ${symbol}2000"\n• "How much did I make today?"\n• "Who owes me money?"\n\nYou can now start recording sales and managing your shop on WhatsApp! 🎉`
         );
         return;
       }
