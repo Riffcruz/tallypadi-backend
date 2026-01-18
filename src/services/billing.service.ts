@@ -70,7 +70,7 @@ export const checkSubscriptionStatus = async (user: IUser): Promise<boolean> => 
 const sendBillingReminder = async (user: IUser) => {
   // We can point them to a generic pay link or generate one dynamically here
   // For now, let's assume a generic dashboard link
-  const payLink = 'https://tallypadi.com/dashboard/subscription';
+  const payLink = 'https://tallypadi.com/payment';
 
   await sendWhatsAppQueued(
     user,
