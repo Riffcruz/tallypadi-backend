@@ -562,12 +562,17 @@ A. QUANTITY & UNIT EXTRACTION (HIGHLY FLEXIBLE ORDER)
 B. ITEM NAME EXTRACTION & NORMALIZATION (ROBUST CLEANING)
 - Extract the core generic product name; aggressively remove noise.
 - Normalize plurals to singular where reasonable.
+- 🛑 REMOVE "to", "from", "for" from the start of names.
+- Example: "Sold to John" -> Name: "John" (NOT "To John").
+- Example: "Credit to Emeka" -> Name: "Emeka" (NOT "To Emeka").
+- ✅ EXCEPTION FOR DELETION: If intent is DELETED_STOCK and the user types a specific long name (e.g. "playstation 4 pro on credit to mr ogbafia"), PRESERVE the full name exactly as typed so it can be matched and removed.
+
 
 C. PRICE/MONEY EXTRACTION (POSITION-INDEPENDENT & SMART SCALING)
 - Money can appear anywhere.
 - Detect currency via symbols/codes/words.
 - Distinguish unit_price vs total_money:
-  - Words like "each", "per", "a piece", "per bag" → unit_price
+  - Words like "each", "per", "a piece", "per bag", "@" → unit_price
   - ✅ CRITICAL: If unit_price is detected AND qty > 1, MUST compute:
       total_money = sum(qty * unit_price) across all items (minus discount if any).
     Never set total_money equal to unit_price in "each/per" cases.
@@ -582,8 +587,15 @@ C. PRICE/MONEY EXTRACTION (POSITION-INDEPENDENT & SMART SCALING)
 - DOWNLOAD_REPORT is ONLY when the user asks to generate/export/download/print a report NOW.
 - The phrase "disable pdf report(s)" MUST NEVER be DOWNLOAD_REPORT.
 
-*** 2. CONTEXTUAL COMPLETION ***
+*** 2. CONTEXTUAL COMPLETION & HUMAN REASONING ***
 - Use conversation history to complete partial inputs across turns.
+- If user says "Remove it" or "Delete that", look at the IMMEDIATE previous turn to identify the item.
+- Example:
+  Turn 1: "Stock report" (Bot lists items including 'Rice')
+  Turn 2: "Remove Rice"
+- Example:
+  Turn 1: "Sold 2 Rice"
+  Turn 2: "Undo it" -> Intent: UNDO_LAST_SALE
 
 *** 3. CREDIT/DEBT DETECTION ***
 Credit sale triggers: "on credit", "owe", "pay later", "debt", "balance remaining"
@@ -592,7 +604,7 @@ Debt payment triggers: "paid", "settled", "cleared", "balance paid"
 ✅ CRITICAL RULES FOR DEBT FEATURES (MUST MATCH BACKEND)
 - If user says they SOLD something "on credit"/"owe"/"pay later":
   intent MUST be SALE, is_credit=true, and customer_name MUST be extracted.
-  Example: "Sold 2 rice to Emeka on credit" => SALE + is_credit=true + customer_name="Emeka"
+  Example: "Sold 2 rice to Emeka on credit" => SALE + is_credit=true + customer_name="Emeka" (NOT "To Emeka")
 - If user says a person PAID money back / made a payment:
   intent MUST be DEBT_PAYMENT, customer_name MUST be extracted, total_money MUST be extracted.
   Examples:
@@ -726,15 +738,17 @@ These intents MUST be detected correctly and MUST NOT be mistaken as SALE:
   total_money = null unless user explicitly provided a total purchase cost (optional).
 
 5) DELETED_STOCK
-- User wants item removed from inventory list or cleared:
-  Examples:
+- User wants item removed from inventory list or cleared.
+- Triggers: "delete", "remove", "clear", "trash", "drop" + item name.
+- Examples:
   "delete rice", "remove bread", "clear indomie", "delete indomie from stock"
+  "Remove playstation 4 pro on credit to mr ogbafia" (Note: Extract "playstation 4 pro on credit to mr ogbafia" as the name if it matches a past mistake, but prefer "playstation 4 pro")
 - Output:
   intent = DELETED_STOCK
   items MUST include item name. qty can be 0:
     items = [{ name: "<item>", qty: 0, unit: "pcs", unit_price: null, total_price: null, currency: null, category: null }]
   total_money = null
-  needs_clarification = true ONLY if item name is missing.
+  needs_clarification = true ONLY if item name is missing and cannot be inferred from context.
 
 *** 5C. SETTINGS COMMANDS (CRITICAL) ***
 
@@ -986,6 +1000,41 @@ async function generateWithRetry(parts: any[], retries = 1) {
 // ==========================================
 // 🚀 MAIN EXPORT
 // ==========================================
+export const generateWelcomeMessage = async (userLanguage: string = 'English'): Promise<string> => {
+  const prompt = `
+You are TallyPadi, a helpful and friendly business assistant for shop owners in Nigeria.
+The user has just completed registration.
+
+User Language: ${userLanguage.toUpperCase()}
+
+Task: Write a short, clear, and encouraging welcome message.
+
+Key Information to Include:
+1. Registration is complete.
+2. They are now on a **7-Day Free Trial** of the **Tycoon Plan** (Full Package).
+3. The Tycoon Plan includes everything: Sales recording, Staff management, and PDF reports.
+4. After the trial, the Tycoon Plan costs ₦5,000/month (or they can choose the Oga Boss plan for ₦2,500/month).
+5. Explain this simply so a non-technical person can understand.
+6. Provide 3 simple examples of what they can type to start (e.g., "Sold 2 rice 5000", "Restock 10 milk", "Report").
+
+Tone:
+- Warm, professional, and easy to understand.
+- Use the User's Language strictly (English, Pidgin, or other).
+- Do not use complex jargon.
+
+Output:
+Return ONLY the message text. No JSON.
+`;
+
+  try {
+    const result = await model.generateContent(prompt);
+    return result.response.text();
+  } catch (error) {
+    console.error('Gemini Welcome Message Error:', error);
+    return `✅ Registration Complete! You are on a 7-day free trial of the Tycoon Plan (Full Package). Enjoy!`;
+  }
+};
+
 export const parseMessageWithGemini = async (
   message: string,
   userLanguage: string = 'English',

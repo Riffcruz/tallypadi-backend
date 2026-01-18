@@ -895,12 +895,9 @@ export const handleMessageLogic = async (
         actor.registrationStage = 'COMPLETED';
         await actor.save();
 
-        const { symbol } = getUserCurrency(actor);
-
-        await queueOutboundMessage(
-          from,
-          `✅ *Setup Complete!*\n\n🎉 *7 Days Free Trial Started!*\n\nTry:\n• "Sold 2 rice for ${symbol}5000"\n• "Restock 10 rice at ${symbol}2000"\n• "How much did I make today?"\n• "Who owes me money?"\n\nYou can now start recording sales and managing your shop on WhatsApp! 🎉`
-        );
+        const { generateWelcomeMessage } = await import('../services/gemini.service');
+        const welcomeMsg = await generateWelcomeMessage(actor.settings?.language || 'English');
+        await queueOutboundMessage(from, welcomeMsg);
         return;
       }
     }
@@ -1048,7 +1045,13 @@ if (btn?.txId && btn?.action) {
     // =====================================================
     switch (parsed.intent) {
       case 'SALE': {
-       await processTransaction(shopId as any, parsed, messageId, actor);
+        // ✅ STOP: If clarification needed, ask user first (don't process partial sale)
+        if (parsed.needs_clarification) {
+          await queueOutboundMessage(from, parsed.reply_text);
+          break;
+        }
+
+        await processTransaction(shopId as any, parsed, messageId, actor);
 
        
         const tx = await Transaction.findOne({ user: shopId, messageId }).lean();
@@ -1082,6 +1085,12 @@ if (btn?.txId && btn?.action) {
       case 'DEFINE_PRICE':
       case 'PRICE_CHECK':
       case 'DEBT_PAYMENT': {
+        // ✅ STOP: If clarification needed, ask user first
+        if (parsed.needs_clarification) {
+          await queueOutboundMessage(from, parsed.reply_text);
+          break;
+        }
+
         try {
     await processTransaction(shopId as any, parsed, messageId, actor);
 
