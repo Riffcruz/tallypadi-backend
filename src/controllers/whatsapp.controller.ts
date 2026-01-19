@@ -4,7 +4,7 @@ import bcrypt from 'bcryptjs';
 import axios from 'axios';
 
 import { env } from '../config/env';
-import { User } from '../models/user.model';
+import { User, IUser } from '../models/user.model';
 import { Inventory } from '../models/inventory.model';
 import { Transaction } from '../models/transaction.model';
 import { Debtor } from '../models/debtor.model';
@@ -1198,7 +1198,7 @@ if (btn?.txId && btn?.action) {
           const money = `${symbol}${Number(t.totalMoney || 0).toLocaleString(locale)}`;
           const itemsStr = (t.items || []).map((i: any) => `${i.name} (${i.qty})`).join(', ');
           const undoneTag = t.isUndone ? ' ⚠️UNDONE' : '';
-          const soldBy = t.user && t.user.role === 'STAFF' ? ` (by ${t.user.name})` : ''; // Display staff name
+          const soldBy = t.user && (t.user as IUser).role === 'STAFF' ? ` (by ${(t.user as IUser).name})` : ''; // Display staff name
 
           out += `• *${itemsStr}*\n  — ${money} (${timeStr})${soldBy}${undoneTag}\n\n`; // Improved spacing
         });
@@ -1281,7 +1281,7 @@ if (btn?.txId && btn?.action) {
   local.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
 
     const undoneTag = tx.isUndone ? ' ⚠️UNDONE' : '';
-    const soldBy = tx.user && tx.user.role === 'STAFF' ? ` (by ${tx.user.name})` : ''; // Display staff name
+    const soldBy = tx.user && (tx.user as IUser).role === 'STAFF' ? ` (by ${(tx.user as IUser).name})` : ''; // Display staff name
 
     salesMsg += `--- Sale ID: ${tx._id} ---\n`; // Add Sale ID for clarity
     (tx.items || []).forEach((it: any) => {

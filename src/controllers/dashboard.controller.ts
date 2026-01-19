@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { Transaction } from '../models/transaction.model';
 import { Inventory } from '../models/inventory.model';
-import { User } from '../models/user.model';
+import { User, IUser } from '../models/user.model';
 import { getRelevantUserIds } from '../services/report.service';
 const UNKNOWN_ITEM_NAMES = ['unknown_item', 'unknown', 'item', 'null', 'undefined'];
 
@@ -91,15 +91,18 @@ export const getDashboardData = async (req: Request | any, res: Response) => {
   .populate('user', 'name role'); // ✅ Populate user to get staff name
 
 
-    const transactions = transactionDocs.map(t => ({
-      id: t._id,
-      type: t.type,
-      item: t.items.map(i => i.name).join(', '),
-      qty: t.items.reduce((acc, i) => acc + i.qty, 0),
-      amount: t.totalMoney || 0,
-      date: t.timestamp.toISOString(),
-      soldBy: t.user && t.user.role === 'STAFF' ? t.user.name : 'Owner', // ✅ Add soldBy field
-    }));
+    const transactions = transactionDocs.map(t => {
+      const transactingUser = t.user as IUser; // Cast t.user to IUser
+      return ({
+        id: t._id,
+        type: t.type,
+        item: t.items.map(i => i.name).join(', '),
+        qty: t.items.reduce((acc, i) => acc + i.qty, 0),
+        amount: t.totalMoney || 0,
+        date: t.timestamp.toISOString(),
+        soldBy: transactingUser && transactingUser.role === 'STAFF' ? transactingUser.name : 'Owner', // ✅ Add soldBy field
+      });
+    });
 
     // 4) Stats
   const totalRevenueAgg = await Transaction.aggregate([
