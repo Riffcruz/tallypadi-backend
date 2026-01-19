@@ -101,7 +101,7 @@ export const initializePayment = async (user: IUser, email: string, targetPlan?:
       {
         email: email,
         amount: planDetails.amount,
-        plan: planDetails.planCode, // recurring billing if set on Paystack
+        // plan: planDetails.planCode, // Commented out to allow Bank Transfer (one-time payment)
         channels: ['card', 'bank', 'ussd', 'qr', 'mobile_money', 'bank_transfer', 'eft'],
         metadata: {
           userId: user._id.toString(),
