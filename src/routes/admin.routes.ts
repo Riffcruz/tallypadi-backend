@@ -14,6 +14,7 @@ import {
   adminAddStaff,
   deleteStaffMember,
   unlinkStaffMember,
+  cleanupStaffHierarchy,
 } from '../controllers/admin.controller';
 
 const router = Router();
@@ -38,6 +39,7 @@ router.put('/users/:id', manageUser);
 
 // Staff
 router.post('/users/:ownerId/staff', adminAddStaff);
+router.post('/staff/cleanup', cleanupStaffHierarchy); // ✅ New cleanup endpoint
 router.delete('/staff/:staffId', deleteStaffMember);
 router.put('/staff/:staffId/unlink', unlinkStaffMember);
 

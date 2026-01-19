@@ -258,7 +258,8 @@ export const getUserDeepDive = async (req: Request, res: Response) => {
     const ownerId = user.role === 'OWNER' ? user._id : user.ownerId;
     if (!ownerId) return res.status(400).json({ error: 'OwnerId not found' });
 
-    const staff = await User.find({ ownerId });
+    // Find all users linked to this owner, EXCLUDING the owner themselves
+    const staff = await User.find({ ownerId, _id: { $ne: ownerId } });
     const staffIds = staff.map((s) => s._id);
     const allUserIds = [ownerId, ...staffIds];
 
@@ -511,12 +512,14 @@ export const deleteStaffMember = async (req: Request, res: Response) => {
 
     const staff = await User.findById(staffId);
     if (!staff) return res.status(404).json({ error: 'Staff not found' });
-    if (staff.role !== 'STAFF') return res.status(400).json({ error: 'User is not a staff member' });
+    
+    // Allow deleting if role is STAFF OR if they have an ownerId (handle inconsistent state)
+    if (staff.role !== 'STAFF' && !staff.ownerId) {
+      return res.status(400).json({ error: 'User is not a staff member (no ownerId found)' });
+    }
 
     await User.deleteOne({ _id: staff._id });
 
-    // Optional: Notify owner?
-    
     res.json({ success: true, message: 'Staff deleted' });
   } catch (error) {
     console.error('Delete Staff Error:', error);
@@ -532,17 +535,17 @@ export const unlinkStaffMember = async (req: Request, res: Response) => {
 
     const staff = await User.findById(staffId);
     if (!staff) return res.status(404).json({ error: 'Staff not found' });
-    if (staff.role !== 'STAFF') return res.status(400).json({ error: 'User is not a staff member' });
+    
+    // Allow unlinking if they have an ownerId
+    if (staff.role !== 'STAFF' && !staff.ownerId) {
+      return res.status(400).json({ error: 'User is not a staff member (no ownerId found)' });
+    }
 
     // "Unlink" means promoting them to an independent OWNER
-    // We need to remove ownerId and set role to OWNER.
-    // We might also want to give them a default trial plan if they don't have one,
-    // but usually they inherit from owner. Let's start them on a trial.
-    
     staff.role = 'OWNER';
     staff.ownerId = undefined; // Remove link
     
-    // Reset subscription to a fresh trial to avoid immediate lockout if owner was expired
+    // Reset subscription to a fresh trial
     staff.subscriptionStatus = 'trial';
     staff.trialEndsAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days trial
     staff.planType = 'TYCOON'; // Default plan
@@ -553,5 +556,51 @@ export const unlinkStaffMember = async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Unlink Staff Error:', error);
     res.status(500).json({ error: 'Unlink Staff Error' });
+  }
+};
+
+// POST /api/admin/staff/cleanup
+export const cleanupStaffHierarchy = async (req: Request, res: Response) => {
+  try {
+    const linkedUsers = await User.find({ ownerId: { $exists: true, $ne: null } });
+    
+    let nestedCount = 0;
+    let orphanCount = 0;
+    let selfRefCount = 0;
+
+    for (const user of linkedUsers) {
+      if (!user.ownerId) continue;
+
+      // Self-reference check
+      if (user.ownerId.toString() === user._id.toString()) {
+         await User.updateOne({ _id: user._id }, { $unset: { ownerId: 1 } });
+         selfRefCount++;
+         continue;
+      }
+
+      const owner = await User.findById(user.ownerId);
+
+      // Orphan check
+      if (!owner) {
+        await User.deleteOne({ _id: user._id });
+        orphanCount++;
+        continue;
+      }
+
+      // Nested Staff check (Owner is actually a STAFF)
+      if (owner.role === 'STAFF') {
+        await User.deleteOne({ _id: user._id });
+        nestedCount++;
+      }
+    }
+
+    res.json({ 
+      success: true, 
+      message: 'Cleanup complete', 
+      stats: { nestedRemoved: nestedCount, orphansRemoved: orphanCount, selfRefsFixed: selfRefCount } 
+    });
+  } catch (error) {
+    console.error('Cleanup Staff Error:', error);
+    res.status(500).json({ error: 'Cleanup Staff Error' });
   }
 };
