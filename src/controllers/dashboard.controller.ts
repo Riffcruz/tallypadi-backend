@@ -87,7 +87,8 @@ export const getDashboardData = async (req: Request | any, res: Response) => {
   ...validSaleMatch, // ✅ excludes undone + unknown
 })
   .sort({ timestamp: -1 })
-  .limit(10);
+  .limit(10)
+  .populate('user', 'name role'); // ✅ Populate user to get staff name
 
 
     const transactions = transactionDocs.map(t => ({
@@ -97,6 +98,7 @@ export const getDashboardData = async (req: Request | any, res: Response) => {
       qty: t.items.reduce((acc, i) => acc + i.qty, 0),
       amount: t.totalMoney || 0,
       date: t.timestamp.toISOString(),
+      soldBy: t.user && t.user.role === 'STAFF' ? t.user.name : 'Owner', // ✅ Add soldBy field
     }));
 
     // 4) Stats

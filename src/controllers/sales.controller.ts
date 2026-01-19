@@ -254,7 +254,9 @@ export const getSalesHistory = async (req: Request | any, res: Response) => {
       if (!Object.keys(query.timestamp).length) delete query.timestamp;
     }
 
-    const sales = await Transaction.find(query).sort({ timestamp: -1 });
+    const sales = await Transaction.find(query)
+      .sort({ timestamp: -1 })
+      .populate('user', 'name role'); // ✅ Populate user to get staff name
 
     const formatted = sales.map((t: any) => {
       const { total, paid, balance, paymentStatus } = computePaidBalanceStatus(t);
@@ -281,6 +283,7 @@ export const getSalesHistory = async (req: Request | any, res: Response) => {
         paidAmount: paid,
         balance,
         paymentStatus,
+        soldBy: t.user && t.user.role === 'STAFF' ? t.user.name : 'Owner', // ✅ Add soldBy field
 
         items: (t.items || []).map((i: any) => ({
           name: i.name,
@@ -344,7 +347,9 @@ export const generateSalesReport = async (req: Request | any, res: Response) => 
 }
 
 
-    const transactions = await Transaction.find(query).sort({ timestamp: 1 });
+    const transactions = await Transaction.find(query)
+      .sort({ timestamp: 1 })
+      .populate('user', 'name role'); // ✅ Populate user to get staff name
     const totalRevenue = transactions.reduce((sum: number, t: any) => sum + (t.totalMoney || 0), 0);
     const totalTx = transactions.length;
 
@@ -478,7 +483,11 @@ export const generateSalesReport = async (req: Request | any, res: Response) => 
       const amtStr = formatMoney(t.totalMoney || 0);
 
       const textHeight = doc.heightOfString(itemText, { width: colItems - 10 });
-      const rowHeight = Math.max(25, textHeight + 15);
+      const soldByText = t.user && t.user.role === 'STAFF' ? `Sold by: ${t.user.name}` : ''; // Get staff name
+      let rowContentHeight = textHeight;
+      if (soldByText) rowContentHeight += 12; // Add height for soldBy line
+
+      let rowHeight = Math.max(25, rowContentHeight + 15); // Base row height + padding
 
       if (doc.y + rowHeight > bottomLimit) {
         doc.addPage();
@@ -495,13 +504,20 @@ export const generateSalesReport = async (req: Request | any, res: Response) => 
       if (idx % 2 !== 0) doc.rect(margin, currentY, contentW, rowHeight).fill(THEME.bgLight);
 
       doc.fillColor(THEME.text);
-      const centerY = currentY + (rowHeight - 10) / 2;
+      let yCursor = currentY + 8; // Starting Y for itemText
 
-      doc.text(dateStr, margin + 10, centerY, { width: colDate });
-      doc.text(itemText, margin + 10 + colDate, currentY + 8, { width: colItems - 10 });
+      doc.text(dateStr, margin + 10, yCursor, { width: colDate });
+      doc.text(itemText, margin + 10 + colDate, yCursor, { width: colItems - 10 });
+      yCursor += textHeight + 2; // Move yCursor after itemText
+
+      if (soldByText) {
+        doc.fontSize(7).fillColor(THEME.muted).text(soldByText, margin + 10 + colDate, yCursor, { width: colItems - 10 });
+        doc.fontSize(9).fillColor(THEME.text); // Reset font size and color
+      }
 
       doc.font(boldFont);
-      doc.text(amtStr, margin, centerY, { width: contentW - 10, align: 'right' });
+      // Vertically center amount based on actual row height
+      doc.text(amtStr, margin, currentY + (rowHeight - doc.currentLineHeight()) / 2, { width: contentW - 10, align: 'right' }); 
       doc.font(regFont);
 
       doc.moveTo(margin, currentY + rowHeight).lineTo(pageW - margin, currentY + rowHeight)

@@ -1183,6 +1183,7 @@ if (btn?.txId && btn?.action) {
         })
           .sort({ createdAt: -1 })
           .limit(safeLimit)
+          .populate('user', 'name role') // ✅ Populate user to get staff name
           .lean();
 
         if (!recentTx.length) {
@@ -1197,7 +1198,9 @@ if (btn?.txId && btn?.action) {
           const money = `${symbol}${Number(t.totalMoney || 0).toLocaleString(locale)}`;
           const itemsStr = (t.items || []).map((i: any) => `${i.name} (${i.qty})`).join(', ');
           const undoneTag = t.isUndone ? ' ⚠️UNDONE' : '';
-          out += `• *${itemsStr}* — ${money} (${timeStr})${undoneTag}\n`;
+          const soldBy = t.user && t.user.role === 'STAFF' ? ` (by ${t.user.name})` : ''; // Display staff name
+
+          out += `• *${itemsStr}*\n  — ${money} (${timeStr})${soldBy}${undoneTag}\n\n`; // Improved spacing
         });
 
         await queueOutboundMessage(from, out);
@@ -1232,6 +1235,7 @@ if (btn?.txId && btn?.action) {
     ...buildUndoneFilter(includeUndoneRequestedByOwner),
   })
     .sort({ timestamp: 1 })
+    .populate('user', 'name role') // ✅ Populate user to get staff name
     .lean();
 
   // ✅ 3) If empty: do NOT generate PDF, do NOT continue
@@ -1277,7 +1281,9 @@ if (btn?.txId && btn?.action) {
   local.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
 
     const undoneTag = tx.isUndone ? ' ⚠️UNDONE' : '';
+    const soldBy = tx.user && tx.user.role === 'STAFF' ? ` (by ${tx.user.name})` : ''; // Display staff name
 
+    salesMsg += `--- Sale ID: ${tx._id} ---\n`; // Add Sale ID for clarity
     (tx.items || []).forEach((it: any) => {
       const qty = Number(it.qty || 0);
       const unitPrice = Number(it.unitPrice || 0);
@@ -1288,9 +1294,9 @@ if (btn?.txId && btn?.action) {
           ? Number(it.total)
           : qty * unitPrice;
 
-      salesMsg += `🕒 ${dateTimeStr} • ${it.name} (${qty}${it.unit ? ' ' + it.unit : ''}) - ${symbol}${Number(line || 0).toLocaleString(locale)}${undoneTag}\n`;
-
+      salesMsg += `• ${it.name} (${qty}${it.unit ? ' ' + it.unit : ''}) — ${symbol}${Number(line || 0).toLocaleString(locale)}${undoneTag}\n`;
     });
+    salesMsg += `  *Time:* ${dateTimeStr}${soldBy}\n\n`; // Improved spacing
   });
 
   salesMsg += `\n💰 *Total Money:* ${totalFormatted}`;
