@@ -1283,22 +1283,29 @@ if (btn?.txId && btn?.action) {
   local.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
 
     const undoneTag = tx.isUndone ? ' ⚠️UNDONE' : '';
-    const soldBy = transactingUser && transactingUser.role === 'STAFF' ? ` (by ${transactingUser.name})` : ''; // Display staff name
+    const soldBy = transactingUser && transactingUser.role === 'STAFF' ? ` (Staff: ${transactingUser.name})` : '';
 
-    salesMsg += `--- Sale ID: ${tx._id} ---\n`; // Add Sale ID for clarity
-    (tx.items || []).forEach((it: any) => {
+    // salesMsg += `--- Sale ID: ${tx._id} ---\n`; // Removed per request
+
+    const itemsArr = tx.items || [];
+    itemsArr.forEach((it: any) => {
       const qty = Number(it.qty || 0);
       const unitPrice = Number(it.unitPrice || 0);
 
       // ✅ fallback for line total
-      const line =
+      let line =
         it.total != null && Number.isFinite(Number(it.total))
           ? Number(it.total)
           : qty * unitPrice;
 
+      // ✅ FIX: If line is 0 (e.g. "total" price used) and it's a single item, use the transaction total
+      if (line === 0 && itemsArr.length === 1 && (tx.totalMoney || 0) > 0) {
+        line = Number(tx.totalMoney);
+      }
+
       salesMsg += `• ${it.name} (${qty}${it.unit ? ' ' + it.unit : ''}) — ${symbol}${Number(line || 0).toLocaleString(locale)}${undoneTag}\n`;
     });
-    salesMsg += `  *Time:* ${dateTimeStr}${soldBy}\n\n`; // Improved spacing
+    salesMsg += `  Time: ${dateTimeStr}${soldBy}\n\n`;
   });
 
   salesMsg += `\n💰 *Total Money:* ${totalFormatted}`;
