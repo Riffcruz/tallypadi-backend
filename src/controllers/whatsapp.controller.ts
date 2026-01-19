@@ -1199,7 +1199,7 @@ if (btn?.txId && btn?.action) {
           const money = `${symbol}${Number(t.totalMoney || 0).toLocaleString(locale)}`;
           const itemsStr = (t.items || []).map((i: any) => `${i.name} (${i.qty})`).join(', ');
           const undoneTag = t.isUndone ? ' ⚠️UNDONE' : '';
-          const soldBy = transactingUser && transactingUser.role === 'STAFF' ? ` (Staff: ${transactingUser.name})` : '';
+          const soldBy = transactingUser && transactingUser.role === 'STAFF' ? ` (Sold by ${transactingUser.name})` : '';
 
           out += `• *${itemsStr}*\n  — ${money} (${timeStr})${soldBy}${undoneTag}\n\n`; // Improved spacing
         });
@@ -1283,7 +1283,7 @@ if (btn?.txId && btn?.action) {
   local.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
 
     const undoneTag = tx.isUndone ? ' ⚠️UNDONE' : '';
-    const soldBy = transactingUser && transactingUser.role === 'STAFF' ? ` (Staff: ${transactingUser.name})` : '';
+    const soldBy = transactingUser && transactingUser.role === 'STAFF' ? ` (Sold by ${transactingUser.name})` : '';
 
     // salesMsg += `--- Sale ID: ${tx._id} ---\n`; // Removed per request
 
