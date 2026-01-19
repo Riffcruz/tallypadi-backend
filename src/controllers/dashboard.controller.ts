@@ -100,7 +100,7 @@ export const getDashboardData = async (req: Request | any, res: Response) => {
         qty: t.items.reduce((acc, i) => acc + i.qty, 0),
         amount: t.totalMoney || 0,
         date: t.timestamp.toISOString(),
-        soldBy: transactingUser && transactingUser.role === 'STAFF' ? transactingUser.name : 'Owner', // ✅ Add soldBy field
+        soldBy: (transactingUser as IUser) && (transactingUser as IUser).role === 'STAFF' ? (transactingUser as IUser).name : 'Owner', // ✅ Add soldBy field
       });
     });
 
