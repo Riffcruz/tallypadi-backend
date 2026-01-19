@@ -34,6 +34,7 @@ import {
   getStockReport,
   getFullSummary,
   getTodayTransactions,
+  getRelevantUserIds,
 } from '../services/report.service';
 import { generatePdfReport } from '../services/pdf.service';
 import { toUserLocalDate } from '../utils/dates';
@@ -130,13 +131,13 @@ function suffixReportScope(includeUndone: boolean) {
 }
 
 async function getSalesCountForPeriod(
-  shopId: any,
+  userIds: any[],
   startUtc: Date,
   endUtc: Date,
   includeUndone: boolean
 ) {
   const q: any = {
-    user: shopId,
+    user: { $in: userIds },
     type: 'SALE',
     timestamp: { $gte: startUtc, $lte: endUtc },
   };
@@ -1167,8 +1168,11 @@ if (btn?.txId && btn?.action) {
 
         await queueOutboundMessage(from, `🔎 Fetching last ${safeLimit} transactions...`);
 
+        const scope = shopUser.role === 'OWNER' ? 'SHOP' : 'OWN';
+        const relevantIds = await getRelevantUserIds(shopUser, scope);
+
         const recentTx = await Transaction.find({
-          user: shopId,
+          user: { $in: relevantIds },
           type: 'SALE',
           ...buildUndoneFilter(includeUndoneRequestedByOwner),
         })
@@ -1212,9 +1216,12 @@ if (btn?.txId && btn?.action) {
   // ✅ 1) Get the correct UTC range for the user's requested period
   const { startUtc, endUtc } = getUtcRangeForUser(offsetMinutes, startDate, endDate);
 
+  const scope = shopUser.role === 'OWNER' ? 'SHOP' : 'OWN';
+  const relevantIds = await getRelevantUserIds(shopUser, scope);
+
   // ✅ 2) Pull transactions (so we can decide empty BEFORE doing anything else)
   const salesTx = await Transaction.find({
-    user: shopId,
+    user: { $in: relevantIds },
     type: 'SALE',
     timestamp: { $gte: startUtc, $lte: endUtc },
     ...buildUndoneFilter(includeUndoneRequestedByOwner),
@@ -1428,8 +1435,11 @@ if (btn?.txId && btn?.action) {
 
         const { startUtc, endUtc } = getUtcRangeForUser(offsetMinutes, startDate, endDate);
 
+        const scope = shopUser.role === 'OWNER' ? 'SHOP' : 'OWN';
+        const relevantIds = await getRelevantUserIds(shopUser, scope);
+
         // ✅ check first
-        const count = await getSalesCountForPeriod(shopId, startUtc, endUtc, includeUndoneRequestedByOwner);
+        const count = await getSalesCountForPeriod(relevantIds, startUtc, endUtc, includeUndoneRequestedByOwner);
 
         if (count === 0) {
           await queueOutboundMessage(from, `📭 No sales found for *${dateLabel}*. No PDF generated.`);

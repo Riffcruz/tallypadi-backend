@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import { Transaction } from '../models/transaction.model';
 import { Inventory } from '../models/inventory.model';
 import { User } from '../models/user.model';
+import { getRelevantUserIds } from '../services/report.service';
 import PDFDocument from 'pdfkit';
 import path from 'path';
 import fs from 'fs';
@@ -224,11 +225,18 @@ export const getSalesHistory = async (req: Request | any, res: Response) => {
     const userId = req.user?.id || req.user?._id;
     if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
+    // ✅ Fetch user to determine role and relevant IDs
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    const scope = user.role === 'OWNER' ? 'SHOP' : 'OWN';
+    const relevantIds = await getRelevantUserIds(user, scope);
+
     const startDate = String(req.query.startDate || '').trim();
     const endDate = String(req.query.endDate || '').trim();
 
     const query: any = {
-      user: userId,
+      user: { $in: relevantIds },
       type: 'SALE',
       ...buildNotUndoneMatch(), // ✅ hide undone
     };
@@ -315,9 +323,12 @@ export const generateSalesReport = async (req: Request | any, res: Response) => 
     const startDate = String(req.query.startDate || '');
     const endDate = String(req.query.endDate || '');
 
+    const scope = user.role === 'OWNER' ? 'SHOP' : 'OWN';
+    const relevantIds = await getRelevantUserIds(user, scope);
+
     // ✅ Query MUST include user: userId
     const query: any = {
-      user: userId,
+      user: { $in: relevantIds },
       type: 'SALE',
       ...buildNotUndoneMatch(), // ✅ exclude undone from PDF + totals
     };

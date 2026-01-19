@@ -5,7 +5,7 @@ import { User, IUser } from '../models/user.model';
 import { getTodayRangeForOffset } from '../utils/dates';
 
 // Helper function to get relevant user IDs based on role and report type
-const _getRelevantUserIds = async (user: IUser, reportScope: 'OWN' | 'SHOP'): Promise<Types.ObjectId[]> => {
+export const getRelevantUserIds = async (user: IUser, reportScope: 'OWN' | 'SHOP'): Promise<Types.ObjectId[]> => {
   if (!user) throw new Error('User not found');
 
   // If the report scope is 'OWN', return only the current user's ID
@@ -81,7 +81,7 @@ export const getDailySummary = async (
   if (!user) throw new Error('User not found');
 
   const scope: 'OWN' | 'SHOP' = user.role === 'OWNER' ? 'SHOP' : 'OWN';
-  const relevantUserIds = await _getRelevantUserIds(user, scope);
+  const relevantUserIds = await getRelevantUserIds(user, scope);
 
   let start: Date, end: Date;
 
@@ -135,7 +135,7 @@ export const getStockReport = async (userId: Types.ObjectId, itemQuery: string |
   const user = await User.findById(userId);
   if (!user) throw new Error('User not found');
 
-  const relevantUserIds = await _getRelevantUserIds(user, 'SHOP');
+  const relevantUserIds = await getRelevantUserIds(user, 'SHOP');
 
   const query: any = { user: { $in: relevantUserIds } };
 
@@ -170,9 +170,9 @@ export const getFullSummary = async (
   if (!user) throw new Error('User not found');
 
   const salesScope: 'OWN' | 'SHOP' = user.role === 'OWNER' ? 'SHOP' : 'OWN';
-  const salesUserIds = await _getRelevantUserIds(user, salesScope);
+  const salesUserIds = await getRelevantUserIds(user, salesScope);
 
-  const stockUserIds = await _getRelevantUserIds(user, 'SHOP');
+  const stockUserIds = await getRelevantUserIds(user, 'SHOP');
 
   let start: Date, end: Date;
 
@@ -273,7 +273,7 @@ export const getTodayTransactions = async (
   if (!user) throw new Error('User not found');
 
   const scope: 'OWN' | 'SHOP' = user.role === 'OWNER' ? 'SHOP' : 'OWN';
-  const relevantUserIds = await _getRelevantUserIds(user, scope);
+  const relevantUserIds = await getRelevantUserIds(user, scope);
 
   let start: Date, end: Date;
 
@@ -309,7 +309,7 @@ export const getProfitSummary = async (
   if (!user) throw new Error('User not found');
 
   const scope: 'OWN' | 'SHOP' = user.role === 'OWNER' ? 'SHOP' : 'OWN';
-  const relevantUserIds = await _getRelevantUserIds(user, scope);
+  const relevantUserIds = await getRelevantUserIds(user, scope);
 
   let start: Date, end: Date;
 
@@ -374,7 +374,7 @@ export const getSmartSuggestions = async (userId: Types.ObjectId): Promise<strin
   const user = await User.findById(userId);
   if (!user) return [];
 
-  const relevantUserIds = await _getRelevantUserIds(user, 'OWN');
+  const relevantUserIds = await getRelevantUserIds(user, 'OWN');
 
   const offset = user.settings?.utcOffsetMinutes ?? 60;
 

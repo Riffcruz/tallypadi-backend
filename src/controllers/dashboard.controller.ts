@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { Transaction } from '../models/transaction.model';
 import { Inventory } from '../models/inventory.model';
 import { User } from '../models/user.model';
+import { getRelevantUserIds } from '../services/report.service';
 const UNKNOWN_ITEM_NAMES = ['unknown_item', 'unknown', 'item', 'null', 'undefined'];
 
 const unknownSaleQuery = {
@@ -68,8 +69,11 @@ export const getDashboardData = async (req: Request | any, res: Response) => {
     // ✅ FIX 2: GET CURRENCY DETAILS
     const { code: currencyCode, locale } = getCurrencyConfig(user.countryCode);
 
+    const scope = user.role === 'OWNER' ? 'SHOP' : 'OWN';
+    const relevantIds = await getRelevantUserIds(user, scope);
+
     // 2) Inventory
-    const inventoryDocs = await Inventory.find({ user: user._id });
+    const inventoryDocs = await Inventory.find({ user: { $in: relevantIds } });
     const inventory = inventoryDocs.map(doc => ({
       name: doc.name,
       quantity: doc.quantity,
@@ -79,7 +83,7 @@ export const getDashboardData = async (req: Request | any, res: Response) => {
 
     // 3) Recent transactions
     const transactionDocs = await Transaction.find({
-  user: user._id,
+  user: { $in: relevantIds },
   ...validSaleMatch, // ✅ excludes undone + unknown
 })
   .sort({ timestamp: -1 })
@@ -97,13 +101,13 @@ export const getDashboardData = async (req: Request | any, res: Response) => {
 
     // 4) Stats
   const totalRevenueAgg = await Transaction.aggregate([
-  { $match: { user: user._id, type: 'SALE', ...validSaleMatch } },
+  { $match: { user: { $in: relevantIds }, type: 'SALE', ...validSaleMatch } },
   { $group: { _id: null, total: { $sum: '$totalMoney' } } },
 ]);
 
 
     const totalItemsSoldAgg = await Transaction.aggregate([
-  { $match: { user: user._id, type: 'SALE', ...validSaleMatch } },
+  { $match: { user: { $in: relevantIds }, type: 'SALE', ...validSaleMatch } },
   { $unwind: '$items' },
   { $group: { _id: null, total: { $sum: '$items.qty' } } },
 ]);
@@ -117,7 +121,7 @@ export const getDashboardData = async (req: Request | any, res: Response) => {
     const salesByDow = await Transaction.aggregate([
   {
     $match: {
-      user: user._id,
+      user: { $in: relevantIds },
       type: 'SALE',
       timestamp: { $gte: start },
       ...validSaleMatch, // ✅ excludes undone + unknown
