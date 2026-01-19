@@ -30,8 +30,9 @@ export const getStaff = async (req: Request, res: Response) => {
 // POST /api/staff
 export const addStaff = async (req: Request, res: Response) => {
     try {
-        const { phoneNumber } = req.body;
+        const { phoneNumber, name } = req.body;
         const safePhone = sanitizeString(phoneNumber);
+        const safeName = sanitizeString(name);
         const userId = (req as any).user?.id;
 
         if (!userId) return res.status(401).json({ error: "Unauthorized" });
@@ -65,6 +66,7 @@ export const addStaff = async (req: Request, res: Response) => {
         const newStaff = await User.create({
             phoneNumber: safePhone,
             role: 'STAFF',
+            name: safeName || 'Staff',
             ownerId: owner._id, // Link to Owner
             planType: 'TYCOON', // Inherit Plan features
             registrationStage: 'COMPLETED', // Skip setup steps
@@ -79,7 +81,7 @@ export const addStaff = async (req: Request, res: Response) => {
             // Construct a wa.me link that pre-fills a message
             const botLink = `https://wa.me/${botNumber}?text=Hi`; 
             
-            const inviteMsg = `🔔 *Invitation to Join Tallypadi*\n\nYou have been added as a staff member by *${ownerName}*.\n\nClick here to start recording sales:\n👉 ${botLink}\n\nType "Help" to get started.`;
+            const inviteMsg = `🔔 *Invitation to Join Tallypadi*\n\n${safeName ? `Hello ${safeName},\n` : ''}You have been added as a staff member by *${ownerName}*.\n\nClick here to start recording sales:\n👉 ${botLink}\n\nType "Help" to get started.`;
             
             await sendWhatsAppText(newStaff.phoneNumber, inviteMsg);
             console.log(`✅ Staff invite sent to ${newStaff.phoneNumber}`);

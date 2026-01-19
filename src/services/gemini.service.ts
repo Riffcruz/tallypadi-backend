@@ -45,6 +45,7 @@ export interface ParsedResult {
   is_credit: boolean;
   customer_name?: string;
   staffPhoneNumber?: string;
+  staffName?: string;
   items: ParsedItem[];
   total_money: number | null;
   discount_amount?: number | null;
@@ -273,6 +274,7 @@ function safeParsedResult(p: any): ParsedResult {
     is_credit: Boolean(p?.is_credit),
     customer_name: typeof p?.customer_name === 'string' ? sanitizeInput(p.customer_name) : undefined,
     staffPhoneNumber: normalizePhone(p?.staffPhoneNumber),
+    staffName: typeof p?.staffName === 'string' ? sanitizeInput(p.staffName) : undefined,
     items: normalizedItems,
     total_money: finalTotal,
     discount_amount: discount,
@@ -383,6 +385,7 @@ function fallbackParse(message: string): ParsedResult | null {
     '\n' +
     '👥 *12) Staff (Owner only)*\n' +
     '• "Add staff 08012345678"\n' +
+    '• "Add staff John 08012345678"\n' +
     '\n' +
     '⚙️ *13) Settings (Owner only)*\n' +
     '• "Change language to English"\n' +
@@ -824,6 +827,12 @@ Output:
 intent = CHANGE_LANGUAGE (or SETTINGS is acceptable)
 settings_update = { "key": "language", "value": "<LanguageName>" }
 
+*** 5D. STAFF MANAGEMENT ***
+- Triggers: "add staff", "new staff".
+- Extract "staffPhoneNumber" and optional "staffName".
+- Example: "Add staff John 080123" -> staffName="John", staffPhoneNumber="080123".
+- Example: "Add staff 080123" -> staffName=null, staffPhoneNumber="080123".
+
 *** SETTINGS PRIORITY OVERRIDE ***
 If the message matches any settings triggers above, DO NOT return SALE/REPORT intents.
 
@@ -942,6 +951,7 @@ Disable:
   "is_credit": boolean,
   "customer_name": string | null,
   "staffPhoneNumber": string | null,
+  "staffName": string | null,
   "items": [
     {
       "name": string,

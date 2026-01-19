@@ -55,6 +55,7 @@ export default function SettingsPage() {
   // New Staff Input State
   const [staffCountryCode, setStaffCountryCode] = useState('+234');
   const [newStaffPhone, setNewStaffPhone] = useState('');
+  const [newStaffName, setNewStaffName] = useState('');
   const [addingStaff, setAddingStaff] = useState(false);
 
   const getTokenOrRedirect = () => {
@@ -231,18 +232,19 @@ export default function SettingsPage() {
 
       await axios.post(
         `${API_URL}/staff`,
-        { phoneNumber: formattedNumber },
+        { phoneNumber: formattedNumber, name: newStaffName },
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
       Swal.fire({
         title: 'Invitation Sent!',
-        text: `${formattedNumber} has been added as staff.`,
+        text: `${newStaffName || formattedNumber} has been added as staff.`,
         icon: 'success',
         confirmButtonColor: '#9333ea',
       });
 
       setNewStaffPhone('');
+      setNewStaffName('');
       setIsStaffModalOpen(false);
       fetchStaff(token); // Refresh list
     } catch (err: any) {
@@ -643,6 +645,19 @@ export default function SettingsPage() {
             </div>
 
             <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wide">
+                  Staff Name
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. John Doe"
+                  className="w-full border border-gray-200 bg-slate-50 focus:bg-white rounded-xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500 transition-all font-medium text-gray-900 placeholder:text-gray-400"
+                  value={newStaffName}
+                  onChange={(e) => setNewStaffName(e.target.value)}
+                />
+              </div>
+
               <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wide">
                 Phone Number
               </label>

@@ -63,7 +63,7 @@ const userSchema = new Schema<IUser>(
     },
 
     businessName: { type: String, default: 'My Shop' },
-    name: { type: String },
+    name: { type: String, default: 'Staff' },
 
     nextSummaryAt: { type: Date, default: null, index: true },
     lastSummaryDateKey: { type: String, default: null, index: true },

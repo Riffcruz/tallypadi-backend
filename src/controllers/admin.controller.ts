@@ -101,6 +101,7 @@ const phoneSchema = z
 const adminAddStaffSchema = z
   .object({
     phoneNumber: phoneSchema,
+    name: z.string().trim().max(50).optional(),
   })
   .strict();
 
@@ -457,7 +458,7 @@ export const adminAddStaff = async (req: Request, res: Response) => {
     const parsed = adminAddStaffSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
-    const { phoneNumber } = parsed.data;
+    const { phoneNumber, name } = parsed.data;
 
     const owner = await User.findById(ownerId);
     if (!owner) return res.status(404).json({ error: 'Owner not found' });
@@ -476,6 +477,7 @@ export const adminAddStaff = async (req: Request, res: Response) => {
     const newStaff = await User.create({
       phoneNumber,
       role: 'STAFF',
+      name: name || 'Staff',
       ownerId: owner._id,
       planType: owner.planType,
       subscriptionStatus: owner.subscriptionStatus,

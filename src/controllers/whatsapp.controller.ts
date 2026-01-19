@@ -732,7 +732,7 @@ function normalizePhone(raw: string) {
   return String(raw || '').replace(/[^\d+]/g, '').trim();
 }
 
-async function addStaffUnderOwner(owner: any, staffPhoneRaw?: string | null) {
+async function addStaffUnderOwner(owner: any, staffPhoneRaw?: string | null, staffName?: string | null) {
   const staffPhone = normalizePhone(staffPhoneRaw || '');
   if (!staffPhone) return { ok: false, msg: 'Reply with staff number (e.g. +2348123456789).' };
 
@@ -757,7 +757,7 @@ async function addStaffUnderOwner(owner: any, staffPhoneRaw?: string | null) {
     role: 'STAFF',
     ownerId: owner._id,
     businessName: owner.businessName,
-    name: 'Staff',
+    name: staffName || 'Staff',
     countryCode: owner.countryCode || guessCountryFromPhone(staffPhone),
     registrationStage: 'COMPLETED',
     subscriptionStatus: owner.subscriptionStatus || 'trial',
@@ -1403,7 +1403,7 @@ if (btn?.txId && btn?.action) {
           break;
         }
 
-        const r = await addStaffUnderOwner(actor, (parsed as any).staffPhoneNumber || null);
+        const r = await addStaffUnderOwner(actor, (parsed as any).staffPhoneNumber || null, (parsed as any).staffName || null);
         await queueOutboundMessage(from, r.msg);
         break;
       }
