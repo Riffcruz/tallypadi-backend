@@ -1199,7 +1199,7 @@ if (btn?.txId && btn?.action) {
           const money = `${symbol}${Number(t.totalMoney || 0).toLocaleString(locale)}`;
           const itemsStr = (t.items || []).map((i: any) => `${i.name} (${i.qty})`).join(', ');
           const undoneTag = t.isUndone ? ' ⚠️UNDONE' : '';
-          const soldBy = transactingUser && transactingUser.role === 'STAFF' ? ` (by ${transactingUser.name})` : ''; // Display staff name
+          const soldBy = transactingUser && transactingUser.role === 'STAFF' ? ` (Staff: ${transactingUser.name})` : '';
 
           out += `• *${itemsStr}*\n  — ${money} (${timeStr})${soldBy}${undoneTag}\n\n`; // Improved spacing
         });
