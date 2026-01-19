@@ -4,7 +4,7 @@ import bcrypt from 'bcryptjs';
 import axios from 'axios';
 
 import { env } from '../config/env';
-import { User } from '../models/user.model';
+import { User, IUser } from '../models/user.model';
 import { Inventory } from '../models/inventory.model';
 import { Transaction } from '../models/transaction.model';
 import { Debtor } from '../models/debtor.model';
@@ -1192,13 +1192,14 @@ if (btn?.txId && btn?.action) {
         }
 
         let out = `🕒 *Last ${safeLimit} Sales*${suffixReportScope(includeUndoneRequestedByOwner)}:\n\n`;
-        recentTx.forEach((t: any) => {
+        recentTx.forEach((t) => {
+          const transactingUser = t.user as IUser;
           const local = toUserLocalDate(t.timestamp, offsetMinutes);
           const timeStr = local.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
           const money = `${symbol}${Number(t.totalMoney || 0).toLocaleString(locale)}`;
           const itemsStr = (t.items || []).map((i: any) => `${i.name} (${i.qty})`).join(', ');
           const undoneTag = t.isUndone ? ' ⚠️UNDONE' : '';
-          const soldBy = t.user && t.user.role === 'STAFF' ? ` (by ${t.user.name})` : ''; // Display staff name
+          const soldBy = transactingUser && transactingUser.role === 'STAFF' ? ` (by ${transactingUser.name})` : ''; // Display staff name
 
           out += `• *${itemsStr}*\n  — ${money} (${timeStr})${soldBy}${undoneTag}\n\n`; // Improved spacing
         });
@@ -1273,7 +1274,8 @@ if (btn?.txId && btn?.action) {
   // ✅ 5) Build breakdown message (from salesTx — consistent with undone filter)
   let salesMsg = `📅 *${dateLabel} Sales Breakdown*${suffixReportScope(includeUndoneRequestedByOwner)}\n\n`;
 
-  salesTx.forEach((tx: any) => {
+  salesTx.forEach((tx) => {
+    const transactingUser = tx.user as IUser;
     const local = toUserLocalDate(tx.timestamp, offsetMinutes);
     const dateTimeStr =
   local.toLocaleDateString(locale, { day: '2-digit', month: '2-digit', year: 'numeric' }) +
@@ -1281,7 +1283,7 @@ if (btn?.txId && btn?.action) {
   local.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
 
     const undoneTag = tx.isUndone ? ' ⚠️UNDONE' : '';
-    const soldBy = tx.user && tx.user.role === 'STAFF' ? ` (by ${tx.user.name})` : ''; // Display staff name
+    const soldBy = transactingUser && transactingUser.role === 'STAFF' ? ` (by ${transactingUser.name})` : ''; // Display staff name
 
     salesMsg += `--- Sale ID: ${tx._id} ---\n`; // Add Sale ID for clarity
     (tx.items || []).forEach((it: any) => {
