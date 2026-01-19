@@ -498,3 +498,60 @@ export const adminAddStaff = async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Failed to add staff' });
   }
 };
+
+// -------------------------
+// STAFF MANAGEMENT (Delete / Unlink)
+// -------------------------
+
+// DELETE /api/admin/staff/:staffId
+export const deleteStaffMember = async (req: Request, res: Response) => {
+  try {
+    const { staffId } = req.params;
+    if (!isValidObjectId(staffId)) return res.status(400).json({ error: 'Invalid staffId' });
+
+    const staff = await User.findById(staffId);
+    if (!staff) return res.status(404).json({ error: 'Staff not found' });
+    if (staff.role !== 'STAFF') return res.status(400).json({ error: 'User is not a staff member' });
+
+    await User.deleteOne({ _id: staff._id });
+
+    // Optional: Notify owner?
+    
+    res.json({ success: true, message: 'Staff deleted' });
+  } catch (error) {
+    console.error('Delete Staff Error:', error);
+    res.status(500).json({ error: 'Delete Staff Error' });
+  }
+};
+
+// PUT /api/admin/staff/:staffId/unlink
+export const unlinkStaffMember = async (req: Request, res: Response) => {
+  try {
+    const { staffId } = req.params;
+    if (!isValidObjectId(staffId)) return res.status(400).json({ error: 'Invalid staffId' });
+
+    const staff = await User.findById(staffId);
+    if (!staff) return res.status(404).json({ error: 'Staff not found' });
+    if (staff.role !== 'STAFF') return res.status(400).json({ error: 'User is not a staff member' });
+
+    // "Unlink" means promoting them to an independent OWNER
+    // We need to remove ownerId and set role to OWNER.
+    // We might also want to give them a default trial plan if they don't have one,
+    // but usually they inherit from owner. Let's start them on a trial.
+    
+    staff.role = 'OWNER';
+    staff.ownerId = undefined; // Remove link
+    
+    // Reset subscription to a fresh trial to avoid immediate lockout if owner was expired
+    staff.subscriptionStatus = 'trial';
+    staff.trialEndsAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days trial
+    staff.planType = 'TYCOON'; // Default plan
+    
+    await staff.save();
+
+    res.json({ success: true, message: 'Staff unlinked and promoted to Owner', user: staff });
+  } catch (error) {
+    console.error('Unlink Staff Error:', error);
+    res.status(500).json({ error: 'Unlink Staff Error' });
+  }
+};

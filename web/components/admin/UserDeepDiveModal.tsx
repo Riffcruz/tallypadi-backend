@@ -11,6 +11,7 @@ import {
   Trash2,
   MessageSquare,
   Send,
+  Unlink,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import jsPDF from 'jspdf';
@@ -379,6 +380,45 @@ export default function UserDeepDiveModal({
       Swal.fire('Error', 'Message failed', 'error');
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleDeleteStaff = async (staffId: string, staffName: string) => {
+    const res = await Swal.fire({
+      title: 'Delete Staff?',
+      text: `Are you sure you want to delete ${staffName}?`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Yes, Delete',
+      confirmButtonColor: '#dc2626',
+    });
+    if (!res.isConfirmed) return;
+
+    try {
+      await axios.delete(`${API_URL}/admin/staff/${staffId}`, { headers: authHeaders });
+      Swal.fire('Deleted', 'Staff member removed.', 'success');
+      refreshDetails();
+    } catch (e) {
+      Swal.fire('Error', 'Failed to delete staff', 'error');
+    }
+  };
+
+  const handleUnlinkStaff = async (staffId: string, staffName: string) => {
+    const res = await Swal.fire({
+      title: 'Unlink Staff?',
+      text: `Promote ${staffName} to independent business owner?`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Yes, Unlink',
+    });
+    if (!res.isConfirmed) return;
+
+    try {
+      await axios.put(`${API_URL}/admin/staff/${staffId}/unlink`, {}, { headers: authHeaders });
+      Swal.fire('Success', 'Staff promoted to Owner.', 'success');
+      refreshDetails();
+    } catch (e) {
+      Swal.fire('Error', 'Failed to unlink staff', 'error');
     }
   };
 
@@ -790,18 +830,34 @@ export default function UserDeepDiveModal({
                       <p className="text-xs text-slate-400 break-words">{s.phoneNumber}</p>
                     </div>
 
-                    <button
-                      onClick={() => {
-                        setTarget('staff');
-                        setStaffTarget(s.phoneNumber);
-                        setView('info');
-                        Swal.fire('Selected', `Staff selected: ${s.name || 'Staff'}`, 'info');
-                      }}
-                      className="p-2 rounded-xl hover:bg-white/10 transition"
-                      title="Send message to staff"
-                    >
-                      <Share2 size={16} className="text-emerald-400 shrink-0" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleUnlinkStaff(s._id, s.name)}
+                        className="p-2 rounded-xl hover:bg-white/10 transition text-slate-400 hover:text-amber-400"
+                        title="Unlink (Promote to Owner)"
+                      >
+                        <Unlink size={16} />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteStaff(s._id, s.name)}
+                        className="p-2 rounded-xl hover:bg-white/10 transition text-slate-400 hover:text-red-400"
+                        title="Delete Staff"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                      <button
+                        onClick={() => {
+                          setTarget('staff');
+                          setStaffTarget(s.phoneNumber);
+                          setView('info');
+                          Swal.fire('Selected', `Staff selected: ${s.name || 'Staff'}`, 'info');
+                        }}
+                        className="p-2 rounded-xl hover:bg-white/10 transition text-slate-400 hover:text-emerald-400"
+                        title="Send message to staff"
+                      >
+                        <Share2 size={16} />
+                      </button>
+                    </div>
                   </div>
                 ))
               )}

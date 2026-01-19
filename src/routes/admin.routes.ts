@@ -12,6 +12,8 @@ import {
   getGlobalSettings,
   updateGlobalSettings,
   adminAddStaff,
+  deleteStaffMember,
+  unlinkStaffMember,
 } from '../controllers/admin.controller';
 
 const router = Router();
@@ -36,6 +38,8 @@ router.put('/users/:id', manageUser);
 
 // Staff
 router.post('/users/:ownerId/staff', adminAddStaff);
+router.delete('/staff/:staffId', deleteStaffMember);
+router.put('/staff/:staffId/unlink', unlinkStaffMember);
 
 router.use('/fx', fxRoutes);       // -> /api/fx
 router.use('/chat', chatRoutes);   // -> /api/chat/send
