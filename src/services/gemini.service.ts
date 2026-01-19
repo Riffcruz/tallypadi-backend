@@ -113,7 +113,7 @@ const extractJsonObject = (text: string): string => {
 const normalizePhone = (raw: any): string | undefined => {
   if (typeof raw !== 'string') return undefined;
   const s = sanitizeInput(raw);
-  const cleaned = s.replace(/[^\d+]/g, '');
+  const cleaned = s.replace(/\D/g, '');
   return cleaned || undefined;
 };
 

@@ -753,34 +753,50 @@ function normalizePhone(raw: string) {
 }
 
 async function addStaffUnderOwner(owner: any, staffPhoneRaw?: string | null, staffName?: string | null) {
-  let staffPhone = normalizePhone(staffPhoneRaw || ''); // staffPhone is now pure digits
-  if (!staffPhone) return { ok: false, msg: 'Reply with staff number (e.g. +2348123456789).' };
+  let staffPhoneDigits = normalizePhone(staffPhoneRaw || ''); // e.g., "18599189638" from "+1 (859) 918-9638"
+  if (!staffPhoneDigits) return { ok: false, msg: 'Reply with staff number (e.g. +2348123456789).' };
 
-  // Determine owner's numeric country code (e.g., '234' for NG)
-  const ownerCountryCodeAlpha = owner.countryCode || guessCountryFromPhone(owner.phoneNumber);
+  let finalStaffPhoneNumber = staffPhoneDigits;
+  let finalStaffCountryCodeAlpha = '';
+
+  // Map for numeric country codes
   const numericCcMap: Record<string, string> = {
       NG: '234', US: '1', GB: '44', GH: '233', KE: '254', ZA: '27', IN: '91',
-      BJ: '229', TG: '228', CM: '237', GQ: '240', CA: '1', IE: '353'
+      BJ: '229', TG: '228', CM: '237', GQ: '240', CA: '1', IE: '353',
+      // Add more as needed
   };
-  const ownerNumericCc = numericCcMap[ownerCountryCodeAlpha] || '234'; // Default to NG
 
-  // If staffPhone starts with '0', remove it (local dialing prefix in some countries)
-  if (staffPhone.startsWith('0')) {
-    staffPhone = staffPhone.substring(1);
-  }
-
-  // If staffPhone doesn't already start with the owner's country code, prepend it
-  // This handles cases where user provides a number without country code (e.g., 8031234567)
-  if (!staffPhone.startsWith(ownerNumericCc)) {
-      staffPhone = `${ownerNumericCc}${staffPhone}`;
-  }
+  // 1. Try to infer country from the staffPhoneDigits itself (e.g., "US" from "1859...")
+  const inferredStaffCountryAlpha = guessCountryFromPhone(staffPhoneDigits); 
   
-  // Ensure no '+' sign is inadvertently included in the final saved number
-  staffPhone = staffPhone.replace('+', '');
+  // If `guessCountryFromPhone` infers a non-default country (i.e. not 'NG' unless it's explicitly an NG number)
+  // or if the number is sufficiently long to imply an international format.
+  // The 'NG' default in guessCountryFromPhone can be tricky, so we check length too.
+  if (inferredStaffCountryAlpha !== 'NG' || (inferredStaffCountryAlpha === 'NG' && staffPhoneDigits.startsWith('234')) || staffPhoneDigits.length > 10) {
+    finalStaffCountryCodeAlpha = inferredStaffCountryAlpha;
+  } else {
+    // If it's ambiguous or looks like a local number, default to owner's country code
+    finalStaffCountryCodeAlpha = owner.countryCode || guessCountryFromPhone(owner.phoneNumber);
+  }
 
-  if (String(owner.phoneNumber) === staffPhone) return { ok: false, msg: 'You cannot add your own number as staff.' };
+  const targetNumericCc = numericCcMap[finalStaffCountryCodeAlpha] || '234'; // Fallback to '234' if owner's CC is also unknown
 
-  const existing = await User.findOne({ phoneNumber: staffPhone });
+  // If staffPhone starts with '0', remove it (common local dialing prefix in some countries)
+  if (finalStaffPhoneNumber.startsWith('0')) {
+    finalStaffPhoneNumber = finalStaffPhoneNumber.substring(1);
+  }
+
+  // Only prepend the target numeric CC if the number doesn't already start with it
+  // This prevents adding '234' to a '1859...' number.
+  if (!finalStaffPhoneNumber.startsWith(targetNumericCc)) {
+    finalStaffPhoneNumber = `${targetNumericCc}${finalStaffPhoneNumber}`;
+  }
+
+  // Ensure no '+' sign (should already be removed by normalizePhone, but good for safety)
+  finalStaffPhoneNumber = finalStaffPhoneNumber.replace('+', '');
+
+  // Look for existing staff/user based on the *final normalized phone number*
+  const existing = await User.findOne({ phoneNumber: finalStaffPhoneNumber });
   if (existing) {
     if (existing.role !== 'STAFF') return { ok: false, msg: 'That number is already registered as a shop owner.' };
 
@@ -789,18 +805,19 @@ async function addStaffUnderOwner(owner: any, staffPhoneRaw?: string | null, sta
     existing.subscriptionStatus = owner.subscriptionStatus;
     existing.planType = owner.planType;
     existing.registrationStage = 'COMPLETED';
+    existing.countryCode = finalStaffCountryCodeAlpha; // Update country code
     await existing.save();
 
-    return { ok: true, msg: `✅ Staff linked: ${staffPhone}` };
+    return { ok: true, msg: `✅ Staff linked: ${finalStaffPhoneNumber}` };
   }
 
   await User.create({
-    phoneNumber: staffPhone,
+    phoneNumber: finalStaffPhoneNumber, // Use the cleaned and prefixed number
     role: 'STAFF',
     ownerId: owner._id,
     businessName: owner.businessName,
     name: staffName || 'Staff',
-    countryCode: owner.countryCode || guessCountryFromPhone(staffPhone),
+    countryCode: finalStaffCountryCodeAlpha, // Use the inferred/owner's country code
     registrationStage: 'COMPLETED',
     subscriptionStatus: owner.subscriptionStatus || 'trial',
     trialEndsAt: owner.trialEndsAt || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
@@ -816,11 +833,11 @@ async function addStaffUnderOwner(owner: any, staffPhoneRaw?: string | null, sta
   });
 
   await queueOutboundMessage(
-    staffPhone,
+    finalStaffPhoneNumber, // Send message to the new, correctly formatted number
     `✅ You have been added as *STAFF* for *${owner.businessName || 'TallyPadi Shop'}*.\nYou can now record sales and view reports on WhatsApp.`
   );
 
-  return { ok: true, msg: `✅ Staff added: ${staffPhone}` };
+  return { ok: true, msg: `✅ Staff added: ${finalStaffPhoneNumber}` };
 }
 
 // =====================================================
