@@ -1173,8 +1173,9 @@ if (btn?.txId && btn?.action) {
 
         await queueOutboundMessage(from, `🔎 Fetching last ${safeLimit} transactions...`);
 
-        const scope = shopUser.role === 'OWNER' ? 'SHOP' : 'OWN';
-        const relevantIds = await getRelevantUserIds(shopUser, scope);
+        // ✅ FIX: Use actor to determine scope (Staff sees OWN, Owner sees SHOP)
+        const scope = actor.role === 'OWNER' ? 'SHOP' : 'OWN';
+        const relevantIds = await getRelevantUserIds(actor, scope);
 
         const recentTx = await Transaction.find({
           user: { $in: relevantIds },
@@ -1183,7 +1184,7 @@ if (btn?.txId && btn?.action) {
         })
           .sort({ createdAt: -1 })
           .limit(safeLimit)
-          .populate('user', 'name role phoneNumber') // ✅ Populate user to get staff name
+          .populate('user', 'name role phoneNumber businessName') // ✅ Populate user to get staff name & shop name
           .lean();
 
         if (!recentTx.length) {
@@ -1199,7 +1200,12 @@ if (btn?.txId && btn?.action) {
           const money = `${symbol}${Number(t.totalMoney || 0).toLocaleString(locale)}`;
           const itemsStr = (t.items || []).map((i: any) => `${i.name} (${i.qty})`).join(', ');
           const undoneTag = t.isUndone ? ' ⚠️UNDONE' : '';
-          const soldBy = transactingUser && transactingUser.role === 'STAFF' ? ` (Sold by ${transactingUser.name})` : '';
+          
+          let soldBy = '';
+          if (transactingUser) {
+            if (transactingUser.role === 'STAFF') soldBy = ` (Sold by ${transactingUser.name})`;
+            else if (transactingUser.role === 'OWNER') soldBy = ` (Sold by ${transactingUser.businessName || 'Shop'})`;
+          }
 
           out += `• *${itemsStr}*\n  — ${money} (${timeStr})${soldBy}${undoneTag}\n\n`; // Improved spacing
         });
@@ -1208,7 +1214,7 @@ if (btn?.txId && btn?.action) {
 
         // PDF (default FULL for recent)
         await sendPdfIfTycoon({
-          user: shopUser,
+          user: actor, // ✅ Generate PDF for actor (restricted scope if staff)
           from,
           type: 'FULL',
           dateLabel: `${dateLabel}${suffixReportScope(includeUndoneRequestedByOwner)}`,
@@ -1225,8 +1231,9 @@ if (btn?.txId && btn?.action) {
   // ✅ 1) Get the correct UTC range for the user's requested period
   const { startUtc, endUtc } = getUtcRangeForUser(offsetMinutes, startDate, endDate);
 
-  const scope = shopUser.role === 'OWNER' ? 'SHOP' : 'OWN';
-  const relevantIds = await getRelevantUserIds(shopUser, scope);
+  // ✅ FIX: Use actor to determine scope (Staff sees OWN, Owner sees SHOP)
+  const scope = actor.role === 'OWNER' ? 'SHOP' : 'OWN';
+  const relevantIds = await getRelevantUserIds(actor, scope);
 
   // ✅ 2) Pull transactions (so we can decide empty BEFORE doing anything else)
   const salesTx = await Transaction.find({
@@ -1236,7 +1243,7 @@ if (btn?.txId && btn?.action) {
     ...buildUndoneFilter(includeUndoneRequestedByOwner),
   })
     .sort({ timestamp: 1 })
-    .populate('user', 'name role phoneNumber') // ✅ Populate user to get staff name
+    .populate('user', 'name role phoneNumber businessName') // ✅ Populate user to get staff name & shop name
     .lean();
 
   // ✅ 3) If empty: do NOT generate PDF, do NOT continue
@@ -1246,7 +1253,8 @@ if (btn?.txId && btn?.action) {
   }
 
   // ✅ 4) Use same service as old version for correct totals/summary
-  const summary = await getDailySummary(shopId as any, startUtc, endUtc);
+  // ✅ FIX: Pass actor._id so summary matches the restricted sales list
+  const summary = await getDailySummary(actor._id as any, startUtc, endUtc);
 
   const totalFormatted = Number(summary?.totalRevenue || 0).toLocaleString(locale, {
     style: 'currency',
@@ -1283,7 +1291,12 @@ if (btn?.txId && btn?.action) {
   local.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
 
     const undoneTag = tx.isUndone ? ' ⚠️UNDONE' : '';
-    const soldBy = transactingUser && transactingUser.role === 'STAFF' ? ` (Sold by ${transactingUser.name})` : '';
+    
+    let soldBy = '';
+    if (transactingUser) {
+      if (transactingUser.role === 'STAFF') soldBy = ` (Sold by ${transactingUser.name})`;
+      else if (transactingUser.role === 'OWNER') soldBy = ` (Sold by ${transactingUser.businessName || 'Shop'})`;
+    }
 
     // salesMsg += `--- Sale ID: ${tx._id} ---\n`; // Removed per request
 
@@ -1336,7 +1349,7 @@ if (btn?.txId && btn?.action) {
         `Generated: ${generatedAt}`;
 
       const pdfFileName = await generatePdfReport(
-        shopId as any,
+        actor._id as any, // ✅ Generate PDF for actor (restricted scope)
         'SALES', // ✅ important: match sales report type
         pdfLabel,
         startUtc,
@@ -1383,7 +1396,7 @@ if (btn?.txId && btn?.action) {
 
         // PDF for stock: safest is FULL
         await sendPdfIfTycoon({
-          user: shopUser,
+          user: actor, // ✅ Generate PDF for actor
           from,
           type: 'FULL',
           dateLabel: `${dateLabel} Stock${suffixReportScope(includeUndoneRequestedByOwner)}`,
@@ -1397,8 +1410,9 @@ if (btn?.txId && btn?.action) {
       case 'REPORT_FULL': {
         await queueOutboundMessage(from, 'Generating comprehensive report... 📋');
 
-        const fullData = await getFullSummary(shopId as any, startUtc, endUtc);
-        const revenueSummary = await getDailySummary(shopId as any, startUtc, endUtc);
+        // ✅ FIX: Use actor._id so staff only see their own sales stats (but full stock)
+        const fullData = await getFullSummary(actor._id as any, startUtc, endUtc);
+        const revenueSummary = await getDailySummary(actor._id as any, startUtc, endUtc);
 
         let fullMsg = `📋 *${dateLabel} Business Summary*${suffixReportScope(includeUndoneRequestedByOwner)}\n\n`;
         fullMsg += `💰 *Revenue (${dateLabel}):* ${symbol}${Number(revenueSummary.totalRevenue || 0).toLocaleString(locale)}\n`;
@@ -1436,7 +1450,7 @@ if (btn?.txId && btn?.action) {
 
         // ✅ PDF type = FULL
         await sendPdfIfTycoon({
-          user: shopUser,
+          user: actor, // ✅ Generate PDF for actor
           from,
           type: 'FULL',
           dateLabel: `${dateLabel}${suffixReportScope(includeUndoneRequestedByOwner)}`,
@@ -1455,8 +1469,9 @@ if (btn?.txId && btn?.action) {
 
         const { startUtc, endUtc } = getUtcRangeForUser(offsetMinutes, startDate, endDate);
 
-        const scope = shopUser.role === 'OWNER' ? 'SHOP' : 'OWN';
-        const relevantIds = await getRelevantUserIds(shopUser, scope);
+        // ✅ FIX: Use actor to determine scope
+        const scope = actor.role === 'OWNER' ? 'SHOP' : 'OWN';
+        const relevantIds = await getRelevantUserIds(actor, scope);
 
         // ✅ check first
         const count = await getSalesCountForPeriod(relevantIds, startUtc, endUtc, includeUndoneRequestedByOwner);
@@ -1470,7 +1485,8 @@ if (btn?.txId && btn?.action) {
         await queueOutboundMessage(from, '📄 Generating PDF report...');
 
         try {
-          const pdfFileName = await generatePdfReport(shopId as any, 'FULL', dateLabel, startUtc, endUtc);
+          // ✅ FIX: Generate PDF for actor
+          const pdfFileName = await generatePdfReport(actor._id as any, 'FULL', dateLabel, startUtc, endUtc);
           await queueOutboundMessage(from, `✨ PDF: https://tallypadi.com/reports/${pdfFileName}`);
         } catch (e) {
           console.error(e);
