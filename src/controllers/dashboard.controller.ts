@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { Transaction } from '../models/transaction.model';
 import { Inventory } from '../models/inventory.model';
-import { User, IUser } from '../models/user.model';
+import { User } from '../models/user.model';
 import { getRelevantUserIds } from '../services/report.service';
 const UNKNOWN_ITEM_NAMES = ['unknown_item', 'unknown', 'item', 'null', 'undefined'];
 
@@ -92,7 +92,7 @@ export const getDashboardData = async (req: Request | any, res: Response) => {
 
 
     const transactions = transactionDocs.map(t => {
-      const transactingUser = t.user as IUser; // Cast t.user to IUser
+      const transactingUser = t.user; // No cast needed
       return ({
         id: t._id,
         type: t.type,

@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { Transaction } from '../models/transaction.model';
 import { Inventory } from '../models/inventory.model';
-import { User, IUser } from '../models/user.model';
+import { User } from '../models/user.model';
 import { getRelevantUserIds } from '../services/report.service';
 import PDFDocument from 'pdfkit';
 import path from 'path';
@@ -283,7 +283,7 @@ export const getSalesHistory = async (req: Request | any, res: Response) => {
         paidAmount: paid,
         balance,
         paymentStatus,
-        soldBy: t.user && (t.user as IUser).role === 'STAFF' ? (t.user as IUser).name : 'Owner', // ✅ Add soldBy field
+        soldBy: t.user && t.user.role === 'STAFF' ? t.user.name : 'Owner', // ✅ Add soldBy field
 
         items: (t.items || []).map((i: any) => ({
           name: i.name,
@@ -483,7 +483,7 @@ export const generateSalesReport = async (req: Request | any, res: Response) => 
       const amtStr = formatMoney(t.totalMoney || 0);
 
       const textHeight = doc.heightOfString(itemText, { width: colItems - 10 });
-      const soldByText = t.user && (t.user as IUser).role === 'STAFF' ? `Sold by: ${(t.user as IUser).name}` : ''; // Get staff name
+      const soldByText = t.user && t.user.role === 'STAFF' ? `Sold by: ${t.user.name}` : ''; // Get staff name
       let rowContentHeight = textHeight;
       if (soldByText) rowContentHeight += 12; // Add height for soldBy line
 

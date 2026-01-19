@@ -1,4 +1,5 @@
 import { Schema, model, Document, Types } from 'mongoose';
+import { IUser } from './user.model'; // Import IUser
 
 // --- SUB-INTERFACES ---
 export interface ITransactionItem {
@@ -13,7 +14,7 @@ export interface ITransactionItem {
 
 // --- MAIN INTERFACE ---
 export interface ITransaction extends Document {
-  user: Types.ObjectId; // Shop owner
+  user: Types.ObjectId | IUser; // Shop owner - Updated to allow populated User object
   
   // Business logic types
   type: 'SALE' | 'RESTOCK' | 'ADJUSTMENT' | 'PAYMENT_RECEIVED' | 'DEBT_PAYMENT';
