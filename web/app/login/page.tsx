@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -14,7 +14,7 @@ import {
   ChevronDown,
   ArrowLeft
 } from 'lucide-react';
-import { setCookie } from '../../utils/cookies';
+import { setCookie, getCookie } from '../../utils/cookies';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 
@@ -69,6 +69,13 @@ function buildPhoneIdentifier(input: string, selectedCountryCode: string) {
 
 export default function LoginPage() {
   const router = useRouter();
+
+  useEffect(() => {
+    const token = getCookie('tallyToken');
+    if (token) {
+      router.replace('/dashboard');
+    }
+  }, [router]);
 
   const [loginMethod, setLoginMethod] = useState<'phone' | 'email'>('phone');
   const [countryCode, setCountryCode] = useState('+234');
