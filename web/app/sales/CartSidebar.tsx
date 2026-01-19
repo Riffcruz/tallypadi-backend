@@ -17,6 +17,10 @@ import {
   Share2,
   Printer,
   X,
+  CreditCard,
+  Landmark,
+  Smartphone,
+  Banknote,
 } from 'lucide-react';
 import { CartItem, UserProfile } from './page';
 import { getCookie } from '../../utils/cookies';
@@ -200,6 +204,7 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [printReceipt, setPrintReceipt] = useState(true);
+  const [paymentMethod, setPaymentMethod] = useState<string>('CASH');
 
   // store blob url + saleId so buttons work after generation
   const [receipt, setReceipt] = useState<{ saleId?: string; url?: string } | null>(null);
@@ -294,6 +299,7 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
 
     try {
       const payload = {
+        paymentMethod, // ✅ Add this
         items: cart.map((i) => ({
           itemId: i.id,
           quantity: Number(i.sellQty),
@@ -581,6 +587,32 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
             </div>
 
             <div className="p-5 space-y-4">
+              {/* Payment Method Selector */}
+              <div className="space-y-2">
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Payment Method</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { id: 'CASH', label: 'Cash', icon: Banknote },
+                    { id: 'TRANSFER', label: 'Transfer', icon: Landmark },
+                    { id: 'POS', label: 'POS', icon: CreditCard },
+                    { id: 'OPAY', label: 'OPay', icon: Smartphone },
+                  ].map((pm) => (
+                    <button
+                      key={pm.id}
+                      onClick={() => setPaymentMethod(pm.id)}
+                      className={`flex items-center gap-2 px-3 py-2.5 rounded-2xl border text-sm font-bold transition-all ${
+                        paymentMethod === pm.id
+                          ? 'bg-emerald-50 border-emerald-500 text-emerald-800 shadow-sm ring-1 ring-emerald-500/20'
+                          : 'bg-white border-slate-200 text-slate-600 hover:border-emerald-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      <pm.icon className={`w-4 h-4 ${paymentMethod === pm.id ? 'text-emerald-600' : 'text-slate-400'}`} />
+                      {pm.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
                 <label className="flex items-start gap-3 cursor-pointer select-none">
                   <input

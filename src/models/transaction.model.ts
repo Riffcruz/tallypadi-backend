@@ -32,6 +32,7 @@ export interface ITransaction extends Document {
   // Financial tracking
   amountPaid: number;  // Cash actually received
   balance: number;     // Remaining debt for this specific record
+  paymentMethod?: string; // CASH, TRANSFER, POS, OPAY, etc.
   settledAt?: Date | null;
 
   // Reversal/Undo tracking
@@ -111,6 +112,10 @@ const transactionSchema = new Schema<ITransaction>(
     amountPaid: { 
       type: Number, 
       default: 0 
+    },
+    paymentMethod: {
+      type: String,
+      default: 'CASH'
     },
     balance: { 
       type: Number, 

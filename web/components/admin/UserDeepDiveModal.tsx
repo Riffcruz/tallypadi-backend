@@ -623,7 +623,7 @@ export default function UserDeepDiveModal({
                 </div>
 
                 <div className="p-4 bg-slate-700/30 rounded-xl border border-slate-600">
-                  <h3 className="text-slate-400 text-xs uppercase font-extrabold mb-2">Last 5 Messages</h3>
+                  <h3 className="text-slate-400 text-xs uppercase font-extrabold mb-2">Last Messages</h3>
                   <div className="space-y-2">
                     {(details?.lastMessages || []).length ? (
                       (details.lastMessages || []).slice(-5).map((m: string, i: number) => (

@@ -186,10 +186,13 @@ export const recordSale = async (req: Request | any, res: Response) => {
     }
 
     // 4. Create Transaction Record
+    const paymentMethod = String(req.body.paymentMethod || 'CASH').toUpperCase();
+
     const createdTx = await Transaction.create({
       user: userId, // ✅ Link to authenticated user
       type: 'SALE',
       paymentStatus: 'PAID',
+      paymentMethod,
       items: txItems,
       totalMoney,
       date: getCurrentDateString(),

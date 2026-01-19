@@ -53,7 +53,7 @@ const PLANS: PlanDetails[] = [
   {
     id: 'TYCOON',
     name: 'Tycoon Plan',
-    price: 5000,
+    price: 3500,
     features: [
       'Everything in Oga Boss',
       'Multi-Staff Login (Up to 5)',
@@ -430,7 +430,7 @@ export default function PaymentPage() {
 
               <div className="flex justify-center items-center gap-2 text-slate-400 text-xs mt-4">
                 <ShieldCheck size={12} />
-                Payments secured by Paystack
+                Secured by Paystack • Cards, Transfer, OPay & USSD accepted
               </div>
             </form>
           </div>

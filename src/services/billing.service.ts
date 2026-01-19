@@ -12,7 +12,7 @@ const PLAN_CONFIG = {
     name: 'Oga Boss Plan',
   },
   TYCOON: {
-    amount: 5000 * 100, // ₦5,000 in kobo
+    amount: 3500 * 100, // ₦5,000 in kobo
     planCode: process.env.PAYSTACK_PLAN_TYCOON || 'PLN_bw4lqou4plnf07e',
     name: 'Tycoon Plan',
   },
@@ -102,6 +102,7 @@ export const initializePayment = async (user: IUser, email: string, targetPlan?:
         email: email,
         amount: planDetails.amount,
         plan: planDetails.planCode, // recurring billing if set on Paystack
+        channels: ['card', 'bank', 'ussd', 'qr', 'mobile_money', 'bank_transfer', 'eft'],
         metadata: {
           userId: user._id.toString(),
           phoneNumber: user.phoneNumber,
