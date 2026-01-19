@@ -93,14 +93,44 @@ const getApiUrl = () => {
   return 'https://tallypadi.com/api';
 };
 
-// very light client normalizer (server does the real validation)
-const normalizePhoneClient = (raw: string) => {
-  let p = String(raw || '').trim();
-  // keep + and digits only
-  p = p.replace(/[^\d+]/g, '');
-  if (p.startsWith('00')) p = '+' + p.slice(2);
-  return p;
-};
+const isValidEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim());
+
+/**
+ * Make a phone identifier your backend can match:
+ * - allow user to type: "+234 908...", "234908...", "0908...", "908..."
+ * - output: "+<digits>"
+ */
+function buildPhoneIdentifier(input: string, selectedCountryCode: string) {
+  const raw = String(input || '').trim();
+  if (!raw) return null;
+
+  // If user already typed +..., respect it
+  if (raw.startsWith('+')) {
+    const digits = raw.replace(/[^\d]/g, '');
+    if (!digits) return null;
+    return `+${digits}`;
+  }
+
+  const digitsOnly = raw.replace(/[^\d]/g, '');
+  if (!digitsOnly) return null;
+
+  // selected country digits (e.g. "+234" -> "234")
+  const cc = selectedCountryCode.replace('+', '').trim();
+
+  // If user typed a local NG style "0xxxxxxxxxx", strip the 0 then prefix cc
+  if (digitsOnly.startsWith('0')) {
+    const stripped = digitsOnly.replace(/^0+/, '');
+    return `+${cc}${stripped}`;
+  }
+
+  // If user typed country code already (e.g. "234...." while cc=234)
+  if (digitsOnly.startsWith(cc)) {
+    return `+${digitsOnly}`;
+  }
+
+  // Otherwise treat it as national number and prefix cc
+  return `+${cc}${digitsOnly}`;
+}
 
 export default function PaymentPage() {
   const [selectedPlan, setSelectedPlan] = useState<PlanType>('OGA_BOSS');
@@ -144,28 +174,26 @@ export default function PaymentPage() {
     let fullPhone = '';
 
     try {
-      const cleanEmail = email.trim();
-      
-      // Handle Phone Number Combination
-      let cleanLocal = phoneNumber.replace(/\D/g, ''); // strip non-digits
-      
-      // Remove ALL leading zeros (handles 080... or 0090...)
-      while (cleanLocal.startsWith('0')) {
-        cleanLocal = cleanLocal.substring(1);
-      }
-
-      fullPhone = normalizePhoneClient(`${countryCode}${cleanLocal}`);
-
-      // ✅ Client-Side Validation
-      if (fullPhone.length < 9) {
-        setError('Please enter a complete phone number.');
+      // 1. Validate Email
+      const cleanEmail = email.trim().toLowerCase();
+      if (!isValidEmail(cleanEmail)) {
+        setError('Please enter a valid email address.');
         setLoading(false);
         return;
       }
 
+      // 2. Validate Phone
+      const phoneId = buildPhoneIdentifier(phoneNumber, countryCode);
+      if (!phoneId || phoneId.length < 9) {
+        setError('Please enter a valid phone number.');
+        setLoading(false);
+        return;
+      }
+      fullPhone = phoneId;
+
       console.log(`Connecting to Backend: ${endpoint} with phone: ${fullPhone}`);
 
-      // 1. Call Backend
+      // 3. Call Backend
       const response = await axios.post(endpoint, {
         email: cleanEmail,
         phoneNumber: fullPhone, // ✅ NEW (required by your backend for non-logged-in payments)
@@ -174,7 +202,7 @@ export default function PaymentPage() {
 
       const { authorization_url } = response.data;
 
-      // 2. Validate URL before redirecting
+      // 4. Validate URL before redirecting
       if (authorization_url && authorization_url.startsWith('http')) {
         console.log('Redirecting to Paystack:', authorization_url);
         window.location.href = authorization_url;
