@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { Transaction } from '../models/transaction.model';
 import { Inventory } from '../models/inventory.model';
-import { User } from '../models/user.model';
+import { User, IUser } from '../models/user.model';
 import { getRelevantUserIds } from '../services/report.service';
 const UNKNOWN_ITEM_NAMES = ['unknown_item', 'unknown', 'item', 'null', 'undefined'];
 
