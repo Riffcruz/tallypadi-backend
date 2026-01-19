@@ -59,11 +59,20 @@ export const startPayment = async (req: Request, res: Response) => {
     if (!user) user = await User.findOne({ email: cleanEmail });
 
     // ✅ If found by email but has a DIFFERENT phone, block
-    if (user?.phoneNumber && user.phoneNumber !== cleanPhone) {
-      return res.status(400).json({
-        message:
-          'This email is already linked to a different phone number. Please use the correct phone number.',
-      });
+    if (user?.phoneNumber) {
+      const dbPhone = normalizePhone(user.phoneNumber);
+      const inputPhone = cleanPhone;
+
+      // Compare without leading '+' to be safe against (+234 vs 234)
+      const p1 = dbPhone.replace(/^\+/, '');
+      const p2 = inputPhone.replace(/^\+/, '');
+
+      if (p1 !== p2) {
+        return res.status(400).json({
+          message:
+            'This email is already linked to a different phone number. Please use the correct phone number.',
+        });
+      }
     }
 
     // ✅ Stop if user not found (do not auto-create)

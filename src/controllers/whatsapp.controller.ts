@@ -689,6 +689,18 @@ export const handleWebhook = async (req: Request, res: Response) => {
         isVoiceMessage = true;
         break;
 
+      case 'contacts': {
+        const contact = msg.contacts?.[0];
+        if (contact) {
+          const name = contact.name?.formatted_name || contact.name?.first_name || 'Staff';
+          const phone = contact.phones?.[0]?.phone || contact.phones?.[0]?.wa_id;
+          if (phone) {
+             text = `Add staff ${name} ${phone}`;
+          }
+        }
+        break;
+      }
+
       default:
         console.log(`Unsupported message type: ${msg.type}`);
         return res.sendStatus(200);
@@ -733,8 +745,49 @@ function normalizePhone(raw: string) {
 }
 
 async function addStaffUnderOwner(owner: any, staffPhoneRaw?: string | null, staffName?: string | null) {
-  const staffPhone = normalizePhone(staffPhoneRaw || '');
+  let staffPhone = normalizePhone(staffPhoneRaw || '');
   if (!staffPhone) return { ok: false, msg: 'Reply with staff number (e.g. +2348123456789).' };
+
+  // ✅ Inherit owner's country code if missing
+  if (!staffPhone.startsWith('+')) {
+    // If it looks like a local number (e.g. 080...), strip the leading 0
+    if (staffPhone.startsWith('0')) {
+      staffPhone = staffPhone.substring(1);
+    }
+
+    // Attempt to get owner's prefix (e.g. +234)
+    // Safer strategy: Use owner.countryCode to determine prefix
+    const ccMap: Record<string, string> = {
+      NG: '+234',
+      US: '+1',
+      GB: '+44',
+      GH: '+233',
+      KE: '+254',
+      ZA: '+27',
+      IN: '+91',
+      BJ: '+229',
+      TG: '+228',
+      CM: '+237',
+      GQ: '+240',
+      CA: '+1',
+      IE: '+353'
+    };
+    
+    let prefix = ccMap[owner.countryCode] || '+234';
+    
+    // Fallback: if owner.countryCode was missing, try to parse from phone (carefully)
+    if (!owner.countryCode && owner.phoneNumber) {
+       if (owner.phoneNumber.startsWith('+234')) prefix = '+234';
+       else if (owner.phoneNumber.startsWith('+1')) prefix = '+1';
+       else if (owner.phoneNumber.startsWith('+44')) prefix = '+44';
+       else if (owner.phoneNumber.startsWith('+233')) prefix = '+233';
+       else if (owner.phoneNumber.startsWith('+254')) prefix = '+254';
+       else if (owner.phoneNumber.startsWith('+27')) prefix = '+27';
+       else if (owner.phoneNumber.startsWith('+91')) prefix = '+91';
+    }
+
+    staffPhone = `${prefix}${staffPhone}`;
+  }
 
   if (String(owner.phoneNumber) === staffPhone) return { ok: false, msg: 'You cannot add your own number as staff.' };
 
