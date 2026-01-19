@@ -662,6 +662,9 @@ export default function SalesHistory({ user }: { user: UserProfile | null }) {
                 <th className="py-4 px-6 text-xs font-extrabold text-blue-600 uppercase tracking-wider text-right min-w-[160px]">
                   Total Amount
                 </th>
+                <th className="py-4 px-6 text-xs font-extrabold text-blue-600 uppercase tracking-wider text-right min-w-[120px]">
+                  Profit
+                </th>
                 {/* ✅ NEW */}
                 <th className="py-4 px-6 text-xs font-extrabold text-blue-600 uppercase tracking-wider text-right min-w-[140px]">
                   Receipt
@@ -684,13 +687,16 @@ export default function SalesHistory({ user }: { user: UserProfile | null }) {
                       <div className="h-6 bg-gray-100 rounded w-24 ml-auto"></div>
                     </td>
                     <td className="px-6 py-4 text-right">
+                      <div className="h-6 bg-gray-100 rounded w-20 ml-auto"></div>
+                    </td>
+                    <td className="px-6 py-4 text-right">
                       <div className="h-9 bg-gray-100 rounded w-24 ml-auto"></div>
                     </td>
                   </tr>
                 ))
               ) : history.length === 0 ? (
                 <tr>
-                  <td colSpan={4}>
+                  <td colSpan={5}>
                     <div className="py-24 flex flex-col items-center justify-center text-center">
                       <div className="w-20 h-20 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-full flex items-center justify-center mb-4 border border-blue-100 shadow-sm">
                         <Search className="w-10 h-10 text-blue-300" />
@@ -777,6 +783,12 @@ export default function SalesHistory({ user }: { user: UserProfile | null }) {
                             </span>
                           ) : null}
                         </div>
+                      </td>
+
+                      <td className="px-6 py-5 text-right align-top">
+                        <span className={`font-bold text-sm ${sale.profit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                          {formatMoney(sale.profit || 0)}
+                        </span>
                       </td>
 
                       {/* ✅ NEW: per-transaction receipt pdf */}
@@ -880,6 +892,9 @@ export default function SalesHistory({ user }: { user: UserProfile | null }) {
 
                   <div className="text-right flex flex-col items-end gap-1">
                     <span className="font-black text-gray-900 text-lg block">{formatMoney(status.total)}</span>
+                    <span className={`text-xs font-bold ${sale.profit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      Profit: {formatMoney(sale.profit || 0)}
+                    </span>
                     {renderStatusBadge(status)}
                     {status.type !== 'PAID' ? (
                       <span className="text-[11px] font-bold text-gray-500">

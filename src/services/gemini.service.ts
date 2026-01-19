@@ -35,6 +35,7 @@ export interface ParsedItem {
   name: string;
   qty: number;
   unit_price: number | null;
+  cost_price?: number | null;
   unit?: string;
   category?: string | null;
 }
@@ -224,6 +225,7 @@ function safeParsedResult(p: any): ParsedResult {
     name: typeof it?.name === 'string' ? normalizeItemName(it.name) : 'unknown_item',
     qty: Number.isFinite(Number(it?.qty)) ? Math.max(0, Number(it.qty)) : 0,
     unit_price: parseMoney(it?.unit_price),
+    cost_price: parseMoney(it?.cost_price),
     unit: typeof it?.unit === 'string' ? sanitizeInput(it.unit).toLowerCase() : '',
     category: typeof it?.category === 'string' ? sanitizeInput(it.category) : null,
   }));
@@ -707,13 +709,16 @@ These intents MUST be detected correctly and MUST NOT be mistaken as SALE:
   needs_clarification = true ONLY if item name is missing.
 
 2) DEFINE_PRICE
-- User is SETTING/UPDATING price:
-  Examples:
-  "set rice price to 1200", "rice is 1200 each", "bread now 800", "change indomie price to 250"
+- User is SETTING/UPDATING price (Selling Price OR Cost Price).
+- Distinguish between "price/selling price" and "cost/buying price".
+- Examples:
+  "set rice price to 1200" -> unit_price=1200 (selling price)
+  "set rice cost to 1000" -> cost_price=1000 (cost price)
+  "change indomie selling price to 250 and cost to 200" -> unit_price=250, cost_price=200
 - Output:
   intent = DEFINE_PRICE
-  items MUST include item name + unit_price:
-    items = [{ name: "<item>", qty: 1, unit: "<unit or pcs>", unit_price: <number>, total_price: null, currency: null, category: null }]
+  items MUST include item name + unit_price (for selling) OR cost_price (for cost):
+    items = [{ name: "<item>", qty: 1, unit: "pcs", unit_price: <number|null>, cost_price: <number|null>, total_price: null, currency: null, category: null }]
   total_money MUST be null (this is not a sale)
   needs_clarification = true if price or item name is missing.
 
@@ -729,12 +734,15 @@ These intents MUST be detected correctly and MUST NOT be mistaken as SALE:
   needs_clarification = true if qty missing or item name missing.
 
 4) RESTOCK
-- User is adding stock (increase inventory):
-  Examples:
-  "restocked 5 bags of rice", "I bought 10 indomie", "supplier brought 3 cartons of milk"
+- User is adding stock (increase inventory).
+- If price is mentioned (e.g. "bought at 500"), treat it as COST PRICE.
+- Examples:
+  "restocked 5 bags of rice", "I bought 10 indomie at 200 each"
 - Output:
   intent = RESTOCK
-  items MUST include item name + qty (>0). unit_price may be present if user supplied.
+  items MUST include item name + qty (>0).
+  cost_price should be set if user provides a buying price.
+  unit_price should be null (unless user explicitly says "selling price is X").
   total_money = null unless user explicitly provided a total purchase cost (optional).
 
 5) DELETED_STOCK
@@ -940,6 +948,7 @@ Disable:
       "qty": number,
       "unit": string,
       "unit_price": number | null,
+      "cost_price": number | null,
       "total_price": number | null,
       "currency": "NGN|USD|GBP|EUR|GHS|null",
       "category": string | null

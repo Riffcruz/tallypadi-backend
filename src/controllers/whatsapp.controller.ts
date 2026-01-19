@@ -1184,6 +1184,23 @@ if (btn?.txId && btn?.action) {
     maximumFractionDigits: 0,
   });
 
+  // Calculate Profit
+  let totalProfit = 0;
+  let hasCostData = false;
+
+  salesTx.forEach((tx: any) => {
+    if (tx.isUndone) return;
+    (tx.items || []).forEach((it: any) => {
+      const sp = Number(it.unitPrice || 0);
+      const cp = Number(it.costPrice || 0);
+      const q = Number(it.qty || 0);
+      if (cp > 0) {
+        totalProfit += (sp - cp) * q;
+        hasCostData = true;
+      }
+    });
+  });
+
   // ✅ 5) Build breakdown message (from salesTx — consistent with undone filter)
   let salesMsg = `📅 *${dateLabel} Sales Breakdown*${suffixReportScope(includeUndoneRequestedByOwner)}\n\n`;
 
@@ -1212,6 +1229,11 @@ if (btn?.txId && btn?.action) {
   });
 
   salesMsg += `\n💰 *Total Money:* ${totalFormatted}`;
+  if (hasCostData) {
+    const pLabel = totalProfit >= 0 ? 'Profit' : 'Loss';
+    const pVal = totalProfit.toLocaleString(locale, { style: 'currency', currency: code });
+    salesMsg += `\n📈 *Est. ${pLabel}:* ${pVal}`;
+  }
   salesMsg += `\n📉 *Total Transactions:* ${salesTx.length}`;
 
   await queueOutboundMessage(from, salesMsg);

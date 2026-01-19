@@ -15,6 +15,10 @@ import {
   Package,
   Lock,
   Sparkles,
+  Save,
+  XCircle,
+  Upload,
+  FileDown,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { getCookie } from '../../utils/cookies';
@@ -27,6 +31,7 @@ type InventoryItem = {
   stock: number;
   price: number;
   lastUnitPrice?: number;
+  costPrice?: number;
 };
 
 function currencyPrefix(code?: string) {
@@ -55,6 +60,7 @@ export default function InventoryPage() {
   const [newItemName, setNewItemName] = useState('');
   const [newItemStock, setNewItemStock] = useState('');
   const [newItemPrice, setNewItemPrice] = useState('');
+  const [newItemCostPrice, setNewItemCostPrice] = useState('');
 
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -66,6 +72,14 @@ export default function InventoryPage() {
   const [editingName, setEditingName] = useState<string>('');
   const [editStock, setEditStock] = useState<number | string>('');
   const [editPrice, setEditPrice] = useState<number | string>('');
+  const [editCostPrice, setEditCostPrice] = useState<number | string>('');
+
+  // ✅ Bulk Edit State
+  const [isBulkMode, setIsBulkMode] = useState(false);
+  const [bulkEdits, setBulkEdits] = useState<Record<string, number>>({});
+
+  // ✅ File Input Ref
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   // optional: mobile add modal (keeps the page clean)
   const [addOpen, setAddOpen] = useState(false);
@@ -112,6 +126,34 @@ export default function InventoryPage() {
     }
   };
 
+  const loadInventory = async () => {
+    const token = getCookie('tallyToken');
+    if (!token) return;
+    try {
+      const [invRes, userRes] = await Promise.all([
+        axios.get(`${API_URL}/inventory`, { headers: { Authorization: `Bearer ${token}` } }),
+        axios.get(`${API_URL}/dashboard`, { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
+
+      const raw = Array.isArray(invRes.data) ? invRes.data : [];
+      const normalized: InventoryItem[] = raw.map((x: any) => ({
+        id: String(x.id || x._id || ''),
+        name: String(x.name || '').trim(),
+        stock: Number(x.stock ?? x.quantity ?? 0),
+        price: Number(x.price ?? x.unitPrice ?? x.lastUnitPrice ?? 0),
+        lastUnitPrice: x.lastUnitPrice !== undefined ? Number(x.lastUnitPrice) : undefined,
+        costPrice: Number(x.costPrice ?? 0),
+      }));
+
+      setInventory(normalized.filter((i) => i.id && i.name));
+      setUser(userRes.data.user);
+    } catch (err) {
+      console.error('Failed to fetch data:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     const token = getCookie('tallyToken');
     if (!token) {
@@ -119,32 +161,7 @@ export default function InventoryPage() {
       return;
     }
 
-    const fetchData = async () => {
-      try {
-        const [invRes, userRes] = await Promise.all([
-          axios.get(`${API_URL}/inventory`, { headers: { Authorization: `Bearer ${token}` } }),
-          axios.get(`${API_URL}/dashboard`, { headers: { Authorization: `Bearer ${token}` } }),
-        ]);
-
-        const raw = Array.isArray(invRes.data) ? invRes.data : [];
-        const normalized: InventoryItem[] = raw.map((x: any) => ({
-          id: String(x.id || x._id || ''),
-          name: String(x.name || '').trim(),
-          stock: Number(x.stock ?? x.quantity ?? 0),
-          price: Number(x.price ?? x.unitPrice ?? x.lastUnitPrice ?? 0),
-          lastUnitPrice: x.lastUnitPrice !== undefined ? Number(x.lastUnitPrice) : undefined,
-        }));
-
-        setInventory(normalized.filter((i) => i.id && i.name));
-        setUser(userRes.data.user);
-      } catch (err) {
-        console.error('Failed to fetch data:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
+    loadInventory();
   }, [router]);
 
   // Filter items based on search
@@ -189,6 +206,7 @@ export default function InventoryPage() {
       name: newItemName,
       stock: parseInt(newItemStock, 10),
       price: parseFloat(newItemPrice),
+      costPrice: parseFloat(newItemCostPrice) || 0,
     };
 
     try {
@@ -207,6 +225,7 @@ export default function InventoryPage() {
         stock: Number(x.stock ?? x.quantity ?? 0),
         price: Number(x.price ?? x.unitPrice ?? x.lastUnitPrice ?? 0),
         lastUnitPrice: x.lastUnitPrice !== undefined ? Number(x.lastUnitPrice) : undefined,
+        costPrice: Number(x.costPrice ?? 0),
       }));
 
       setInventory(normalized.filter((i) => i.id && i.name));
@@ -214,6 +233,7 @@ export default function InventoryPage() {
       setNewItemName('');
       setNewItemStock('');
       setNewItemPrice('');
+      setNewItemCostPrice('');
       setAddOpen(false);
 
       Swal.fire({
@@ -247,6 +267,7 @@ export default function InventoryPage() {
     setEditingName(item.name);
     setEditStock(item.stock);
     setEditPrice(item.price || item.lastUnitPrice || 0);
+    setEditCostPrice(item.costPrice || 0);
     setEditOpen(true);
   };
 
@@ -256,6 +277,7 @@ export default function InventoryPage() {
     setEditingName('');
     setEditStock('');
     setEditPrice('');
+    setEditCostPrice('');
   };
 
   const saveEdit = async (id: string) => {
@@ -273,6 +295,7 @@ export default function InventoryPage() {
         {
           stock: Number(editStock),
           price: Number(editPrice),
+          costPrice: Number(editCostPrice),
         },
         {
           headers: { Authorization: `Bearer ${token}` },
@@ -281,8 +304,8 @@ export default function InventoryPage() {
       );
 
       setInventory((prev) =>
-        prev.map((item) =>
-          item.id === id ? { ...item, stock: Number(editStock), price: Number(editPrice) } : item
+        prev.map((item) => 
+          item.id === id ? { ...item, stock: Number(editStock), price: Number(editPrice), costPrice: Number(editCostPrice) } : item
         )
       );
 
@@ -303,6 +326,149 @@ export default function InventoryPage() {
       console.error('Update failed', err);
       Swal.fire('Error', 'Failed to update item.', 'error');
     }
+  };
+
+  // ✅ Bulk Edit Handlers
+  const toggleBulkMode = () => {
+    if (isBulkMode) {
+      setIsBulkMode(false);
+      setBulkEdits({});
+    } else {
+      const init: Record<string, number> = {};
+      inventory.forEach((i) => {
+        if (i.costPrice) init[i.id] = i.costPrice;
+      });
+      setBulkEdits(init);
+      setIsBulkMode(true);
+    }
+  };
+
+  const handleBulkChange = (id: string, val: string) => {
+    setBulkEdits((prev) => ({ ...prev, [id]: parseFloat(val) }));
+  };
+
+  const saveBulkChanges = async () => {
+    if (!hasFeatureAccess) {
+      showLockedModal();
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const updates = Object.entries(bulkEdits).map(([id, cost]) => ({
+        id,
+        costPrice: cost,
+      }));
+
+      const token = getCookie('tallyToken');
+      await axios.post(`${API_URL}/inventory/bulk`, { updates }, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      // Update local state
+      setInventory((prev) =>
+        prev.map((item) => (bulkEdits[item.id] !== undefined ? { ...item, costPrice: bulkEdits[item.id] } : item))
+      );
+
+      setIsBulkMode(false);
+      setBulkEdits({});
+      Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Saved', text: 'Costs updated.', showConfirmButton: false, timer: 1500 });
+    } catch (err) {
+      console.error(err);
+      Swal.fire('Error', 'Failed to update costs', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ✅ Import Logic
+  const handleImportClick = () => {
+    if (!hasFeatureAccess) {
+      showLockedModal();
+      return;
+    }
+    fileInputRef.current?.click();
+  };
+
+  const processCSV = (str: string) => {
+    const rows = str.split(/\r?\n/);
+    if (rows.length < 2) return [];
+    
+    const headers = rows[0].split(',').map(h => h.trim().toLowerCase());
+    
+    const nameIdx = headers.findIndex(h => h.includes('name') || h.includes('item'));
+    const stockIdx = headers.findIndex(h => h.includes('stock') || h.includes('qty') || h.includes('quantity'));
+    const priceIdx = headers.findIndex(h => h.includes('price') || h.includes('selling'));
+    const costIdx = headers.findIndex(h => h.includes('cost'));
+
+    if (nameIdx === -1) throw new Error("CSV must have a 'Name' column");
+
+    const items = [];
+    for(let i=1; i<rows.length; i++) {
+        // Handle commas in quotes roughly
+        const row = rows[i].match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || rows[i].split(',');
+        if(row.length < 1) continue;
+        
+        const cleanCell = (val: string) => val ? val.replace(/^"|"$/g, '').trim() : '';
+
+        const name = cleanCell(row[nameIdx]);
+        if(!name) continue;
+
+        items.push({
+            name,
+            stock: stockIdx > -1 ? parseFloat(cleanCell(row[stockIdx])) : 0,
+            price: priceIdx > -1 ? parseFloat(cleanCell(row[priceIdx])) : 0,
+            costPrice: costIdx > -1 ? parseFloat(cleanCell(row[costIdx])) : 0,
+        });
+    }
+    return items;
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if(!file) return;
+      e.target.value = ''; // reset
+
+      if(!file.name.endsWith('.csv')) {
+          Swal.fire('Format Error', 'Please upload a CSV file.', 'error');
+          return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = async (evt) => {
+          try {
+              const text = evt.target?.result as string;
+              const items = processCSV(text);
+              
+              if(items.length === 0) {
+                  Swal.fire('Empty', 'No valid items found in CSV. Check headers: Name, Stock, Price, Cost', 'warning');
+                  return;
+              }
+
+              setLoading(true);
+              const token = getCookie('tallyToken');
+              await axios.post(`${API_URL}/inventory/import`, { items }, { headers: { Authorization: `Bearer ${token}` } });
+              
+              await loadInventory();
+              Swal.fire('Success', `Imported ${items.length} items successfully.`, 'success');
+          } catch(err: any) {
+              Swal.fire('Import Failed', err.message || 'Could not process file', 'error');
+          } finally {
+              setLoading(false);
+          }
+      };
+      reader.readAsText(file);
+  };
+
+  const downloadTemplate = () => {
+    const csvContent = "Name,Stock,Price,Cost\nRice (50kg),50,45000,40000\nCoke (50cl),100,250,200";
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'inventory_template.csv';
+    a.click();
+    window.URL.revokeObjectURL(url);
   };
 
   if (loading) {
@@ -365,6 +531,48 @@ export default function InventoryPage() {
                 </p>
               </div>
             </div>
+
+            {/* ✅ Bulk Edit Button */}
+            <div className="hidden md:block">
+              <input 
+                type="file" 
+                ref={fileInputRef} 
+                onChange={handleFileChange} 
+                className="hidden" 
+                accept=".csv"
+              />
+              {isBulkMode ? (
+                <div className="flex items-center gap-2">
+                  <button onClick={toggleBulkMode} className="px-4 py-2 rounded-xl bg-slate-100 text-slate-600 font-bold text-xs flex items-center gap-2 hover:bg-slate-200">
+                    <XCircle className="w-4 h-4" /> Cancel
+                  </button>
+                  <button onClick={saveBulkChanges} className="px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs flex items-center gap-2 hover:bg-emerald-700 shadow-lg shadow-emerald-200">
+                    <Save className="w-4 h-4" /> Save Changes
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleImportClick}
+                    className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 transition flex items-center gap-2"
+                  >
+                    <Upload className="w-3.5 h-3.5" /> Import CSV
+                  </button>
+                  <button
+                    onClick={downloadTemplate}
+                    className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 transition flex items-center gap-2"
+                  >
+                    <FileDown className="w-3.5 h-3.5" /> Template
+                  </button>
+                  <button
+                    onClick={toggleBulkMode}
+                    className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 transition"
+                  >
+                    Bulk Edit Costs
+                  </button>
+                </div>
+              )}
+              </div>
 
             {/* Status */}
             {user ? (
@@ -446,14 +654,14 @@ export default function InventoryPage() {
             </div>
 
             <form onSubmit={handleAddItem} className="grid grid-cols-12 gap-3 items-end">
-              <div className="col-span-12 md:col-span-6">
+              <div className="col-span-12 md:col-span-3">
                 <label className="block text-xs font-bold text-slate-500 mb-1 ml-1">Item Name</label>
                 <input
                   type="text"
                   value={newItemName}
                   onChange={(e) => setNewItemName(e.target.value)}
                   className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 text-sm font-semibold"
-                  placeholder="e.g. Bag of Rice"
+                  placeholder="e.g. Rice"
                   required
                   disabled={showLockUI}
                 />
@@ -472,7 +680,23 @@ export default function InventoryPage() {
                 />
               </div>
 
-              <div className="col-span-6 md:col-span-3">
+              <div className="col-span-4 md:col-span-3">
+                <label className="block text-xs font-bold text-slate-500 mb-1 ml-1">Cost Price</label>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-extrabold">
+                    {prefix}
+                  </span>
+                  <input
+                    type="number"
+                    value={newItemCostPrice}
+                    onChange={(e) => setNewItemCostPrice(e.target.value)}
+                    className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 text-sm font-semibold text-right"
+                    placeholder="0"
+                  />
+                </div>
+              </div>
+
+              <div className="col-span-4 md:col-span-3">
                 <label className="block text-xs font-bold text-slate-500 mb-1 ml-1">Unit Price</label>
                 <div className="relative">
                   <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-extrabold">
@@ -564,6 +788,7 @@ export default function InventoryPage() {
                 <tr>
                   <th className="px-6 py-4 text-xs font-extrabold text-slate-600 uppercase tracking-wider">Item</th>
                   <th className="px-6 py-4 text-xs font-extrabold text-slate-600 uppercase tracking-wider">Stock</th>
+                  <th className="px-6 py-4 text-xs font-extrabold text-slate-600 uppercase tracking-wider">Cost</th>
                   <th className="px-6 py-4 text-xs font-extrabold text-slate-600 uppercase tracking-wider">Price</th>
                   <th className="px-6 py-4 text-right text-xs font-extrabold text-slate-600 uppercase tracking-wider">
                     Action
@@ -599,6 +824,22 @@ export default function InventoryPage() {
                           {item.stock} units
                           {low ? <span className="text-[10px] font-black">LOW</span> : null}
                         </span>
+                      </td>
+
+                      <td className="px-6 py-4">
+                        {isBulkMode ? (
+                          <div className="relative w-24">
+                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[10px] font-extrabold">{prefix}</span>
+                            <input
+                              type="number"
+                              value={bulkEdits[item.id] ?? item.costPrice ?? ''}
+                              onChange={(e) => handleBulkChange(item.id, e.target.value)}
+                              className="w-full pl-5 pr-2 py-1.5 bg-white border border-emerald-300 rounded-lg text-xs font-bold outline-none focus:ring-2 focus:ring-emerald-500/20"
+                            />
+                          </div>
+                        ) : (
+                          <span className="text-sm font-bold text-slate-500">{formatMoney(item.costPrice || 0)}</span>
+                        )}
                       </td>
 
                       <td className="px-6 py-4">
@@ -758,7 +999,7 @@ export default function InventoryPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="block text-xs font-extrabold text-slate-600 mb-1">Quantity</label>
                   <input
@@ -769,6 +1010,21 @@ export default function InventoryPage() {
                     placeholder="0"
                     required
                   />
+                </div>
+                <div>
+                  <label className="block text-xs font-extrabold text-slate-600 mb-1">Cost</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[10px] font-extrabold">
+                      {prefix}
+                    </span>
+                    <input
+                      type="number"
+                      value={newItemCostPrice}
+                      onChange={(e) => setNewItemCostPrice(e.target.value)}
+                      className="w-full pl-7 pr-3 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 text-sm font-semibold text-right"
+                      placeholder="0"
+                    />
+                  </div>
                 </div>
                 <div>
                   <label className="block text-xs font-extrabold text-slate-600 mb-1">Unit Price</label>
@@ -828,7 +1084,7 @@ export default function InventoryPage() {
             </div>
 
             <div className="p-5 space-y-4">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="block text-xs font-extrabold text-slate-600 mb-1">Stock</label>
                   <input
@@ -838,6 +1094,21 @@ export default function InventoryPage() {
                     className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 text-sm font-semibold"
                     autoFocus
                   />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-extrabold text-slate-600 mb-1">Cost</label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-extrabold">
+                      {prefix}
+                    </span>
+                    <input
+                      type="number"
+                      value={editCostPrice}
+                      onChange={(e) => setEditCostPrice(e.target.value)}
+                      className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 text-sm font-semibold text-right"
+                    />
+                  </div>
                 </div>
 
                 <div>
@@ -878,7 +1149,7 @@ export default function InventoryPage() {
                 </button>
 
                 <button
-                  onClick={() => saveEdit(editingId)}
+                  onClick={() => editingId && saveEdit(editingId)}
                   className="flex-1 py-3 rounded-2xl font-extrabold bg-emerald-600 hover:bg-emerald-700 text-white transition inline-flex items-center justify-center gap-2"
                 >
                   <Check className="w-4 h-4" />

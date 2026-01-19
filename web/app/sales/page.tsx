@@ -35,6 +35,7 @@ export interface InventoryItem {
   name: string;
   stock: number;
   price: number;
+  costPrice?: number;
 }
 export interface CartItem extends InventoryItem {
   sellQty: number;
@@ -47,6 +48,7 @@ export interface UserProfile {
   trialEndsAt?: string;
   currencyCode?: string;
   locale?: string;
+  role?: string;
 }
 
 export default function SalesPage() {

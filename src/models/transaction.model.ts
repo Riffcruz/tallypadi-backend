@@ -7,6 +7,7 @@ export interface ITransactionItem {
   qty: number;
   unit: string;
   unitPrice: number | null;
+  costPrice: number | null; // <--- NEW: Snapshot of cost at time of sale
   total: number | null;
 }
 
@@ -75,6 +76,7 @@ const transactionSchema = new Schema<ITransaction>(
         qty: { type: Number, required: true },
         unit: { type: String, default: '' },
         unitPrice: { type: Number, default: 0 },
+        costPrice: { type: Number, default: 0 },
         total: { type: Number, default: 0 },
       },
     ],

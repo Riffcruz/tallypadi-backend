@@ -299,6 +299,76 @@ export const getTodayTransactions = async (
   return transactions;
 };
 
+// 6) PROFIT REPORT (Revenue - Cost)
+export const getProfitSummary = async (
+  userId: Types.ObjectId,
+  customStart?: Date,
+  customEnd?: Date
+): Promise<{ totalRevenue: number; totalCost: number; totalProfit: number; items: any[] }> => {
+  const user = await User.findById(userId);
+  if (!user) throw new Error('User not found');
+
+  const scope: 'OWN' | 'SHOP' = user.role === 'OWNER' ? 'SHOP' : 'OWN';
+  const relevantUserIds = await _getRelevantUserIds(user, scope);
+
+  let start: Date, end: Date;
+
+  if (customStart && customEnd) {
+    start = customStart;
+    end = customEnd;
+  } else {
+    const offset = user.settings?.utcOffsetMinutes ?? 60;
+    const range = getTodayRangeForOffset(offset);
+    start = range.start;
+    end = range.end;
+  }
+
+  const result = await Transaction.aggregate([
+    {
+      $match: {
+        user: { $in: relevantUserIds },
+        type: 'SALE',
+        isUndone: { $ne: true },
+        createdAt: { $gte: start, $lte: end },
+      },
+    },
+    { $unwind: '$items' },
+    {
+      $group: {
+        _id: '$items.name',
+        totalQty: { $sum: '$items.qty' },
+        revenue: { 
+          $sum: { $multiply: [{ $ifNull: ['$items.qty', 0] }, { $ifNull: ['$items.unitPrice', 0] }] } 
+        },
+        cost: {
+          $sum: { $multiply: [{ $ifNull: ['$items.qty', 0] }, { $ifNull: ['$items.costPrice', 0] }] }
+        }
+      },
+    },
+    {
+      $project: {
+        name: '$_id',
+        totalQty: 1,
+        revenue: 1,
+        cost: 1,
+        profit: { $subtract: ['$revenue', '$cost'] }
+      }
+    },
+    { $sort: { profit: -1 } }
+  ]);
+
+  const totalRevenue = result.reduce((sum, item) => sum + (item.revenue || 0), 0);
+  const totalCost = result.reduce((sum, item) => sum + (item.cost || 0), 0);
+  const totalProfit = totalRevenue - totalCost;
+
+  return {
+    totalRevenue,
+    totalCost,
+    totalProfit,
+    items: result
+  };
+};
+
 // 5) SMART SUGGESTIONS — ignore undone
 export const getSmartSuggestions = async (userId: Types.ObjectId): Promise<string[]> => {
   const user = await User.findById(userId);

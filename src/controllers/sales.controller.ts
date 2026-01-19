@@ -172,6 +172,7 @@ export const recordSale = async (req: Request | any, res: Response) => {
         unit: 'pc',
         unitPrice: it.price,
         price: it.price,
+        costPrice: inv.costPrice || 0,
         total: lineTotal
       });
     }
@@ -247,12 +248,23 @@ export const getSalesHistory = async (req: Request | any, res: Response) => {
     const formatted = sales.map((t: any) => {
       const { total, paid, balance, paymentStatus } = computePaidBalanceStatus(t);
 
+      let profit = 0;
+      if (t.items && Array.isArray(t.items)) {
+        t.items.forEach((i: any) => {
+          const q = Number(i.qty ?? i.quantity ?? 0);
+          const p = Number(i.unitPrice ?? i.price ?? 0);
+          const c = Number(i.costPrice ?? 0);
+          profit += (p - c) * q;
+        });
+      }
+
       return {
         id: t._id,
         timestamp: t.timestamp,
         date: t.timestamp || t.date || new Date(),
 
         totalAmount: total,
+        profit,
 
         // ✅ IMPORTANT: send these so frontend won’t guess wrongly
         paidAmount: paid,

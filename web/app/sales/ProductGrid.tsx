@@ -46,6 +46,7 @@ export default function ProductGrid({ user, onAddToCart, currencyCode }: Product
           name: item.name,
           stock: Number(item.quantity ?? item.stock ?? 0),
           price: Number(item.lastUnitPrice ?? item.price ?? 0),
+          costPrice: Number(item.costPrice ?? 0),
         }));
         setInventory(clean);
         setLoading(false);
@@ -242,9 +243,14 @@ export default function ProductGrid({ user, onAddToCart, currencyCode }: Product
                     </p>
 
                     <div className="flex items-end justify-between mt-1">
-                      <p className="text-base font-extrabold text-slate-900">
-                        {formatPrice(item.price)}
-                      </p>
+                      <div>
+                        <p className="text-base font-extrabold text-slate-900">
+                          {formatPrice(item.price)}
+                        </p>
+                        {user?.role === 'OWNER' && (item.costPrice || 0) > 0 && (
+                          <p className="text-[10px] font-bold text-slate-400">Cost: {formatPrice(item.costPrice!)}</p>
+                        )}
+                      </div>
 
                       <div
                         className={`

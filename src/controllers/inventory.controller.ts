@@ -61,6 +61,7 @@ export const getInventory = async (req: Request, res: Response) => {
       name: item.name,
       stock: item.quantity,
       price: item.lastUnitPrice || 0,
+      costPrice: item.costPrice || 0,
     }));
 
     return res.json(formattedItems);
@@ -89,6 +90,7 @@ export const getInventoryItem = async (req: Request, res: Response) => {
       quantity: item.quantity,
       price: item.lastUnitPrice || 0,
       lastUnitPrice: item.lastUnitPrice || 0,
+      costPrice: item.costPrice || 0,
     });
   } catch (error) {
     console.error('Get Item Error:', error);
@@ -105,6 +107,7 @@ export const addInventoryItem = async (req: Request, res: Response) => {
     const safeName = sanitizeString(body.name);
     const safeStock = validateNumber(body.stock);
     const safePrice = validateNumber(body.price);
+    const safeCostPrice = validateNumber(body.costPrice);
 
     const user = await getAuthUser(req);
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
@@ -124,6 +127,7 @@ export const addInventoryItem = async (req: Request, res: Response) => {
       item.quantity += stockToAdd;
 
       if (safePrice !== undefined) item.lastUnitPrice = safePrice;
+      if (safeCostPrice !== undefined) item.costPrice = safeCostPrice;
       await item.save();
     } else {
       item = await Inventory.create({
@@ -131,6 +135,7 @@ export const addInventoryItem = async (req: Request, res: Response) => {
         name: safeName.toLowerCase(),
         quantity: safeStock !== undefined ? safeStock : 0,
         lastUnitPrice: safePrice !== undefined ? safePrice : 0,
+        costPrice: safeCostPrice !== undefined ? safeCostPrice : 0,
       });
     }
 
@@ -139,6 +144,7 @@ export const addInventoryItem = async (req: Request, res: Response) => {
       name: item.name,
       stock: item.quantity,
       price: item.lastUnitPrice,
+      costPrice: item.costPrice,
     });
   } catch (error) {
     console.error('Add Item Error:', error);
@@ -154,6 +160,7 @@ export const updateInventoryItem = async (req: Request, res: Response) => {
 
     const safeStock = validateNumber(body.stock);
     const safePrice = validateNumber(body.price);
+    const safeCostPrice = validateNumber(body.costPrice);
 
     const user = await getAuthUser(req);
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
@@ -167,6 +174,7 @@ export const updateInventoryItem = async (req: Request, res: Response) => {
 
     if (safeStock !== undefined) item.quantity = safeStock;
     if (safePrice !== undefined) item.lastUnitPrice = safePrice;
+    if (safeCostPrice !== undefined) item.costPrice = safeCostPrice;
 
     await item.save();
 
@@ -175,9 +183,104 @@ export const updateInventoryItem = async (req: Request, res: Response) => {
       name: item.name,
       stock: item.quantity,
       price: item.lastUnitPrice,
+      costPrice: item.costPrice,
     });
   } catch (error) {
     console.error('Update Item Error:', error);
+    return res.status(500).json({ error: 'Server Error' });
+  }
+};
+
+// BULK UPDATE (e.g. for cost prices)
+export const bulkUpdateInventory = async (req: Request, res: Response) => {
+  try {
+    const body = req.body || {};
+    const updates = Array.isArray(body.updates) ? body.updates : [];
+
+    const user = await getAuthUser(req);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+
+    if (!hasInventoryWriteAccess(user)) {
+      return denySubscription(res, user);
+    }
+
+    if (updates.length === 0) {
+      return res.json({ success: true, count: 0 });
+    }
+
+    const operations = updates.map((u: any) => {
+      const safeCost = validateNumber(u.costPrice);
+      const update: any = {};
+      if (safeCost !== undefined) update.costPrice = safeCost;
+
+      return {
+        updateOne: {
+          filter: { _id: u.id, user: user._id },
+          update: { $set: update },
+        },
+      };
+    });
+
+    if (operations.length > 0) {
+      await Inventory.bulkWrite(operations);
+    }
+
+    return res.json({ success: true, count: operations.length });
+  } catch (error) {
+    console.error('Bulk Update Error:', error);
+    return res.status(500).json({ error: 'Server Error' });
+  }
+};
+
+// IMPORT INVENTORY (CSV/JSON)
+export const importInventory = async (req: Request, res: Response) => {
+  try {
+    const body = req.body || {};
+    const items = Array.isArray(body.items) ? body.items : [];
+
+    const user = await getAuthUser(req);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+
+    if (!hasInventoryWriteAccess(user)) {
+      return denySubscription(res, user);
+    }
+
+    if (items.length === 0) {
+      return res.json({ success: true, count: 0 });
+    }
+
+    const operations = items.map((item: any) => {
+      const name = sanitizeString(item.name);
+      if (!name) return null;
+
+      const stock = validateNumber(item.stock);
+      const price = validateNumber(item.price);
+      const cost = validateNumber(item.costPrice);
+
+      const updateFields: any = {};
+      if (stock !== undefined) updateFields.quantity = stock;
+      if (price !== undefined) updateFields.lastUnitPrice = price;
+      if (cost !== undefined) updateFields.costPrice = cost;
+
+      return {
+        updateOne: {
+          filter: { user: user._id, name: name.toLowerCase() },
+          update: { 
+            $set: updateFields,
+            $setOnInsert: { user: user._id, name: name.toLowerCase() }
+          },
+          upsert: true,
+        },
+      };
+    }).filter(Boolean);
+
+    if (operations.length > 0) {
+      await Inventory.bulkWrite(operations);
+    }
+
+    return res.json({ success: true, count: operations.length });
+  } catch (error) {
+    console.error('Import Inventory Error:', error);
     return res.status(500).json({ error: 'Server Error' });
   }
 };

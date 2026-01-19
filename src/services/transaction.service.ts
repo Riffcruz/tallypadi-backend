@@ -517,13 +517,39 @@ export const processTransaction = async (
 
       // Determine Price: Message price > DB Last Price > 0
       let effectiveUnitPrice = 0;
+      let effectiveCostPrice = toNumber(inv.costPrice);
+
       const msgPrice = item.unit_price == null ? null : toNumber(item.unit_price);
 
-      if (msgPrice !== null && msgPrice > 0) {
-        effectiveUnitPrice = msgPrice;
-        inv.lastUnitPrice = msgPrice; // Update DB with new price
+      // LOGIC:
+      // If RESTOCK + Price Provided -> It is COST PRICE.
+      // If SALE + Price Provided -> It is SELLING PRICE.
+      // If DEFINE_PRICE -> It is SELLING PRICE (handled above separately).
+
+      if (type === 'RESTOCK') {
+        if (msgPrice !== null && msgPrice > 0) {
+           effectiveCostPrice = msgPrice;
+           inv.costPrice = msgPrice; // Update Cost Price
+        }
+        // For RESTOCK, we don't change lastUnitPrice (Selling) unless explicitly asked?
+        // Let's keep lastUnitPrice as is (Selling Price).
+      } else if (type === 'SALE') {
+        if (msgPrice !== null && msgPrice > 0) {
+          effectiveUnitPrice = msgPrice;
+          inv.lastUnitPrice = msgPrice; // Update Last Selling Price
+        } else {
+          effectiveUnitPrice = toNumber(inv.lastUnitPrice);
+        }
       } else {
-        effectiveUnitPrice = toNumber(inv.lastUnitPrice);
+        // Other types (ADJUSTMENT/SET_STOCK)
+         if (msgPrice !== null && msgPrice > 0) {
+           // Ambiguous... assume selling price update for now?
+           // Or just ignore. Let's update selling price to be safe.
+           effectiveUnitPrice = msgPrice;
+           inv.lastUnitPrice = msgPrice;
+         } else {
+           effectiveUnitPrice = toNumber(inv.lastUnitPrice);
+         }
       }
 
       // Update Stock
@@ -546,7 +572,12 @@ export const processTransaction = async (
       }
 
       // ✅ Add to final list with calculated totals
-      const lineTotal = effectiveUnitPrice * qty;
+      const lineTotal = (type === 'RESTOCK' ? effectiveCostPrice : effectiveUnitPrice) * qty; // For restock, total is cost. For sale, total is revenue.
+      
+      // Wait, 'calculatedTotal' is used for 'totalMoney' of the transaction.
+      // For RESTOCK, totalMoney represents "Amount Spent".
+      // For SALE, totalMoney represents "Amount Received".
+      // This is consistent.
       calculatedTotal += lineTotal;
 
       finalItems.push({
@@ -556,6 +587,7 @@ export const processTransaction = async (
         qty,
         unit: (item.unit || 'pcs').toString(),
         unitPrice: effectiveUnitPrice,
+        costPrice: effectiveCostPrice, // ✅ Snapshot Cost
         total: lineTotal
       });
     }
