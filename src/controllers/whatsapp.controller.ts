@@ -1183,7 +1183,7 @@ if (btn?.txId && btn?.action) {
         })
           .sort({ createdAt: -1 })
           .limit(safeLimit)
-          .populate('user', 'name role') // ✅ Populate user to get staff name
+          .populate('user', 'name role phoneNumber') // ✅ Populate user to get staff name
           .lean();
 
         if (!recentTx.length) {
@@ -1236,7 +1236,7 @@ if (btn?.txId && btn?.action) {
     ...buildUndoneFilter(includeUndoneRequestedByOwner),
   })
     .sort({ timestamp: 1 })
-    .populate('user', 'name role') // ✅ Populate user to get staff name
+    .populate('user', 'name role phoneNumber') // ✅ Populate user to get staff name
     .lean();
 
   // ✅ 3) If empty: do NOT generate PDF, do NOT continue

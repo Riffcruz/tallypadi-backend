@@ -614,7 +614,7 @@ export const processTransaction = async (
     const balance = type === 'SALE' ? (isCredit ? finalTotalMoney : 0) : 0;
 
     await Transaction.create({
-      user: userId,
+      user: actor ? actor._id : userId, // ✅ Record the actual actor (Staff) for audit trails
       type,
       paymentStatus,
       items: finalItems,

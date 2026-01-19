@@ -464,7 +464,7 @@ if (wantsDownload && !isToggle) {
   // "Sold 2 coke at ₦500 per"
   // "Sold 4 bread for 2000 total"
   const saleRegex =
-    /(?:i|we)?\s*\b(?:sold|sell)\b\s+(\d+(?:\.\d+)?)\s*(bags?|pcs?|pieces?|cartons?|packs?|sachets?|bottles?|rolls?|liters?|ltrs?|kg)?\s*(?:of)?\s+(.+?)\s+(?:for|at|price)\s+([₦$€£₵]?\s*[\d,]+(?:k|m)?)\s*(each|per|\/each|\/per|total)?\b/i;
+    /(?:i|we)?\s*\b(?:sold|sell)\b\s+(\d+(?:\.\d+)?)\s*(bags?|pcs?|pieces?|cartons?|packs?|sachets?|bottles?|rolls?|liters?|ltrs?|kg)?\s*(?:of)?\s+(.+?)\s+(?:for|at|price)\s+([₦$€£₵]?\s*[\d,]+(?:k|m)?)(?:\s*(?:naira|dollars?|cedis?|pounds?|shillings?|rand|ngn|usd|ghs|gbp|eur))?\s*(each|per|\/each|\/per|total)?\b/i;
 
   const match = raw.match(saleRegex);
 
@@ -580,6 +580,7 @@ C. PRICE/MONEY EXTRACTION (POSITION-INDEPENDENT & SMART SCALING)
   - Words like "each", "per", "a piece", "per bag", "@" → unit_price
   - ✅ CRITICAL: If unit_price is detected AND qty > 1, MUST compute:
       total_money = sum(qty * unit_price) across all items (minus discount if any).
+  - Handle currency words: "20000 naira each" → unit_price=20000.
     Never set total_money equal to unit_price in "each/per" cases.
   - If user explicitly says "total" → treat as total_money (do NOT multiply).
   - Words like "for", "total", "in total" → total_money
