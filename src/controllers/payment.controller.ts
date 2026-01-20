@@ -102,12 +102,6 @@ export const startPayment = async (req: Request, res: Response) => {
        await user.save();
     }
     
-    // Only update plan if explicitly requested and different
-    if (safePlan(targetPlan) && user.planType !== finalPlan) {
-      user.planType = finalPlan;
-      await user.save();
-    }
-
     // ✅ Initialize paystack with strong binding metadata (userId + phone)
     const authorizationUrl = await initializePayment(user as any, cleanEmail, finalPlan, finalDuration);
 
