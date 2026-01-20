@@ -18,6 +18,7 @@ import { generateSaleReceiptPdf } from './controllers/receipt.controller';
 import whatsappRouter from './routes/whatsapp.routes';
 import paymentRouter from './routes/payment.routes';
 import adminRouter from './routes/admin.routes';
+import investorRouter from './routes/investor.routes';
 import webhookRoutes from './routes/webhook.routes';
 import healthRouter from './routes/health.routes';
 
@@ -324,6 +325,7 @@ const adminLimiterPerUser = rateLimit({
 
 
 app.use('/api/admin', authRequired, adminLimiterPerUser, adminRouter);
+app.use('/api/investor', authRequired, investorRouter);
 
 
 

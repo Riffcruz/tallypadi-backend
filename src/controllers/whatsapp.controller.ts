@@ -1161,6 +1161,31 @@ if (btn?.txId && btn?.action) {
       break;
     }
 
+      case 'DELETE_ALL_INVENTORY': {
+        if (actor.role !== 'OWNER') {
+          await queueOutboundMessage(from, '❌ Only the shop owner can delete all inventory.');
+          break;
+        }
+
+        if (parsed.needs_clarification) {
+          await queueOutboundMessage(
+            from,
+            parsed.reply_text ||
+              '⚠️ Are you sure you want to delete ALL inventory? This cannot be undone.\n\nReply *YES DELETE ALL* to confirm.'
+          );
+          break;
+        }
+
+        try {
+          const result = await Inventory.deleteMany({ user: shopId });
+          await queueOutboundMessage(from, `✅ All inventory deleted. Removed ${result.deletedCount} items.`);
+        } catch (e) {
+          console.error('DELETE_ALL_INVENTORY error:', e);
+          await queueOutboundMessage(from, '❌ Failed to delete inventory. Please try again.');
+        }
+        break;
+      }
+
       case 'UNDO_LAST_SALE': {
         const r = await undoLastSale(shopId, messageId);
         await queueOutboundMessage(from, r.message);

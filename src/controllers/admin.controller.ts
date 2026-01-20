@@ -12,6 +12,8 @@ import { Debtor } from '../models/debtor.model';
 
 import { sendWhatsAppText } from '../services/whatsapp.service';
 
+import bcrypt from 'bcryptjs';
+
 // -------------------------
 // Helpers
 // -------------------------
@@ -105,6 +107,15 @@ const adminAddStaffSchema = z
   })
   .strict();
 
+const createInvestorSchema = z
+  .object({
+    phoneNumber: phoneSchema,
+    name: z.string().trim().max(50).optional(),
+    password: z.string().min(6),
+    email: z.string().email().optional(),
+  })
+  .strict();
+
 const changePlanSchema = z.object({
   planType: z.enum(['TYCOON', 'OGA_BOSS']),
 });
@@ -178,6 +189,48 @@ export const getSystemAnalytics = async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Server Error' });
   }
 };
+
+// -------------------------
+// INVESTORS
+// POST /api/admin/investors
+// -------------------------
+export const createInvestor = async (req: Request, res: Response) => {
+  try {
+    const parsed = createInvestorSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+    const { phoneNumber, name, password, email } = parsed.data;
+
+    const existing = await User.findOne({ 
+      $or: [
+        { phoneNumber },
+        ...(email ? [{ email }] : [])
+      ]
+    });
+    if (existing) return res.status(409).json({ error: 'User with this phone or email already exists' });
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const investor = await User.create({
+      phoneNumber,
+      email,
+      password: hashedPassword,
+      name: name || 'Investor',
+      role: 'INVESTOR',
+      registrationStage: 'COMPLETED',
+      subscriptionStatus: 'active',
+      // Default other fields
+      planType: 'TYCOON', 
+      businessName: 'Investor Account',
+    });
+
+    res.json({ success: true, message: 'Investor account created', investor: { id: investor._id, phoneNumber, name } });
+  } catch (error) {
+    console.error('Create Investor Error:', error);
+    res.status(500).json({ error: 'Create Investor Error' });
+  }
+};
+
 
 // -------------------------
 // USERS

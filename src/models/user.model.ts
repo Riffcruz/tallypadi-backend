@@ -24,7 +24,7 @@ export interface IUser extends Document {
   // Plan & Staff Fields
   planType: 'OGA_BOSS' | 'TYCOON';
   // interface
- role: 'OWNER' | 'STAFF' | 'ADMIN' | 'SUPER_ADMIN';
+ role: 'OWNER' | 'STAFF' | 'ADMIN' | 'SUPER_ADMIN' | 'INVESTOR';
   ownerId?: Types.ObjectId;
 
   messageHistory: string[];
@@ -99,7 +99,7 @@ const userSchema = new Schema<IUser>(
     // schema
   role: {
     type: String,
-    enum: ['OWNER', 'STAFF', 'ADMIN', 'SUPER_ADMIN'],
+    enum: ['OWNER', 'STAFF', 'ADMIN', 'SUPER_ADMIN', 'INVESTOR'],
     default: 'OWNER',
   },
 

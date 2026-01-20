@@ -134,9 +134,16 @@ export default function LoginPage() {
       if (res.data?.success) {
         // ✅ Safer storage: Cookie for token, sessionStorage for user
         setCookie('tallyToken', res.data.token, 7);
-        sessionStorage.setItem('tallyUser', JSON.stringify(res.data.user));
-        
-        router.push('/dashboard');
+        const user = res.data.user;
+        sessionStorage.setItem('tallyUser', JSON.stringify(user));
+
+        if (user.role === 'INVESTOR') {
+          router.push('/investor/dashboard');
+        } else if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') {
+          router.push('/admin/dashboard');
+        } else {
+          router.push('/dashboard');
+        }
         return;
       }
 

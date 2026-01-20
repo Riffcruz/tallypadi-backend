@@ -1,7 +1,8 @@
 'use client';
 import React, { useMemo, useState } from 'react';
-import { Search, Filter, Eye, Lock, Unlock } from 'lucide-react';
+import { Search, Filter, Eye, Lock, Unlock, UserPlus } from 'lucide-react';
 import UserDeepDiveModal from './UserDeepDiveModal';
+import CreateInvestorModal from './CreateInvestorModal';
 
 export default function UsersTab({
   users,
@@ -11,6 +12,7 @@ export default function UsersTab({
   const [filterActive, setFilterActive] = useState(true);
   const [search, setSearch] = useState('');
   const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [showCreateInvestor, setShowCreateInvestor] = useState(false);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -63,17 +65,26 @@ export default function UsersTab({
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-lg sm:text-2xl font-extrabold text-white">User Database</h2>
 
-            <button
-              onClick={() => setFilterActive(!filterActive)}
-              className={`shrink-0 inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-extrabold transition-all border ${
-                filterActive
-                  ? 'bg-emerald-600 text-white border-emerald-500/30'
-                  : 'bg-slate-800 text-slate-200 border-slate-700'
-              }`}
-              title={filterActive ? 'Showing active + trial users' : 'Showing all users'}
-            >
-              <Filter size={14} /> {filterActive ? 'Active Only' : 'Show All'}
-            </button>
+            <div className="flex items-center gap-2">
+                <button
+                    onClick={() => setShowCreateInvestor(true)}
+                    className="shrink-0 inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-extrabold transition-all border bg-emerald-600 text-white border-emerald-500/30 hover:bg-emerald-500"
+                    title="Create Investor"
+                >
+                    <UserPlus size={14} /> New Investor
+                </button>
+                <button
+                onClick={() => setFilterActive(!filterActive)}
+                className={`shrink-0 inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-extrabold transition-all border ${
+                    filterActive
+                    ? 'bg-slate-700 text-white border-slate-600'
+                    : 'bg-slate-800 text-slate-200 border-slate-700'
+                }`}
+                title={filterActive ? 'Showing active + trial users' : 'Showing all users'}
+                >
+                <Filter size={14} /> {filterActive ? 'Active Only' : 'Show All'}
+                </button>
+            </div>
           </div>
 
           <div className="relative w-full sm:w-[320px]">
@@ -236,6 +247,12 @@ export default function UsersTab({
 />
 
 )}
+{showCreateInvestor && (
+    <CreateInvestorModal
+      onClose={() => setShowCreateInvestor(false)}
+      adminToken={adminToken}
+    />
+  )}
     </div>
   );
 }

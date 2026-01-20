@@ -13,6 +13,7 @@ export type ParsedIntent =
   | 'RESTOCK'
   | 'SET_STOCK'
   | 'DELETED_STOCK'
+  | 'DELETE_ALL_INVENTORY'
   | 'DEFINE_PRICE'
   | 'PRICE_CHECK'
   | 'REPORT_SALES'
@@ -200,6 +201,7 @@ function safeParsedResult(p: any): ParsedResult {
     'RESTOCK',
     'SET_STOCK',
     'DELETED_STOCK',
+    'DELETE_ALL_INVENTORY',
     'DEFINE_PRICE',
     'PRICE_CHECK',
     'REPORT_SALES',
@@ -762,6 +764,21 @@ These intents MUST be detected correctly and MUST NOT be mistaken as SALE:
   total_money = null
   needs_clarification = true ONLY if item name is missing and cannot be inferred from context.
 
+6) DELETE_ALL_INVENTORY (CRITICAL - Owner Only)
+- User wants to delete EVERYTHING/ALL stock.
+- Triggers: "delete all inventory", "delete all stock", "wipe all items", "clear everything", "delete my inventory".
+- Output:
+  intent = DELETE_ALL_INVENTORY
+  items = []
+  total_money = null
+  needs_clarification = true (ALWAYS, unless user strictly confirms).
+  reply_text = "⚠️ Are you sure you want to delete ALL inventory? This cannot be undone.\n\nReply *YES DELETE ALL* to confirm."
+
+- IF user says "YES DELETE ALL" (exact phrase) AND context shows they just asked to delete all:
+  intent = DELETE_ALL_INVENTORY
+  needs_clarification = false
+  reply_text = "✅ Deleting all inventory..."
+
 *** 5C. SETTINGS COMMANDS (CRITICAL) ***
 
 These commands MUST map to intent SETTINGS (or CHANGE_LANGUAGE) and MUST output settings_update with EXACT keys supported by backend.
@@ -1051,7 +1068,10 @@ Return ONLY the message text. Do not output literal "\\n" characters; use real l
 `;
 
   try {
-    const result = await model.generateContent(prompt);
+    const result = await model.generateContent({
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig: { responseMimeType: 'text/plain' },
+    });
     // ✅ Fix: Ensure literal "\n" are converted to real newlines
     return result.response.text().replace(/\\n/g, '\n');
   } catch (error) {
