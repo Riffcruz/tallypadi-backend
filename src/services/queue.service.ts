@@ -125,6 +125,21 @@ export const queueSaleResponse = async (
   );
 };
 
+export const queueWelcomeResponse = async (
+  phoneNumber: string,
+  message: string,
+  loginUrl: string,
+  jobId?: string
+) => {
+  const finalJobId = safeJobId(jobId || `welcome_${phoneNumber}_${Date.now()}`);
+
+  await replyQueue.add(
+    'send-welcome-response',
+    { phoneNumber, message, loginUrl },
+    { jobId: finalJobId }
+  );
+};
+
 // ============================================================
 // ✅ Receipt PDF (GENERATE + SEND DOCUMENT)
 // Worker must handle job.name === 'send-sale-receipt'

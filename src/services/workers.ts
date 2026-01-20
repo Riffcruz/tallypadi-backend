@@ -22,6 +22,15 @@ export const replyWorker = new Worker(
       return;
     }
 
+    if (job.name === 'send-welcome-response') {
+      const { phoneNumber, message, loginUrl } = job.data;
+      await sendWhatsAppText(phoneNumber, message); // ✅ first
+      await sendWhatsAppButtons(phoneNumber, '🌐 Manage your shop online:', [
+        { type: 'url', title: 'Login to Dashboard', payload: loginUrl }
+      ]);
+      return;
+    }
+
     // ✅ NEW: Send receipt PDF to WhatsApp
     if (job.name === 'send-sale-receipt') {
   const { phoneNumber, userId, saleId } = job.data as {

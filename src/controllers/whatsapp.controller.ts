@@ -17,6 +17,7 @@ import {
   queueOutboundMessage,
   queueOutboundButtons, // ✅ NEW: queued buttons helper
 queueSaleResponse,
+queueWelcomeResponse,
 queueSaleReceipt
 
 
@@ -956,7 +957,12 @@ export const handleMessageLogic = async (
 
         const { generateWelcomeMessage } = await import('../services/gemini.service');
         const welcomeMsg = await generateWelcomeMessage(actor.settings?.language || 'English');
-        await queueOutboundMessage(from, welcomeMsg);
+        
+        await queueWelcomeResponse(
+          from,
+          welcomeMsg,
+          'https://tallypadi.com/login'
+        );
         return;
       }
     }
