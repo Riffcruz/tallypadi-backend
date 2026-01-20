@@ -25,9 +25,7 @@ export const replyWorker = new Worker(
     if (job.name === 'send-welcome-response') {
       const { phoneNumber, message, loginUrl } = job.data;
       await sendWhatsAppText(phoneNumber, message); // ✅ first
-      await sendWhatsAppButtons(phoneNumber, '🌐 Manage your shop online:', [
-        { type: 'url', title: 'Login to Dashboard', payload: loginUrl }
-      ]);
+      await sendWhatsAppText(phoneNumber, `🌐 *Web Access*\n\nLogin here to manage your shop on the web:\n${loginUrl}`); // ✅ then
       return;
     }
 
