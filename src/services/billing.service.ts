@@ -97,3 +97,46 @@ export const initializePayment = async (
     return null;
   }
 };
+
+// 🟢 NEW: Check Subscription Status
+export const checkSubscriptionStatus = async (user: IUser): Promise<boolean> => {
+  // 1. If active, allow
+  if (user.subscriptionStatus === 'active') {
+    // Optional: Double check expiry if cron missed it
+    if (user.nextBillingDate && user.nextBillingDate < new Date()) {
+      user.subscriptionStatus = 'past_due';
+      await user.save();
+      // fall through to failure handling
+    } else {
+      return true;
+    }
+  }
+
+  // 2. If trial
+  if (user.subscriptionStatus === 'trial') {
+    // If trial is still valid
+    if (user.trialEndsAt && user.trialEndsAt > new Date()) {
+      return true;
+    }
+    // Trial expired
+    user.subscriptionStatus = 'past_due';
+    await user.save();
+  }
+
+  // 3. If we get here, they are not allowed (past_due, cancelled, suspended)
+  // We send them a message and return false.
+  
+  // Don't spam them on every single message? 
+  // For now, we return false. The controller handles flow interruption.
+  // We can send a reminder message here.
+
+  // Using a generic payment link or instruction
+  const payLink = \`https://tallypadi.com/login\`; 
+
+  await queueOutboundMessage(
+    user.phoneNumber,
+    \`🛑 *Subscription Expired*\n\nYour plan has expired. Please renew to continue using TallyPadi.\n\n👉 Login to renew: \${payLink}\`
+  );
+
+  return false;
+};
