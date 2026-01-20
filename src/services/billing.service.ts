@@ -131,11 +131,11 @@ export const checkSubscriptionStatus = async (user: IUser): Promise<boolean> => 
   // We can send a reminder message here.
 
   // Using a generic payment link or instruction
-  const payLink = \`https://tallypadi.com/login\`; 
+  const payLink = `https://tallypadi.com/login`; 
 
   await queueOutboundMessage(
     user.phoneNumber,
-    \`🛑 *Subscription Expired*\n\nYour plan has expired. Please renew to continue using TallyPadi.\n\n👉 Login to renew: \${payLink}\`
+    `🛑 *Subscription Expired*\n\nYour plan has expired. Please renew to continue using TallyPadi.\n\n👉 Login to renew: ${payLink}`
   );
 
   return false;
