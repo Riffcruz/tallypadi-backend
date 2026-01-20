@@ -969,7 +969,7 @@ export default function LandingPage() {
               </div>
 
               <div className="mb-8">
-                <span className="text-5xl font-extrabold text-blue-600">₦2,500</span>
+                <span className="text-5xl font-extrabold text-blue-600">₦3,000</span>
                 <span className="text-slate-500 text-sm"> / month</span>
                 <p className="text-slate-500 mt-2 text-sm">
                   The essential plan for serious owners focused on maximizing solo profit.

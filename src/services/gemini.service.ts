@@ -1054,8 +1054,8 @@ Required Format:
    - Explain they are on the **Tycoon Plan** (Full Package).
 4. (Gap)
 5. Pricing (Clean List):
-   - Tycoon Plan: ₦5,000/month
-   - Oga Boss Plan: ₦2,500/month
+   - Tycoon Plan: ₦5,000/month (Save more on yearly plan)
+   - Oga Boss Plan: ₦3,000/month (Save more on yearly plan)
 6. (Gap)
 7. "How to Start:"
    - List 3 examples using "👉" bullet points.
@@ -1076,7 +1076,7 @@ Return ONLY the message text. Do not output literal "\\n" characters; use real l
     return result.response.text().replace(/\\n/g, '\n');
   } catch (error) {
     console.error('Gemini Welcome Message Error:', error);
-    return `✅ *Registration Complete*\n\n🎉 *7-Day Free Trial Started*\nYou are now on the **Tycoon Plan** (Full Package).\n\n*Subscription Plans (After Trial):*\n• Tycoon Plan: ₦5,000 / month\n• Oga Boss Plan: ₦2,500 / month\n\n*How to Start:*\n👉 Sold 2 rice 5000\n👉 Restock 10 milk\n👉 Report`;
+    return `✅ *Registration Complete*\n\n🎉 *7-Day Free Trial Started*\nYou are now on the **Tycoon Plan** (Full Package).\n\n*Subscription Plans (After Trial):*\n• Tycoon Plan: ₦5,000 / month\n• Oga Boss Plan: ₦3,000 / month\n\n*How to Start:*\n👉 Sold 2 rice 5000\n👉 Restock 10 milk\n👉 Report`;
   }
 };
 

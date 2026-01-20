@@ -31,15 +31,21 @@ function safePlan(input: any): PlanType | null {
  */
 export const startPayment = async (req: Request, res: Response) => {
   try {
-    const { email, phoneNumber, targetPlan } = req.body as {
+    const { email, phoneNumber, targetPlan, duration } = req.body as {
       email?: string;
       phoneNumber?: string;
       targetPlan?: PlanType;
+      duration?: number;
     };
 
     const cleanEmail = String(email || '').trim().toLowerCase();
     const cleanPhone = normalizePhone(phoneNumber || '');
     const plan = safePlan(targetPlan) || 'OGA_BOSS';
+    
+    // ✅ Duration validation (1, 6, 12)
+    const validDurations = [1, 6, 12];
+    const finalDuration = (validDurations.includes(Number(duration))) ? (Number(duration) as 1 | 6 | 12) : 1;
+
 
     if (!cleanEmail || !emailRegex.test(cleanEmail)) {
       return res.status(400).json({ message: 'Valid email is required' });
@@ -103,7 +109,7 @@ export const startPayment = async (req: Request, res: Response) => {
     }
 
     // ✅ Initialize paystack with strong binding metadata (userId + phone)
-    const authorizationUrl = await initializePayment(user as any, cleanEmail, finalPlan);
+    const authorizationUrl = await initializePayment(user as any, cleanEmail, finalPlan, finalDuration);
 
     if (!authorizationUrl) {
       return res.status(400).json({ message: 'Could not initialize payment' });
@@ -155,14 +161,15 @@ export const verifyPayment = async (req: Request, res: Response) => {
     if (planType) user.planType = planType;
 
     user.subscriptionStatus = 'active';
-    user.paystackCustomerCode = data.customer?.customer_code || user.paystackCustomerCode;
-    user.paystackPlanCode = data.plan_object?.plan_code || user.paystackPlanCode;
-
-    // NOTE: better to compute from Paystack subscription if you store it
-    user.nextBillingDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-
-    await user.save();
-
+          user.paystackCustomerCode = data.customer?.customer_code || user.paystackCustomerCode;
+          user.paystackPlanCode = data.plan_object?.plan_code || user.paystackPlanCode;
+    
+          // ✅ Use duration from metadata (default 1 month)
+          const monthsToAdd = Number(metadata.durationMonths || 1);
+          const daysToAdd = monthsToAdd * 30; // approx
+          user.nextBillingDate = new Date(Date.now() + daysToAdd * 24 * 60 * 60 * 1000);
+    
+          await user.save();
     if (user.phoneNumber) {
       const planName = String(user.planType || '').replace(/_/g, ' ');
       await sendWhatsAppText(user.phoneNumber, `✅ Payment confirmed! Your *${planName}* subscription is ACTIVE.`);
@@ -218,7 +225,11 @@ export const handlePaystackWebhook = async (req: any, res: Response) => {
       user.subscriptionStatus = 'active';
       user.paystackCustomerCode = data.customer?.customer_code || user.paystackCustomerCode;
       user.paystackPlanCode = data.plan_object?.plan_code || user.paystackPlanCode;
-      user.nextBillingDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      
+      // ✅ Use duration from metadata (default 1 month)
+      const monthsToAdd = Number(metadata.durationMonths || 1);
+      const daysToAdd = monthsToAdd * 30; // approx
+      user.nextBillingDate = new Date(Date.now() + daysToAdd * 24 * 60 * 60 * 1000);
 
       await user.save();
 

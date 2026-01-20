@@ -41,7 +41,7 @@ const PLANS: PlanDetails[] = [
   {
     id: 'OGA_BOSS',
     name: 'Oga Boss Plan',
-    price: 2500,
+    price: 3000,
     features: [
       'Unlimited Sales Records',
       'Basic Inventory Tracking',
@@ -53,7 +53,7 @@ const PLANS: PlanDetails[] = [
   {
     id: 'TYCOON',
     name: 'Tycoon Plan',
-    price: 3500,
+    price: 5000,
     features: [
       'Everything in Oga Boss',
       'Multi-Staff Login (Up to 5)',
@@ -64,6 +64,19 @@ const PLANS: PlanDetails[] = [
     recommended: true
   }
 ];
+
+// ✅ Price Helper
+const getPrice = (planId: PlanType, months: number) => {
+  if (planId === 'OGA_BOSS') {
+    if (months === 12) return 28800;
+    if (months === 6) return 15000;
+    return 3000;
+  }
+  // TYCOON
+  if (months === 12) return 42000;
+  if (months === 6) return 27000;
+  return 5000;
+};
 
 // Sanitize URL & Handle Localhost/Network Logic
 const getApiUrl = () => {
@@ -134,6 +147,7 @@ function buildPhoneIdentifier(input: string, selectedCountryCode: string) {
 
 export default function PaymentPage() {
   const [selectedPlan, setSelectedPlan] = useState<PlanType>('OGA_BOSS');
+  const [duration, setDuration] = useState<1 | 6 | 12>(1); // ✅ NEW
   const [email, setEmail] = useState('');
   const [countryCode, setCountryCode] = useState('+234');
   const [phoneNumber, setPhoneNumber] = useState(''); // ✅ NEW
@@ -197,7 +211,8 @@ export default function PaymentPage() {
       const response = await axios.post(endpoint, {
         email: cleanEmail,
         phoneNumber: fullPhone, // ✅ NEW (required by your backend for non-logged-in payments)
-        targetPlan: selectedPlan
+        targetPlan: selectedPlan,
+        duration: duration
       });
 
       const { authorization_url } = response.data;
@@ -282,8 +297,33 @@ export default function PaymentPage() {
             </p>
           </div>
 
+          {/* Duration Selector */}
+          <div className="bg-slate-100 p-1 rounded-xl flex font-bold text-sm">
+            {[
+              { label: 'Monthly', value: 1 },
+              { label: '6 Months (Save)', value: 6 },
+              { label: 'Yearly (Best Value)', value: 12 },
+            ].map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => setDuration(opt.value as 1 | 6 | 12)}
+                className={`flex-1 py-3 rounded-lg transition-all ${
+                  duration === opt.value
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
           <div className="space-y-4">
-            {PLANS.map((plan) => (
+            {PLANS.map((plan) => {
+               const price = getPrice(plan.id, duration);
+               const perMonth = Math.round(price / duration);
+               
+               return (
               <div
                 key={plan.id}
                 onClick={() => setSelectedPlan(plan.id)}
@@ -324,13 +364,19 @@ export default function PaymentPage() {
                       ? 'Perfect for solo shop owners managing sales.'
                       : 'For growing businesses needing staff accounts and branding.'}
                   </p>
-                  <div className="text-2xl font-bold text-slate-900">
-                    ₦{plan.price.toLocaleString()}{' '}
-                    <span className="text-sm font-medium text-slate-400">/ month</span>
+                  <div className="flex items-baseline gap-2">
+                     <span className="text-2xl font-bold text-slate-900">₦{price.toLocaleString()}</span>
+                     {duration > 1 && (
+                        <span className="text-sm font-medium text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full">
+                           ₦{perMonth.toLocaleString()}/mo
+                        </span>
+                     )}
+                     {duration === 1 && <span className="text-sm font-medium text-slate-400">/ month</span>}
                   </div>
                 </div>
               </div>
-            ))}
+            );
+            })}
           </div>
 
           {/* Features List for Selected Plan */}
@@ -420,12 +466,14 @@ export default function PaymentPage() {
                 </div>
                 <div className="flex justify-between text-sm text-slate-600">
                   <span>Billing Cycle</span>
-                  <span className="font-medium">Monthly</span>
+                  <span className="font-medium">
+                      {duration === 1 ? 'Monthly' : duration === 6 ? '6 Months' : 'Yearly'}
+                  </span>
                 </div>
                 <div className="border-t border-slate-200 pt-3 flex justify-between items-center">
                   <span className="font-bold text-slate-900">Total</span>
                   <span className="text-xl font-bold text-emerald-600">
-                    ₦{currentPlan.price.toLocaleString()}
+                    ₦{getPrice(currentPlan.id, duration).toLocaleString()}
                   </span>
                 </div>
               </div>

@@ -4,109 +4,66 @@ import { env } from '../config/env';
 import { queueOutboundMessage } from './queue.service'; // ✅ QUEUED SENDER
 
 // 🟢 CONFIGURATION: Plan Details
-// Replace 'PLN_...' with your actual plan codes from Paystack Dashboard
 const PLAN_CONFIG = {
   OGA_BOSS: {
-    amount: 2500 * 100, // ₦2,500 in kobo
-    planCode: process.env.PAYSTACK_PLAN_OGA || 'PLN_znp64o8rjnn13g6',
     name: 'Oga Boss Plan',
+    // key = duration (months)
+    pricing: {
+      1: 3000 * 100,      // ₦3,000 (1 month)
+      6: 15000 * 100,     // ₦2,500 * 6 = 15,000 (6 months)
+      12: 28800 * 100,    // ₦2,400 * 12 = 28,800 (1 year)
+    },
   },
   TYCOON: {
-    amount: 3500 * 100, // ₦5,000 in kobo
-    planCode: process.env.PAYSTACK_PLAN_TYCOON || 'PLN_bw4lqou4plnf07e',
     name: 'Tycoon Plan',
+    pricing: {
+      1: 5000 * 100,      // ₦5,000 (1 month)
+      6: 27000 * 100,     // ₦4,500 * 6 = 27,000 (6 months)
+      12: 42000 * 100,    // ₦3,500 * 12 = 42,000 (1 year)
+    },
   },
 };
 
-// ✅ helper: queue message (fast + non-blocking delivery)
-async function sendWhatsAppQueued(user: IUser, text: string, tag: string) {
-  // optional stable-ish job id to reduce duplicates
-  const day = new Date().toISOString().slice(0, 10); // YYYY-MM-DD UTC
-  const jobId = `${tag}_${String(user._id)}_${day}`;
-  await queueOutboundMessage(user.phoneNumber, text, jobId);
-}
-
-export const checkSubscriptionStatus = async (user: IUser): Promise<boolean> => {
-  const now = new Date();
-
-  // 1. 🔴 Check Suspended Status (Highest Priority)
-  if (user.subscriptionStatus === 'suspended') {
-    await sendWhatsAppQueued(
-      user,
-      `🚫 *Account Suspended*\n\nYour account has been suspended due to policy violations or an administrative action.\n\nPlease contact support to resolve this issue.`,
-      'sub_suspended'
-    );
-    return false; // BLOCKED
-  }
-
-  // 2. Check Trial
-  if (user.subscriptionStatus === 'trial') {
-    if (now < user.trialEndsAt) {
-      return true; // Trial still valid
-    } else {
-      // Trial Expired -> Move to Past Due
-      user.subscriptionStatus = 'past_due';
-      await user.save();
-
-      await sendBillingReminder(user);
-      return false; // BLOCKED
-    }
-  }
-
-  // 3. Check Active Subscription
-  if (user.subscriptionStatus === 'active') {
-    return true;
-  }
-
-  // 4. Blocked States (Past Due / Cancelled)
-  if (user.subscriptionStatus === 'past_due' || user.subscriptionStatus === 'cancelled') {
-    await sendBillingReminder(user);
-    return false; // BLOCKED
-  }
-
-  return false;
-};
-
-const sendBillingReminder = async (user: IUser) => {
-  // We can point them to a generic pay link or generate one dynamically here
-  // For now, let's assume a generic dashboard link
-  const payLink = 'https://tallypadi.com/payment';
-
-  await sendWhatsAppQueued(
-    user,
-    `🛑 *Access Paused*\n\nOga, your Tallypadi subscription don expire.\n\nTo continue using the bot, please renew here:\n👉 ${payLink}`,
-    'sub_billing'
-  );
-};
+// ... (keep existing imports and helpers)
 
 // 🟢 UPDATED: Dynamic Plan Selection
-export const initializePayment = async (user: IUser, email: string, targetPlan?: 'OGA_BOSS' | 'TYCOON') => {
+export const initializePayment = async (
+  user: IUser, 
+  email: string, 
+  targetPlan?: 'OGA_BOSS' | 'TYCOON',
+  durationMonths: 1 | 6 | 12 = 1
+) => {
   try {
     // 1. Determine which plan to charge for
-    // If targetPlan is passed (e.g. upgrading), use that. Otherwise use current user plan.
     const selectedPlanType = targetPlan || user.planType || 'OGA_BOSS';
-    const planDetails = (PLAN_CONFIG as any)[selectedPlanType];
+    const planConfig = (PLAN_CONFIG as any)[selectedPlanType];
 
-    if (!planDetails) {
+    if (!planConfig) {
       throw new Error(`Invalid plan type: ${selectedPlanType}`);
     }
 
+    // 2. Get price for duration
+    const amount = planConfig.pricing[durationMonths];
+    if (!amount) {
+      throw new Error(`Invalid duration ${durationMonths} for plan ${selectedPlanType}`);
+    }
+
     console.log(
-      `💳 Initializing Paystack for ${user.phoneNumber} - Plan: ${planDetails.name} (${planDetails.amount})`
+      `💳 Initializing Paystack for ${user.phoneNumber} - Plan: ${planConfig.name} (${amount}) Duration: ${durationMonths}m`
     );
 
-    // 2. Call Paystack API
+    // 3. Call Paystack API
     const response = await axios.post(
       'https://api.paystack.co/transaction/initialize',
       {
         email: email,
-        amount: planDetails.amount,
-        // plan: planDetails.planCode, // Commented out to allow Bank Transfer (one-time payment)
+        amount: amount,
         channels: ['card', 'bank', 'ussd', 'qr', 'mobile_money', 'bank_transfer', 'eft'],
         metadata: {
           userId: user._id.toString(),
           phoneNumber: user.phoneNumber,
           planType: selectedPlanType,
+          durationMonths: durationMonths, // ✅ Pass duration to metadata so webhook knows
           custom_fields: [
             {
               display_name: 'Phone Number',
@@ -118,9 +75,13 @@ export const initializePayment = async (user: IUser, email: string, targetPlan?:
               variable_name: 'shop_name',
               value: user.businessName,
             },
+            {
+              display_name: 'Plan Duration',
+              variable_name: 'plan_duration',
+              value: `${durationMonths} Month(s)`,
+            }
           ],
         },
-        // callback_url: "https://tallypadi.com/payment/callback"
       },
       {
         headers: {
