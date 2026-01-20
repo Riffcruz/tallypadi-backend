@@ -1,5 +1,5 @@
 'use client';
-import { LayoutDashboard, Users, Settings as SettingsIcon, Send, ShieldAlert } from 'lucide-react';
+import { LayoutDashboard, Users, Settings as SettingsIcon, Send, ShieldAlert, Briefcase } from 'lucide-react';
 
 export default function Sidebar({ tab, setTab }: { tab: string, setTab: (t: any) => void }) {
     // 🔴 Removed: isOpen state and setIsOpen setter
@@ -7,6 +7,7 @@ export default function Sidebar({ tab, setTab }: { tab: string, setTab: (t: any)
     const menu = [
         { id: 'overview', icon: LayoutDashboard, label: 'Overview' },
         { id: 'users', icon: Users, label: 'User Management' },
+        { id: 'investors', icon: Briefcase, label: 'Investors' },
         { id: 'settings', icon: SettingsIcon, label: 'Global Settings' },
         { id: 'broadcast', icon: Send, label: 'Broadcast' },
     ];

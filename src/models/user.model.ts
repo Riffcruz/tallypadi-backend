@@ -45,6 +45,8 @@ export interface IUser extends Document {
     lastInjectionAt?: Date | null;
   };
 
+  lastLogin?: Date;
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -123,6 +125,8 @@ const userSchema = new Schema<IUser>(
       injectionStrikes: { type: Number, default: 0 },
       lastInjectionAt: { type: Date, default: null },
     },
+    
+    lastLogin: { type: Date },
   },
   { timestamps: true }
 );

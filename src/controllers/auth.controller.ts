@@ -83,6 +83,10 @@ export const loginUser = async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
+    // ✅ Update lastLogin
+    user.lastLogin = new Date();
+    await user.save();
+
     // Keep JWT small: just user id (and role if needed)
     const token = jwt.sign(
       {

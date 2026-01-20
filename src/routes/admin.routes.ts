@@ -16,6 +16,8 @@ import {
   unlinkStaffMember,
   cleanupStaffHierarchy,
   createInvestor,
+  getInvestors,
+  deleteInvestor,
 } from '../controllers/admin.controller';
 
 const router = Router();
@@ -32,7 +34,11 @@ router.put('/settings', updateGlobalSettings);
 // User Management
 router.get('/users', getAllUsers);
 router.get('/users/:id/details', getUserDeepDive);
+
+// Investor Management
+router.get('/investors', getInvestors);
 router.post('/investors', createInvestor);
+router.delete('/investors/:id', deleteInvestor);
 
 // ✅ Single endpoint handles ALL admin actions:
 // suspend | unsuspend | activate | cancel | change_plan | set_expiry

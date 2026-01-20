@@ -11,6 +11,7 @@ import OverviewTab from '../../components/admin/OverviewTab';
 import UsersTab from '../../components/admin/UsersTab';
 import SettingsTab from '../../components/admin/SettingsTab';
 import BroadcastTab from '../../components/admin/BroadcastTab';
+import InvestorsTab from '../../components/admin/InvestorsTab';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 const TOKEN_KEY = 'adminToken';
@@ -25,7 +26,7 @@ export default function AdminDashboard() {
   const [globalSettings, setGlobalSettings] = useState<any>(null);
 
   const [loading, setLoading] = useState(false);
-  const [tab, setTab] = useState<'overview' | 'users' | 'settings' | 'broadcast'>('overview');
+  const [tab, setTab] = useState<'overview' | 'users' | 'settings' | 'broadcast' | 'investors'>('overview');
 
   // Mobile sidebar
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -263,6 +264,8 @@ export default function AdminDashboard() {
   )}
 
   {tab === 'broadcast' && <BroadcastTab headers={getHeaders()} />}
+  
+  {tab === 'investors' && <InvestorsTab adminToken={token} />}
 </div>
 
       </main>

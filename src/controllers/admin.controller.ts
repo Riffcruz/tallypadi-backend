@@ -231,6 +231,38 @@ export const createInvestor = async (req: Request, res: Response) => {
   }
 };
 
+// GET /api/admin/investors
+export const getInvestors = async (req: Request, res: Response) => {
+  try {
+    const investors = await User.find({ role: 'INVESTOR' })
+      .select('name phoneNumber email lastLogin createdAt')
+      .sort({ createdAt: -1 });
+
+    res.json(investors);
+  } catch (error) {
+    console.error('Get Investors Error:', error);
+    res.status(500).json({ error: 'Get Investors Error' });
+  }
+};
+
+// DELETE /api/admin/investors/:id
+export const deleteInvestor = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    if (!isValidObjectId(id)) return res.status(400).json({ error: 'Invalid id' });
+
+    const investor = await User.findOne({ _id: id, role: 'INVESTOR' });
+    if (!investor) return res.status(404).json({ error: 'Investor not found' });
+
+    await User.deleteOne({ _id: id });
+
+    res.json({ success: true, message: 'Investor deleted' });
+  } catch (error) {
+    console.error('Delete Investor Error:', error);
+    res.status(500).json({ error: 'Delete Investor Error' });
+  }
+};
+
 
 // -------------------------
 // USERS
