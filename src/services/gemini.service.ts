@@ -1062,7 +1062,7 @@ Required Format:
      (e.g., Sold 2 rice 5000, Restock 10 milk, Report)
 8. (Gap)
 9. Web Access:
-   - "Login here: ${env.appBaseUrl}/login to manage your business on the web."
+   - "Login here: https://tallypadi.com/login to manage your business on the web."
 
 Tone: Professional, spacious, encouraging.
 
@@ -1079,7 +1079,7 @@ Return ONLY the message text. Do not output literal "\\n" characters; use real l
     return result.response.text().replace(/\\n/g, '\n');
   } catch (error) {
     console.error('Gemini Welcome Message Error:', error);
-    return `✅ *Registration Complete*\n\n🎉 *7-Day Free Trial Started*\nYou are now on the **Tycoon Plan** (Full Package).\n\n*Subscription Plans (After Trial):*\n• Tycoon Plan: ₦5,000 / month\n• Oga Boss Plan: ₦3,000 / month\n\n*How to Start:*\n👉 Sold 2 rice 5000\n👉 Restock 10 milk\n👉 Report\n\n*Web Access:*\nLogin here: ${env.appBaseUrl}/login to manage your business on the web.`;
+    return `✅ *Registration Complete*\n\n🎉 *7-Day Free Trial Started*\nYou are now on the **Tycoon Plan** (Full Package).\n\n*Subscription Plans (After Trial):*\n• Tycoon Plan: ₦5,000 / month\n• Oga Boss Plan: ₦3,000 / month\n\n*How to Start:*\n👉 Sold 2 rice 5000\n👉 Restock 10 milk\n👉 Report\n\n*Web Access:*\nLogin here: https://tallypadi.com/login to manage your business on the web.`;
   }
 };
 
