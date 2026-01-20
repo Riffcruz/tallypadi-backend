@@ -489,8 +489,8 @@ function escapeRegex(s: string) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-async function undoSaleById(ownerId: any, txId: string, undoMessageId: string) {
-  const tx = await Transaction.findOne({ _id: txId, user: ownerId, type: 'SALE' });
+async function undoSaleById(txUserId: any, inventoryOwnerId: any, txId: string, undoMessageId: string) {
+  const tx = await Transaction.findOne({ _id: txId, user: txUserId, type: 'SALE' });
   if (!tx) return { ok: false, message: 'Sale not found.' };
   if (tx.isUndone) return { ok: false, message: 'Already undone.' };
 
@@ -506,7 +506,7 @@ async function undoSaleById(ownerId: any, txId: string, undoMessageId: string) {
     if (!name || qty <= 0) continue;
 
     await Inventory.updateOne(
-      { user: ownerId, name: { $regex: `^${escapeRegex(name)}$`, $options: 'i' } },
+      { user: inventoryOwnerId, name: { $regex: `^${escapeRegex(name)}$`, $options: 'i' } },
       { $inc: { quantity: qty } }
     );
   }
@@ -517,8 +517,8 @@ async function undoSaleById(ownerId: any, txId: string, undoMessageId: string) {
 // =====================================================
 // Mark CREDIT by txId
 // =====================================================
-async function markSaleCredit(ownerId: any, txId: string) {
-  const tx = await Transaction.findOne({ _id: txId, user: ownerId, type: 'SALE' });
+async function markSaleCredit(txUserId: any, txId: string) {
+  const tx = await Transaction.findOne({ _id: txId, user: txUserId, type: 'SALE' });
   if (!tx) return { ok: false, msg: 'Sale not found.' };
   if (tx.isUndone) return { ok: false, msg: 'That sale was already undone.' };
 
@@ -994,10 +994,10 @@ if (btn?.txId && btn?.action) {
   if (btn.action === 'RECEIPT') {
     await queueOutboundMessage(from, '🧾 Generating receipt PDF…');
 
-    // shopId is OWNER id (even if staff is acting) ✅
+    // Use actor._id because transaction is saved under actor (Staff or Owner)
     await queueSaleReceipt(
       from,                    // send to whoever clicked
-      String(shopId),          // owner/user id for fetching tx
+      String(actor._id),       // owner/user id for fetching tx
       String(btn.txId),        // sale id
       `receipt_${btn.txId}_${messageId}`
     );
@@ -1006,13 +1006,13 @@ if (btn?.txId && btn?.action) {
   }
 
   if (btn.action === 'CREDIT') {
-    const r = await markSaleCredit(shopId, btn.txId);
+    const r = await markSaleCredit(actor._id, btn.txId);
     await queueOutboundMessage(from, r.msg);
     return;
   }
 
   if (btn.action === 'UNDO') {
-    const r = await undoSaleById(shopId, btn.txId, messageId);
+    const r = await undoSaleById(actor._id, shopId, btn.txId, messageId);
     await queueOutboundMessage(from, r.message);
     return;
   }
@@ -1113,7 +1113,7 @@ if (btn?.txId && btn?.action) {
         await processTransaction(shopId as any, parsed, messageId, actor);
 
        
-        const tx = await Transaction.findOne({ user: shopId, messageId }).lean();
+        const tx = await Transaction.findOne({ user: actor._id, messageId }).lean();
         if (tx?._id) {
           const txId = String(tx._id);
           const body = `After sale:\nChoose action 👇`;
