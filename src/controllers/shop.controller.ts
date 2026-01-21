@@ -107,7 +107,7 @@ export const updateShopSettings = async (req: Request, res: Response): Promise<a
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return res.status(400).json({ error: error.errors[0].message });
+      return res.status(400).json({ error: error.issues[0].message });
     }
     console.error('Error updating shop settings:', error);
     return res.status(500).json({ error: 'Internal server error' });

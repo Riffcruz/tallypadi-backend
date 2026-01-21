@@ -111,6 +111,7 @@ export const addInventoryItem = async (req: Request, res: Response) => {
     const safePrice = validateNumber(body.price);
     const safeCostPrice = validateNumber(body.costPrice);
     const imageUrl = saveImageFromBase64(body.image);
+    const safeName = sanitizeString(body.name);
 
     const user = await getAuthUser(req);
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
