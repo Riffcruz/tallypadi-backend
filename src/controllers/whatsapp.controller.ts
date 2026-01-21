@@ -1680,7 +1680,7 @@ if (btn?.txId && btn?.action) {
                   break;
               }
               
-              let msg = "📋 *Pending Work Queue*:\n\n";
+              let msg = "📋 *Orders*:\n\n";
               orders.forEach((o: any) => {
                   const dDate = new Date(o.deliveryDate);
                   const bal = Number(o.balance || 0);

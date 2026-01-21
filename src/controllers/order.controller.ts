@@ -1,152 +1,286 @@
+// src/controllers/order.controller.ts
 import { Request, Response } from 'express';
+import { Types } from 'mongoose';
 import { orderService } from '../services/order.service';
-import { User } from '../models/user.model';
 
-// put this near the top of your controller file
+// If you already exported these from your model, prefer importing them instead:
+// import { ORDER_STATUSES, OrderStatus } from '../models/order.model';
+
 type OrderStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'DELIVERED' | 'CANCELLED';
+const ORDER_STATUSES: readonly OrderStatus[] = [
+  'PENDING',
+  'IN_PROGRESS',
+  'COMPLETED',
+  'DELIVERED',
+  'CANCELLED',
+] as const;
+
+type AuthedReq = Request & { user?: { id?: string; _id?: string } };
 
 const normalizeStatus = (s: any): OrderStatus | undefined => {
   if (!s) return undefined;
-
   const up = String(s).toUpperCase().trim();
-
-  const allowed: readonly OrderStatus[] = [
-    'PENDING',
-    'IN_PROGRESS',
-    'COMPLETED',
-    'DELIVERED',
-    'CANCELLED',
-  ] as const;
-
-  return (allowed as readonly string[]).includes(up) ? (up as OrderStatus) : undefined;
+  return (ORDER_STATUSES as readonly string[]).includes(up) ? (up as OrderStatus) : undefined;
 };
 
+const normalizeText = (v: any, max = 500): string | undefined => {
+  if (v == null) return undefined;
+  const s = String(v).trim();
+  if (!s) return undefined;
+  return s.length > max ? s.slice(0, max) : s;
+};
 
-const normalizeMoney = (v: any) => {
+const normalizePhone = (v: any): string | null | undefined => {
+  if (v === undefined) return undefined; // not provided
+  if (v === null) return null; // explicit null
+
+  const s = String(v).trim();
+  if (!s) return null;
+
+  // allows +234..., 080..., spaces/hyphens/() - flexible
+  if (!/^[+]?[\d\s\-()]{7,32}$/.test(s)) return undefined; // invalid
+  return s;
+};
+
+const normalizeMoney = (v: any): number | undefined => {
   if (v == null) return undefined;
   const n = Number(String(v).replace(/,/g, '').trim());
-  return Number.isFinite(n) ? n : undefined;
+  if (!Number.isFinite(n)) return undefined;
+  if (n < 0) return undefined;
+  // optional cap to block nonsense
+  if (n > 1_000_000_000) return undefined;
+  return n;
 };
 
-
-const parseDate = (v: any) => {
+const parseDate = (v: any): Date | undefined => {
+  if (v == null) return undefined;
   const d = new Date(String(v));
-  return Number.isNaN(d.getTime()) ? null : d;
+  return Number.isNaN(d.getTime()) ? undefined : d;
 };
 
-export const createOrder = async (req: Request | any, res: Response) => {
+const toInt = (v: any, fallback: number) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.trunc(n) : fallback;
+};
+
+const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
+
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const getUserId = (req: AuthedReq) => req.user?.id || req.user?._id;
+
+export const createOrder = async (req: AuthedReq, res: Response) => {
   try {
-    const userId = req.user?.id || req.user?._id;
-    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-    const { description, customerName, customerPhone, price, amountPaid, deliveryDate, status } = req.body;
+    const description = normalizeText(req.body?.description, 500);
+    const customerName = normalizeText(req.body?.customerName, 120);
+    const customerPhone = normalizePhone(req.body?.customerPhone);
+    const price = normalizeMoney(req.body?.price);
+    const amountPaid = normalizeMoney(req.body?.amountPaid) ?? 0;
+    const deliveryDate = parseDate(req.body?.deliveryDate);
+    const status = normalizeStatus(req.body?.status);
 
-    const priceN = normalizeMoney(price);
-    const paidN  = normalizeMoney(amountPaid) ?? 0;
-    const dateD  = parseDate(deliveryDate);
-    const st     = normalizeStatus(status);
-
-    if (!description || !customerName || priceN == null || !dateD) {
+    if (!description || !customerName || price === undefined || !deliveryDate) {
       return res.status(400).json({
-        error: "Missing/invalid required fields",
-        required: ["description", "customerName", "price (number)", "deliveryDate (valid date)"],
+        error: 'Missing/invalid required fields',
+        required: ['description', 'customerName', 'price (number)', 'deliveryDate (valid date)'],
       });
+    }
+
+    // If phone was provided but invalid => customerPhone === undefined
+    if (req.body?.customerPhone !== undefined && customerPhone === undefined) {
+      return res.status(400).json({ error: 'Invalid customerPhone' });
+    }
+
+    // Optional: block overpayment (or allow and let model clamp balance)
+    if (amountPaid > price) {
+      return res.status(400).json({ error: 'amountPaid cannot exceed price' });
     }
 
     const order = await orderService.createOrder(userId, {
       description,
       customerName,
-      customerPhone,
-      price: priceN,
-      amountPaid: paidN,
-      deliveryDate: dateD,
-      status: st,
+      customerPhone: customerPhone ?? undefined, // null or string or undefined
+      price,
+      amountPaid,
+      deliveryDate,
+      status,
     });
 
     return res.json({ success: true, order });
   } catch (error: any) {
-    console.error("Create Order Error:", error);
-    return res.status(500).json({ error: "Server Error", details: error.message });
+    console.error('Create Order Error:', error);
+    return res.status(500).json({ error: 'Server Error', details: error?.message });
   }
 };
 
-
-export const getOrders = async (req: Request | any, res: Response) => {
+export const getOrders = async (req: AuthedReq, res: Response) => {
   try {
-    const userId = req.user?.id || req.user?._id;
-    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-    const { status, startDate, endDate, search, page, limit } = req.query;
+    const status = normalizeStatus((req.query as any)?.status);
+    const startDate = parseDate((req.query as any)?.startDate);
+    const endDate = parseDate((req.query as any)?.endDate);
+
+    if ((req.query as any)?.status && !status) {
+      return res.status(400).json({ error: 'Invalid status' });
+    }
+    if ((req.query as any)?.startDate && !startDate) {
+      return res.status(400).json({ error: 'Invalid startDate' });
+    }
+    if ((req.query as any)?.endDate && !endDate) {
+      return res.status(400).json({ error: 'Invalid endDate' });
+    }
+    if (startDate && endDate && startDate > endDate) {
+      return res.status(400).json({ error: 'startDate cannot be after endDate' });
+    }
+
+    const page = clamp(toInt((req.query as any)?.page, 1), 1, 1_000_000);
+    const limit = clamp(toInt((req.query as any)?.limit, 20), 1, 100);
+
+    const rawSearch = normalizeText((req.query as any)?.search, 100);
+    const search = rawSearch ? escapeRegExp(rawSearch) : undefined; // ✅ avoid regex injection
 
     const result = await orderService.getOrders(userId, {
-      status: status as string,
-      startDate: startDate ? new Date(startDate as string) : undefined,
-      endDate: endDate ? new Date(endDate as string) : undefined,
-      search: search as string,
-      page: page ? Number(page) : 1,
-      limit: limit ? Number(limit) : 20
+      status,
+      startDate,
+      endDate,
+      search,
+      page,
+      limit,
     });
 
-    res.json(result);
+    return res.json(result);
   } catch (error: any) {
-    console.error("Get Orders Error:", error);
-    res.status(500).json({ error: "Server Error" });
+    console.error('Get Orders Error:', error);
+    return res.status(500).json({ error: 'Server Error' });
   }
 };
 
-export const getOrder = async (req: Request | any, res: Response) => {
+export const getOrder = async (req: AuthedReq, res: Response) => {
   try {
-    const userId = req.user?.id || req.user?._id;
-    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-    const { id } = req.params;
+    const id = String(req.params?.id || '');
+    if (!Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ error: 'Invalid order id' });
+    }
+
     const order = await orderService.getOrder(userId, id);
+    if (!order) return res.status(404).json({ error: 'Order not found' });
 
-    if (!order) return res.status(404).json({ error: "Order not found" });
-
-    res.json(order);
+    return res.json(order);
   } catch (error: any) {
-    console.error("Get Order Error:", error);
-    res.status(500).json({ error: "Server Error" });
+    console.error('Get Order Error:', error);
+    return res.status(500).json({ error: 'Server Error' });
   }
 };
 
-export const updateOrder = async (req: Request | any, res: Response) => {
+export const updateOrder = async (req: AuthedReq, res: Response) => {
   try {
-    const userId = req.user?.id || req.user?._id;
-    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-    const { id } = req.params;
-    const updates = req.body;
+    const id = String(req.params?.id || '');
+    if (!Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ error: 'Invalid order id' });
+    }
 
-    if (updates.deliveryDate) {
-        updates.deliveryDate = new Date(updates.deliveryDate);
+    // ✅ WHITELIST updates (no mass assignment)
+    const updates: {
+      description?: string;
+      customerName?: string;
+      customerPhone?: string | null;
+      price?: number;
+      amountPaid?: number;
+      deliveryDate?: Date;
+      status?: OrderStatus;
+    } = {};
+
+    if ('description' in req.body) {
+      const v = normalizeText(req.body.description, 500);
+      if (!v) return res.status(400).json({ error: 'Invalid description' });
+      updates.description = v;
+    }
+
+    if ('customerName' in req.body) {
+      const v = normalizeText(req.body.customerName, 120);
+      if (!v) return res.status(400).json({ error: 'Invalid customerName' });
+      updates.customerName = v;
+    }
+
+    if ('customerPhone' in req.body) {
+      const v = normalizePhone(req.body.customerPhone);
+      if (req.body.customerPhone !== null && req.body.customerPhone !== '' && v === undefined) {
+        return res.status(400).json({ error: 'Invalid customerPhone' });
+      }
+      updates.customerPhone = v ?? null;
+    }
+
+    if ('price' in req.body) {
+      const v = normalizeMoney(req.body.price);
+      if (v === undefined) return res.status(400).json({ error: 'Invalid price' });
+      updates.price = v;
+    }
+
+    if ('amountPaid' in req.body) {
+      const v = normalizeMoney(req.body.amountPaid);
+      if (v === undefined) return res.status(400).json({ error: 'Invalid amountPaid' });
+      updates.amountPaid = v;
+    }
+
+    if ('deliveryDate' in req.body) {
+      const d = parseDate(req.body.deliveryDate);
+      if (!d) return res.status(400).json({ error: 'Invalid deliveryDate' });
+      updates.deliveryDate = d;
+    }
+
+    if ('status' in req.body) {
+      const st = normalizeStatus(req.body.status);
+      if (!st) return res.status(400).json({ error: 'Invalid status' });
+      updates.status = st;
+    }
+
+    // If nothing to update
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ error: 'No valid fields to update' });
+    }
+
+    // Optional: block overpayment in updates when both fields are included
+    if (updates.price !== undefined && updates.amountPaid !== undefined && updates.amountPaid > updates.price) {
+      return res.status(400).json({ error: 'amountPaid cannot exceed price' });
     }
 
     const order = await orderService.updateOrder(userId, id, updates);
+    if (!order) return res.status(404).json({ error: 'Order not found' });
 
-    if (!order) return res.status(404).json({ error: "Order not found" });
-
-    res.json({ success: true, order });
+    return res.json({ success: true, order });
   } catch (error: any) {
-    console.error("Update Order Error:", error);
-    res.status(500).json({ error: "Server Error" });
+    console.error('Update Order Error:', error);
+    return res.status(500).json({ error: 'Server Error' });
   }
 };
 
-export const deleteOrder = async (req: Request | any, res: Response) => {
+export const deleteOrder = async (req: AuthedReq, res: Response) => {
   try {
-    const userId = req.user?.id || req.user?._id;
-    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-    const { id } = req.params;
+    const id = String(req.params?.id || '');
+    if (!Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ error: 'Invalid order id' });
+    }
+
     const order = await orderService.deleteOrder(userId, id);
+    if (!order) return res.status(404).json({ error: 'Order not found' });
 
-    if (!order) return res.status(404).json({ error: "Order not found" });
-
-    res.json({ success: true, message: "Order deleted" });
+    return res.json({ success: true, message: 'Order deleted' });
   } catch (error: any) {
-    console.error("Delete Order Error:", error);
-    res.status(500).json({ error: "Server Error" });
+    console.error('Delete Order Error:', error);
+    return res.status(500).json({ error: 'Server Error' });
   }
 };

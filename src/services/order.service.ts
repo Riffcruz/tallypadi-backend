@@ -1,28 +1,69 @@
+// src/services/order.service.ts
 import { Types } from 'mongoose';
-import { Order, IOrder } from '../models/order.model';
-import { User } from '../models/user.model';
+import { Order, IOrder, ORDER_STATUSES, OrderStatus } from '../models/order.model';
 import { startOfDay, endOfDay, addDays } from 'date-fns';
+
+const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
+
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+type CreateOrderDto = {
+  description: string;
+  customerName: string;
+  customerPhone?: string | null;
+  price: number;
+  amountPaid?: number;
+  deliveryDate: Date;
+  status?: OrderStatus;
+};
+
+type OrderFilters = {
+  status?: OrderStatus;
+  startDate?: Date;
+  endDate?: Date;
+  search?: string;
+  page?: number;
+  limit?: number;
+};
+
+type UpdateOrderDto = {
+  description?: string;
+  customerName?: string;
+  customerPhone?: string | null;
+  price?: number;
+  amountPaid?: number;
+  deliveryDate?: Date;
+  status?: OrderStatus;
+};
 
 export class OrderService {
   /**
    * Create a new order
    */
-  async createOrder(
-    userId: string | Types.ObjectId,
-    data: {
-      description: string;
-      customerName: string;
-      customerPhone?: string;
-      price: number;
-      amountPaid?: number;
-      deliveryDate: Date;
-      status?: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'DELIVERED' | 'CANCELLED';
+  async createOrder(userId: string | Types.ObjectId, data: CreateOrderDto): Promise<IOrder> {
+    // Safety: ensure status is valid if provided
+    if (data.status && !(ORDER_STATUSES as readonly string[]).includes(data.status)) {
+      throw new Error('Invalid status');
     }
-  ): Promise<IOrder> {
+
+    const price = Number(data.price);
+    const paid = Number(data.amountPaid ?? 0);
+
+    if (!Number.isFinite(price) || price < 0) throw new Error('Invalid price');
+    if (!Number.isFinite(paid) || paid < 0) throw new Error('Invalid amountPaid');
+    if (paid > price) throw new Error('amountPaid cannot exceed price');
+
     const order = new Order({
       user: userId,
-      ...data,
-      balance: data.price - (data.amountPaid || 0)
+      description: data.description,
+      customerName: data.customerName,
+      customerPhone: data.customerPhone ?? null,
+      price,
+      amountPaid: paid,
+      deliveryDate: data.deliveryDate,
+      status: data.status,
+      // balance is computed in model middleware too; keep it consistent:
+      balance: Math.max(0, price - paid),
     });
 
     return await order.save();
@@ -31,22 +72,10 @@ export class OrderService {
   /**
    * Get orders for a user with optional filters
    */
-  async getOrders(
-    userId: string | Types.ObjectId,
-    filters: {
-      status?: string;
-      startDate?: Date;
-      endDate?: Date;
-      search?: string;
-      page?: number;
-      limit?: number;
-    }
-  ) {
+  async getOrders(userId: string | Types.ObjectId, filters: OrderFilters) {
     const query: any = { user: userId };
 
-    if (filters.status) {
-      query.status = filters.status;
-    }
+    if (filters.status) query.status = filters.status;
 
     if (filters.startDate || filters.endDate) {
       query.deliveryDate = {};
@@ -55,30 +84,30 @@ export class OrderService {
     }
 
     if (filters.search) {
-      const regex = new RegExp(filters.search, 'i');
-      query.$or = [
-        { description: regex },
-        { customerName: regex }
-      ];
+      // double-safety: escape again even if controller already did
+      const safe = escapeRegExp(String(filters.search).slice(0, 100));
+      const regex = new RegExp(safe, 'i');
+      query.$or = [{ description: regex }, { customerName: regex }];
     }
 
-    const page = filters.page || 1;
-    const limit = filters.limit || 20;
+    const page = clamp(Number(filters.page ?? 1) || 1, 1, 1_000_000);
+    const limit = clamp(Number(filters.limit ?? 20) || 20, 1, 100);
     const skip = (page - 1) * limit;
 
     const [orders, total] = await Promise.all([
       Order.find(query)
-        .sort({ deliveryDate: 1 }) // Sort by delivery date ascending (nearest first)
+        .sort({ deliveryDate: 1 })
         .skip(skip)
-        .limit(limit),
-      Order.countDocuments(query)
+        .limit(limit)
+        .lean(), // faster list response
+      Order.countDocuments(query),
     ]);
 
     return {
       orders,
       total,
       page,
-      totalPages: Math.ceil(total / limit)
+      totalPages: Math.ceil(total / limit),
     };
   }
 
@@ -86,38 +115,53 @@ export class OrderService {
    * Get a single order by ID
    */
   async getOrder(userId: string | Types.ObjectId, orderId: string) {
-    return await Order.findOne({ 
-      _id: orderId, 
-      user: userId 
+    if (!Types.ObjectId.isValid(orderId)) return null;
+
+    return await Order.findOne({
+      _id: new Types.ObjectId(orderId),
+      user: userId,
     });
   }
 
   /**
-   * Update an order
+   * Update an order (whitelisted DTO)
    */
-  async updateOrder(
-    userId: string | Types.ObjectId, 
-    orderId: string, 
-    updates: Partial<IOrder>
-  ) {
-    const order = await Order.findOne({ 
-      _id: orderId, 
-      user: userId 
+  async updateOrder(userId: string | Types.ObjectId, orderId: string, updates: UpdateOrderDto) {
+    if (!Types.ObjectId.isValid(orderId)) return null;
+
+    const order = await Order.findOne({
+      _id: new Types.ObjectId(orderId),
+      user: userId,
     });
 
     if (!order) return null;
 
-    if (updates.price !== undefined) order.price = updates.price;
-    if (updates.amountPaid !== undefined) order.amountPaid = updates.amountPaid;
+    // Apply only whitelisted fields
+    if (updates.price !== undefined) {
+      if (!Number.isFinite(updates.price) || updates.price < 0) throw new Error('Invalid price');
+      order.price = updates.price;
+    }
+
+    if (updates.amountPaid !== undefined) {
+      if (!Number.isFinite(updates.amountPaid) || updates.amountPaid < 0) throw new Error('Invalid amountPaid');
+      order.amountPaid = updates.amountPaid;
+    }
+
+    // block overpayment
+    if (order.amountPaid > order.price) throw new Error('amountPaid cannot exceed price');
+
     if (updates.description !== undefined) order.description = updates.description;
     if (updates.customerName !== undefined) order.customerName = updates.customerName;
     if (updates.customerPhone !== undefined) order.customerPhone = updates.customerPhone;
     if (updates.deliveryDate !== undefined) order.deliveryDate = updates.deliveryDate;
-    if (updates.status !== undefined) order.status = updates.status;
-    
-    // Recalculate balance if price or amountPaid changed (handled by pre-save middleware but good to be explicit/safe)
-    // Actually, middleware handles it:
-    // orderSchema.pre('save', function (next) { ... })
+
+    if (updates.status !== undefined) {
+      if (!(ORDER_STATUSES as readonly string[]).includes(updates.status)) throw new Error('Invalid status');
+      order.status = updates.status;
+    }
+
+    // balance will be recalculated by schema hook, but safe to keep consistent:
+    order.balance = Math.max(0, order.price - Math.min(order.amountPaid, order.price));
 
     return await order.save();
   }
@@ -126,9 +170,11 @@ export class OrderService {
    * Delete an order
    */
   async deleteOrder(userId: string | Types.ObjectId, orderId: string) {
-    return await Order.findOneAndDelete({ 
-      _id: orderId, 
-      user: userId 
+    if (!Types.ObjectId.isValid(orderId)) return null;
+
+    return await Order.findOneAndDelete({
+      _id: new Types.ObjectId(orderId),
+      user: userId,
     });
   }
 
@@ -142,8 +188,12 @@ export class OrderService {
     return await Order.find({
       deliveryDate: { $gte: targetDateStart, $lte: targetDateEnd },
       reminderSent: false,
-      status: { $in: ['PENDING', 'IN_PROGRESS'] } // Only remind for active orders
-    }).populate('user');
+      status: { $in: ['PENDING', 'IN_PROGRESS'] },
+    })
+      .populate({
+        path: 'user',
+        select: '_id phone fullName email language utcOffsetMinutes', // ✅ avoid leaking password/hash etc
+      });
   }
 }
 
