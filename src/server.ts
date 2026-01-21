@@ -22,6 +22,7 @@ import investorRouter from './routes/investor.routes';
 import webhookRoutes from './routes/webhook.routes';
 import healthRouter from './routes/health.routes';
 import orderRouter from './routes/order.routes';
+import shopRouter from './routes/shop.routes';
 
 // --- SERVICES & CONFIG ---
 import { loginUser } from './controllers/auth.controller';
@@ -115,7 +116,7 @@ const verifySignature = (req: any, _res: any, buf: Buffer) => {
   }
 };
 
-app.use(express.json({ limit: '1mb', verify: verifySignature }));
+app.use(express.json({ limit: '10mb', verify: verifySignature }));
 
 // ==========================================
 // 🚦 RATE LIMITERS
@@ -314,6 +315,7 @@ app.delete('/api/staff/:id', authRequired, removeStaff);
 app.use('/api/payment', paymentRouter);
 app.use('/api/health', healthRouter);
 app.use('/api/orders', authRequired, orderRouter);
+app.use('/api/shop', shopRouter);
 
 // --- ADMIN (SITE OWNER) ---
 const adminLimiterPerUser = rateLimit({
@@ -336,6 +338,7 @@ app.use('/api/investor', authRequired, investorRouter);
 // 📁 STATIC FILES
 // ==========================================
 app.use('/reports', express.static(path.join(__dirname, '..', 'public', 'reports')));
+app.use('/uploads', express.static(path.join(__dirname, '..', 'public', 'uploads')));
 
 app.get('/', (_req, res) => {
   res.send('🛡️ Tallypadi Server is Secured & Running');

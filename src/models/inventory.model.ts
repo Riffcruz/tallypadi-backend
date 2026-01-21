@@ -6,6 +6,7 @@ export interface IInventoryItem extends Document {
     quantity: number;
     lastUnitPrice: number; // <--- Selling Price
     costPrice: number;     // <--- NEW: Cost Price
+    image?: string;        // <--- Product Image URL
   }
   
   const inventorySchema = new Schema<IInventoryItem>(
@@ -15,7 +16,8 @@ export interface IInventoryItem extends Document {
       quantity: { type: Number, required: true, default: 0 },
       // Default to 0 if unknown
       lastUnitPrice: { type: Number, default: 0 },
-      costPrice: { type: Number, default: 0 }
+      costPrice: { type: Number, default: 0 },
+      image: { type: String }
     },  { timestamps: true }
 );
 

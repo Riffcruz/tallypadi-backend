@@ -44,6 +44,7 @@ export default function SettingsPage() {
 
   // Form State
   const [businessName, setBusinessName] = useState('');
+  const [shopSlug, setShopSlug] = useState(''); // New State
   const [closingTime, setClosingTime] = useState('');
   const [language, setLanguage] = useState('');
   const [pdfEnabled, setPdfEnabled] = useState(false);
@@ -108,6 +109,7 @@ export default function SettingsPage() {
     });
 
     setBusinessName(bName);
+    setShopSlug(userData?.shopSlug || '');
     setClosingTime(userData?.settings?.closingTime || '20:00');
     setLanguage(userData?.settings?.language || 'English');
 
@@ -211,6 +213,33 @@ export default function SettingsPage() {
         err?.response?.data?.error || err?.response?.data?.message || 'Failed to save settings',
         'error'
       );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveShop = async () => {
+    const token = getTokenOrRedirect();
+    if (!token) return;
+
+    setSaving(true);
+    try {
+      await axios.put(
+        `${API_URL}/shop/settings`,
+        { shopSlug, businessName },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      
+      Swal.fire({
+        title: 'Shop Updated',
+        text: 'Your storefront settings have been saved.',
+        icon: 'success',
+        timer: 1500,
+        showConfirmButton: false,
+      });
+    } catch (err: any) {
+      console.error('Shop save failed', err);
+      Swal.fire('Error', err?.response?.data?.error || 'Failed to update shop', 'error');
     } finally {
       setSaving(false);
     }
@@ -509,6 +538,50 @@ export default function SettingsPage() {
               </button>
             </div>
           </div>
+
+          {/* Storefront Settings (Tycoon Only) */}
+          {isTycoon && (
+             <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-pink-100">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-pink-50 rounded-xl text-pink-600">
+                       <Smartphone size={20} />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-bold text-gray-900">Online Storefront</h2>
+                      <p className="text-xs text-gray-400">Manage your public product page</p>
+                    </div>
+                  </div>
+                  <button onClick={handleSaveShop} className="text-xs font-bold text-pink-600 hover:underline">Save Shop Settings</button>
+                </div>
+
+                <div className="space-y-4">
+                   <div>
+                      <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wider">
+                        Shop Link
+                      </label>
+                      <div className="flex items-center">
+                         <span className="bg-slate-100 border border-r-0 border-gray-200 rounded-l-xl px-3 py-3 text-slate-500 text-sm font-medium">
+                            tallypadi.com/shop/
+                         </span>
+                         <input
+                            type="text"
+                            value={shopSlug}
+                            onChange={(e) => setShopSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                            placeholder="unique-shop-name"
+                            className="flex-1 border border-gray-200 rounded-r-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-pink-500/20 focus:border-pink-500 text-sm font-bold text-slate-700"
+                         />
+                      </div>
+                      <p className="text-[10px] text-gray-400 mt-1.5">Share this link with your customers.</p>
+                      {shopSlug && (
+                        <a href={`https://tallypadi.com/shop/${shopSlug}`} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline mt-1 inline-block">
+                          Preview Shop &rarr;
+                        </a>
+                      )}
+                   </div>
+                </div>
+             </div>
+          )}
 
           {/* Save Button */}
           <div className="flex justify-end pt-2">

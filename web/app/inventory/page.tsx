@@ -32,6 +32,7 @@ type InventoryItem = {
   price: number;
   lastUnitPrice?: number;
   costPrice?: number;
+  image?: string;
 };
 
 function currencyPrefix(code?: string) {
@@ -61,6 +62,7 @@ export default function InventoryPage() {
   const [newItemStock, setNewItemStock] = useState('');
   const [newItemPrice, setNewItemPrice] = useState('');
   const [newItemCostPrice, setNewItemCostPrice] = useState('');
+  const [newItemImage, setNewItemImage] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -73,6 +75,7 @@ export default function InventoryPage() {
   const [editStock, setEditStock] = useState<number | string>('');
   const [editPrice, setEditPrice] = useState<number | string>('');
   const [editCostPrice, setEditCostPrice] = useState<number | string>('');
+  const [editImage, setEditImage] = useState<string | null>(null);
 
   // ✅ Bulk Edit State
   const [isBulkMode, setIsBulkMode] = useState(false);
@@ -143,6 +146,7 @@ export default function InventoryPage() {
         price: Number(x.price ?? x.unitPrice ?? x.lastUnitPrice ?? 0),
         lastUnitPrice: x.lastUnitPrice !== undefined ? Number(x.lastUnitPrice) : undefined,
         costPrice: Number(x.costPrice ?? 0),
+        image: x.image || null,
       }));
 
       setInventory(normalized.filter((i) => i.id && i.name));
@@ -207,6 +211,7 @@ export default function InventoryPage() {
       stock: parseInt(newItemStock, 10),
       price: parseFloat(newItemPrice),
       costPrice: parseFloat(newItemCostPrice) || 0,
+      image: newItemImage,
     };
 
     try {
@@ -226,6 +231,7 @@ export default function InventoryPage() {
         price: Number(x.price ?? x.unitPrice ?? x.lastUnitPrice ?? 0),
         lastUnitPrice: x.lastUnitPrice !== undefined ? Number(x.lastUnitPrice) : undefined,
         costPrice: Number(x.costPrice ?? 0),
+        image: x.image || null,
       }));
 
       setInventory(normalized.filter((i) => i.id && i.name));
@@ -234,6 +240,7 @@ export default function InventoryPage() {
       setNewItemStock('');
       setNewItemPrice('');
       setNewItemCostPrice('');
+      setNewItemImage(null);
       setAddOpen(false);
 
       Swal.fire({
@@ -268,6 +275,7 @@ export default function InventoryPage() {
     setEditStock(item.stock);
     setEditPrice(item.price || item.lastUnitPrice || 0);
     setEditCostPrice(item.costPrice || 0);
+    setEditImage(item.image || null);
     setEditOpen(true);
   };
 
@@ -278,6 +286,7 @@ export default function InventoryPage() {
     setEditStock('');
     setEditPrice('');
     setEditCostPrice('');
+    setEditImage(null);
   };
 
   const saveEdit = async (id: string) => {
@@ -296,6 +305,7 @@ export default function InventoryPage() {
           stock: Number(editStock),
           price: Number(editPrice),
           costPrice: Number(editCostPrice),
+          image: editImage,
         },
         {
           headers: { Authorization: `Bearer ${token}` },
@@ -305,7 +315,7 @@ export default function InventoryPage() {
 
       setInventory((prev) =>
         prev.map((item) => 
-          item.id === id ? { ...item, stock: Number(editStock), price: Number(editPrice), costPrice: Number(editCostPrice) } : item
+          item.id === id ? { ...item, stock: Number(editStock), price: Number(editPrice), costPrice: Number(editCostPrice), image: editImage || item.image } : item
         )
       );
 
@@ -469,6 +479,30 @@ export default function InventoryPage() {
     a.download = 'inventory_template.csv';
     a.click();
     window.URL.revokeObjectURL(url);
+  };
+
+  const getImageUrl = (path?: string) => {
+    if (!path) return '';
+    if (path.startsWith('http') || path.startsWith('data:')) return path;
+    const baseUrl = API_URL.replace(/\/api\/?$/, '');
+    return `${baseUrl}${path.startsWith('/') ? '' : '/'}${path}`;
+  };
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>, setter: (val: string | null) => void) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    if (file.size > 5 * 1024 * 1024) {
+      Swal.fire('File too large', 'Image must be under 5MB', 'error');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const res = evt.target?.result as string;
+      setter(res);
+    };
+    reader.readAsDataURL(file);
   };
 
   if (loading) {
@@ -656,15 +690,33 @@ export default function InventoryPage() {
             <form onSubmit={handleAddItem} className="grid grid-cols-12 gap-3 items-end">
               <div className="col-span-12 md:col-span-3">
                 <label className="block text-xs font-bold text-slate-500 mb-1 ml-1">Item Name</label>
-                <input
-                  type="text"
-                  value={newItemName}
-                  onChange={(e) => setNewItemName(e.target.value)}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 text-sm font-semibold"
-                  placeholder="e.g. Rice"
-                  required
-                  disabled={showLockUI}
-                />
+                <div className="flex gap-2">
+                  <div className="relative w-10 h-10 shrink-0">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handleImageSelect(e, setNewItemImage)}
+                      className="absolute inset-0 opacity-0 cursor-pointer z-10"
+                      disabled={showLockUI}
+                    />
+                    {newItemImage ? (
+                      <img src={newItemImage} className="w-full h-full rounded-xl object-cover border border-slate-200" />
+                    ) : (
+                      <div className="w-full h-full rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400">
+                        <Upload size={14} />
+                      </div>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    value={newItemName}
+                    onChange={(e) => setNewItemName(e.target.value)}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 text-sm font-semibold"
+                    placeholder="e.g. Rice"
+                    required
+                    disabled={showLockUI}
+                  />
+                </div>
               </div>
 
               <div className="col-span-6 md:col-span-3">
@@ -786,7 +838,7 @@ export default function InventoryPage() {
             <table className="w-full text-left border-collapse">
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
-                  <th className="px-6 py-4 text-xs font-extrabold text-slate-600 uppercase tracking-wider">Item</th>
+                  <th className="px-6 py-4 text-xs font-extrabold text-slate-600 uppercase tracking-wider">Product</th>
                   <th className="px-6 py-4 text-xs font-extrabold text-slate-600 uppercase tracking-wider">Stock</th>
                   <th className="px-6 py-4 text-xs font-extrabold text-slate-600 uppercase tracking-wider">Cost</th>
                   <th className="px-6 py-4 text-xs font-extrabold text-slate-600 uppercase tracking-wider">Price</th>
@@ -805,9 +857,13 @@ export default function InventoryPage() {
                     <tr key={item.id} className="hover:bg-slate-50 transition-colors">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-2xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-600 font-black text-xs uppercase">
-                            {String(item.name || 'I').slice(0, 2)}
-                          </div>
+                          {item.image ? (
+                            <img src={getImageUrl(item.image)} alt={item.name} className="w-10 h-10 rounded-2xl object-cover border border-slate-200 bg-white" />
+                          ) : (
+                            <div className="w-10 h-10 rounded-2xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-600 font-black text-xs uppercase">
+                              {String(item.name || 'I').slice(0, 2)}
+                            </div>
+                          )}
                           <div className="min-w-0">
                             <p className="font-black text-slate-900 capitalize truncate max-w-[360px]">{item.name}</p>
                             <p className="text-xs text-slate-500 font-semibold">ID: {String(item.id).slice(0, 10)}…</p>
@@ -989,14 +1045,31 @@ export default function InventoryPage() {
             <form onSubmit={handleAddItem} className="p-5 space-y-4">
               <div>
                 <label className="block text-xs font-extrabold text-slate-600 mb-1">Item Name</label>
-                <input
-                  type="text"
-                  value={newItemName}
-                  onChange={(e) => setNewItemName(e.target.value)}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 text-sm font-semibold"
-                  placeholder="e.g. Indomie carton"
-                  required
-                />
+                <div className="flex gap-2">
+                   <div className="relative w-12 h-12 shrink-0">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handleImageSelect(e, setNewItemImage)}
+                      className="absolute inset-0 opacity-0 cursor-pointer z-10"
+                    />
+                    {newItemImage ? (
+                      <img src={newItemImage} className="w-full h-full rounded-xl object-cover border border-slate-200" />
+                    ) : (
+                      <div className="w-full h-full rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400">
+                        <Upload size={16} />
+                      </div>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    value={newItemName}
+                    onChange={(e) => setNewItemName(e.target.value)}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 text-sm font-semibold"
+                    placeholder="e.g. Indomie carton"
+                    required
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-3 gap-3">
@@ -1084,6 +1157,28 @@ export default function InventoryPage() {
             </div>
 
             <div className="p-5 space-y-4">
+              
+              <div className="flex justify-center mb-4">
+                <div className="relative w-20 h-20">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => handleImageSelect(e, setEditImage)}
+                    className="absolute inset-0 opacity-0 cursor-pointer z-10"
+                  />
+                  {editImage ? (
+                    <img src={getImageUrl(editImage)} className="w-full h-full rounded-2xl object-cover border border-slate-200 shadow-sm" />
+                  ) : (
+                    <div className="w-full h-full rounded-2xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400">
+                      <Upload size={24} />
+                    </div>
+                  )}
+                  <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-1 border border-slate-200 shadow-sm pointer-events-none">
+                     <Edit2 size={12} className="text-slate-600"/>
+                  </div>
+                </div>
+              </div>
+
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="block text-xs font-extrabold text-slate-600 mb-1">Stock</label>

@@ -18,6 +18,8 @@ export interface IUser extends Document {
   paystackCustomerCode?: string;
   paystackPlanCode?: string;
 
+  shopSlug?: string; // unique URL part for tallypadi.com/shop/:slug
+
   nextSummaryAt?: Date | null;        // UTC date when next summary should run
   lastSummaryDateKey?: string | null; // YYYY-MM-DD for last summary sent (user-local day)
 
@@ -91,6 +93,8 @@ const userSchema = new Schema<IUser>(
     nextBillingDate: { type: Date },
     paystackCustomerCode: { type: String },
     paystackPlanCode: { type: String },
+    
+    shopSlug: { type: String, unique: true, sparse: true, trim: true, lowercase: true },
 
     planType: {
       type: String,

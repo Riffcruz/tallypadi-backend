@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { Inventory } from '../models/inventory.model';
 import { User } from '../models/user.model';
+import { saveImageFromBase64 } from '../utils/image';
 
 // --- Helpers ---
 const sanitizeString = (input: unknown): string | null => {
@@ -62,6 +63,7 @@ export const getInventory = async (req: Request, res: Response) => {
       stock: item.quantity,
       price: item.lastUnitPrice || 0,
       costPrice: item.costPrice || 0,
+      image: item.image || null,
     }));
 
     return res.json(formattedItems);
@@ -91,6 +93,7 @@ export const getInventoryItem = async (req: Request, res: Response) => {
       price: item.lastUnitPrice || 0,
       lastUnitPrice: item.lastUnitPrice || 0,
       costPrice: item.costPrice || 0,
+      image: item.image || null,
     });
   } catch (error) {
     console.error('Get Item Error:', error);
@@ -104,10 +107,10 @@ export const addInventoryItem = async (req: Request, res: Response) => {
   try {
     const body = req.body || {};
 
-    const safeName = sanitizeString(body.name);
     const safeStock = validateNumber(body.stock);
     const safePrice = validateNumber(body.price);
     const safeCostPrice = validateNumber(body.costPrice);
+    const imageUrl = saveImageFromBase64(body.image);
 
     const user = await getAuthUser(req);
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
@@ -128,6 +131,7 @@ export const addInventoryItem = async (req: Request, res: Response) => {
 
       if (safePrice !== undefined) item.lastUnitPrice = safePrice;
       if (safeCostPrice !== undefined) item.costPrice = safeCostPrice;
+      if (imageUrl) item.image = imageUrl;
       await item.save();
     } else {
       item = await Inventory.create({
@@ -136,6 +140,7 @@ export const addInventoryItem = async (req: Request, res: Response) => {
         quantity: safeStock !== undefined ? safeStock : 0,
         lastUnitPrice: safePrice !== undefined ? safePrice : 0,
         costPrice: safeCostPrice !== undefined ? safeCostPrice : 0,
+        image: imageUrl || undefined,
       });
     }
 
@@ -145,6 +150,7 @@ export const addInventoryItem = async (req: Request, res: Response) => {
       stock: item.quantity,
       price: item.lastUnitPrice,
       costPrice: item.costPrice,
+      image: item.image,
     });
   } catch (error) {
     console.error('Add Item Error:', error);
@@ -161,6 +167,7 @@ export const updateInventoryItem = async (req: Request, res: Response) => {
     const safeStock = validateNumber(body.stock);
     const safePrice = validateNumber(body.price);
     const safeCostPrice = validateNumber(body.costPrice);
+    const imageUrl = saveImageFromBase64(body.image);
 
     const user = await getAuthUser(req);
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
@@ -175,6 +182,7 @@ export const updateInventoryItem = async (req: Request, res: Response) => {
     if (safeStock !== undefined) item.quantity = safeStock;
     if (safePrice !== undefined) item.lastUnitPrice = safePrice;
     if (safeCostPrice !== undefined) item.costPrice = safeCostPrice;
+    if (imageUrl) item.image = imageUrl;
 
     await item.save();
 
@@ -184,6 +192,7 @@ export const updateInventoryItem = async (req: Request, res: Response) => {
       stock: item.quantity,
       price: item.lastUnitPrice,
       costPrice: item.costPrice,
+      image: item.image,
     });
   } catch (error) {
     console.error('Update Item Error:', error);
