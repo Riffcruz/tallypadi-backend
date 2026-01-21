@@ -985,35 +985,40 @@ Disable:
 }
 
 
-*** 5E. ORDER MANAGEMENT (NEW FEATURE) ***
-Target: Freelancers, Tailors, Engineers, etc.
-Orders are distinct from Inventory Sales. They have a delivery date and usually a specific customer.
+*** 5E. ORDER MANAGEMENT (JOBS & WORK) ***
+For tracking custom work (Tailoring, Engineering, Baking, etc.) with a future delivery date.
+Distinct from "Sales" (which are immediate).
 
-1) CREATE_ORDER
-- Triggers: "New order", "Order from <Person>", "I have a job for <Person>", "Sewing <Style> for <Person>", "Make a dress for <Person>".
-- Requirements:
-  - customer_name: Required.
-  - description: Required (what is being ordered). Extract from context (e.g. "Sewing a red dress").
-  - total_money: Required (Total Price).
-  - amount_paid: Optional (if partial/full payment made now). Default to 0 if not mentioned.
-  - delivery_date: Required. Extract to YYYY-MM-DD in order_params.delivery_date.
-    - Resolve relative dates like "tomorrow", "next friday", "in 3 days", "friday next week" based on "Current Date".
-    - If not mentioned, set needs_clarification=true.
+1) CREATE_ORDER (RECORDING)
+- Triggers: "New order", "Order for <Person>", "Job for <Person>", "Sewing <Style> for <Person>", "Make <Item> for <Person>", "I have a job for <Person>".
+- ACTION: Record a new job/order.
+- EXTRACTION RULES (STRICT):
+  - customer_name: MUST be extracted (e.g. "for Amina" -> "Amina").
+  - description: MUST be extracted (e.g. "sewing a gown", "baking cake", "fixing phone").
+  - total_money: MUST be extracted (Price).
+  - delivery_date: MUST be extracted to YYYY-MM-DD.
+    - Interpret "tomorrow", "next friday", "in 2 weeks", "on 25th" relative to Current Date.
+    - If missing, needs_clarification=true (Ask: "When is the delivery date?").
+  - amount_paid: Extract partial deposit if mentioned (e.g. "paid 5k deposit"). Default 0.
 - Output:
   intent = CREATE_ORDER
   customer_name = <Name>
   total_money = <Price>
   amount_paid = <Amount Paid>
-  items = [] (or empty)
+  items = []
   order_params = { description: <Description>, delivery_date: <YYYY-MM-DD> }
 
-2) LIST_ORDERS
-- Triggers: "Orders", "Get orders", "List orders", "Show my orders", "Active jobs", "Work list", "Pending orders", "My jobs".
+2) LIST_ORDERS (RETRIEVAL)
+- Triggers: "Orders", "My orders", "List orders", "Show pending jobs", "Active jobs", "Who has orders?", "Check orders", "My jobs".
 - Output: intent = LIST_ORDERS
 
-3) UPDATE_ORDER
-- Triggers: "Mark order as done", "Order completed", "Update order status", "Add payment to order".
-- Output: intent = UPDATE_ORDER, customer_name=<Name>
+3) UPDATE_ORDER (STATUS/PAYMENT)
+- Triggers: "Mark order for <Name> as done", "Order for <Name> completed", "Update order <Name> paid 5k".
+- Output:
+  intent = UPDATE_ORDER
+  customer_name = <Name>
+  amount_paid = <Amount> (if adding payment)
+  order_params = { status: "COMPLETED" (if 'done'/'finished') or null }
 
 4) CANCEL_ORDER
 - Triggers: "Cancel order for <Name>", "Delete job for <Name>".

@@ -1630,22 +1630,24 @@ if (btn?.txId && btn?.action) {
       }
 
       case 'CREATE_ORDER': {
-          console.log(`CREATE_ORDER intent triggered for shop ${shopId}`);
-          const { customer_name, total_money, amount_paid, order_params } = parsed;
-          if (!customer_name || !total_money || !order_params?.delivery_date) {
-               await queueOutboundMessage(from, "I need customer name, price, and delivery date. E.g., 'New order for Amina, dress 50k, delivery Friday'.");
-               break;
+          // ✅ 1. Check clarification first (Debts Logic)
+          if (parsed.needs_clarification) {
+            await queueOutboundMessage(from, parsed.reply_text || "I need more details (Who, What, Price, Due Date).");
+            break;
           }
 
-          const deliveryDate = new Date(order_params.delivery_date);
-          if (isNaN(deliveryDate.getTime())) {
-               await queueOutboundMessage(from, "Invalid delivery date.");
-               break;
+          const { customer_name, total_money, amount_paid, order_params } = parsed;
+          const deliveryDate = order_params?.delivery_date ? new Date(order_params.delivery_date) : null;
+
+          // Double-check critical fields even if AI didn't flag (safety)
+          if (!customer_name || !total_money || !deliveryDate || isNaN(deliveryDate.getTime())) {
+             await queueOutboundMessage(from, "Missing details. Try: 'New order for Amina, dress 50k, delivery Friday'.");
+             break;
           }
 
           try {
-              // Use parsed.items[0].name as description if description is not explicitly in params but implied
-              const desc = order_params.description || (parsed.items.length > 0 ? parsed.items[0].name : 'Order');
+              const desc = order_params?.description || 
+                           (parsed.items.length > 0 ? parsed.items.map(i => i.name).join(', ') : 'Order');
 
               const order = await orderService.createOrder(shopId, {
                   customerName: customer_name,
@@ -1656,7 +1658,11 @@ if (btn?.txId && btn?.action) {
                   status: 'PENDING'
               });
 
-              await queueOutboundMessage(from, `✅ Order created for ${customer_name}.\n📝 ${desc}\n📅 Due: ${deliveryDate.toDateString()}\n💰 Balance: ${symbol}${order.balance.toLocaleString(locale)}`);
+              const balStr = order.balance > 0 
+                ? `💳 Bal: ${symbol}${order.balance.toLocaleString(locale)}`
+                : `✅ Fully Paid`;
+
+              await queueOutboundMessage(from, `✅ Order Recorded.\n\n👤 *${customer_name}*\n📝 ${desc}\n📅 Due: ${deliveryDate.toDateString()}\n💰 Price: ${symbol}${total_money.toLocaleString(locale)}\n${balStr}`);
           } catch (e) {
               console.error("Create Order Error:", e);
               await queueOutboundMessage(from, "❌ Failed to create order. Please try again.");
@@ -1665,20 +1671,25 @@ if (btn?.txId && btn?.action) {
       }
 
       case 'LIST_ORDERS': {
-          await queueOutboundMessage(from, "🔍 Checking orders...");
+          await queueOutboundMessage(from, "🔍 Checking pending orders...");
           try {
               const { orders } = await orderService.getOrders(shopId, { status: 'PENDING' });
               
               if (!orders.length) {
-                  await queueOutboundMessage(from, "No pending orders.");
+                  await queueOutboundMessage(from, "✅ You have no pending orders.");
                   break;
               }
               
-              let msg = "📋 *Pending Orders*:\n\n";
+              let msg = "📋 *Pending Work Queue*:\n\n";
               orders.forEach((o: any) => {
                   const dDate = new Date(o.deliveryDate);
                   const bal = Number(o.balance || 0);
-                  msg += `• *${o.customerName}* - ${o.description}\n  📅 Due: ${dDate.toDateString()}\n  💰 Bal: ${symbol}${bal.toLocaleString(locale)}\n\n`;
+                  const balDisplay = bal > 0 ? `💳 Owes ${symbol}${bal.toLocaleString(locale)}` : `✅ Paid`;
+                  
+                  // Simulating "Debts" style list
+                  msg += `• *${o.customerName}* — ${o.description}\n`;
+                  msg += `  📅 ${dDate.toLocaleDateString(locale, { weekday: 'short', day: 'numeric', month: 'short' })}\n`;
+                  msg += `  ${balDisplay}\n\n`;
               });
               
               await queueOutboundMessage(from, msg);
@@ -1694,16 +1705,43 @@ if (btn?.txId && btn?.action) {
               await queueOutboundMessage(from, "Whose order? Reply 'Update order for Amina'.");
               break;
           }
+
           const { orders } = await orderService.getOrders(shopId, { search: parsed.customer_name, status: 'PENDING' });
           if (orders.length === 0) {
-               await queueOutboundMessage(from, `No pending order found for ${parsed.customer_name}.`);
+               await queueOutboundMessage(from, `⚠️ No pending order found for *${parsed.customer_name}*.`);
                break;
           }
-          // If multiple, pick first for now (CLI simplicity), or ask clarification
+
+          // Pick first match (Debts logic usually requires selection, but keeping simple for now)
           const order = orders[0];
-          order.status = 'COMPLETED';
+          let updates: string[] = [];
+
+          // 1. Handle Payment
+          if (parsed.amount_paid && parsed.amount_paid > 0) {
+            order.amountPaid = (order.amountPaid || 0) + parsed.amount_paid;
+            order.balance = Math.max(0, order.price - order.amountPaid);
+            updates.push(`💰 Paid ${symbol}${parsed.amount_paid.toLocaleString(locale)}`);
+          }
+
+          // 2. Handle Status (Completion)
+          // Detect "done", "completed", "finished" via order_params or regex in prompt
+          if (parsed.order_params?.status === 'COMPLETED') {
+            order.status = 'COMPLETED';
+            updates.push(`✅ Marked as COMPLETED`);
+          }
+
+          if (updates.length === 0) {
+            await queueOutboundMessage(from, `ℹ️ Found order for ${order.customerName}. Tell me to "mark done" or "add payment".`);
+            break;
+          }
+
           await order.save();
-          await queueOutboundMessage(from, `✅ Order for ${order.customerName} marked as COMPLETED.`);
+          
+          const finalBal = order.balance > 0 
+            ? `💳 Remaining Bal: ${symbol}${order.balance.toLocaleString(locale)}`
+            : `✅ Fully Paid`;
+
+          await queueOutboundMessage(from, `Updated *${order.customerName}*:\n${updates.join('\n')}\n${finalBal}`);
           break;
       }
 
@@ -1714,13 +1752,13 @@ if (btn?.txId && btn?.action) {
           }
           const { orders } = await orderService.getOrders(shopId, { search: parsed.customer_name, status: 'PENDING' });
            if (orders.length === 0) {
-               await queueOutboundMessage(from, `No pending order found for ${parsed.customer_name}.`);
+               await queueOutboundMessage(from, `⚠️ No pending order found for *${parsed.customer_name}*.`);
                break;
           }
           const order = orders[0];
           order.status = 'CANCELLED';
           await order.save();
-          await queueOutboundMessage(from, `✅ Order for ${order.customerName} marked as CANCELLED.`);
+          await queueOutboundMessage(from, `🗑️ Order for *${order.customerName}* has been CANCELLED.`);
           break;
       }
 
