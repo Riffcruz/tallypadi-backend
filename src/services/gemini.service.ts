@@ -66,10 +66,10 @@ export interface ParsedResult {
     include_undone?: boolean; // default false unless user asks
   };
   order_params?: {
-    description?: string;
-    delivery_date?: string;
-    status?: string;
-  };
+  description: string | null;
+  delivery_date: string | null;
+  status: string | null;
+};
   settings_update: { key: string | null; value: string | boolean | null };
   reply_text: string;
 }
@@ -207,29 +207,37 @@ const computeTotalFromItems = (items: ParsedItem[]): number | null => {
 // ==========================================
 function safeParsedResult(p: any): ParsedResult {
   const allowedIntents: ParsedIntent[] = [
-    'SALE',
-    'RESTOCK',
-    'SET_STOCK',
-    'DELETED_STOCK',
-    'DELETE_ALL_INVENTORY',
-    'DEFINE_PRICE',
-    'PRICE_CHECK',
-    'REPORT_SALES',
-    'REPORT_STOCK',
-    'REPORT_FULL',
-    'SETTINGS',
-    'CHANGE_LANGUAGE',
-    'DEBT_PAYMENT',
-    'CLOSE_BOOK',
-    'ADD_STAFF',
-    'DOWNLOAD_REPORT',
-    'UNDO_LAST_SALE',
-    'REPORT_DEBTS',
-    'REPORT_RECENT',
-    'HELP',
-    'UNKNOWN',
-    'SHOW_SETTINGS'
-  ];
+  'SALE',
+  'RESTOCK',
+  'SET_STOCK',
+  'DELETED_STOCK',
+  'DELETE_ALL_INVENTORY',
+  'DEFINE_PRICE',
+  'PRICE_CHECK',
+  'REPORT_SALES',
+  'REPORT_STOCK',
+  'REPORT_FULL',
+  'SETTINGS',
+  'CHANGE_LANGUAGE',
+  'DEBT_PAYMENT',
+  'CLOSE_BOOK',
+  'ADD_STAFF',
+  'DOWNLOAD_REPORT',
+  'UNDO_LAST_SALE',
+  'REPORT_DEBTS',
+  'REPORT_RECENT',
+  'SHOW_SETTINGS',
+
+  // ✅ ADD THESE
+  'CREATE_ORDER',
+  'LIST_ORDERS',
+  'UPDATE_ORDER',
+  'CANCEL_ORDER',
+
+  'HELP',
+  'UNKNOWN',
+];
+
 
   const intent: ParsedIntent = allowedIntents.includes(p?.intent) ? p.intent : 'UNKNOWN';
 
@@ -1033,7 +1041,7 @@ Distinct from "Sales" (which are immediate).
 
 *** 7. OUTPUT SCHEMA ***
 {
-  "intent": "SALE|RESTOCK|SET_STOCK|DELETED_STOCK|DEFINE_PRICE|PRICE_CHECK|REPORT_SALES|REPORT_STOCK|REPORT_FULL|REPORT_DEBTS|REPORT_RECENT|DEBT_PAYMENT|CLOSE_BOOK|ADD_STAFF|DOWNLOAD_REPORT|UNDO_LAST_SALE|SETTINGS|CHANGE_LANGUAGE|HELP|UNKNOWN",
+  "intent": "SALE|RESTOCK|SET_STOCK|DELETED_STOCK|DELETE_ALL_INVENTORY|DEFINE_PRICE|PRICE_CHECK|REPORT_SALES|REPORT_STOCK|REPORT_FULL|REPORT_DEBTS|REPORT_RECENT|DEBT_PAYMENT|CLOSE_BOOK|ADD_STAFF|DOWNLOAD_REPORT|UNDO_LAST_SALE|SETTINGS|CHANGE_LANGUAGE|SHOW_SETTINGS|CREATE_ORDER|LIST_ORDERS|UPDATE_ORDER|CANCEL_ORDER|HELP|UNKNOWN"
   "is_credit": boolean,
   "customer_name": string | null,
   "staffPhoneNumber": string | null,
