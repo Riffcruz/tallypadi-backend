@@ -41,7 +41,7 @@ export default function ShopClient({ data, slug, error }: ShopClientProps) {
   const getImageUrl = (path?: string) => {
     if (!path) return '';
     if (path.startsWith('http') || path.startsWith('data:')) return path;
-    const baseUrl = API_URL.replace(///api\/?$/, '');
+    const baseUrl = API_URL.replace(/\/api\/?$/, '');
     return `${baseUrl}${path.startsWith('/') ? '' : '/'}${path}`;
   };
 
