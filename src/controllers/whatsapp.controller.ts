@@ -540,6 +540,7 @@ async function markSaleCredit(txUserId: any, txId: string) {
 // Attach "credit John" to latest credit sale missing name
 // =====================================================
 export async function attachCreditNameToLatest(
+  actorId: any,
   shopId: any,
   rawName: string
 ): Promise<{ ok: boolean; msg: string }> {
@@ -547,7 +548,7 @@ export async function attachCreditNameToLatest(
   if (!name) return { ok: false, msg: 'Reply like: credit John' };
 
   const tx = await Transaction.findOne({
-    user: shopId,
+    user: actorId,
     type: 'SALE',
     isUndone: { $ne: true },
     paymentStatus: 'CREDIT',
@@ -1033,7 +1034,7 @@ if (btn?.txId && btn?.action) {
     // =====================================================
     const creditNameMatch = rawText.match(/^credit\s+(.+)$/i);
     if (creditNameMatch?.[1]) {
-      const r = await attachCreditNameToLatest(shopId, creditNameMatch[1]);
+      const r = await attachCreditNameToLatest(actor._id, shopId, creditNameMatch[1]);
       await queueOutboundMessage(from, r.msg);
       return;
     }
