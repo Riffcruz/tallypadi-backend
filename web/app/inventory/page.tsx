@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { getCookie } from '../../utils/cookies';
+import { uploadToR2 } from '../../src/utils/uploadToR2';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 
@@ -67,6 +68,7 @@ export default function InventoryPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isUploadingImage, setIsLoadingImage] = useState(false); // New state for upload status
 
   // ✅ POPUP EDIT (Modal)
   const [editOpen, setEditOpen] = useState(false);
@@ -483,26 +485,55 @@ export default function InventoryPage() {
 
   const getImageUrl = (path?: string) => {
     if (!path) return '';
-    if (path.startsWith('http') || path.startsWith('data:')) return path;
+    if (path.startsWith('http')) return path; // R2 public URL
+    if (path.startsWith('data:')) return path; // Base64 image
     const baseUrl = API_URL.replace(/\/api\/?$/, '');
-    return `${baseUrl}${path.startsWith('/') ? '' : '/'}${path}`;
+    return `${baseUrl}${path.startsWith('/') ? '' : '/'}${path}`; // Local /uploads path
   };
 
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>, setter: (val: string | null) => void) => {
+  const handleImageSelect = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    setter: (val: string | null) => void,
+  ) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    
+
+    if (!user) {
+      Swal.fire('Error', 'User not authenticated', 'error');
+      return;
+    }
+
     if (file.size > 5 * 1024 * 1024) {
       Swal.fire('File too large', 'Image must be under 5MB', 'error');
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      const res = evt.target?.result as string;
-      setter(res);
-    };
-    reader.readAsDataURL(file);
+    const token = getCookie('tallyToken');
+    if (!token) {
+      Swal.fire('Error', 'Authentication token missing.', 'error');
+      return;
+    }
+
+    setIsLoadingImage(true);
+    try {
+      // Show local preview immediately using FileReader
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        setter(evt.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+      
+      // Upload to R2
+      const publicUrl = await uploadToR2(file, token);
+      setter(publicUrl); // Update state with the public URL
+    } catch (error: any) {
+      console.error('Image upload failed:', error);
+      Swal.fire('Upload Error', error.message || 'Failed to upload image.', 'error');
+      setter(null); // Clear image on error
+    } finally {
+      setIsLoadingImage(false);
+      e.target.value = ''; // Clear file input
+    }
   };
 
   if (loading) {
@@ -697,7 +728,7 @@ export default function InventoryPage() {
                       accept="image/*"
                       onChange={(e) => handleImageSelect(e, setNewItemImage)}
                       className="absolute inset-0 opacity-0 cursor-pointer z-10"
-                      disabled={showLockUI}
+                      disabled={showLockUI || isUploadingImage}
                     />
                     {newItemImage ? (
                       <img src={newItemImage} className="w-full h-full rounded-xl object-cover border border-slate-200" />
@@ -769,9 +800,9 @@ export default function InventoryPage() {
               <div className="col-span-12 flex items-center gap-3 pt-2">
                 <button
                   type="submit"
-                  disabled={showLockUI}
-                  className={`px-6 py-3 rounded-2xl font-extrabold text-sm shadow-lg transition active:scale-[0.98] inline-flex items-center gap-2 ${
-                    showLockUI
+                  disabled={showLockUI || isUploadingImage}
+                  className={`px-6 py-3 rounded-2xl font-extrabold text-sm shadow-lg transition active:scale-[0.98] ${
+                    showLockUI || isUploadingImage
                       ? 'bg-slate-200 text-slate-500 cursor-not-allowed shadow-none'
                       : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20'
                   }`}
@@ -1052,6 +1083,7 @@ export default function InventoryPage() {
                       accept="image/*"
                       onChange={(e) => handleImageSelect(e, setNewItemImage)}
                       className="absolute inset-0 opacity-0 cursor-pointer z-10"
+                      disabled={isUploadingImage}
                     />
                     {newItemImage ? (
                       <img src={newItemImage} className="w-full h-full rounded-xl object-cover border border-slate-200" />
@@ -1127,6 +1159,7 @@ export default function InventoryPage() {
                 </button>
                 <button
                   type="submit"
+                  disabled={isUploadingImage}
                   className="flex-1 py-3 rounded-2xl font-extrabold bg-slate-900 hover:bg-black text-white transition inline-flex items-center justify-center gap-2"
                 >
                   <Plus className="w-4 h-4" />
@@ -1165,6 +1198,7 @@ export default function InventoryPage() {
                     accept="image/*"
                     onChange={(e) => handleImageSelect(e, setEditImage)}
                     className="absolute inset-0 opacity-0 cursor-pointer z-10"
+                    disabled={isUploadingImage}
                   />
                   {editImage ? (
                     <img src={getImageUrl(editImage)} className="w-full h-full rounded-2xl object-cover border border-slate-200 shadow-sm" />
@@ -1245,6 +1279,7 @@ export default function InventoryPage() {
 
                 <button
                   onClick={() => editingId && saveEdit(editingId)}
+                  disabled={isUploadingImage}
                   className="flex-1 py-3 rounded-2xl font-extrabold bg-emerald-600 hover:bg-emerald-700 text-white transition inline-flex items-center justify-center gap-2"
                 >
                   <Check className="w-4 h-4" />

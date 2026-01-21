@@ -40,6 +40,7 @@ import {
 import { updateSettings } from './controllers/settings.controller';
 import { getGlobalSettings } from './controllers/admin.controller';
 import { getStaff, addStaff, removeStaff } from './controllers/staff.controller';
+import { presignUpload } from './controllers/upload.controller';
 
 import {
   recordSale,
@@ -191,6 +192,16 @@ const phoneLimiter = rateLimit({
   },
 });
 
+// ✅ Presign upload limiter
+const presignUploadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 30, // 30 requests per 15 minutes
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: 'Too many upload presign requests from this IP, please try again after 15 minutes',
+  keyGenerator: (req: any) => (req.user?.id ? `user:${req.user.id}` : `ip:${ipKeyGenerator(req)}`),
+});
+
 
 app.use('/api', (req, res, next) => {
   // Skip rate limit for webhooks
@@ -287,6 +298,9 @@ app.get('/api/inventory', authRequired, getInventory);
 app.get('/api/inventory/:id', authRequired, getInventoryItem);
 app.post('/api/inventory', authRequired, addInventoryItem);
 app.put('/api/inventory/:id', authRequired, updateInventoryItem);
+
+// --- UPLOADS ---
+app.post('/api/uploads/presign', authRequired, presignUploadLimiter, presignUpload); // R2 presigned upload endpoint
 
 // --- SALES ---
 app.post('/api/sales', authRequired, recordSale);

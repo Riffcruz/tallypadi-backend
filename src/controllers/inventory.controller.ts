@@ -110,7 +110,15 @@ export const addInventoryItem = async (req: Request, res: Response) => {
     const safeStock = validateNumber(body.stock);
     const safePrice = validateNumber(body.price);
     const safeCostPrice = validateNumber(body.costPrice);
-    const imageUrl = saveImageFromBase64(body.image);
+    let imageUrl: string | undefined | null;
+
+    if (typeof body.image === 'string' && (body.image.startsWith('http://') || body.image.startsWith('https://'))) {
+      imageUrl = body.image; // R2 public URL
+    } else if (typeof body.image === 'string' && body.image.startsWith('data:image/')) {
+      imageUrl = saveImageFromBase64(body.image); // Old base64 behavior
+    } else {
+      imageUrl = null; // Store null/undefined if no valid image data
+    }
     const safeName = sanitizeString(body.name);
 
     const user = await getAuthUser(req);
@@ -168,7 +176,15 @@ export const updateInventoryItem = async (req: Request, res: Response) => {
     const safeStock = validateNumber(body.stock);
     const safePrice = validateNumber(body.price);
     const safeCostPrice = validateNumber(body.costPrice);
-    const imageUrl = saveImageFromBase64(body.image);
+    let imageUrl: string | undefined | null;
+
+    if (typeof body.image === 'string' && (body.image.startsWith('http://') || body.image.startsWith('https://'))) {
+      imageUrl = body.image; // R2 public URL
+    } else if (typeof body.image === 'string' && body.image.startsWith('data:image/')) {
+      imageUrl = saveImageFromBase64(body.image); // Old base64 behavior
+    } else {
+      imageUrl = null; // Store null/undefined if no valid image data
+    }
 
     const user = await getAuthUser(req);
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
