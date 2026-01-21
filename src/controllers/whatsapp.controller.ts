@@ -1630,6 +1630,7 @@ if (btn?.txId && btn?.action) {
       }
 
       case 'CREATE_ORDER': {
+          console.log(`CREATE_ORDER intent triggered for shop ${shopId}`);
           const { customer_name, total_money, amount_paid, order_params } = parsed;
           if (!customer_name || !total_money || !order_params?.delivery_date) {
                await queueOutboundMessage(from, "I need customer name, price, and delivery date. E.g., 'New order for Amina, dress 50k, delivery Friday'.");
@@ -1642,19 +1643,24 @@ if (btn?.txId && btn?.action) {
                break;
           }
 
-          // Use parsed.items[0].name as description if description is not explicitly in params but implied
-          const desc = order_params.description || (parsed.items.length > 0 ? parsed.items[0].name : 'Order');
+          try {
+              // Use parsed.items[0].name as description if description is not explicitly in params but implied
+              const desc = order_params.description || (parsed.items.length > 0 ? parsed.items[0].name : 'Order');
 
-          const order = await orderService.createOrder(shopId, {
-              customerName: customer_name,
-              description: desc,
-              price: total_money,
-              amountPaid: amount_paid || 0,
-              deliveryDate: deliveryDate,
-              status: 'PENDING'
-          });
+              const order = await orderService.createOrder(shopId, {
+                  customerName: customer_name,
+                  description: desc,
+                  price: total_money,
+                  amountPaid: amount_paid || 0,
+                  deliveryDate: deliveryDate,
+                  status: 'PENDING'
+              });
 
-          await queueOutboundMessage(from, `✅ Order created for ${customer_name}.\n📝 ${desc}\n📅 Due: ${deliveryDate.toDateString()}\n💰 Balance: ${symbol}${order.balance.toLocaleString(locale)}`);
+              await queueOutboundMessage(from, `✅ Order created for ${customer_name}.\n📝 ${desc}\n📅 Due: ${deliveryDate.toDateString()}\n💰 Balance: ${symbol}${order.balance.toLocaleString(locale)}`);
+          } catch (e) {
+              console.error("Create Order Error:", e);
+              await queueOutboundMessage(from, "❌ Failed to create order. Please try again.");
+          }
           break;
       }
 
