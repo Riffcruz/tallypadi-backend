@@ -1645,7 +1645,7 @@ if (btn?.txId && btn?.action) {
           // Use parsed.items[0].name as description if description is not explicitly in params but implied
           const desc = order_params.description || (parsed.items.length > 0 ? parsed.items[0].name : 'Order');
 
-          const order = await orderService.createOrder(actor._id, {
+          const order = await orderService.createOrder(shopId, {
               customerName: customer_name,
               description: desc,
               price: total_money,
@@ -1659,19 +1659,26 @@ if (btn?.txId && btn?.action) {
       }
 
       case 'LIST_ORDERS': {
-          const { orders } = await orderService.getOrders(actor._id, { status: 'PENDING' });
-          if (!orders.length) {
-              await queueOutboundMessage(from, "No pending orders.");
-              break;
+          await queueOutboundMessage(from, "🔍 Checking orders...");
+          try {
+              const { orders } = await orderService.getOrders(shopId, { status: 'PENDING' });
+              
+              if (!orders.length) {
+                  await queueOutboundMessage(from, "No pending orders.");
+                  break;
+              }
+              
+              let msg = "📋 *Pending Orders*:\n\n";
+              orders.forEach((o: any) => {
+                  const dDate = new Date(o.deliveryDate);
+                  msg += `• *${o.customerName}* - ${o.description}\n  📅 Due: ${dDate.toDateString()}\n  💰 Bal: ${symbol}${o.balance.toLocaleString(locale)}\n\n`;
+              });
+              
+              await queueOutboundMessage(from, msg);
+          } catch (e) {
+              console.error("List Orders Error:", e);
+              await queueOutboundMessage(from, "❌ Failed to retrieve orders.");
           }
-          
-          let msg = "📋 *Pending Orders*:\n\n";
-          orders.forEach((o: any) => {
-              const dDate = new Date(o.deliveryDate);
-              msg += `• *${o.customerName}* - ${o.description}\n  📅 Due: ${dDate.toDateString()}\n  💰 Bal: ${symbol}${o.balance.toLocaleString(locale)}\n\n`;
-          });
-          
-          await queueOutboundMessage(from, msg);
           break;
       }
 
@@ -1680,7 +1687,7 @@ if (btn?.txId && btn?.action) {
               await queueOutboundMessage(from, "Whose order? Reply 'Update order for Amina'.");
               break;
           }
-          const { orders } = await orderService.getOrders(actor._id, { search: parsed.customer_name, status: 'PENDING' });
+          const { orders } = await orderService.getOrders(shopId, { search: parsed.customer_name, status: 'PENDING' });
           if (orders.length === 0) {
                await queueOutboundMessage(from, `No pending order found for ${parsed.customer_name}.`);
                break;
@@ -1698,7 +1705,7 @@ if (btn?.txId && btn?.action) {
               await queueOutboundMessage(from, "Whose order? Reply 'Cancel order for Amina'.");
               break;
           }
-          const { orders } = await orderService.getOrders(actor._id, { search: parsed.customer_name, status: 'PENDING' });
+          const { orders } = await orderService.getOrders(shopId, { search: parsed.customer_name, status: 'PENDING' });
            if (orders.length === 0) {
                await queueOutboundMessage(from, `No pending order found for ${parsed.customer_name}.`);
                break;
