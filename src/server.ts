@@ -21,6 +21,7 @@ import adminRouter from './routes/admin.routes';
 import investorRouter from './routes/investor.routes';
 import webhookRoutes from './routes/webhook.routes';
 import healthRouter from './routes/health.routes';
+import orderRouter from './routes/order.routes';
 
 // --- SERVICES & CONFIG ---
 import { loginUser } from './controllers/auth.controller';
@@ -312,6 +313,7 @@ app.delete('/api/staff/:id', authRequired, removeStaff);
 // --- BILLING & SYSTEM ---
 app.use('/api/payment', paymentRouter);
 app.use('/api/health', healthRouter);
+app.use('/api/orders', authRequired, orderRouter);
 
 // --- ADMIN (SITE OWNER) ---
 const adminLimiterPerUser = rateLimit({

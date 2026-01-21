@@ -12,6 +12,7 @@ import { AdminSettings } from '../models/adminSettings.model';
 
 import { processTransaction } from '../services/transaction.service';
 import { checkSubscriptionStatus } from '../services/billing.service';
+import { orderService } from '../services/order.service';
 import {
   messageQueue,
   queueOutboundMessage,
@@ -1626,6 +1627,87 @@ if (btn?.txId && btn?.action) {
         
         await queueOutboundMessage(from, msg);
         break;
+      }
+
+      case 'CREATE_ORDER': {
+          const { customer_name, total_money, amount_paid, order_params } = parsed;
+          if (!customer_name || !total_money || !order_params?.delivery_date) {
+               await queueOutboundMessage(from, "I need customer name, price, and delivery date. E.g., 'New order for Amina, dress 50k, delivery Friday'.");
+               break;
+          }
+
+          const deliveryDate = new Date(order_params.delivery_date);
+          if (isNaN(deliveryDate.getTime())) {
+               await queueOutboundMessage(from, "Invalid delivery date.");
+               break;
+          }
+
+          // Use parsed.items[0].name as description if description is not explicitly in params but implied
+          const desc = order_params.description || (parsed.items.length > 0 ? parsed.items[0].name : 'Order');
+
+          const order = await orderService.createOrder(actor._id, {
+              customerName: customer_name,
+              description: desc,
+              price: total_money,
+              amountPaid: amount_paid || 0,
+              deliveryDate: deliveryDate,
+              status: 'PENDING'
+          });
+
+          await queueOutboundMessage(from, `✅ Order created for ${customer_name}.\n📝 ${desc}\n📅 Due: ${deliveryDate.toDateString()}\n💰 Balance: ${symbol}${order.balance.toLocaleString(locale)}`);
+          break;
+      }
+
+      case 'LIST_ORDERS': {
+          const { orders } = await orderService.getOrders(actor._id, { status: 'PENDING' });
+          if (!orders.length) {
+              await queueOutboundMessage(from, "No pending orders.");
+              break;
+          }
+          
+          let msg = "📋 *Pending Orders*:\n\n";
+          orders.forEach((o: any) => {
+              const dDate = new Date(o.deliveryDate);
+              msg += `• *${o.customerName}* - ${o.description}\n  📅 Due: ${dDate.toDateString()}\n  💰 Bal: ${symbol}${o.balance.toLocaleString(locale)}\n\n`;
+          });
+          
+          await queueOutboundMessage(from, msg);
+          break;
+      }
+
+      case 'UPDATE_ORDER': {
+          if (!parsed.customer_name) {
+              await queueOutboundMessage(from, "Whose order? Reply 'Update order for Amina'.");
+              break;
+          }
+          const { orders } = await orderService.getOrders(actor._id, { search: parsed.customer_name, status: 'PENDING' });
+          if (orders.length === 0) {
+               await queueOutboundMessage(from, `No pending order found for ${parsed.customer_name}.`);
+               break;
+          }
+          // If multiple, pick first for now (CLI simplicity), or ask clarification
+          const order = orders[0];
+          order.status = 'COMPLETED';
+          await order.save();
+          await queueOutboundMessage(from, `✅ Order for ${order.customerName} marked as COMPLETED.`);
+          break;
+      }
+
+      case 'CANCEL_ORDER': {
+          if (!parsed.customer_name) {
+              await queueOutboundMessage(from, "Whose order? Reply 'Cancel order for Amina'.");
+              break;
+          }
+          const { orders } = await orderService.getOrders(actor._id, { search: parsed.customer_name, status: 'PENDING' });
+           if (orders.length === 0) {
+               await queueOutboundMessage(from, `No pending order found for ${parsed.customer_name}.`);
+               break;
+          }
+          const order = orders[0];
+          order.status = 'CANCELLED';
+          await order.save();
+          await queueOutboundMessage(from, `✅ Order for ${order.customerName} marked as CANCELLED.`);
+          break;
       }
 
       case 'HELP':

@@ -29,6 +29,10 @@ export type ParsedIntent =
   | 'REPORT_DEBTS'
   | 'REPORT_RECENT'
   | 'SHOW_SETTINGS'
+  | 'CREATE_ORDER'
+  | 'LIST_ORDERS'
+  | 'UPDATE_ORDER'
+  | 'CANCEL_ORDER'
   | 'HELP'
   | 'UNKNOWN';
 
@@ -49,6 +53,7 @@ export interface ParsedResult {
   staffName?: string;
   items: ParsedItem[];
   total_money: number | null;
+  amount_paid?: number | null;
   discount_amount?: number | null;
   confidence_score?: number;
   needs_clarification?: boolean;
@@ -59,6 +64,11 @@ export interface ParsedResult {
 
     // ✅ NEW
     include_undone?: boolean; // default false unless user asks
+  };
+  order_params?: {
+    description?: string;
+    delivery_date?: string;
+    status?: string;
   };
   settings_update: { key: string | null; value: string | boolean | null };
   reply_text: string;
@@ -279,6 +289,7 @@ function safeParsedResult(p: any): ParsedResult {
     staffName: typeof p?.staffName === 'string' ? sanitizeInput(p.staffName) : undefined,
     items: normalizedItems,
     total_money: finalTotal,
+    amount_paid: parseMoney(p?.amount_paid),
     discount_amount: discount,
     confidence_score: typeof p?.confidence_score === 'number' ? p.confidence_score : 1,
     needs_clarification: needsClarification,
@@ -287,6 +298,11 @@ function safeParsedResult(p: any): ParsedResult {
       end_date: p?.report_params?.end_date || null,
       category_filter: p?.report_params?.category_filter || null,
       include_undone,
+    },
+    order_params: {
+      description: p?.order_params?.description || null,
+      delivery_date: p?.order_params?.delivery_date || null,
+      status: p?.order_params?.status || null,
     },
     settings_update: {
       key: p?.settings_update?.key || null,
@@ -957,6 +973,41 @@ Disable:
 }
 
 
+*** 5E. ORDER MANAGEMENT (NEW FEATURE) ***
+Target: Freelancers, Tailors, Engineers, etc.
+Orders are distinct from Inventory Sales. They have a delivery date and usually a specific customer.
+
+1) CREATE_ORDER
+- Triggers: "New order", "Order from <Person>", "I have a job for <Person>", "Sewing <Style> for <Person>", "Make a dress for <Person>".
+- Requirements:
+  - customer_name: Required.
+  - description: Required (what is being ordered). Extract from context (e.g. "Sewing a red dress").
+  - total_money: Required (Total Price).
+  - amount_paid: Optional (if partial/full payment made now). Default to 0 if not mentioned.
+  - delivery_date: Required. Extract to YYYY-MM-DD in order_params.delivery_date.
+    - Resolve relative dates like "tomorrow", "next friday", "in 3 days", "friday next week" based on "Current Date".
+    - If not mentioned, set needs_clarification=true.
+- Output:
+  intent = CREATE_ORDER
+  customer_name = <Name>
+  total_money = <Price>
+  amount_paid = <Amount Paid>
+  items = [] (or empty)
+  order_params = { description: <Description>, delivery_date: <YYYY-MM-DD> }
+
+2) LIST_ORDERS
+- Triggers: "Show my orders", "Active jobs", "Work list", "Pending orders", "My jobs".
+- Output: intent = LIST_ORDERS
+
+3) UPDATE_ORDER
+- Triggers: "Mark order as done", "Order completed", "Update order status", "Add payment to order".
+- Output: intent = UPDATE_ORDER, customer_name=<Name>
+
+4) CANCEL_ORDER
+- Triggers: "Cancel order for <Name>", "Delete job for <Name>".
+- Output: intent = CANCEL_ORDER, customer_name=<Name>
+
+
 *** 6. JSON OUTPUT RULES ***
 - ALWAYS output strict valid JSON only.
 - confidence_score: 0.1–1.0
@@ -983,6 +1034,7 @@ Disable:
     }
   ],
   "total_money": number | null,
+  "amount_paid": number | null,
   "total_currency": "NGN|USD|GBP|EUR|GHS|null",
   "discount_amount": number | null,
   "confidence_score": number,
@@ -993,6 +1045,11 @@ Disable:
     "end_date": string | null,
     "category_filter": string | null,
     "include_undone": boolean
+  },
+  "order_params": {
+    "description": string | null,
+    "delivery_date": string | null,
+    "status": string | null
   },
   "settings_update": { "key": string | null, "value": any | null },
   "reply_text": string

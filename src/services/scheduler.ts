@@ -4,6 +4,7 @@ import { User } from '../models/user.model';
 import { Transaction } from '../models/transaction.model';
 import { queueOutboundMessage } from './queue.service';
 import { cleanupPdfReports } from './pdf.service';
+import { orderService } from './order.service';
 
 const BATCH_SIZE = 2000;
 const SPREAD_MINUTES = 10; // spread sending load (0..9 min) per user deterministically
@@ -285,6 +286,29 @@ export function startScheduler() {
       await cleanupPdfReports();
     } catch (err) {
       console.error('❌ PDF cleanup error:', err);
+    }
+  });
+
+  // 4) Order Reminders (Daily 8 AM)
+  cron.schedule('0 8 * * *', async () => {
+    try {
+        const orders = await orderService.getOrdersDueForReminder(3);
+        console.log(`Checking order reminders. Found ${orders.length} due in 3 days.`);
+        
+        for (const order of orders) {
+             const user = order.user as any;
+             if (!user || !user.phoneNumber) continue;
+             
+             const dDate = new Date(order.deliveryDate).toDateString();
+             const msg = `🔔 *Order Reminder*\n\nOrder for *${order.customerName}* (${order.description}) is due on *${dDate}* (in 3 days).\n\nStatus: ${order.status}`;
+             
+             await queueOutboundMessage(user.phoneNumber, msg);
+             
+             order.reminderSent = true;
+             await order.save();
+        }
+    } catch (err) {
+        console.error('❌ Order reminder scheduler error:', err);
     }
   });
 
