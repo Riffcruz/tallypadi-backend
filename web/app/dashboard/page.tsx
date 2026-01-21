@@ -20,6 +20,7 @@ import {
   Send,
   X,
   Sparkles,
+  Clipboard,
 } from 'lucide-react';
 import {
   BarChart,
@@ -164,6 +165,7 @@ export default function DashboardPage() {
   const [fx, setFx] = useState<FxRatesResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [copied, setCopied] = useState(false); // New state for copy feedback
 
   // Chat dock
   const [chatOpen, setChatOpen] = useState(false);
@@ -201,6 +203,27 @@ export default function DashboardPage() {
   const currencyCode = data?.user?.currencyCode || 'NGN';
   const userLocale = data?.user?.locale || 'en-NG';
   const inventory = data?.inventory || [];
+
+  const shopUrl = useMemo(() => {
+    if (data?.user?.shopName) {
+      // Extract base URL from API_URL
+      const baseUrl = API_URL.replace('/api', '');
+      return `${baseUrl}/shop/${data.user.shopName}`;
+    }
+    return '';
+  }, [data?.user?.shopName, API_URL]);
+
+  const handleCopyShopLink = async () => {
+    if (shopUrl) {
+      try {
+        await navigator.clipboard.writeText(shopUrl);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000); // Reset "Copied!" after 2 seconds
+      } catch (err) {
+        console.error('Failed to copy shop link: ', err);
+      }
+    }
+  };
 
   const stockValue = useMemo(() => {
     return inventory.reduce((acc, curr) => {
@@ -322,7 +345,24 @@ const topTransactions = filteredTransactions.slice(0, 6);
             <div className="min-w-0">
               <h1 className="text-3xl md:text-4xl font-black tracking-tight leading-tight">
                 {getGreeting()},{' '}
-                <span className="text-emerald-700">{data?.user?.shopName || 'Owner'}</span>
+                <span className="text-emerald-700">
+                  <span className="inline-flex items-center gap-2"> {/* New wrapper for shop name and button */}
+                    {data?.user?.shopName || 'Owner'}
+                    {shopUrl && ( // Only show button if shopUrl exists
+                      <button
+                        onClick={handleCopyShopLink}
+                        className="p-1.5 bg-white rounded-lg border border-slate-200 text-slate-400 hover:text-emerald-600 hover:border-emerald-200 transition-all shadow-sm text-sm font-bold"
+                        title="Copy shop link"
+                      >
+                        {copied ? (
+                          <span className="text-emerald-600 text-xs">Copied!</span>
+                        ) : (
+                          <Clipboard className="w-4 h-4" />
+                        )}
+                      </button>
+                    )}
+                  </span>
+                </span>
               </h1>
               <p className="text-slate-500 text-sm mt-2 flex items-center gap-2 font-semibold">
                 <Calendar className="w-4 h-4 text-emerald-600" />
