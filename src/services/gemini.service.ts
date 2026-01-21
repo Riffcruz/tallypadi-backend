@@ -476,6 +476,18 @@ if (wantsDownload && !isToggle) {
     return safeParsedResult({ intent: 'REPORT_DEBTS', reply_text: 'Fetching debtors list...' });
   }
 
+  // ✅ NEW: LIST_ORDERS fallback
+  if (
+    /^orders?$/i.test(m) ||
+    /\b(list|check|show|my|get)\s+orders?\b/i.test(m) ||
+    /\b(active|pending)\s+(jobs?|orders?)\b/i.test(m)
+  ) {
+    // Exclude "create order" or "new order"
+    if (!/\b(new|create|make|add)\b/i.test(m)) {
+      return safeParsedResult({ intent: 'LIST_ORDERS', reply_text: '🔍 Checking orders...' });
+    }
+  }
+
   // Handles:
   // "Sold 3 bags rice for 100k"
   // "Sold 5 pack water for $1 each"
@@ -996,7 +1008,7 @@ Orders are distinct from Inventory Sales. They have a delivery date and usually 
   order_params = { description: <Description>, delivery_date: <YYYY-MM-DD> }
 
 2) LIST_ORDERS
-- Triggers: "Show my orders", "Active jobs", "Work list", "Pending orders", "My jobs".
+- Triggers: "Orders", "Get orders", "List orders", "Show my orders", "Active jobs", "Work list", "Pending orders", "My jobs".
 - Output: intent = LIST_ORDERS
 
 3) UPDATE_ORDER
