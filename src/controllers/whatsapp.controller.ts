@@ -1677,7 +1677,8 @@ if (btn?.txId && btn?.action) {
               let msg = "📋 *Pending Orders*:\n\n";
               orders.forEach((o: any) => {
                   const dDate = new Date(o.deliveryDate);
-                  msg += `• *${o.customerName}* - ${o.description}\n  📅 Due: ${dDate.toDateString()}\n  💰 Bal: ${symbol}${o.balance.toLocaleString(locale)}\n\n`;
+                  const bal = Number(o.balance || 0);
+                  msg += `• *${o.customerName}* - ${o.description}\n  📅 Due: ${dDate.toDateString()}\n  💰 Bal: ${symbol}${bal.toLocaleString(locale)}\n\n`;
               });
               
               await queueOutboundMessage(from, msg);

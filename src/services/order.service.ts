@@ -20,7 +20,7 @@ export class OrderService {
     }
   ): Promise<IOrder> {
     const order = new Order({
-      user: new Types.ObjectId(userId),
+      user: userId,
       ...data,
       balance: data.price - (data.amountPaid || 0)
     });
@@ -42,7 +42,7 @@ export class OrderService {
       limit?: number;
     }
   ) {
-    const query: any = { user: new Types.ObjectId(userId) };
+    const query: any = { user: userId };
 
     if (filters.status) {
       query.status = filters.status;
@@ -87,8 +87,8 @@ export class OrderService {
    */
   async getOrder(userId: string | Types.ObjectId, orderId: string) {
     return await Order.findOne({ 
-      _id: new Types.ObjectId(orderId), 
-      user: new Types.ObjectId(userId) 
+      _id: orderId, 
+      user: userId 
     });
   }
 
@@ -101,8 +101,8 @@ export class OrderService {
     updates: Partial<IOrder>
   ) {
     const order = await Order.findOne({ 
-      _id: new Types.ObjectId(orderId), 
-      user: new Types.ObjectId(userId) 
+      _id: orderId, 
+      user: userId 
     });
 
     if (!order) return null;
@@ -127,8 +127,8 @@ export class OrderService {
    */
   async deleteOrder(userId: string | Types.ObjectId, orderId: string) {
     return await Order.findOneAndDelete({ 
-      _id: new Types.ObjectId(orderId), 
-      user: new Types.ObjectId(userId) 
+      _id: orderId, 
+      user: userId 
     });
   }
 
