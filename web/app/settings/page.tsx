@@ -637,7 +637,7 @@ export default function SettingsPage() {
                       <textarea
                         value={shopDescription}
                         onChange={(e) => setShopDescription(e.target.value)}
-                        placeholder="Welcome to my shop! We sell the best quality items..."
+                        placeholder={user?.shopDescription || "Welcome to my shop! We sell the best quality items..."}
                         maxLength={500}
                         rows={3}
                         className="w-full border border-gray-200 bg-slate-50/50 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-pink-500/20 focus:border-pink-500 transition-all text-sm font-medium resize-none"
@@ -659,7 +659,7 @@ export default function SettingsPage() {
                                 type="text"
                                 value={shopSlug}
                                 onChange={(e) => setShopSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
-                                placeholder="unique-shop-name"
+                                placeholder={user?.shopSlug || "unique-shop-name"}
                                 className="flex-1 border border-gray-200 sm:rounded-l-none rounded-l-xl rounded-r-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-pink-500/20 focus:border-pink-500 text-sm font-bold text-slate-700"
                             />
                          </div>
