@@ -22,29 +22,25 @@ import {
   AlertCircle,
   Smartphone,
   Lock,
+  Camera,
+  Copy,
+  ExternalLink,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { getCookie } from '../../utils/cookies';
+import { uploadToR2 } from '../../src/utils/uploadToR2';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 
 interface StaffMember {
   id: string;
-  phoneNumber: string;
-  name?: string;
-  dateAdded: string;
-}
-
-export default function SettingsPage() {
-  const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const router = useRouter();
-
-  // Form State
+// ...
   const [businessName, setBusinessName] = useState('');
   const [shopSlug, setShopSlug] = useState(''); // New State
+  const [shopDescription, setShopDescription] = useState(''); // ✅ Shop Desc
+  const [heroImageUrl, setHeroImageUrl] = useState(''); // ✅ Hero Image
+  const [uploadingHero, setUploadingHero] = useState(false); // ✅ Upload state
+
   const [closingTime, setClosingTime] = useState('');
   const [language, setLanguage] = useState('');
   const [pdfEnabled, setPdfEnabled] = useState(false);
@@ -110,6 +106,8 @@ export default function SettingsPage() {
 
     setBusinessName(bName);
     setShopSlug(userData?.shopSlug || '');
+    setShopDescription(userData?.shopDescription || '');
+    setHeroImageUrl(userData?.heroImageUrl || '');
     setClosingTime(userData?.settings?.closingTime || '20:00');
     setLanguage(userData?.settings?.language || 'English');
 
@@ -218,6 +216,25 @@ export default function SettingsPage() {
     }
   };
 
+  const handleHeroUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const token = getTokenOrRedirect();
+    if (!token) return;
+
+    setUploadingHero(true);
+    try {
+       const url = await uploadToR2(file, token);
+       setHeroImageUrl(url);
+    } catch (err) {
+       console.error(err);
+       Swal.fire('Error', 'Failed to upload image', 'error');
+    } finally {
+       setUploadingHero(false);
+    }
+  };
+
   const handleSaveShop = async () => {
     const token = getTokenOrRedirect();
     if (!token) return;
@@ -226,7 +243,12 @@ export default function SettingsPage() {
     try {
       await axios.put(
         `${API_URL}/shop/settings`,
-        { shopSlug, businessName },
+        { 
+          shopSlug, 
+          businessName,
+          shopDescription,
+          heroImageUrl
+        },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       
@@ -555,29 +577,98 @@ export default function SettingsPage() {
                   <button onClick={handleSaveShop} className="text-xs font-bold text-pink-600 hover:underline">Save Shop Settings</button>
                 </div>
 
-                <div className="space-y-4">
+                <div className="space-y-6">
+                   {/* Hero Image */}
+                   <div>
+                      <label className="block text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wider">
+                        Shop Cover Image
+                      </label>
+                      <div className="relative w-full h-40 bg-slate-100 rounded-xl border-2 border-dashed border-slate-300 overflow-hidden group">
+                         {heroImageUrl ? (
+                            <img src={heroImageUrl} alt="Cover" className="w-full h-full object-cover" />
+                         ) : (
+                            <div className="absolute inset-0 flex items-center justify-center text-slate-400">
+                               <div className="text-center">
+                                  <Camera className="w-8 h-8 mx-auto mb-1 opacity-50" />
+                                  <span className="text-xs font-bold">Upload Cover</span>
+                               </div>
+                            </div>
+                         )}
+                         <input 
+                            type="file" 
+                            accept="image/*" 
+                            onChange={handleHeroUpload} 
+                            disabled={uploadingHero}
+                            className="absolute inset-0 opacity-0 cursor-pointer z-10" 
+                         />
+                         {uploadingHero && (
+                            <div className="absolute inset-0 bg-white/60 flex items-center justify-center z-20">
+                               <Loader2 className="w-6 h-6 animate-spin text-pink-600" />
+                            </div>
+                         )}
+                      </div>
+                      <p className="text-[10px] text-gray-400 mt-1.5">Recommended: 1200x400px. Appears at the top of your shop.</p>
+                   </div>
+
+                   {/* Description */}
+                   <div>
+                      <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wider">
+                        Shop Description
+                      </label>
+                      <textarea
+                        value={shopDescription}
+                        onChange={(e) => setShopDescription(e.target.value)}
+                        placeholder="Welcome to my shop! We sell the best quality items..."
+                        maxLength={500}
+                        rows={3}
+                        className="w-full border border-gray-200 bg-slate-50/50 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-pink-500/20 focus:border-pink-500 transition-all text-sm font-medium resize-none"
+                      />
+                      <p className="text-[10px] text-gray-400 mt-1.5 text-right">{shopDescription.length}/500</p>
+                   </div>
+
+                   {/* Link */}
                    <div>
                       <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wider">
                         Shop Link
                       </label>
-                      <div className="flex items-center">
-                         <span className="bg-slate-100 border border-r-0 border-gray-200 rounded-l-xl px-3 py-3 text-slate-500 text-sm font-medium">
-                            tallypadi.com/shop/
-                         </span>
-                         <input
-                            type="text"
-                            value={shopSlug}
-                            onChange={(e) => setShopSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
-                            placeholder="unique-shop-name"
-                            className="flex-1 border border-gray-200 rounded-r-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-pink-500/20 focus:border-pink-500 text-sm font-bold text-slate-700"
-                         />
+                      <div className="flex items-center gap-2">
+                         <div className="flex-1 flex items-center">
+                            <span className="bg-slate-100 border border-r-0 border-gray-200 rounded-l-xl px-3 py-3 text-slate-500 text-sm font-medium hidden sm:block">
+                               tallypadi.com/shop/
+                            </span>
+                            <input
+                                type="text"
+                                value={shopSlug}
+                                onChange={(e) => setShopSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                                placeholder="unique-shop-name"
+                                className="flex-1 border border-gray-200 sm:rounded-l-none rounded-l-xl rounded-r-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-pink-500/20 focus:border-pink-500 text-sm font-bold text-slate-700"
+                            />
+                         </div>
+                         
+                         {shopSlug && (
+                            <>
+                              <button 
+                                onClick={() => {
+                                   navigator.clipboard.writeText(`https://tallypadi.com/shop/${shopSlug}`);
+                                   Swal.fire({ toast: true, position: 'top', icon: 'success', title: 'Copied!', showConfirmButton: false, timer: 1000 });
+                                }}
+                                className="p-3 bg-white border border-gray-200 text-gray-600 rounded-xl hover:bg-gray-50 transition"
+                                title="Copy Link"
+                              >
+                                 <Copy size={18} />
+                              </button>
+                              <a 
+                                href={`https://tallypadi.com/shop/${shopSlug}`} 
+                                target="_blank" 
+                                rel="noopener noreferrer" 
+                                className="p-3 bg-pink-50 border border-pink-100 text-pink-600 rounded-xl hover:bg-pink-100 transition"
+                                title="Open Shop"
+                              >
+                                 <ExternalLink size={18} />
+                              </a>
+                            </>
+                         )}
                       </div>
-                      <p className="text-[10px] text-gray-400 mt-1.5">Share this link with your customers.</p>
-                      {shopSlug && (
-                        <a href={`https://tallypadi.com/shop/${shopSlug}`} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline mt-1 inline-block">
-                          Preview Shop &rarr;
-                        </a>
-                      )}
                    </div>
                 </div>
              </div>

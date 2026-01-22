@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { User } from '../models/user.model';
 import { Inventory } from '../models/inventory.model';
 import { z } from 'zod';
+import { r2Service } from '../services/r2.service';
 
 // Schema for updating shop settings
 const updateShopSchema = z.object({
@@ -12,56 +13,79 @@ const updateShopSchema = z.object({
     .regex(/^[a-z0-9-]+$/, 'Slug must only contain lowercase letters, numbers, and hyphens')
     .optional(),
   businessName: z.string().min(2).max(50).optional(),
+  shopDescription: z.string().max(500).optional(),
+  heroImageUrl: z.string().url().optional().or(z.literal('')),
 });
 
 /**
+ * GET /api/shop/me
+ * Shop owner gets their own shop info + public URL
+ */
+export const getShopMe = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const userId = (req as any).user.id;
+    const user = await User.findById(userId).select('businessName shopSlug shopDescription heroImageUrl planType');
+
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    // Generate public URL
+    const publicUrl = user.shopSlug 
+      ? `https://tallypadi.com/shop/${user.shopSlug}` 
+      : null;
+
+    return res.json({
+      businessName: user.businessName,
+      shopSlug: user.shopSlug,
+      shopDescription: user.shopDescription,
+      heroImageUrl: user.heroImageUrl,
+      publicUrl,
+      isTycoon: user.planType === 'TYCOON',
+    });
+  } catch (error) {
+    console.error('Error fetching my shop:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+/**
  * GET /api/shop/:slug
- * Public endpoint to fetch shop details and inventory
+ * Public endpoint to fetch shop details (no products here, just info)
  */
 export const getShopBySlug = async (req: Request, res: Response): Promise<any> => {
   try {
     const { slug } = req.params;
 
-    if (!slug) {
-      return res.status(400).json({ error: 'Shop name is required' });
-    }
+    if (!slug) return res.status(400).json({ error: 'Shop slug required' });
 
-    // 1. Find User by shopSlug
-    const shopOwner = await User.findOne({
-      shopSlug: slug,
-      // Ensure user is valid/active if needed, but for now just existence
-    }).select('businessName phoneNumber planType settings _id subscriptionStatus trialEndsAt');
+    const shopOwner = await User.findOne({ shopSlug: slug })
+      .select('businessName phoneNumber planType settings _id subscriptionStatus trialEndsAt shopDescription heroImageUrl');
 
-    if (!shopOwner) {
-      return res.status(404).json({ error: 'Shop not found' });
-    }
+    if (!shopOwner) return res.status(404).json({ error: 'Shop not found' });
 
-    // 2. Check if Tycoon (Only Tycoon users have shops enabled)
     if (shopOwner.planType !== 'TYCOON') {
        return res.status(404).json({ error: 'Shop is currently unavailable' });
     }
 
-    // Check plan expiration
     const now = new Date();
     const isTrial = shopOwner.subscriptionStatus === 'trial';
     const isTrialExpired = isTrial && shopOwner.trialEndsAt < now;
     const isPlanExpired = ['past_due', 'cancelled', 'suspended'].includes(shopOwner.subscriptionStatus);
     const planExpired = isTrialExpired || isPlanExpired;
 
-    // 3. Fetch Inventory
-    // Only fetch items with quantity > 0? Or all? Usually storefronts show what's available.
-    const products = await Inventory.find({
-      user: shopOwner._id,
-      quantity: { $gt: 0 }, // Only show in-stock items
-    }).select('name quantity lastUnitPrice image');
+    // Fetch categories for filtering
+    const categories = await Inventory.distinct('category', { user: shopOwner._id });
+    const cleanCategories = categories.filter((c) => c && typeof c === 'string' && c.trim() !== '');
 
     return res.json({
       shop: {
+        id: shopOwner._id, // needed for fetching products
         name: shopOwner.businessName,
+        description: shopOwner.shopDescription,
+        heroImageUrl: shopOwner.heroImageUrl,
         phone: shopOwner.phoneNumber,
         planExpired,
+        categories: cleanCategories.sort(),
       },
-      products,
     });
   } catch (error) {
     console.error('Error fetching shop:', error);
@@ -70,8 +94,78 @@ export const getShopBySlug = async (req: Request, res: Response): Promise<any> =
 };
 
 /**
- * PUT /api/shop/settings
- * Update shop slug and name. Tycoon only.
+ * GET /api/shop/:slug/products
+ * Public endpoint to fetch paginated products
+ */
+export const getShopProducts = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { slug } = req.params;
+    const { page = '1', q, category, sort } = req.query;
+
+    const shopOwner = await User.findOne({ shopSlug: slug }).select('_id planType subscriptionStatus trialEndsAt');
+    if (!shopOwner) return res.status(404).json({ error: 'Shop not found' });
+
+    // Ensure shop is active (Tycoon + Valid Sub)
+    if (shopOwner.planType !== 'TYCOON') return res.status(404).json({ error: 'Shop unavailable' });
+    
+    // Check expiration logic if needed, or allow browsing but disable cart? 
+    // For now, let's allow browsing.
+
+    const limit = 20;
+    const skip = (Number(page) - 1) * limit;
+
+    const filter: any = {
+      user: shopOwner._id,
+      quantity: { $gt: 0 }, // Only in-stock
+    };
+
+    if (q) {
+      filter.name = { $regex: String(q), $options: 'i' };
+    }
+
+    if (category) {
+      filter.category = String(category).toLowerCase();
+    }
+
+    let sortOptions: any = { createdAt: -1 }; // Default newest
+    if (sort === 'price_asc') sortOptions = { lastUnitPrice: 1 };
+    if (sort === 'price_desc') sortOptions = { lastUnitPrice: -1 };
+
+    const [products, total] = await Promise.all([
+      Inventory.find(filter)
+        .sort(sortOptions)
+        .skip(skip)
+        .limit(limit)
+        .select('name quantity lastUnitPrice image category'),
+      Inventory.countDocuments(filter),
+    ]);
+
+    return res.json({
+      products: products.map(p => ({
+        id: p._id,
+        name: p.name,
+        price: p.lastUnitPrice,
+        image: p.image,
+        category: p.category,
+        inStock: p.quantity > 0,
+      })),
+      pagination: {
+        page: Number(page),
+        totalPages: Math.ceil(total / limit),
+        totalItems: total,
+      },
+    });
+
+  } catch (error) {
+    console.error('Error fetching products:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+
+/**
+ * PUT /api/shop/me
+ * Update shop slug, name, description, hero.
  */
 export const updateShopSettings = async (req: Request, res: Response): Promise<any> => {
   try {
@@ -88,14 +182,22 @@ export const updateShopSettings = async (req: Request, res: Response): Promise<a
     // Check slug uniqueness if changing
     if (body.shopSlug && body.shopSlug !== user.shopSlug) {
       const existing = await User.findOne({ shopSlug: body.shopSlug });
-      if (existing) {
+      if (existing && String(existing._id) !== String(user._id)) {
         return res.status(400).json({ error: 'Shop link is already taken.' });
       }
       user.shopSlug = body.shopSlug;
     }
 
-    if (body.businessName) {
-      user.businessName = body.businessName;
+    if (body.businessName !== undefined) user.businessName = body.businessName;
+    if (body.shopDescription !== undefined) user.shopDescription = body.shopDescription;
+    
+    // Handle Hero Image + Deletion
+    if (body.heroImageUrl !== undefined) {
+      // If replacing an existing R2 image, delete the old one
+      if (user.heroImageUrl && user.heroImageUrl !== body.heroImageUrl) {
+         await r2Service.deleteFile(user.heroImageUrl);
+      }
+      user.heroImageUrl = body.heroImageUrl || undefined;
     }
 
     await user.save();
@@ -104,6 +206,8 @@ export const updateShopSettings = async (req: Request, res: Response): Promise<a
       message: 'Shop settings updated',
       shopSlug: user.shopSlug,
       businessName: user.businessName,
+      shopDescription: user.shopDescription,
+      heroImageUrl: user.heroImageUrl,
     });
   } catch (error) {
     if (error instanceof z.ZodError) {

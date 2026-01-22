@@ -1,31 +1,37 @@
-# Cloudflare R2 Presigned Uploads Migration Guide
+# Migration Guide - Shopfront & Inventory Upgrade
 
-This document outlines the new image upload flow using Cloudflare R2 presigned PUT URLs and necessary CORS configurations.
+## 1. Cloudflare R2 Uploads
 
-## New Image Upload Flow
+We have migrated from base64/direct S3 uploads to a Presigned URL flow with Cloudflare R2.
 
-1.  **Next.js client asks backend for a presigned PUT URL:** The frontend sends a request to the backend with the desired `mime` type and `ext`ension of the image.
-2.  **Backend generates and returns a presigned PUT URL:** The backend (specifically, the `/api/uploads/presign` endpoint) uses the AWS SDK to generate a temporary, signed URL that allows the client to directly upload a file to Cloudflare R2. It also returns a `publicUrl` (CDN URL) for the uploaded image.
-3.  **Client uploads file directly to R2 via PUT:** The frontend then uses the received `uploadUrl` to directly upload the image file to Cloudflare R2 using a PUT request.
-4.  **Client sends inventory create/update with image = public CDN URL:** After a successful upload to R2, the frontend sends the `publicUrl` of the image to the backend when creating or updating an inventory item.
+### Environment Variables
+Ensure these are set in `.env`:
+```bash
+CF_ACCOUNT_ID=your_cloudflare_account_id
+R2_ACCESS_KEY_ID=your_access_key
+R2_SECRET_ACCESS_KEY=your_secret_key
+R2_BUCKET=your_bucket_name
+R2_PUBLIC_BASE_URL=https://cdn.tallypadi.com
+```
 
-## Required Cloudflare R2 Bucket CORS Configuration
+### R2 / S3 CORS Configuration
+You must configure CORS on your R2 bucket to allow uploads from your domain.
 
-To allow direct uploads from your frontend domain to your R2 bucket, you need to configure CORS policies on your Cloudflare R2 bucket.
-
-Here's an example CORS policy that allows `PUT` requests from `https://tallypadi.com`:
-
+Example CORS Policy (JSON):
 ```json
 [
   {
     "AllowedOrigins": [
-      "https://tallypadi.com"
+      "https://tallypadi.com",
+      "http://localhost:3000"
     ],
     "AllowedMethods": [
-      "PUT"
+      "PUT",
+      "GET",
+      "DELETE"
     ],
     "AllowedHeaders": [
-      "*"
+      "Content-Type"
     ],
     "ExposeHeaders": [],
     "MaxAgeSeconds": 3000
@@ -33,15 +39,25 @@ Here's an example CORS policy that allows `PUT` requests from `https://tallypadi
 ]
 ```
 
-**Explanation of fields:**
+## 2. Inventory Categories
+- **Database**: `Inventory` model now has a `category` field (string, lowercase).
+- **API**: 
+    - `GET /api/inventory` now returns `category`.
+    - `GET /api/inventory/categories` returns distinct categories.
 
-*   `AllowedOrigins`: The domains that are allowed to make requests to your R2 bucket. Replace `https://tallypadi.com` with your actual frontend domain. You can add multiple origins.
-*   `AllowedMethods`: The HTTP methods that are allowed. For presigned PUT uploads, `PUT` is required.
-*   `AllowedHeaders`: Which headers can be used in the actual request. Using `*` is generally permissive but simpler. If you need stricter control, list specific headers (e.g., `"Content-Type"`).
-*   `ExposeHeaders`: Headers that browsers are allowed to access. Typically not needed for simple PUT uploads.
-*   `MaxAgeSeconds`: How long the results of a preflight request (OPTIONS) can be cached.
+## 3. Shop Settings
+- **Database**: `User` model now has:
+    - `shopDescription` (string)
+    - `heroImageUrl` (string)
+- **API**:
+    - `GET /api/shop/me` returns shop details.
+    - `PUT /api/shop/me` updates shop details.
 
-## Backward Compatibility
+## 4. Image Replacement Policy
+- When a user replaces a Hero Image, the backend attempts to delete the old image from R2 **if and only if** the URL starts with `R2_PUBLIC_BASE_URL`.
+- This ensures we don't delete external images or base64 strings accidentally.
 
-*   **Existing `/uploads` static route:** The backend's `/uploads` static route for serving images will remain functional. Existing inventory items with image paths like `/uploads/some-image.jpg` will continue to display correctly.
-*   **Base64 uploads:** For a temporary period, the backend will still accept `data:image/...` base64 strings for image uploads in `addInventoryItem` and `updateInventoryItem` to ensure backward compatibility. It is recommended to migrate all frontend image uploads to the new R2 presigned URL flow.
+## 5. Client-Side Compression
+- Images are now compressed on the client (Canvas API) before upload.
+- Max width: 1600px.
+- Format: JPEG (0.8 quality).

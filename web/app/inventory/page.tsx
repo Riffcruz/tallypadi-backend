@@ -19,6 +19,8 @@ import {
   XCircle,
   Upload,
   FileDown,
+  Filter,
+  Trash2,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { getCookie } from '../../utils/cookies';
@@ -34,6 +36,7 @@ type InventoryItem = {
   lastUnitPrice?: number;
   costPrice?: number;
   image?: string;
+  category?: string;
 };
 
 function currencyPrefix(code?: string) {
@@ -56,6 +59,8 @@ function currencyPrefix(code?: string) {
 
 export default function InventoryPage() {
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [categories, setCategories] = useState<string[]>([]); // ✅ Categories list
+  const [selectedCategory, setSelectedCategory] = useState<string>(''); // ✅ Filter
   const [user, setUser] = useState<any>(null);
 
   // add item
@@ -63,6 +68,7 @@ export default function InventoryPage() {
   const [newItemStock, setNewItemStock] = useState('');
   const [newItemPrice, setNewItemPrice] = useState('');
   const [newItemCostPrice, setNewItemCostPrice] = useState('');
+  const [newItemCategory, setNewItemCategory] = useState(''); // ✅ New Item Category
   const [newItemImage, setNewItemImage] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(true);
@@ -77,6 +83,7 @@ export default function InventoryPage() {
   const [editStock, setEditStock] = useState<number | string>('');
   const [editPrice, setEditPrice] = useState<number | string>('');
   const [editCostPrice, setEditCostPrice] = useState<number | string>('');
+  const [editCategory, setEditCategory] = useState<string>(''); // ✅ Edit Category
   const [editImage, setEditImage] = useState<string | null>(null);
 
   // ✅ Bulk Edit State
@@ -135,9 +142,10 @@ export default function InventoryPage() {
     const token = getCookie('tallyToken');
     if (!token) return;
     try {
-      const [invRes, userRes] = await Promise.all([
+      const [invRes, userRes, catRes] = await Promise.all([
         axios.get(`${API_URL}/inventory`, { headers: { Authorization: `Bearer ${token}` } }),
         axios.get(`${API_URL}/dashboard`, { headers: { Authorization: `Bearer ${token}` } }),
+        axios.get(`${API_URL}/inventory/categories`, { headers: { Authorization: `Bearer ${token}` } }),
       ]);
 
       const raw = Array.isArray(invRes.data) ? invRes.data : [];
@@ -149,10 +157,12 @@ export default function InventoryPage() {
         lastUnitPrice: x.lastUnitPrice !== undefined ? Number(x.lastUnitPrice) : undefined,
         costPrice: Number(x.costPrice ?? 0),
         image: x.image || null,
+        category: x.category || '',
       }));
 
       setInventory(normalized.filter((i) => i.id && i.name));
       setUser(userRes.data.user);
+      setCategories(Array.isArray(catRes.data) ? catRes.data : []);
     } catch (err) {
       console.error('Failed to fetch data:', err);
     } finally {
@@ -170,12 +180,20 @@ export default function InventoryPage() {
     loadInventory();
   }, [router]);
 
-  // Filter items based on search
+  // Filter items based on search and category
   const filteredInventory = useMemo(() => {
+    let res = inventory;
+    
+    // Filter by Category
+    if (selectedCategory) {
+      res = res.filter((item) => item.category === selectedCategory);
+    }
+
     const q = searchTerm.trim().toLowerCase();
-    if (!q) return inventory;
-    return inventory.filter((item) => String(item.name || '').toLowerCase().includes(q));
-  }, [inventory, searchTerm]);
+    if (!q) return res;
+
+    return res.filter((item) => String(item.name || '').toLowerCase().includes(q));
+  }, [inventory, searchTerm, selectedCategory]);
 
   const showLockedModal = () => {
     const isTrial = user?.subscriptionStatus === 'trial';
@@ -214,6 +232,7 @@ export default function InventoryPage() {
       price: parseFloat(newItemPrice),
       costPrice: parseFloat(newItemCostPrice) || 0,
       image: newItemImage,
+      category: newItemCategory,
     };
 
     try {
@@ -234,14 +253,21 @@ export default function InventoryPage() {
         lastUnitPrice: x.lastUnitPrice !== undefined ? Number(x.lastUnitPrice) : undefined,
         costPrice: Number(x.costPrice ?? 0),
         image: x.image || null,
+        category: x.category || '',
       }));
 
       setInventory(normalized.filter((i) => i.id && i.name));
+
+      // Update categories if new
+      if (newItemCategory && !categories.includes(newItemCategory.toLowerCase())) {
+        setCategories(prev => [...prev, newItemCategory.toLowerCase()].sort());
+      }
 
       setNewItemName('');
       setNewItemStock('');
       setNewItemPrice('');
       setNewItemCostPrice('');
+      setNewItemCategory('');
       setNewItemImage(null);
       setAddOpen(false);
 
@@ -266,6 +292,49 @@ export default function InventoryPage() {
     }
   };
 
+  const handleDelete = async (item: InventoryItem) => {
+    if (!hasFeatureAccess) {
+      showLockedModal();
+      return;
+    }
+
+    const result = await Swal.fire({
+      title: 'Delete Item?',
+      text: `Are you sure you want to delete "${item.name}"? This cannot be undone.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#ef4444',
+      cancelButtonColor: '#e5e7eb',
+      confirmButtonText: 'Yes, Delete',
+      cancelButtonText: '<span style="color:#374151">Cancel</span>',
+    });
+
+    if (!result.isConfirmed) return;
+
+    const token = getCookie('tallyToken');
+    try {
+      await axios.delete(`${API_URL}/inventory/${item.id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      setInventory((prev) => prev.filter((i) => i.id !== item.id));
+
+      Swal.fire({
+        toast: true,
+        position: 'top-end',
+        icon: 'success',
+        title: 'Deleted',
+        text: 'Item removed.',
+        showConfirmButton: false,
+        timer: 1500,
+        timerProgressBar: true,
+      });
+    } catch (err) {
+      console.error(err);
+      Swal.fire('Error', 'Failed to delete item.', 'error');
+    }
+  };
+
   const startEditing = (item: InventoryItem) => {
     if (!hasFeatureAccess) {
       showLockedModal();
@@ -278,6 +347,7 @@ export default function InventoryPage() {
     setEditPrice(item.price || item.lastUnitPrice || 0);
     setEditCostPrice(item.costPrice || 0);
     setEditImage(item.image || null);
+    setEditCategory(item.category || '');
     setEditOpen(true);
   };
 
@@ -288,6 +358,7 @@ export default function InventoryPage() {
     setEditStock('');
     setEditPrice('');
     setEditCostPrice('');
+    setEditCategory('');
     setEditImage(null);
   };
 
@@ -308,6 +379,7 @@ export default function InventoryPage() {
           price: Number(editPrice),
           costPrice: Number(editCostPrice),
           image: editImage,
+          category: editCategory,
         },
         {
           headers: { Authorization: `Bearer ${token}` },
@@ -317,9 +389,20 @@ export default function InventoryPage() {
 
       setInventory((prev) =>
         prev.map((item) => 
-          item.id === id ? { ...item, stock: Number(editStock), price: Number(editPrice), costPrice: Number(editCostPrice), image: editImage || item.image } : item
+          item.id === id ? { 
+            ...item, 
+            stock: Number(editStock), 
+            price: Number(editPrice), 
+            costPrice: Number(editCostPrice), 
+            image: editImage || item.image,
+            category: editCategory
+          } : item
         )
       );
+      
+      if (editCategory && !categories.includes(editCategory.toLowerCase())) {
+        setCategories(prev => [...prev, editCategory.toLowerCase()].sort());
+      }
 
       setEditOpen(false);
       setEditingId(null);
@@ -682,6 +765,19 @@ export default function InventoryPage() {
                 />
               </div>
 
+              {/* Category Filter */}
+              <div className="hidden sm:block relative">
+                 <select
+                    value={selectedCategory}
+                    onChange={(e) => setSelectedCategory(e.target.value)}
+                    className="appearance-none pl-3 pr-8 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-semibold outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 max-w-[140px]"
+                 >
+                    <option value="">All Categories</option>
+                    {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                 </select>
+                 <Filter className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 w-3.5 h-3.5 pointer-events-none" />
+              </div>
+
               <button
                 onClick={() => {
                   if (!hasFeatureAccess) return showLockedModal();
@@ -748,6 +844,22 @@ export default function InventoryPage() {
                     disabled={showLockUI}
                   />
                 </div>
+              </div>
+
+              <div className="col-span-6 md:col-span-3">
+                 <label className="block text-xs font-bold text-slate-500 mb-1 ml-1">Category (Opt)</label>
+                 <input
+                    type="text"
+                    list="categories-list"
+                    value={newItemCategory}
+                    onChange={(e) => setNewItemCategory(e.target.value)}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 text-sm font-semibold"
+                    placeholder="Category"
+                    disabled={showLockUI}
+                  />
+                  <datalist id="categories-list">
+                    {categories.map(c => <option key={c} value={c} />)}
+                  </datalist>
               </div>
 
               <div className="col-span-6 md:col-span-3">
@@ -934,19 +1046,34 @@ export default function InventoryPage() {
                       </td>
 
                       <td className="px-6 py-4 text-right">
-                        <button
-                          onClick={() => startEditing(item)}
-                          className={`inline-flex items-center gap-2 px-4 py-2 rounded-2xl font-extrabold text-xs border transition active:scale-[0.98] ${
-                            showLockUI
-                              ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
-                              : 'bg-white text-slate-900 border-slate-200 hover:bg-slate-50'
-                          }`}
-                          title={showLockUI ? 'Upgrade to edit' : 'Edit item'}
-                          disabled={showLockUI}
-                        >
-                          {showLockUI ? <Lock className="w-4 h-4" /> : <Edit2 className="w-4 h-4" />}
-                          Edit
-                        </button>
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => startEditing(item)}
+                            className={`inline-flex items-center gap-2 px-4 py-2 rounded-2xl font-extrabold text-xs border transition active:scale-[0.98] ${
+                              showLockUI
+                                ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
+                                : 'bg-white text-slate-900 border-slate-200 hover:bg-slate-50'
+                            }`}
+                            title={showLockUI ? 'Upgrade to edit' : 'Edit item'}
+                            disabled={showLockUI}
+                          >
+                            {showLockUI ? <Lock className="w-4 h-4" /> : <Edit2 className="w-4 h-4" />}
+                            Edit
+                          </button>
+
+                          <button
+                            onClick={() => handleDelete(item)}
+                            disabled={showLockUI}
+                            className={`p-2 rounded-2xl border transition active:scale-[0.98] ${
+                                showLockUI 
+                                ? 'bg-slate-100 text-slate-300 border-slate-200 cursor-not-allowed' 
+                                : 'bg-white text-rose-500 border-rose-100 hover:bg-rose-50 hover:border-rose-200'
+                            }`}
+                            title="Delete"
+                          >
+                             <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -1020,18 +1147,32 @@ export default function InventoryPage() {
                     </div>
                   </div>
 
-                  <button
-                    onClick={() => startEditing(item)}
-                    disabled={showLockUI}
-                    className={`w-11 h-11 rounded-2xl border flex items-center justify-center shrink-0 transition active:scale-[0.98] ${
-                      showLockUI
-                        ? 'bg-slate-100 border-slate-200 text-slate-400'
-                        : 'bg-slate-900 border-slate-900 text-white hover:bg-black'
-                    }`}
-                    title={showLockUI ? 'Upgrade to edit' : 'Edit'}
-                  >
-                    {showLockUI ? <Lock className="w-4 h-4" /> : <Edit2 className="w-4 h-4" />}
-                  </button>
+                  <div className="flex flex-col gap-2">
+                    <button
+                      onClick={() => startEditing(item)}
+                      disabled={showLockUI}
+                      className={`w-10 h-10 rounded-2xl border flex items-center justify-center shrink-0 transition active:scale-[0.98] ${
+                        showLockUI
+                          ? 'bg-slate-100 border-slate-200 text-slate-400'
+                          : 'bg-slate-900 border-slate-900 text-white hover:bg-black'
+                      }`}
+                      title={showLockUI ? 'Upgrade to edit' : 'Edit'}
+                    >
+                      {showLockUI ? <Lock className="w-4 h-4" /> : <Edit2 className="w-4 h-4" />}
+                    </button>
+                    
+                    <button
+                      onClick={() => handleDelete(item)}
+                      disabled={showLockUI}
+                      className={`w-10 h-10 rounded-2xl border flex items-center justify-center shrink-0 transition active:scale-[0.98] ${
+                        showLockUI
+                          ? 'bg-slate-100 border-slate-200 text-slate-300'
+                          : 'bg-white border-rose-100 text-rose-500 hover:bg-rose-50'
+                      }`}
+                    >
+                       <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               );
             })
@@ -1102,6 +1243,21 @@ export default function InventoryPage() {
                     required
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-extrabold text-slate-600 mb-1">Category (Optional)</label>
+                <input
+                  type="text"
+                  list="categories-list-mobile"
+                  value={newItemCategory}
+                  onChange={(e) => setNewItemCategory(e.target.value)}
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 text-sm font-semibold"
+                  placeholder="e.g. Grains"
+                />
+                <datalist id="categories-list-mobile">
+                  {categories.map(c => <option key={c} value={c} />)}
+                </datalist>
               </div>
 
               <div className="grid grid-cols-3 gap-3">
@@ -1212,6 +1368,21 @@ export default function InventoryPage() {
                   </div>
                 </div>
               </div>
+
+               <div className="mb-3">
+                  <label className="block text-xs font-extrabold text-slate-600 mb-1">Category (Optional)</label>
+                  <input
+                    type="text"
+                    list="categories-list-edit"
+                    value={editCategory}
+                    onChange={(e) => setEditCategory(e.target.value)}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 text-sm font-semibold"
+                    placeholder="e.g. Drinks"
+                  />
+                  <datalist id="categories-list-edit">
+                    {categories.map(c => <option key={c} value={c} />)}
+                  </datalist>
+               </div>
 
               <div className="grid grid-cols-3 gap-3">
                 <div>

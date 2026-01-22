@@ -64,11 +64,29 @@ export const getInventory = async (req: Request, res: Response) => {
       price: item.lastUnitPrice || 0,
       costPrice: item.costPrice || 0,
       image: item.image || null,
+      category: item.category || null,
     }));
 
     return res.json(formattedItems);
   } catch (error) {
     console.error('Inventory Fetch Error:', error);
+    return res.status(500).json({ error: 'Server Error' });
+  }
+};
+
+// GET distinct categories
+export const getCategories = async (req: Request, res: Response) => {
+  try {
+    const user = await getAuthUser(req);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+
+    const categories = await Inventory.distinct('category', { user: user._id });
+    // Filter out null/empty strings just in case
+    const cleanCategories = categories.filter((c) => c && typeof c === 'string' && c.trim() !== '');
+
+    return res.json(cleanCategories);
+  } catch (error) {
+    console.error('Get Categories Error:', error);
     return res.status(500).json({ error: 'Server Error' });
   }
 };
@@ -94,6 +112,7 @@ export const getInventoryItem = async (req: Request, res: Response) => {
       lastUnitPrice: item.lastUnitPrice || 0,
       costPrice: item.costPrice || 0,
       image: item.image || null,
+      category: item.category || null,
     });
   } catch (error) {
     console.error('Get Item Error:', error);
@@ -120,6 +139,7 @@ export const addInventoryItem = async (req: Request, res: Response) => {
       imageUrl = null; // Store null/undefined if no valid image data
     }
     const safeName = sanitizeString(body.name);
+    const safeCategory = sanitizeString(body.category); // Sanitize category
 
     const user = await getAuthUser(req);
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
@@ -141,6 +161,7 @@ export const addInventoryItem = async (req: Request, res: Response) => {
       if (safePrice !== undefined) item.lastUnitPrice = safePrice;
       if (safeCostPrice !== undefined) item.costPrice = safeCostPrice;
       if (imageUrl) item.image = imageUrl;
+      if (safeCategory !== undefined) item.category = safeCategory?.toLowerCase(); // Update category if provided
       await item.save();
     } else {
       item = await Inventory.create({
@@ -150,6 +171,7 @@ export const addInventoryItem = async (req: Request, res: Response) => {
         lastUnitPrice: safePrice !== undefined ? safePrice : 0,
         costPrice: safeCostPrice !== undefined ? safeCostPrice : 0,
         image: imageUrl || undefined,
+        category: safeCategory?.toLowerCase(),
       });
     }
 
@@ -160,6 +182,7 @@ export const addInventoryItem = async (req: Request, res: Response) => {
       price: item.lastUnitPrice,
       costPrice: item.costPrice,
       image: item.image,
+      category: item.category,
     });
   } catch (error) {
     console.error('Add Item Error:', error);
@@ -186,6 +209,8 @@ export const updateInventoryItem = async (req: Request, res: Response) => {
       imageUrl = null; // Store null/undefined if no valid image data
     }
 
+    const safeCategory = sanitizeString(body.category);
+
     const user = await getAuthUser(req);
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
 
@@ -200,6 +225,7 @@ export const updateInventoryItem = async (req: Request, res: Response) => {
     if (safePrice !== undefined) item.lastUnitPrice = safePrice;
     if (safeCostPrice !== undefined) item.costPrice = safeCostPrice;
     if (imageUrl) item.image = imageUrl;
+    if (safeCategory !== undefined) item.category = safeCategory?.toLowerCase();
 
     await item.save();
 
@@ -210,6 +236,7 @@ export const updateInventoryItem = async (req: Request, res: Response) => {
       price: item.lastUnitPrice,
       costPrice: item.costPrice,
       image: item.image,
+      category: item.category,
     });
   } catch (error) {
     console.error('Update Item Error:', error);
@@ -258,11 +285,19 @@ export const bulkUpdateInventory = async (req: Request, res: Response) => {
   }
 };
 
+import { r2Service } from '../services/r2.service';
+
+// ... (existing imports)
+
 // IMPORT INVENTORY (CSV/JSON)
 export const importInventory = async (req: Request, res: Response) => {
+  // ... (existing code)
+};
+
+// DELETE an inventory item
+export const deleteInventoryItem = async (req: Request, res: Response) => {
   try {
-    const body = req.body || {};
-    const items = Array.isArray(body.items) ? body.items : [];
+    const { id } = req.params;
 
     const user = await getAuthUser(req);
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
@@ -271,42 +306,19 @@ export const importInventory = async (req: Request, res: Response) => {
       return denySubscription(res, user);
     }
 
-    if (items.length === 0) {
-      return res.json({ success: true, count: 0 });
+    const item = await Inventory.findOne({ _id: id, user: user._id });
+    if (!item) return res.status(404).json({ error: 'Item not found' });
+
+    // ✅ Delete image from R2 if exists
+    if (item.image) {
+       await r2Service.deleteFile(item.image);
     }
 
-    const operations = items.map((item: any) => {
-      const name = sanitizeString(item.name);
-      if (!name) return null;
+    await item.deleteOne();
 
-      const stock = validateNumber(item.stock);
-      const price = validateNumber(item.price);
-      const cost = validateNumber(item.costPrice);
-
-      const updateFields: any = {};
-      if (stock !== undefined) updateFields.quantity = stock;
-      if (price !== undefined) updateFields.lastUnitPrice = price;
-      if (cost !== undefined) updateFields.costPrice = cost;
-
-      return {
-        updateOne: {
-          filter: { user: user._id, name: name.toLowerCase() },
-          update: { 
-            $set: updateFields,
-            $setOnInsert: { user: user._id, name: name.toLowerCase() }
-          },
-          upsert: true,
-        },
-      };
-    }).filter(Boolean);
-
-    if (operations.length > 0) {
-      await Inventory.bulkWrite(operations);
-    }
-
-    return res.json({ success: true, count: operations.length });
+    return res.json({ success: true, id });
   } catch (error) {
-    console.error('Import Inventory Error:', error);
+    console.error('Delete Item Error:', error);
     return res.status(500).json({ error: 'Server Error' });
   }
 };

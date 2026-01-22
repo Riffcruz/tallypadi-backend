@@ -1,18 +1,20 @@
 import { Router } from 'express';
-import { getShopBySlug, updateShopSettings } from '../controllers/shop.controller';
-
-// Middleware to ensure user is logged in
-// We need to import the middleware. Since it's defined in server.ts as a const, 
-// we should probably extract it or reuse the one in src/middleware/authRequired.ts if it exists.
-// Checking file list... src/middleware/authRequired.ts exists.
+import { 
+  getShopBySlug, 
+  getShopProducts, 
+  getShopMe, 
+  updateShopSettings 
+} from '../controllers/shop.controller';
 import { authRequired } from '../middleware/authRequired';
 
 const router = Router();
 
-// Public Route
-router.get('/:slug', getShopBySlug);
+// ✅ Owner Routes (Auth Required)
+router.get('/me', authRequired, getShopMe);
+router.put('/me', authRequired, updateShopSettings);
 
-// Protected Route (Tycoon Owner)
-router.put('/settings', authRequired, updateShopSettings);
+// 🌍 Public Routes
+router.get('/:slug', getShopBySlug);
+router.get('/:slug/products', getShopProducts);
 
 export default router;

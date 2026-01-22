@@ -35,7 +35,9 @@ import {
   getInventory,
   getInventoryItem,
   addInventoryItem,
-  updateInventoryItem
+  updateInventoryItem,
+  getCategories,
+  deleteInventoryItem
 } from './controllers/inventory.controller';
 import { updateSettings } from './controllers/settings.controller';
 import { getGlobalSettings } from './controllers/admin.controller';
@@ -295,9 +297,11 @@ app.get('/api/dashboard', authRequired, getDashboardData);
 
 // --- INVENTORY ---
 app.get('/api/inventory', authRequired, getInventory);
+app.get('/api/inventory/categories', authRequired, getCategories);
 app.get('/api/inventory/:id', authRequired, getInventoryItem);
 app.post('/api/inventory', authRequired, addInventoryItem);
 app.put('/api/inventory/:id', authRequired, updateInventoryItem);
+app.delete('/api/inventory/:id', authRequired, deleteInventoryItem);
 
 // --- UPLOADS ---
 app.post('/api/uploads/presign', authRequired, presignUploadLimiter, presignUpload); // R2 presigned upload endpoint
