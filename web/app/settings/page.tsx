@@ -34,7 +34,19 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 
 interface StaffMember {
   id: string;
-// ...
+  phoneNumber: string;
+  name?: string;
+  dateAdded: string;
+}
+
+export default function SettingsPage() {
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const router = useRouter();
+
+  // Form State
   const [businessName, setBusinessName] = useState('');
   const [shopSlug, setShopSlug] = useState(''); // New State
   const [shopDescription, setShopDescription] = useState(''); // ✅ Shop Desc
