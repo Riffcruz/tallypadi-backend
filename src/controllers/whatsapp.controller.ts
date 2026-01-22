@@ -1762,6 +1762,19 @@ if (btn?.txId && btn?.action) {
           break;
       }
 
+      case 'GET_SHOP_LINK': {
+        const userToLink = owner || actor;
+        if (!userToLink.shopSlug) {
+           const base = (userToLink.businessName || 'shop').toLowerCase().replace(/[^a-z0-9]/g, '');
+           const rand = Math.floor(Math.random() * 10000);
+           userToLink.shopSlug = `${base}-${rand}`;
+           await userToLink.save();
+        }
+        const link = `https://tallypadi.com/shop/${userToLink.shopSlug}`;
+        await queueOutboundMessage(from, `🛍️ Here is your shop link:\n${link}\n\nShare this with customers so they can view your inventory!`);
+        break;
+      }
+
       case 'HELP':
       case 'UNKNOWN':
       default: {

@@ -33,6 +33,7 @@ export type ParsedIntent =
   | 'LIST_ORDERS'
   | 'UPDATE_ORDER'
   | 'CANCEL_ORDER'
+  | 'GET_SHOP_LINK'
   | 'HELP'
   | 'UNKNOWN';
 
@@ -233,6 +234,7 @@ function safeParsedResult(p: any): ParsedResult {
   'LIST_ORDERS',
   'UPDATE_ORDER',
   'CANCEL_ORDER',
+  'GET_SHOP_LINK',
 
   'HELP',
   'UNKNOWN',
@@ -431,6 +433,17 @@ function fallbackParse(message: string): ParsedResult | null {
     'Type any example above to get started ✅',
 });
 
+  }
+
+  // ✅ GET_SHOP_LINK fallback
+  if (
+    /\b(shop link|store link|website|my shop|share shop)\b/i.test(m) &&
+    !/\b(report|sales)\b/i.test(m)
+  ) {
+    return safeParsedResult({
+      intent: 'GET_SHOP_LINK',
+      reply_text: '🛍️ Fetching your shop link...',
+    });
   }
 
   if (/\b(undo|cancel last|mistake|delete last)\b/i.test(m)) {
@@ -1041,7 +1054,7 @@ Distinct from "Sales" (which are immediate).
 
 *** 7. OUTPUT SCHEMA ***
 {
-  "intent": "SALE|RESTOCK|SET_STOCK|DELETED_STOCK|DELETE_ALL_INVENTORY|DEFINE_PRICE|PRICE_CHECK|REPORT_SALES|REPORT_STOCK|REPORT_FULL|REPORT_DEBTS|REPORT_RECENT|DEBT_PAYMENT|CLOSE_BOOK|ADD_STAFF|DOWNLOAD_REPORT|UNDO_LAST_SALE|SETTINGS|CHANGE_LANGUAGE|SHOW_SETTINGS|CREATE_ORDER|LIST_ORDERS|UPDATE_ORDER|CANCEL_ORDER|HELP|UNKNOWN"
+  "intent": "SALE|RESTOCK|SET_STOCK|DELETED_STOCK|DELETE_ALL_INVENTORY|DEFINE_PRICE|PRICE_CHECK|REPORT_SALES|REPORT_STOCK|REPORT_FULL|REPORT_DEBTS|REPORT_RECENT|DEBT_PAYMENT|CLOSE_BOOK|ADD_STAFF|DOWNLOAD_REPORT|UNDO_LAST_SALE|SETTINGS|CHANGE_LANGUAGE|SHOW_SETTINGS|CREATE_ORDER|LIST_ORDERS|UPDATE_ORDER|CANCEL_ORDER|GET_SHOP_LINK|HELP|UNKNOWN"
   "is_credit": boolean,
   "customer_name": string | null,
   "staffPhoneNumber": string | null,
@@ -1079,6 +1092,10 @@ Distinct from "Sales" (which are immediate).
   "settings_update": { "key": string | null, "value": any | null },
   "reply_text": string
 }
+
+*** 5F. SHOP LINK ***
+- Triggers: "Get my shop link", "Share my shop", "Where is my website?", "My store link".
+- Output: intent = GET_SHOP_LINK
 `;
 
 

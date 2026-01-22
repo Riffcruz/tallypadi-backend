@@ -818,7 +818,7 @@ export default function InventoryPage() {
               <div className="col-span-12 md:col-span-3">
                 <label className="block text-xs font-bold text-slate-500 mb-1 ml-1">Item Name</label>
                 <div className="flex gap-2">
-                  <div className="relative w-10 h-10 shrink-0">
+                  <div className="relative w-16 h-12 shrink-0 group">
                     <input
                       type="file"
                       accept="image/*"
@@ -829,8 +829,9 @@ export default function InventoryPage() {
                     {newItemImage ? (
                       <img src={newItemImage} className="w-full h-full rounded-xl object-cover border border-slate-200" />
                     ) : (
-                      <div className="w-full h-full rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400">
-                        <Upload size={14} />
+                      <div className="w-full h-full rounded-xl bg-slate-50 border-2 border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 group-hover:bg-slate-100 group-hover:border-emerald-400 transition-colors">
+                        <Upload size={14} className="mb-0.5" />
+                        <span className="text-[8px] font-bold uppercase">Img</span>
                       </div>
                     )}
                   </div>
@@ -1218,7 +1219,7 @@ export default function InventoryPage() {
               <div>
                 <label className="block text-xs font-extrabold text-slate-600 mb-1">Item Name</label>
                 <div className="flex gap-2">
-                   <div className="relative w-12 h-12 shrink-0">
+                   <div className="relative w-16 h-12 shrink-0 group">
                     <input
                       type="file"
                       accept="image/*"
@@ -1229,8 +1230,9 @@ export default function InventoryPage() {
                     {newItemImage ? (
                       <img src={newItemImage} className="w-full h-full rounded-xl object-cover border border-slate-200" />
                     ) : (
-                      <div className="w-full h-full rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400">
-                        <Upload size={16} />
+                      <div className="w-full h-full rounded-xl bg-slate-50 border-2 border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 group-hover:bg-slate-100 group-hover:border-emerald-400 transition-colors">
+                        <Upload size={16} className="mb-0.5" />
+                        <span className="text-[8px] font-bold uppercase">Img</span>
                       </div>
                     )}
                   </div>
@@ -1348,7 +1350,7 @@ export default function InventoryPage() {
             <div className="p-5 space-y-4">
               
               <div className="flex justify-center mb-4">
-                <div className="relative w-20 h-20">
+                <div className="relative w-24 h-24 group">
                   <input
                     type="file"
                     accept="image/*"
@@ -1359,8 +1361,9 @@ export default function InventoryPage() {
                   {editImage ? (
                     <img src={getImageUrl(editImage)} className="w-full h-full rounded-2xl object-cover border border-slate-200 shadow-sm" />
                   ) : (
-                    <div className="w-full h-full rounded-2xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400">
-                      <Upload size={24} />
+                    <div className="w-full h-full rounded-2xl bg-slate-50 border-2 border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 group-hover:bg-slate-100 group-hover:border-emerald-400 transition-colors">
+                      <Upload size={24} className="mb-1" />
+                      <span className="text-[10px] font-bold uppercase">Upload</span>
                     </div>
                   )}
                   <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-1 border border-slate-200 shadow-sm pointer-events-none">

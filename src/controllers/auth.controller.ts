@@ -95,7 +95,7 @@ export const loginUser = async (req: Request, res: Response) => {
       },
       secret,
       {
-        expiresIn: '30d',
+        expiresIn: '1y',
         algorithm: 'HS256',
         // optional hardening (set envs if you use them)
         issuer: process.env.JWT_ISSUER || 'tallypadi',
@@ -191,7 +191,7 @@ export const registerUser = async (req: Request, res: Response) => {
       },
       secret,
       {
-        expiresIn: '30d',
+        expiresIn: '1y',
         algorithm: 'HS256',
         issuer: process.env.JWT_ISSUER || 'tallypadi',
         audience: process.env.JWT_AUDIENCE || 'tallypadi-web',
