@@ -25,7 +25,7 @@ import orderRouter from './routes/order.routes';
 import shopRouter from './routes/shop.routes';
 
 // --- SERVICES & CONFIG ---
-import { loginUser } from './controllers/auth.controller';
+import { loginUser, registerUser } from './controllers/auth.controller';
 import { startScheduler } from './services/scheduler';
 import { env } from './config/env';
 
@@ -292,6 +292,7 @@ const authRequired = (req: any, res: any, next: any) => {
 // --- AUTH & DASHBOARD ---
 // ✅ APPLY: IP + identity + email + phone limiters
 app.post('/api/login', loginLimiterIp, loginLimiterIdentity, emailLimiter, phoneLimiter, loginUser);
+app.post('/api/register', loginLimiterIp, loginLimiterIdentity, emailLimiter, phoneLimiter, registerUser);
 
 app.get('/api/dashboard', authRequired, getDashboardData);
 
