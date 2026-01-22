@@ -14,7 +14,8 @@ import {
   ChevronDown,
   ArrowLeft,
   Clock,
-  Languages
+  Languages,
+  Mail
 } from 'lucide-react';
 import { setCookie, getCookie } from '../../utils/cookies';
 
@@ -70,6 +71,7 @@ export default function RegisterPage() {
 
   const [countryCode, setCountryCode] = useState('+234');
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [email, setEmail] = useState('');
   const [shopName, setShopName] = useState('');
   const [password, setPassword] = useState('');
   const [closingHour, setClosingHour] = useState('20:00');
@@ -84,8 +86,9 @@ export default function RegisterPage() {
     if (!password.trim() || password.length < 6) return false;
     if (!shopName.trim()) return false;
     if (!phoneNumber.trim()) return false;
+    if (!email.trim()) return false;
     return true;
-  }, [loading, password, shopName, phoneNumber]);
+  }, [loading, password, shopName, phoneNumber, email]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -110,6 +113,7 @@ export default function RegisterPage() {
         `${API_URL}/register`,
         { 
           phoneNumber: phoneId,
+          email,
           businessName: shopName,
           password: pass,
           closingTime: closingHour,
@@ -200,6 +204,25 @@ export default function RegisterPage() {
                 placeholder="908 123 4567"
                 value={phoneNumber}
                 onChange={(e) => setPhoneNumber(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* Email */}
+          <div className="space-y-1.5">
+            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">
+              Email Address
+            </label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                <Mail className="h-5 w-5 text-slate-400" />
+              </div>
+              <input
+                type="email"
+                className="w-full h-12 pl-11 pr-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all outline-none text-slate-900 placeholder:text-slate-400 font-medium"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
               />
             </div>
           </div>

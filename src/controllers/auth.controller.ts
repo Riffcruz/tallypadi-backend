@@ -129,22 +129,33 @@ export const loginUser = async (req: Request, res: Response) => {
 
 export const registerUser = async (req: Request, res: Response) => {
   try {
-    const { phoneNumber, businessName, password, closingTime, language, countryCode } = req.body;
+    const { phoneNumber, businessName, password, closingTime, language, countryCode, email } = req.body;
 
-    if (!phoneNumber || !businessName || !password) {
-      return res.status(400).json({ error: 'Please provide phone number, shop name, and password' });
+    if (!phoneNumber || !businessName || !password || !email) {
+      return res.status(400).json({ error: 'Please provide phone number, email, shop name, and password' });
     }
 
-    // Basic phone validation (assuming frontend sends +234...)
-    // You might want to use the same normalization as login or stricter validation
-    const identifier = sanitizeString(phoneNumber);
-    if (!identifier) {
+    // Normalize phone (digits only)
+    const identifier = normalizePhone(phoneNumber);
+    if (!identifier || identifier.length < 10) {
         return res.status(400).json({ error: 'Invalid phone number' });
     }
 
-    const existingUser = await User.findOne({ phoneNumber: identifier });
-    if (existingUser) {
+    // Check existing phone
+    const existingUserPhone = await User.findOne({ phoneNumber: identifier });
+    if (existingUserPhone) {
       return res.status(400).json({ error: 'Phone number already registered' });
+    }
+
+    // Check existing email
+    const emailLower = email.trim().toLowerCase();
+    if (!isValidEmail(emailLower)) {
+       return res.status(400).json({ error: 'Invalid email address' });
+    }
+
+    const existingUserEmail = await User.findOne({ email: emailLower });
+    if (existingUserEmail) {
+      return res.status(400).json({ error: 'Email already registered' });
     }
 
     const salt = await bcrypt.genSalt(10);
@@ -152,6 +163,7 @@ export const registerUser = async (req: Request, res: Response) => {
 
     const newUser = await User.create({
       phoneNumber: identifier,
+      email: emailLower,
       businessName: sanitizeString(businessName) || undefined,
       password: hashedPassword,
       settings: {
@@ -164,7 +176,7 @@ export const registerUser = async (req: Request, res: Response) => {
       countryCode: countryCode || 'NG',
       registrationStage: 'COMPLETED',
       role: 'OWNER',
-      planType: 'OGA_BOSS', 
+      planType: 'TYCOON', 
     });
 
     const secret = process.env.JWT_SECRET;
@@ -193,6 +205,7 @@ export const registerUser = async (req: Request, res: Response) => {
         id: String(newUser._id),
         name: newUser.name,
         phoneNumber: newUser.phoneNumber,
+        email: newUser.email,
         businessName: newUser.businessName,
         role: newUser.role,
         planType: newUser.planType,
@@ -204,7 +217,7 @@ export const registerUser = async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error('Register Error:', err);
     if (err.code === 11000) {
-        return res.status(400).json({ error: 'Phone number already registered' });
+        return res.status(400).json({ error: 'Phone number or email already registered' });
     }
     return res.status(500).json({ error: 'Server Error' });
   }
