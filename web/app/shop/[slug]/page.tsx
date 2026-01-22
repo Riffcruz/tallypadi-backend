@@ -1,9 +1,10 @@
 import { Metadata } from 'next';
 import ShopClient from './ShopClient';
 
-// Helper to fetch data
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
+
+// Helper to fetch shop data
 async function getShopData(slug: string) {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
   // Revalidate every 60 seconds
   const res = await fetch(`${API_URL}/shop/${slug}`, { next: { revalidate: 60 } });
   
@@ -14,26 +15,63 @@ async function getShopData(slug: string) {
   return res.json();
 }
 
+// Helper to fetch single product data for metadata
+async function getProductData(slug: string, productId: string) {
+  const res = await fetch(`${API_URL}/shop/${slug}/products/${productId}`, { next: { revalidate: 60 } });
+  if (!res.ok) return null;
+  return res.json();
+}
+
 type Props = {
   params: Promise<{ slug: string }>;
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 };
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
+export async function generateMetadata({ params, searchParams }: Props): Promise<Metadata> {
   const { slug } = await params;
+  const resolvedSearchParams = await searchParams;
+  const productId = resolvedSearchParams.productId as string | undefined;
   
-  const data = await getShopData(slug);
+  const shopData = await getShopData(slug);
 
-  if (!data) return { title: 'Shop Not Found' };
+  if (!shopData) return { title: 'Shop Not Found' };
+
+  let title = `${shopData.shop.name} on Tallypadi`;
+  let description = shopData.shop.description || `Check out products from ${shopData.shop.name}`;
+  let imageUrl = shopData.shop.heroImageUrl;
+
+  // If viewing a specific product, override metadata
+  if (productId) {
+     const product = await getProductData(slug, productId);
+     if (product) {
+        title = `${product.name} | ${shopData.shop.name}`;
+        description = `Buy ${product.name} for ₦${product.price ? product.price.toLocaleString() : '0'}. ${shopData.shop.description || ''}`;
+        if (product.image) {
+           // Ensure absolute URL if it's relative
+           if (product.image.startsWith('http') || product.image.startsWith('data:')) {
+               imageUrl = product.image;
+           } else {
+               const baseUrl = API_URL.replace(/\/api\/?$/, '');
+               imageUrl = `${baseUrl}${product.image.startsWith('/') ? '' : '/'}${product.image}`;
+           }
+        }
+     }
+  }
 
   return {
-      title: `${data.shop.name} on Tallypadi`,
-      description: data.shop.description || `Check out products from ${data.shop.name}`,
+      title: title,
+      description: description,
       openGraph: {
-          title: data.shop.name,
-          description: data.shop.description || `Check out products from ${data.shop.name}`,
-          images: data.shop.heroImageUrl ? [data.shop.heroImageUrl] : [],
+          title: title,
+          description: description,
+          images: imageUrl ? [imageUrl] : [],
       },
+      twitter: {
+        card: 'summary_large_image',
+        title: title,
+        description: description,
+        images: imageUrl ? [imageUrl] : [],
+      }
   };
 }
 

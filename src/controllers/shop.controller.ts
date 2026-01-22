@@ -217,3 +217,37 @@ export const updateShopSettings = async (req: Request, res: Response): Promise<a
     return res.status(500).json({ error: 'Internal server error' });
   }
 };
+
+/**
+ * GET /api/shop/:slug/products/:productId
+ * Public endpoint to fetch a single product for metadata
+ */
+export const getShopProductById = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { slug, productId } = req.params;
+
+    const shopOwner = await User.findOne({ shopSlug: slug }).select('_id planType');
+    if (!shopOwner) return res.status(404).json({ error: 'Shop not found' });
+
+    if (shopOwner.planType !== 'TYCOON') return res.status(404).json({ error: 'Shop unavailable' });
+
+    const product = await Inventory.findOne({ 
+      _id: productId, 
+      user: shopOwner._id 
+    }).select('name lastUnitPrice image quantity category');
+
+    if (!product) return res.status(404).json({ error: 'Product not found' });
+
+    return res.json({
+      id: product._id,
+      name: product.name,
+      price: product.lastUnitPrice,
+      image: product.image,
+      category: product.category,
+      inStock: product.quantity > 0,
+    });
+  } catch (error) {
+    console.error('Error fetching product:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};

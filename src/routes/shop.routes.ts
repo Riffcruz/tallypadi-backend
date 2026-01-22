@@ -3,7 +3,8 @@ import {
   getShopBySlug, 
   getShopProducts, 
   getShopMe, 
-  updateShopSettings 
+  updateShopSettings,
+  getShopProductById
 } from '../controllers/shop.controller';
 import { authRequired } from '../middleware/authRequired';
 
@@ -16,5 +17,6 @@ router.put('/me', authRequired, updateShopSettings);
 // 🌍 Public Routes
 router.get('/:slug', getShopBySlug);
 router.get('/:slug/products', getShopProducts);
+router.get('/:slug/products/:productId', getShopProductById);
 
 export default router;

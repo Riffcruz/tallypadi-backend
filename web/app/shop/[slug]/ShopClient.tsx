@@ -297,10 +297,17 @@ export default function ShopClient({ initialShop, slug }: ShopClientProps) {
                                          <span className="font-black text-slate-900 text-base">
                                              {formatMoney(product.price)}
                                          </span>
-                                         <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
-                                            <ShoppingBag size={14} />
-                                         </div>
                                      </div>
+                                     
+                                     <a 
+                                       href={whatsappLink}
+                                       target="_blank"
+                                       rel="noreferrer"
+                                       className="mt-3 w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition shadow-lg shadow-slate-900/10 active:scale-95"
+                                     >
+                                         <ShoppingBag size={14} />
+                                         Buy Now
+                                     </a>
                                  </div>
                              </a>
                          );
