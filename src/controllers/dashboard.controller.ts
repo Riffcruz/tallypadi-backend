@@ -168,6 +168,11 @@ export const getDashboardData = async (req: Request | any, res: Response) => {
         nextBillingDate: user.nextBillingDate || null,
         settings: user.settings,
         
+        // Shop Fields
+        shopSlug: user.shopSlug || null,
+        shopDescription: user.shopDescription || null,
+        heroImageUrl: user.heroImageUrl || null,
+
         // ✅ NEW FIELDS SENT TO FRONTEND
         countryCode: user.countryCode, // e.g., 'US'
         currencyCode: currencyCode,    // e.g., 'USD'
