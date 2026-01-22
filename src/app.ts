@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { json } from 'express';
 import whatsappRouter from './routes/whatsapp.routes';
-import { loginUser } from './controllers/auth.controller'; // Add this
+import { loginUser, registerUser } from './controllers/auth.controller';
 
 const app = express();
 
@@ -14,6 +14,7 @@ app.get('/', (_req, res) => {
 });
 
 app.post('/api/login', loginUser);
+app.post('/api/register', registerUser);
 app.use('/webhook', whatsappRouter);
 
 export default app;

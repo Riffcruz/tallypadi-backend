@@ -127,4 +127,87 @@ export const loginUser = async (req: Request, res: Response) => {
   }
 };
 
+export const registerUser = async (req: Request, res: Response) => {
+  try {
+    const { phoneNumber, businessName, password, closingTime, language, countryCode } = req.body;
+
+    if (!phoneNumber || !businessName || !password) {
+      return res.status(400).json({ error: 'Please provide phone number, shop name, and password' });
+    }
+
+    // Basic phone validation (assuming frontend sends +234...)
+    // You might want to use the same normalization as login or stricter validation
+    const identifier = sanitizeString(phoneNumber);
+    if (!identifier) {
+        return res.status(400).json({ error: 'Invalid phone number' });
+    }
+
+    const existingUser = await User.findOne({ phoneNumber: identifier });
+    if (existingUser) {
+      return res.status(400).json({ error: 'Phone number already registered' });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    const newUser = await User.create({
+      phoneNumber: identifier,
+      businessName: sanitizeString(businessName),
+      password: hashedPassword,
+      settings: {
+        closingTime: closingTime || '20:00',
+        language: language || 'English',
+        utcOffsetMinutes: 60, // Default to WAT (Lagos)
+        dailySummaryEnabled: false,
+        pdfReportsEnabled: true
+      },
+      countryCode: countryCode || 'NG',
+      registrationStage: 'COMPLETED',
+      role: 'OWNER',
+      planType: 'OGA_BOSS', 
+    });
+
+    const secret = process.env.JWT_SECRET;
+    if (!secret) {
+        throw new Error('JWT_SECRET not configured');
+    }
+
+    const token = jwt.sign(
+      {
+        id: String(newUser._id),
+        role: newUser.role,
+      },
+      secret,
+      {
+        expiresIn: '30d',
+        algorithm: 'HS256',
+        issuer: process.env.JWT_ISSUER || 'tallypadi',
+        audience: process.env.JWT_AUDIENCE || 'tallypadi-web',
+      }
+    );
+
+    return res.status(201).json({
+      success: true,
+      token,
+      user: {
+        id: String(newUser._id),
+        name: newUser.name,
+        phoneNumber: newUser.phoneNumber,
+        businessName: newUser.businessName,
+        role: newUser.role,
+        planType: newUser.planType,
+        subscriptionStatus: newUser.subscriptionStatus,
+        trialEndsAt: newUser.trialEndsAt,
+      }
+    });
+
+  } catch (err: any) {
+    console.error('Register Error:', err);
+    if (err.code === 11000) {
+        return res.status(400).json({ error: 'Phone number already registered' });
+    }
+    return res.status(500).json({ error: 'Server Error' });
+  }
+};
+
 

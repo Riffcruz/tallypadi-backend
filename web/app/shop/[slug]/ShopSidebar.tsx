@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Home, Phone, ShoppingBag, List, X } from 'lucide-react';
+import { Home, Phone, ShoppingBag, List, X, UserPlus, FileText, CreditCard, HelpCircle } from 'lucide-react';
 
 interface ShopSidebarProps {
   shopName: string;
@@ -94,6 +94,44 @@ export default function ShopSidebar({
               ))}
             </div>
           )}
+
+          <div className="pt-4 mt-4 border-t border-slate-100">
+            <p className="px-4 text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+              TallyPadi
+            </p>
+            
+            <a
+              href="/register"
+              className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-200 font-medium text-sm text-left text-slate-600 hover:bg-slate-50"
+            >
+              <UserPlus size={16} className="opacity-50" />
+              <span>Register with TallyPadi</span>
+            </a>
+
+            <a
+              href="/help"
+              className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-200 font-medium text-sm text-left text-slate-600 hover:bg-slate-50"
+            >
+              <FileText size={16} className="opacity-50" />
+              <span>Docs & Help</span>
+            </a>
+
+            <a
+              href="/#pricing"
+              className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-200 font-medium text-sm text-left text-slate-600 hover:bg-slate-50"
+            >
+              <CreditCard size={16} className="opacity-50" />
+              <span>Pricing</span>
+            </a>
+
+            <a
+              href="/faq"
+              className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-200 font-medium text-sm text-left text-slate-600 hover:bg-slate-50"
+            >
+              <HelpCircle size={16} className="opacity-50" />
+              <span>FAQ</span>
+            </a>
+          </div>
         </nav>
 
         {/* Footer Actions */}

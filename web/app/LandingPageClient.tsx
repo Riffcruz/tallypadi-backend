@@ -392,40 +392,22 @@ export default function LandingPage() {
             {/* Desktop Links */}
             <div className="hidden md:flex space-x-8 items-center">
               <a
-                href="#how-it-works"
+                href="/"
                 className="text-sm font-medium text-slate-300 hover:text-emerald-400 transition"
               >
-                How it Works
-              </a>
-              <a
-                href="#features"
-                className="text-sm font-medium text-slate-300 hover:text-emerald-400 transition"
-              >
-                Features
-              </a>
-              <a
-                href="/help"
-                className="text-sm font-medium text-slate-300 hover:text-emerald-400 transition"
-              >
-                Docs
-              </a>
-              <a
-                href="#pricing"
-                className="text-sm font-medium text-slate-300 hover:text-emerald-400 transition"
-              >
-                Pricing
-              </a>
-              <a
-                href="#gallery"
-                className="text-sm font-medium text-slate-300 hover:text-emerald-400 transition"
-              >
-                Showcase
+                Home
               </a>
               <a
                 href="#faq"
                 className="text-sm font-medium text-slate-300 hover:text-emerald-400 transition"
               >
                 FAQ
+              </a>
+              <a
+                href="/help"
+                className="text-sm font-medium text-slate-300 hover:text-emerald-400 transition"
+              >
+                Docs
               </a>
             </div>
 
@@ -435,12 +417,10 @@ export default function LandingPage() {
                 Login
               </a>
               <a
-                href={whatsappLink}
-                target="_blank"
-                rel="noreferrer"
+                href="/register"
                 className="bg-emerald-500 hover:bg-emerald-400 text-white px-6 py-2.5 rounded-full font-bold transition-all shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:shadow-[0_0_30px_rgba(16,185,129,0.5)] text-sm flex items-center gap-2 group hover:-translate-y-0.5"
               >
-                Register Now <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
+                Signup <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
               </a>
             </div>
 
