@@ -5,15 +5,15 @@ export interface IUser extends Document {
   email?: string;
   password?: string;
 
-  registrationStage: 'EMAIL' | 'PASSWORD' | 'COMPLETED';
+  registrationStage?: 'EMAIL' | 'PASSWORD' | 'COMPLETED';
   businessName?: string;
   name?: string;
 
-  countryCode: string; // 'NG', 'US', etc.
+  countryCode?: string; // 'NG', 'US', etc.
 
   // Subscription Fields
-  subscriptionStatus: 'trial' | 'active' | 'past_due' | 'cancelled' | 'suspended';
-  trialEndsAt: Date;
+  subscriptionStatus?: 'trial' | 'active' | 'past_due' | 'cancelled' | 'suspended';
+  trialEndsAt?: Date;
   nextBillingDate?: Date;
   paystackCustomerCode?: string;
   paystackPlanCode?: string;
@@ -26,14 +26,14 @@ export interface IUser extends Document {
   lastSummaryDateKey?: string | null; // YYYY-MM-DD for last summary sent (user-local day)
 
   // Plan & Staff Fields
-  planType: 'OGA_BOSS' | 'TYCOON';
+  planType?: 'OGA_BOSS' | 'TYCOON';
   // interface
- role: 'OWNER' | 'STAFF' | 'ADMIN' | 'SUPER_ADMIN' | 'INVESTOR';
+  role?: 'OWNER' | 'STAFF' | 'ADMIN' | 'SUPER_ADMIN' | 'INVESTOR';
   ownerId?: Types.ObjectId;
 
-  messageHistory: string[];
+  messageHistory?: string[];
 
-  settings: {
+  settings?: {
     closingTime: string;
     utcOffsetMinutes: number;
     dailySummaryEnabled: boolean;
