@@ -51,7 +51,7 @@ export const handlePaystackWebhook = async (req: Request, res: Response) => {
                     await user.save();
 
                     // D. Send Confirmation
-                    const planName = user.planType.replace('_', ' '); // "OGA BOSS" or "TYCOON"
+                    const planName = (user.planType || '').replace('_', ' '); // "OGA BOSS" or "TYCOON"
                     await sendWhatsAppText(
                         user.phoneNumber, 
                         `✅ Payment Received! Your *${planName}* subscription is now ACTIVE.\n\nThank you for choosing Tallypadi! 🚀`

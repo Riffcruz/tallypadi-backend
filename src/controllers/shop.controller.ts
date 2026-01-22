@@ -68,8 +68,8 @@ export const getShopBySlug = async (req: Request, res: Response): Promise<any> =
 
     const now = new Date();
     const isTrial = shopOwner.subscriptionStatus === 'trial';
-    const isTrialExpired = isTrial && shopOwner.trialEndsAt < now;
-    const isPlanExpired = ['past_due', 'cancelled', 'suspended'].includes(shopOwner.subscriptionStatus);
+    const isTrialExpired = isTrial && !!shopOwner.trialEndsAt && shopOwner.trialEndsAt < now;
+    const isPlanExpired = ['past_due', 'cancelled', 'suspended'].includes(shopOwner.subscriptionStatus || '');
     const planExpired = isTrialExpired || isPlanExpired;
 
     // Fetch categories for filtering

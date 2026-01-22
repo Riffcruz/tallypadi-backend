@@ -152,7 +152,7 @@ export const registerUser = async (req: Request, res: Response) => {
 
     const newUser = await User.create({
       phoneNumber: identifier,
-      businessName: sanitizeString(businessName),
+      businessName: sanitizeString(businessName) || undefined,
       password: hashedPassword,
       settings: {
         closingTime: closingTime || '20:00',
