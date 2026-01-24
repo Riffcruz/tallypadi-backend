@@ -1765,10 +1765,35 @@ if (btn?.txId && btn?.action) {
       case 'GET_SHOP_LINK': {
         const userToLink = owner || actor;
         if (!userToLink.shopSlug) {
-           const base = (userToLink.businessName || 'shop').toLowerCase().replace(/[^a-z0-9]/g, '');
-           const rand = Math.floor(Math.random() * 10000);
-           userToLink.shopSlug = `${base}-${rand}`;
-           await userToLink.save();
+           let attempts = 0;
+           let saved = false;
+           
+           // Simple slugify: "My Shop!" -> "my-shop"
+           const base = (userToLink.businessName || 'shop')
+             .toLowerCase()
+             .trim()
+             .replace(/[\s\W-]+/g, '-')
+             .replace(/^-+|-+$/g, '');
+
+           while (!saved && attempts < 5) {
+             const rand = Math.floor(1000 + Math.random() * 9000); // 4 digit
+             userToLink.shopSlug = `${base}-${rand}`;
+             try {
+               await userToLink.save();
+               saved = true;
+             } catch (err: any) {
+               if (err.code === 11000) {
+                 attempts++;
+                 continue; 
+               }
+               throw err;
+             }
+           }
+           
+           if (!saved) {
+             await queueOutboundMessage(from, '⚠️ Could not generate a shop link right now. Please try again or set it in your dashboard settings.');
+             break;
+           }
         }
         const link = `https://tallypadi.com/shop/${userToLink.shopSlug}`;
         await queueOutboundMessage(from, `🛍️ Here is your shop link:\n${link}\n\nShare this with customers so they can view your inventory!`);

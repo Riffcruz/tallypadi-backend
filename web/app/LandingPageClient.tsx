@@ -23,6 +23,8 @@ import {
   Crown,
   Quote,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   HelpCircle,
 } from 'lucide-react';
 import Image from 'next/image';
@@ -331,6 +333,78 @@ const FaqItem = ({
 
 
 
+
+const TestimonialSlider = ({ testimonials }: { testimonials: Testimonial[] }) => {
+  const [current, setCurrent] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
+  const length = testimonials.length;
+
+  const nextSlide = () => {
+    setCurrent(current === length - 1 ? 0 : current + 1);
+  };
+
+  const prevSlide = () => {
+    setCurrent(current === 0 ? length - 1 : current - 1);
+  };
+
+  useEffect(() => {
+    if (isPaused) return;
+    const interval = setInterval(nextSlide, 5000);
+    return () => clearInterval(interval);
+  }, [current, isPaused, length]);
+
+  return (
+    <div 
+      className="relative w-full max-w-4xl mx-auto px-4 sm:px-12"
+      onMouseEnter={() => setIsPaused(true)}
+      onMouseLeave={() => setIsPaused(false)}
+    >
+      <div className="overflow-hidden relative min-h-[300px]">
+        <div 
+          className="flex transition-transform duration-700 ease-in-out"
+          style={{ transform: `translateX(-${current * 100}%)` }}
+        >
+          {testimonials.map((t, idx) => (
+            <div key={idx} className="w-full flex-shrink-0 px-2 sm:px-4">
+               <TestimonialCard t={t} />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <button 
+        onClick={prevSlide}
+        className="absolute left-0 top-1/2 -translate-y-1/2 p-2 rounded-full bg-slate-800/80 text-white hover:bg-emerald-500 transition-all border border-slate-700 hover:scale-110 z-10"
+        aria-label="Previous testimonial"
+      >
+        <ChevronLeft size={24} />
+      </button>
+
+      <button 
+        onClick={nextSlide}
+        className="absolute right-0 top-1/2 -translate-y-1/2 p-2 rounded-full bg-slate-800/80 text-white hover:bg-emerald-500 transition-all border border-slate-700 hover:scale-110 z-10"
+        aria-label="Next testimonial"
+      >
+        <ChevronRight size={24} />
+      </button>
+
+      <div className="flex justify-center mt-6 gap-2">
+        {testimonials.map((_, idx) => (
+          <button
+            key={idx}
+            onClick={() => setCurrent(idx)}
+            className={`transition-all duration-300 rounded-full ${
+              current === idx 
+                ? 'w-8 h-2 bg-emerald-500' 
+                : 'w-2 h-2 bg-slate-700 hover:bg-slate-600'
+            }`}
+            aria-label={`Go to slide ${idx + 1}`}
+          />
+        ))}
+      </div>
+    </div>
+  );
+};
 
 export default function LandingPage() {
   const [currentBg, setCurrentBg] = useState(0);
@@ -1103,17 +1177,9 @@ export default function LandingPage() {
               </div>
             </AnimatedSection>
 
-            <div className="grid lg:grid-cols-3 gap-6">
-              {TESTIMONIALS.map((t, idx) => (
-                <AnimatedSection
-                  key={idx}
-                  animation="fade-up"
-                  style={{ transitionDelay: `${idx * 90}ms` }}
-                >
-                  <TestimonialCard t={t} />
-                </AnimatedSection>
-              ))}
-            </div>
+            <AnimatedSection className="mt-8" animation="fade-up">
+               <TestimonialSlider testimonials={TESTIMONIALS} />
+            </AnimatedSection>
           </div>
         </div>
       </section>
