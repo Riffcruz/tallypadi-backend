@@ -23,9 +23,9 @@ export default function HqTransfersPage() {
     const [status, setStatus] = useState<{type: 'success' | 'error', msg: string} | null>(null);
 
     const router = useRouter();
-    const token = getCookie('tallyToken');
 
     useEffect(() => {
+        const token = getCookie('tallyToken');
         if (!token) {
             router.push('/login');
             return;
@@ -35,12 +35,18 @@ export default function HqTransfersPage() {
             .then(res => setBranches(res.data.branches))
             .catch(err => console.error("HQ Branches Error", err))
             .finally(() => setLoading(false));
-    }, [router, token]);
+    }, [router]);
 
     const handleTransfer = async (e: React.FormEvent) => {
         e.preventDefault();
         setStatus(null);
         setSubmitting(true);
+
+        const token = getCookie('tallyToken');
+        if (!token) {
+             router.push('/login');
+             return;
+        }
 
         if (!fromBranchId || !toBranchId || !itemName || !quantity) {
              setStatus({ type: 'error', msg: 'Please fill all fields' });
