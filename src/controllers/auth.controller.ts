@@ -24,9 +24,15 @@ const buildPhoneCandidates = (raw: string): string[] => {
   out.add(digits);
   out.add(`+${digits}`);
 
+  // Handle 080... -> 23480...
   if (digits.length === 11 && digits.startsWith('0')) {
     out.add(`234${digits.slice(1)}`);
     out.add(`+234${digits.slice(1)}`);
+  }
+
+  // Handle 23480... -> 080...
+  if (digits.length === 13 && digits.startsWith('234')) {
+    out.add(`0${digits.slice(3)}`);
   }
 
   return Array.from(out);
@@ -250,16 +256,19 @@ export const requestForgotPasswordOTP = async (req: Request, res: Response) => {
     // Check 24h interaction
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
     
-    // The ProcessedMessage model links to 'user' by ObjectId, not by phone number directly.
-    const lastMsg = await ProcessedMessage.findOne({
-      user: user._id,
-      createdAt: { $gte: oneDayAgo }
-    });
-
-    if (!lastMsg) {
-      return res.status(400).json({ 
-        error: 'No recent interaction. Please send a "Hello" to the bot on WhatsApp first to enable OTP.' 
+    // Check if user has been seen (lastSeen) in the last 24h
+    if (!user.lastSeen || user.lastSeen < oneDayAgo) {
+      // Fallback: Check ProcessedMessage (for older interactions before lastSeen was added)
+      const lastMsg = await ProcessedMessage.findOne({
+        user: user._id,
+        createdAt: { $gte: oneDayAgo }
       });
+
+      if (!lastMsg) {
+        return res.status(400).json({ 
+          error: 'No recent interaction. Please send a "Hello" to the bot on WhatsApp first to enable OTP.' 
+        });
+      }
     }
 
     // Generate OTP

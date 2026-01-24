@@ -984,6 +984,7 @@ export const handleMessageLogic = async (
     actor.messageHistory = actor.messageHistory || [];
     if (actor.messageHistory.length >= MAX_HISTORY) actor.messageHistory.shift();
     actor.messageHistory.push(rawText);
+    actor.lastSeen = new Date(); // ✅ Update last activity
     await actor.save();
 
     const { symbol, locale, code } = getUserCurrency(shopUser);
