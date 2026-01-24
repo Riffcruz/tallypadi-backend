@@ -14,7 +14,7 @@ export const getRelevantUserIds = async (user: IUser, reportScope: 'OWN' | 'SHOP
   }
 
   // If the report scope is 'SHOP' (for inventory/full shop sales for owner)
-  if (user.role === 'OWNER') {
+  if (user.role === 'OWNER' || user.role === 'HQ') {
     const staff = await User.find({ ownerId: user._id, role: 'STAFF' }).select('_id').lean();
     return [user._id as Types.ObjectId].concat(staff.map(s => s._id as Types.ObjectId));
   } else if (user.role === 'STAFF' && user.ownerId) {

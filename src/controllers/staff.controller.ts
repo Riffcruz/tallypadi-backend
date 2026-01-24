@@ -18,7 +18,8 @@ export const getStaff = async (req: Request, res: Response) => {
             id: s._id,
             phoneNumber: s.phoneNumber,
             name: s.name,
-            dateAdded: s.createdAt
+            dateAdded: s.createdAt,
+            isHqManager: s.isHqManager || false
         })));
 
     } catch (error) {
@@ -136,6 +137,47 @@ export const removeStaff = async (req: Request, res: Response) => {
 
     } catch (error) {
         console.error("Remove Staff Error:", error);
+        res.status(500).json({ error: "Server Error" });
+    }
+};
+
+// PUT /api/staff/:id
+export const updateStaff = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const { name } = req.body;
+        const userId = (req as any).user?.id;
+
+        if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+        const owner = await User.findById(userId);
+        if (!owner) return res.status(401).json({ error: "Unauthorized" });
+
+        const staff = await User.findOne({ _id: id, ownerId: owner._id });
+
+        if (!staff) {
+            return res.status(404).json({ error: "Staff member not found or does not belong to you." });
+        }
+
+        if (name) {
+            staff.name = sanitizeString(name) || staff.name;
+        }
+
+        await staff.save();
+
+        res.json({
+            success: true,
+            message: "Staff updated successfully",
+            staff: {
+                id: staff._id,
+                phoneNumber: staff.phoneNumber,
+                name: staff.name,
+                isHqManager: staff.isHqManager
+            }
+        });
+
+    } catch (error) {
+        console.error("Update Staff Error:", error);
         res.status(500).json({ error: "Server Error" });
     }
 };

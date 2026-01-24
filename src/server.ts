@@ -49,7 +49,7 @@ import {
 } from './controllers/inventory.controller';
 import { updateSettings } from './controllers/settings.controller';
 import { getGlobalSettings } from './controllers/admin.controller';
-import { getStaff, addStaff, removeStaff } from './controllers/staff.controller';
+import { getStaff, addStaff, removeStaff, updateStaff } from './controllers/staff.controller';
 import { presignUpload } from './controllers/upload.controller';
 
 import {
@@ -358,6 +358,7 @@ app.put('/api/settings', authRequired, updateSettings);
 app.get('/api/admin/settings', getGlobalSettings); // Public config (OK if intentional)
 app.get('/api/staff', authRequired, getStaff);
 app.post('/api/staff', authRequired, addStaff);
+app.put('/api/staff/:id', authRequired, updateStaff);
 app.delete('/api/staff/:id', authRequired, removeStaff);
 
 // --- BILLING & SYSTEM ---

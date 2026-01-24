@@ -10,6 +10,18 @@ import { removeCookie } from '../utils/cookies';
 export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
+  const [user, setUser] = React.useState<any>(null);
+
+  React.useEffect(() => {
+    try {
+      const stored = sessionStorage.getItem('tallyUser');
+      if (stored) {
+        setUser(JSON.parse(stored));
+      }
+    } catch (e) {
+      console.error("Failed to parse user session", e);
+    }
+  }, []);
 
   const handleLogout = () => {
     removeCookie('tallyToken');
@@ -28,6 +40,11 @@ export default function Sidebar() {
     { href: '/settings', icon: Settings, label: 'Settings' },
     { href: '/help', icon: BookOpen, label: 'Guide' },
   ];
+
+  if (user && (user.role === 'HQ' || user.isHqManager)) {
+    // Add HQ link at the top or appropriate place. Let's add it at the top.
+    menuItems.unshift({ href: '/hq/dashboard', icon: LayoutDashboard, label: 'HQ Dashboard' });
+  }
 
   return (
     <div className="w-64 bg-white h-[100dvh] border-r border-gray-200 flex flex-col fixed left-0 top-0 z-10">

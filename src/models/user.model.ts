@@ -29,6 +29,7 @@ export interface IUser extends Document {
   planType?: 'OGA_BOSS' | 'TYCOON';
   // interface
   role?: 'OWNER' | 'STAFF' | 'ADMIN' | 'SUPER_ADMIN' | 'INVESTOR' | 'HQ';
+  isHqManager?: boolean;
   ownerId?: Types.ObjectId;
   hqId?: Types.ObjectId;
 
@@ -119,6 +120,7 @@ const userSchema = new Schema<IUser>(
     enum: ['OWNER', 'STAFF', 'ADMIN', 'SUPER_ADMIN', 'INVESTOR', 'HQ'],
     default: 'OWNER',
   },
+  isHqManager: { type: Boolean, default: false },
 
 
     ownerId: { type: Schema.Types.ObjectId, ref: 'User' },

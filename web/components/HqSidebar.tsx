@@ -20,6 +20,7 @@ export default function HqSidebar() {
     { href: '/hq/dashboard', icon: LayoutDashboard, label: 'HQ Dashboard' },
     { href: '/hq/branches', icon: Store, label: 'Branches' },
     { href: '/hq/inventory', icon: ArrowRightLeft, label: 'Transfers' },
+    { href: '/dashboard', icon: Store, label: 'Switch to Shop' },
     { href: '/settings', icon: Settings, label: 'Settings' },
   ];
 

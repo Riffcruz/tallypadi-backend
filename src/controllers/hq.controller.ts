@@ -15,12 +15,19 @@ const getAuthUser = async (req: Request) => {
 // List all branches (Owners) linked to this HQ
 export const getBranches = async (req: Request, res: Response) => {
     try {
-        const hqUser = await getAuthUser(req);
-        if (!hqUser || hqUser.role !== 'HQ') {
-            return res.status(403).json({ error: 'Access denied. HQ account required.' });
+        const user = await getAuthUser(req);
+        if (!user) return res.status(401).json({ error: 'Unauthorized' });
+
+        const isHq = user.role === 'HQ' || user.role === 'OWNER';
+        const isHqManager = user.role === 'STAFF' && user.isHqManager;
+
+        if (!isHq && !isHqManager) {
+            return res.status(403).json({ error: 'Access denied. HQ privileges required.' });
         }
 
-        const branches = await User.find({ hqId: hqUser._id, role: 'OWNER' })
+        const hqId = (user.role === 'STAFF') ? user.ownerId : user._id;
+
+        const branches = await User.find({ hqId: hqId, role: 'OWNER' })
             .select('businessName name phoneNumber city address shopSlug lastSeen subscriptionStatus')
             .lean();
 
@@ -35,12 +42,19 @@ export const getBranches = async (req: Request, res: Response) => {
 // Aggregated stats across all branches
 export const getHqDashboardData = async (req: Request, res: Response) => {
     try {
-        const hqUser = await getAuthUser(req);
-        if (!hqUser || hqUser.role !== 'HQ') {
-            return res.status(403).json({ error: 'Access denied. HQ account required.' });
+        const user = await getAuthUser(req);
+        if (!user) return res.status(401).json({ error: 'Unauthorized' });
+
+        const isHq = user.role === 'HQ' || user.role === 'OWNER';
+        const isHqManager = user.role === 'STAFF' && user.isHqManager;
+
+        if (!isHq && !isHqManager) {
+            return res.status(403).json({ error: 'Access denied. HQ privileges required.' });
         }
 
-        const branchDocs = await User.find({ hqId: hqUser._id, role: 'OWNER' }).select('_id businessName').lean();
+        const hqId = (user.role === 'STAFF') ? user.ownerId : user._id;
+
+        const branchDocs = await User.find({ hqId: hqId, role: 'OWNER' }).select('_id businessName').lean();
         const branchIds = branchDocs.map(b => b._id);
 
         if (branchIds.length === 0) {
@@ -108,11 +122,18 @@ export const getHqDashboardData = async (req: Request, res: Response) => {
 export const transferStock = async (req: Request, res: Response) => {
     try {
         const { fromBranchId, toBranchId, itemName, quantity } = req.body;
-        const hqUser = await getAuthUser(req);
+        const user = await getAuthUser(req);
 
-        if (!hqUser || hqUser.role !== 'HQ') {
-            return res.status(403).json({ error: 'Access denied. HQ account required.' });
+        if (!user) return res.status(401).json({ error: 'Unauthorized' });
+
+        const isHq = user.role === 'HQ' || user.role === 'OWNER';
+        const isHqManager = user.role === 'STAFF' && user.isHqManager;
+
+        if (!isHq && !isHqManager) {
+            return res.status(403).json({ error: 'Access denied. HQ privileges required.' });
         }
+
+        const hqId = (user.role === 'STAFF') ? user.ownerId : user._id;
 
         if (!fromBranchId || !toBranchId || !itemName || !quantity || quantity <= 0) {
             return res.status(400).json({ error: 'Invalid transfer details' });
@@ -120,8 +141,8 @@ export const transferStock = async (req: Request, res: Response) => {
 
         // Verify ownership of branches
         const [fromBranch, toBranch] = await Promise.all([
-            User.findOne({ _id: fromBranchId, hqId: hqUser._id }),
-            User.findOne({ _id: toBranchId, hqId: hqUser._id })
+            User.findOne({ _id: fromBranchId, hqId: hqId }),
+            User.findOne({ _id: toBranchId, hqId: hqId })
         ]);
 
         if (!fromBranch || !toBranch) {
@@ -162,20 +183,63 @@ export const transferStock = async (req: Request, res: Response) => {
         // Creating a 'TRANSFER' transaction record would be good for audit trails.
         
         await Transaction.create({
-            user: hqUser._id, // Logged under HQ? Or Create 2 transactions one for each user?
+            user: hqId, // Logged under HQ
             // Let's create a special transaction for audit
             type: 'TRANSFER',
             totalMoney: 0,
             items: [{ name: itemName, qty: quantity, unitPrice: sourceItem.lastUnitPrice }],
             timestamp: new Date(),
             date: new Date().toISOString().split('T')[0],
-            notes: `Transfer from ${fromBranch.businessName} to ${toBranch.businessName}`
+            notes: `Transfer from ${fromBranch.businessName} to ${toBranch.businessName} by ${user.name}`
         });
 
         return res.json({ success: true, message: `Transferred ${quantity} ${itemName} from ${fromBranch.businessName} to ${toBranch.businessName}` });
 
     } catch (error) {
         console.error('HQ Transfer Error:', error);
+        return res.status(500).json({ error: 'Server Error' });
+    }
+};
+
+// POST /hq/staff/promote
+// Grant HQ Management privileges to a staff member
+export const promoteToHqManager = async (req: Request, res: Response) => {
+    try {
+        const { staffId } = req.body;
+        const user = await getAuthUser(req);
+
+        if (!user || (user.role !== 'HQ' && user.role !== 'OWNER')) {
+            return res.status(403).json({ error: 'Access denied. Only the HQ Owner can promote staff.' });
+        }
+
+        if (!staffId) {
+            return res.status(400).json({ error: 'Staff ID is required' });
+        }
+
+        // Find the staff member
+        // Ensure they are owned by this HQ (assuming HQ acts as the Owner for these staff)
+        const staff = await User.findOne({ _id: staffId, ownerId: user._id, role: 'STAFF' });
+
+        if (!staff) {
+            return res.status(404).json({ error: 'Staff member not found or does not belong to you.' });
+        }
+
+        // Update
+        staff.isHqManager = true;
+        await staff.save();
+
+        return res.json({ 
+            success: true, 
+            message: `${staff.name} has been promoted to HQ Manager.`,
+            staff: {
+                id: staff._id,
+                name: staff.name,
+                isHqManager: true
+            }
+        });
+
+    } catch (error) {
+        console.error('HQ Promote Staff Error:', error);
         return res.status(500).json({ error: 'Server Error' });
     }
 };
