@@ -45,6 +45,7 @@ export interface ITransaction extends Document {
   timestamp: Date;
   date: string; // Format: YYYY-MM-DD
   messageId?: string; // For WhatsApp linkage
+  notes?: string;
   
   createdAt: Date;
   updatedAt: Date;
@@ -157,6 +158,7 @@ const transactionSchema = new Schema<ITransaction>(
       unique: true, 
       sparse: true 
     },
+    notes: { type: String, default: null },
   },
   { timestamps: true }
 );

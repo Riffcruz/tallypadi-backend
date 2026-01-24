@@ -146,6 +146,7 @@ export const hqService = {
         totalMoney: 0,
         items: [{ name: itemName, qty: quantity, unitPrice: sourceItem.lastUnitPrice }],
         timestamp: new Date(),
+        date: new Date().toISOString().split('T')[0],
         notes: `Transfer from ${fromBranch.businessName} to ${toBranch.businessName}` // Store notes if schema allows or rely on type
     });
 
