@@ -29,6 +29,7 @@ import { sendWhatsAppDocumentBuffer } from '../services/whatsapp.service';
 import { undoLastSale } from '../services/undo.service';
 
 import { resolveDebtor, normName } from '../services/debtor.service';
+import { hqService } from '../services/hq.service';
 
 // Reports / PDF (your existing services)
 import {
@@ -1799,6 +1800,79 @@ if (btn?.txId && btn?.action) {
         const link = `https://tallypadi.com/shop/${userToLink.shopSlug}`;
         await queueOutboundMessage(from, `🛍️ Here is your shop link:\n${link}\n\nShare this with customers so they can view your inventory!`);
         break;
+      }
+
+      case 'HQ_DASHBOARD': {
+          if (actor.role !== 'HQ') {
+              await queueOutboundMessage(from, "❌ Access denied. This command is for HQ accounts only.");
+              break;
+          }
+
+          const stats = await hqService.getDashboardStats(String(actor._id));
+          const { overview } = stats;
+
+          const msg = `🏢 *HQ Dashboard (All Branches)*\n\n` +
+                      `💰 Total Revenue: ${symbol}${overview.totalRevenue.toLocaleString(locale)}\n` +
+                      `📉 Total Sales: ${overview.totalSales}\n` +
+                      `📅 Today's Revenue: ${symbol}${overview.todayRevenue.toLocaleString(locale)}\n` +
+                      `🏪 Active Branches: ${overview.activeBranches}\n\n` +
+                      `*Recent Network Sales:*\n` +
+                      (stats.recentNetworkSales.length ? 
+                          stats.recentNetworkSales.map(s => `• ${s.branchName}: ${s.items} (${symbol}${Number(s.amount).toLocaleString(locale)})`).join('\n') 
+                          : "_No recent sales_");
+          
+          await queueOutboundMessage(from, msg);
+          break;
+      }
+
+      case 'HQ_COMPARE_BRANCHES': {
+          if (actor.role !== 'HQ') {
+              await queueOutboundMessage(from, "❌ Access denied. This command is for HQ accounts only.");
+              break;
+          }
+
+          const comparison = await hqService.compareBranches(String(actor._id));
+          if (!comparison.length) {
+              await queueOutboundMessage(from, "No branch data available for comparison.");
+              break;
+          }
+
+          let msg = `📊 *Branch Comparison (Last 7 Days)*\n\n`;
+          comparison.forEach((c, i) => {
+              msg += `${i+1}. *${c.branchName}*\n   💰 ${symbol}${c.revenue.toLocaleString(locale)} | 🛒 ${c.salesCount} sales\n\n`;
+          });
+
+          await queueOutboundMessage(from, msg);
+          break;
+      }
+
+      case 'HQ_STOCK_TRANSFER': {
+          if (actor.role !== 'HQ') {
+              await queueOutboundMessage(from, "❌ Access denied. This command is for HQ accounts only.");
+              break;
+          }
+
+          if (parsed.needs_clarification || !parsed.transfer_params?.from_branch || !parsed.transfer_params?.to_branch || !parsed.items.length) {
+              await queueOutboundMessage(from, parsed.reply_text || "Please specify: 'Move [qty] [item] from [Branch A] to [Branch B]'");
+              break;
+          }
+
+          const item = parsed.items[0];
+          
+          try {
+              const result = await hqService.transferStock(
+                  String(actor._id),
+                  parsed.transfer_params.from_branch,
+                  parsed.transfer_params.to_branch,
+                  item.name,
+                  item.qty
+              );
+
+              await queueOutboundMessage(from, `✅ Transfer Successful!\n\nMoved *${item.qty} ${item.name}*\nFrom: ${result.fromBranch}\nTo: ${result.toBranch}`);
+          } catch (e: any) {
+              await queueOutboundMessage(from, `❌ Transfer Failed: ${e.message}`);
+          }
+          break;
       }
 
       case 'HELP':

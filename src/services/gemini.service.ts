@@ -34,6 +34,9 @@ export type ParsedIntent =
   | 'UPDATE_ORDER'
   | 'CANCEL_ORDER'
   | 'GET_SHOP_LINK'
+  | 'HQ_DASHBOARD'
+  | 'HQ_COMPARE_BRANCHES'
+  | 'HQ_STOCK_TRANSFER'
   | 'HELP'
   | 'UNKNOWN';
 
@@ -71,6 +74,10 @@ export interface ParsedResult {
   delivery_date: string | null;
   status: string | null;
 };
+  transfer_params?: {
+    from_branch: string | null;
+    to_branch: string | null;
+  };
   settings_update: { key: string | null; value: string | boolean | null };
   reply_text: string;
 }
@@ -235,6 +242,9 @@ function safeParsedResult(p: any): ParsedResult {
   'UPDATE_ORDER',
   'CANCEL_ORDER',
   'GET_SHOP_LINK',
+  'HQ_DASHBOARD',
+  'HQ_COMPARE_BRANCHES',
+  'HQ_STOCK_TRANSFER',
 
   'HELP',
   'UNKNOWN',
@@ -259,6 +269,12 @@ function safeParsedResult(p: any): ParsedResult {
       (i) => i.qty > 0 && i.name && i.name !== 'unknown_item' && i.name !== 'item'
     );
     if (!hasRealItem) needsClarification = true;
+  }
+  
+  if (intent === 'HQ_STOCK_TRANSFER') {
+      if (!p?.transfer_params?.from_branch || !p?.transfer_params?.to_branch || !normalizedItems[0]?.name) {
+          needsClarification = true;
+      }
   }
 
   // ✅ include_undone safe normalization:
@@ -313,6 +329,10 @@ function safeParsedResult(p: any): ParsedResult {
       description: p?.order_params?.description || null,
       delivery_date: p?.order_params?.delivery_date || null,
       status: p?.order_params?.status || null,
+    },
+    transfer_params: {
+      from_branch: p?.transfer_params?.from_branch || null,
+      to_branch: p?.transfer_params?.to_branch || null,
     },
     settings_update: {
       key: p?.settings_update?.key || null,
@@ -1089,6 +1109,10 @@ Distinct from "Sales" (which are immediate).
     "delivery_date": string | null,
     "status": string | null
   },
+  "transfer_params": {
+    "from_branch": string | null,
+    "to_branch": string | null
+  },
   "settings_update": { "key": string | null, "value": any | null },
   "reply_text": string
 }
@@ -1096,6 +1120,28 @@ Distinct from "Sales" (which are immediate).
 *** 5F. SHOP LINK ***
 - Triggers: "Get my shop link", "Share my shop", "Where is my website?", "My store link".
 - Output: intent = GET_SHOP_LINK
+
+*** 5G. HQ / MULTI-BRANCH COMMANDS (HQ ROLE ONLY) ***
+1) HQ_DASHBOARD
+- Triggers: "Total revenue from all branches", "Network sales", "All shops summary", "HQ report", "Group revenue".
+- Output: intent = HQ_DASHBOARD
+
+2) HQ_COMPARE_BRANCHES
+- Triggers: "Compare sales", "Compare branches", "Which branch is selling more?", "Lekki vs Ikeja sales".
+- Output: intent = HQ_COMPARE_BRANCHES
+
+3) HQ_STOCK_TRANSFER
+- Triggers: "Move 50 cartons of Indomie from Warehouse to Surulere", "Transfer 10 rice from Lekki to Ikeja".
+- ACTION: Move stock between branches.
+- EXTRACTION RULES:
+  - items: Extract item name and qty.
+  - transfer_params.from_branch: Extract source branch name (e.g. "Warehouse", "Lekki").
+  - transfer_params.to_branch: Extract destination branch name (e.g. "Surulere", "Ikeja").
+  - If any info missing, needs_clarification=true.
+- Output:
+  intent = HQ_STOCK_TRANSFER
+  items = [{ name: "Indomie", qty: 50, ... }]
+  transfer_params = { from_branch: "Warehouse", to_branch: "Surulere" }
 `;
 
 
