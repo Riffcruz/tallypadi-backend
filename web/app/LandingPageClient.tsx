@@ -1290,7 +1290,7 @@ export default function LandingPage() {
         {/* Background Image & Overlay */}
         <div className="absolute inset-0 z-0">
           <Image
-            src="https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=2072&auto=format&fit=crop"
+            src="/photo-1451187580459-43490279c0fa.avif"
             alt="Footer Background"
             fill
             className="object-cover opacity-20"
