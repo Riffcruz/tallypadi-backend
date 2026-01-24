@@ -50,7 +50,7 @@ interface PricingItemProps {
 interface AnimatedSectionProps {
   children: React.ReactNode;
   className?: string;
-  animation?: 'fade-up' | 'zoom-in' | 'slide-right';
+  animation?: 'fade-up' | 'zoom-in' | 'slide-right' | 'slide-left' | 'pop-in';
   style?: React.CSSProperties;
 }
 
@@ -211,6 +211,10 @@ const AnimatedSection = ({
     activeClass = isVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-95';
   } else if (animation === 'slide-right') {
     activeClass = isVisible ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-20';
+  } else if (animation === 'slide-left') {
+    activeClass = isVisible ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-20';
+  } else if (animation === 'pop-in') {
+    activeClass = isVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-50';
   }
 
   return (
@@ -776,8 +780,8 @@ export default function LandingPage() {
 
     <div className="grid md:grid-cols-3 gap-8">
       {/* Step 1 */}
-      <AnimatedSection animation="fade-up" className="relative group">
-        <div className="bg-slate-800/50 p-8 rounded-3xl border border-slate-700 hover:border-emerald-500/50 transition-all duration-500 hover:bg-slate-800 relative z-10 h-full">
+      <AnimatedSection animation="slide-right" className="relative group delay-100">
+        <div className="bg-slate-800/50 p-8 rounded-3xl border border-slate-700 hover:border-emerald-500/50 transition-all duration-500 hover:bg-slate-800 relative z-10 h-full hover:-translate-y-2 hover:shadow-2xl hover:shadow-emerald-500/10">
               <StepShotWhatsAppLight
         badge="STEP 1"
         bubbles={[
@@ -789,12 +793,12 @@ export default function LandingPage() {
 
 
 
-          <div className="w-16 h-16 bg-slate-950 text-emerald-400 border border-slate-700 rounded-2xl flex items-center justify-center text-2xl font-bold mb-6 shadow-lg group-hover:scale-110 transition-transform">
+          <div className="w-16 h-16 bg-slate-950 text-emerald-400 border border-slate-700 rounded-2xl flex items-center justify-center text-2xl font-bold mb-6 shadow-lg group-hover:scale-110 transition-transform group-hover:rotate-3">
             1
           </div>
 
-          <h3 className="text-xl font-bold text-white mb-3">Chat & Create Account</h3>
-          <p className="text-slate-400 leading-relaxed">
+          <h3 className="text-xl font-bold text-white mb-3 group-hover:text-emerald-300 transition-colors">Chat & Create Account</h3>
+          <p className="text-slate-400 leading-relaxed group-hover:text-slate-300 transition-colors">
             Message the bot on WhatsApp and sign up by sending your{' '}
             <span className="bg-slate-900 px-1.5 py-0.5 rounded text-emerald-300 font-mono text-xs">
               email
@@ -809,8 +813,8 @@ export default function LandingPage() {
       </AnimatedSection>
 
       {/* Step 2 */}
-      <AnimatedSection animation="fade-up" className="relative group">
-        <div className="bg-slate-800/50 p-8 rounded-3xl border border-slate-700 hover:border-emerald-500/50 transition-all duration-500 hover:bg-slate-800 relative z-10 h-full">
+      <AnimatedSection animation="pop-in" className="relative group delay-200">
+        <div className="bg-slate-800/50 p-8 rounded-3xl border border-slate-700 hover:border-emerald-500/50 transition-all duration-500 hover:bg-slate-800 relative z-10 h-full hover:-translate-y-2 hover:shadow-2xl hover:shadow-emerald-500/10">
               <StepShotWhatsAppLight
         badge="STEP 2"
         bubbles={[
@@ -821,12 +825,12 @@ export default function LandingPage() {
 
 
 
-          <div className="w-16 h-16 bg-emerald-600 text-white rounded-2xl flex items-center justify-center text-2xl font-bold mb-6 shadow-lg shadow-emerald-600/20 group-hover:scale-110 transition-transform">
+          <div className="w-16 h-16 bg-emerald-600 text-white rounded-2xl flex items-center justify-center text-2xl font-bold mb-6 shadow-lg shadow-emerald-600/20 group-hover:scale-110 transition-transform group-hover:-rotate-3">
             2
           </div>
 
-          <h3 className="text-xl font-bold text-white mb-3">Set Shop Name & Settings</h3>
-          <p className="text-slate-400 leading-relaxed">
+          <h3 className="text-xl font-bold text-white mb-3 group-hover:text-emerald-300 transition-colors">Set Shop Name & Settings</h3>
+          <p className="text-slate-400 leading-relaxed group-hover:text-slate-300 transition-colors">
             Ask the bot{' '}
             <span className="bg-slate-900 px-1.5 py-0.5 rounded text-emerald-300 font-mono text-xs">
               &quot;show my settings&quot;
@@ -837,8 +841,8 @@ export default function LandingPage() {
       </AnimatedSection>
 
       {/* Step 3 */}
-      <AnimatedSection animation="fade-up" className="relative group">
-        <div className="bg-slate-800/50 p-8 rounded-3xl border border-slate-700 hover:border-emerald-500/50 transition-all duration-500 hover:bg-slate-800 relative z-10 h-full">
+      <AnimatedSection animation="slide-left" className="relative group delay-300">
+        <div className="bg-slate-800/50 p-8 rounded-3xl border border-slate-700 hover:border-emerald-500/50 transition-all duration-500 hover:bg-slate-800 relative z-10 h-full hover:-translate-y-2 hover:shadow-2xl hover:shadow-emerald-500/10">
          <StepShotWhatsAppLight
   badge="STEP 3"
   bubbles={[
@@ -850,12 +854,12 @@ export default function LandingPage() {
 />
 
 
-          <div className="w-16 h-16 bg-blue-600 text-white rounded-2xl flex items-center justify-center text-2xl font-bold mb-6 shadow-lg shadow-blue-600/20 group-hover:scale-110 transition-transform">
+          <div className="w-16 h-16 bg-blue-600 text-white rounded-2xl flex items-center justify-center text-2xl font-bold mb-6 shadow-lg shadow-blue-600/20 group-hover:scale-110 transition-transform group-hover:rotate-6">
             3
           </div>
 
-          <h3 className="text-xl font-bold text-white mb-3">Update Stock & Record Sales</h3>
-          <p className="text-slate-400 leading-relaxed">
+          <h3 className="text-xl font-bold text-white mb-3 group-hover:text-blue-300 transition-colors">Update Stock & Record Sales</h3>
+          <p className="text-slate-400 leading-relaxed group-hover:text-slate-300 transition-colors">
             Add stock and record sales naturally. Example:{' '}
             <span className="bg-slate-900 px-1.5 py-0.5 rounded text-blue-300 font-mono text-xs">
               &quot;Add 20 cartons of Malt at 2,500&quot;
