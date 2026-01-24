@@ -137,7 +137,9 @@ export default function LoginPage() {
         const user = res.data.user;
         sessionStorage.setItem('tallyUser', JSON.stringify(user));
 
-        if (user.role === 'INVESTOR') {
+        if (user.role === 'HQ') {
+          router.push('/hq/dashboard');
+        } else if (user.role === 'INVESTOR') {
           router.push('/investor/dashboard');
         } else if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') {
           router.push('/admin/dashboard');
