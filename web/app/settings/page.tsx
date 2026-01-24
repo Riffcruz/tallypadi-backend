@@ -768,14 +768,6 @@ export default function SettingsPage() {
                       <p className="text-xs text-gray-400">Manage your public product page</p>
                     </div>
                   </div>
-                  <button 
-                    onClick={handleSaveShop} 
-                    disabled={saving}
-                    className="bg-pink-600 hover:bg-pink-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-pink-600/20 transition-all active:scale-95 flex items-center gap-2 disabled:opacity-50"
-                  >
-                    {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                    Save Shop Settings
-                  </button>
                 </div>
 
                 <div className="space-y-6">
@@ -871,6 +863,17 @@ export default function SettingsPage() {
                          )}
                       </div>
                    </div>
+                </div>
+
+                <div className="flex justify-end pt-4 mt-4 border-t border-pink-50">
+                   <button 
+                    onClick={handleSaveShop} 
+                    disabled={saving}
+                    className="bg-pink-600 hover:bg-pink-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-pink-600/20 transition-all active:scale-95 flex items-center gap-2 disabled:opacity-50"
+                  >
+                    {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                    Save Shop Settings
+                  </button>
                 </div>
              </div>
           )}

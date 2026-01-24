@@ -41,7 +41,9 @@ export default function Sidebar() {
     { href: '/help', icon: BookOpen, label: 'Guide' },
   ];
 
-  if (user && (user.role === 'HQ' || user.isHqManager)) {
+  const isTycoon = String(user?.planType || '').toUpperCase() === 'TYCOON';
+
+  if (user && (user.role === 'HQ' || user.isHqManager || isTycoon)) {
     // Add HQ link at the top or appropriate place. Let's add it at the top.
     menuItems.unshift({ href: '/hq/dashboard', icon: LayoutDashboard, label: 'HQ Dashboard' });
   }
