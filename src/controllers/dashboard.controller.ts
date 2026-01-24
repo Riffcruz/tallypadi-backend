@@ -1,7 +1,9 @@
 import { Request, Response } from 'express';
+import { User, IUser } from '../models/user.model';
 import { Transaction } from '../models/transaction.model';
 import { Inventory } from '../models/inventory.model';
-import { User, IUser } from '../models/user.model';
+import { Debtor } from '../models/debtor.model';
+import { Order } from '../models/order.model';
 import { getRelevantUserIds } from '../services/report.service';
 const UNKNOWN_ITEM_NAMES = ['unknown_item', 'unknown', 'item', 'null', 'undefined'];
 
@@ -51,9 +53,6 @@ const getCurrencyConfig = (countryCode: string = 'NG') => {
 
 export const getDashboardData = async (req: Request | any, res: Response) => {
   try {
-    // ✅ FIX 1: USE REAL AUTH
-    // Assuming your auth middleware attaches the user ID to req.user.id or req.userId
-    // If you are testing without a frontend token, you might need to temporarily hardcode the US User ID here.
     const userId = req.user?.id || req.user?._id || req.userId;
     
     if (!userId) {
@@ -66,89 +65,118 @@ export const getDashboardData = async (req: Request | any, res: Response) => {
       return res.status(404).json({ error: "User account not found." });
     }
 
-    // ✅ FIX 2: GET CURRENCY DETAILS
     const { code: currencyCode, locale } = getCurrencyConfig(user.countryCode);
 
     const scope = user.role === 'OWNER' ? 'SHOP' : 'OWN';
     const relevantIds = await getRelevantUserIds(user, scope);
 
-    // 2) Inventory
-    const inventoryDocs = await Inventory.find({ user: { $in: relevantIds } });
-    const inventory = inventoryDocs.map(doc => ({
-      name: doc.name,
-      quantity: doc.quantity,
-      lastUnitPrice: doc.lastUnitPrice || 0,
-      // Optional: Add price formatted string if needed, but frontend handles it now
-    }));
+    // 7-day range
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+    sevenDaysAgo.setHours(0, 0, 0, 0);
 
-    // 3) Recent transactions
-    const transactionDocs = await Transaction.find({
-  user: { $in: relevantIds },
-  ...validSaleMatch, // ✅ excludes undone + unknown
-})
-  .sort({ timestamp: -1 })
-  .limit(10)
-  .populate('user', 'name role'); // ✅ Populate user to get staff name
+    const [
+      totalRevenueRaw,
+      itemsSoldRaw,
+      dailyStats,
+      recentSales,
+      topItems,
+      totalDebtors,
+      pendingOrders,
+      inventoryDocs
+    ] = await Promise.all([
+      // 1. Total Revenue
+      Transaction.aggregate([
+        { $match: { user: { $in: relevantIds }, type: 'SALE', ...validSaleMatch } },
+        { $group: { _id: null, total: { $sum: '$totalMoney' } } },
+      ]),
 
+      // 2. Total Items Sold
+      Transaction.aggregate([
+        { $match: { user: { $in: relevantIds }, type: 'SALE', ...validSaleMatch } },
+        { $unwind: '$items' },
+        { $group: { _id: null, total: { $sum: '$items.qty' } } },
+      ]),
 
-    const transactions = transactionDocs.map(t => {
-      const transactingUser = t.user; // No cast needed
-      return ({
-        id: t._id,
-        type: t.type,
-        item: t.items.map(i => i.name).join(', '),
-        qty: t.items.reduce((acc, i) => acc + i.qty, 0),
-        amount: t.totalMoney || 0,
-        date: t.timestamp.toISOString(),
-        soldBy: (transactingUser as IUser) && (transactingUser as IUser).role === 'STAFF' ? (transactingUser as IUser).name : 'Owner', // ✅ Add soldBy field
-      });
-    });
+      // 3. Daily Stats
+      Transaction.aggregate([
+        {
+          $match: {
+            user: { $in: relevantIds },
+            type: 'SALE',
+            timestamp: { $gte: sevenDaysAgo },
+            ...validSaleMatch,
+          },
+        },
+        {
+          $group: {
+            _id: { $dateToString: { format: '%Y-%m-%d', date: '$timestamp' } },
+            dailyRevenue: { $sum: '$totalMoney' },
+          },
+        },
+        { $sort: { _id: 1 } },
+      ]),
 
-    // 4) Stats
-  const totalRevenueAgg = await Transaction.aggregate([
-  { $match: { user: { $in: relevantIds }, type: 'SALE', ...validSaleMatch } },
-  { $group: { _id: null, total: { $sum: '$totalMoney' } } },
-]);
+      // 4. Recent Transactions
+      Transaction.find({ user: { $in: relevantIds }, type: 'SALE', ...validSaleMatch })
+        .sort({ timestamp: -1 })
+        .limit(10)
+        .populate('user', 'name role'),
 
+      // 5. Top Items
+      Transaction.aggregate([
+        { $match: { user: { $in: relevantIds }, type: 'SALE', ...validSaleMatch } },
+        { $unwind: '$items' },
+        {
+          $group: {
+            _id: '$items.name',
+            revenue: { $sum: { $multiply: ['$items.qty', '$items.unitPrice'] } },
+            qty: { $sum: '$items.qty' },
+          },
+        },
+        { $sort: { revenue: -1 } },
+        { $limit: 5 },
+      ]),
 
-    const totalItemsSoldAgg = await Transaction.aggregate([
-  { $match: { user: { $in: relevantIds }, type: 'SALE', ...validSaleMatch } },
-  { $unwind: '$items' },
-  { $group: { _id: null, total: { $sum: '$items.qty' } } },
-]);
+      // 6. Debtors
+      Debtor.aggregate([
+        { $match: { user: { $in: relevantIds }, totalDebt: { $gt: 0 } } },
+        {
+          $group: {
+            _id: null,
+            count: { $sum: 1 },
+            totalAmount: { $sum: '$totalDebt' }
+          }
+        }
+      ]),
 
+      // 7. Pending Orders
+      Order.countDocuments({ user: { $in: relevantIds }, status: 'PENDING' }),
 
-    // 5) Sales chart
-    const start = new Date();
-    start.setDate(start.getDate() - 6);
-    start.setHours(0, 0, 0, 0);
+      // 8. Inventory (for legacy frontend compat)
+      Inventory.find({ user: { $in: relevantIds } })
+    ]);
 
-    const salesByDow = await Transaction.aggregate([
-  {
-    $match: {
-      user: { $in: relevantIds },
-      type: 'SALE',
-      timestamp: { $gte: start },
-      ...validSaleMatch, // ✅ excludes undone + unknown
-    },
-  },
-  {
-    $group: {
-      _id: { $dayOfWeek: '$timestamp' },
-      sales: { $sum: '$totalMoney' },
-    },
-  },
-]);
+    const totalRevenue = totalRevenueRaw[0]?.total || 0;
+    const itemsSold = itemsSoldRaw[0]?.total || 0;
 
-
+    // Fill chart gaps
     const map: Record<string, number> = { Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0, Sat: 0, Sun: 0 };
     const dowToName: Record<number, keyof typeof map> = {
       1: 'Sun', 2: 'Mon', 3: 'Tue', 4: 'Wed', 5: 'Thu', 6: 'Fri', 7: 'Sat',
     };
 
-    for (const row of salesByDow) {
-      const key = dowToName[row._id as number];
-      if (key) map[key] = Number(row.sales) || 0;
+    // The aggregation returned dates YYYY-MM-DD, we need to map to Day Name for chart
+    // Re-map dailyStats to day names
+    for (const stat of dailyStats) {
+       const date = new Date(stat._id); // "2023-10-27"
+       // JS getDay(): 0=Sun, 1=Mon...
+       const dayIndex = date.getDay() === 0 ? 7 : date.getDay(); // 1=Mon...7=Sun to match logic?
+       // Actually simpler:
+       const dayName = date.toLocaleDateString('en-US', { weekday: 'short' }); // "Mon"
+       if (map[dayName] !== undefined) {
+          map[dayName] = stat.dailyRevenue;
+       }
     }
 
     const salesChart = (['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const).map(day => ({
@@ -156,7 +184,25 @@ export const getDashboardData = async (req: Request | any, res: Response) => {
       sales: map[day],
     }));
 
-    // 6) Response
+    const transactions = recentSales.map(t => {
+      const transactingUser = t.user; 
+      return ({
+        id: t._id,
+        type: t.type,
+        item: t.items.map((i: any) => i.name).join(', '),
+        qty: t.items.reduce((acc: number, i: any) => acc + i.qty, 0),
+        amount: t.totalMoney || 0,
+        date: t.timestamp.toISOString(),
+        soldBy: (transactingUser as IUser) && (transactingUser as IUser).role === 'STAFF' ? (transactingUser as IUser).name : 'Owner',
+      });
+    });
+
+    const inventory = inventoryDocs.map(doc => ({
+      name: doc.name,
+      quantity: doc.quantity,
+      lastUnitPrice: doc.lastUnitPrice || 0,
+    }));
+
     return res.json({
       user: {
         name: user.name || 'Shop Owner',
@@ -168,24 +214,30 @@ export const getDashboardData = async (req: Request | any, res: Response) => {
         nextBillingDate: user.nextBillingDate || null,
         settings: user.settings,
         
-        // Shop Fields
         shopSlug: user.shopSlug || null,
         shopDescription: user.shopDescription || null,
         heroImageUrl: user.heroImageUrl || null,
 
-        // ✅ NEW FIELDS SENT TO FRONTEND
-        countryCode: user.countryCode, // e.g., 'US'
-        currencyCode: currencyCode,    // e.g., 'USD'
-        locale: locale                 // e.g., 'en-US'
+        countryCode: user.countryCode,
+        currencyCode: currencyCode,
+        locale: locale
       },
       stats: {
-        revenue: totalRevenueAgg[0]?.total || 0,
-        itemsSold: totalItemsSoldAgg[0]?.total || 0,
-        stockValue: 0, // You can calculate this from inventory loop if desired
+        revenue: totalRevenue,
+        itemsSold: itemsSold,
+        stockValue: 0,
+        debtorsCount: totalDebtors[0]?.count || 0,
+        debtorsAmount: totalDebtors[0]?.totalAmount || 0,
+        pendingOrders: pendingOrders
       },
       inventory,
       transactions,
       salesChart,
+      topItems: topItems.map((i: any) => ({
+        name: i._id,
+        revenue: i.revenue,
+        qty: i.qty,
+      })),
     });
   } catch (error) {
     console.error('Dashboard Error:', error);

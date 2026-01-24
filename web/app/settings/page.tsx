@@ -25,6 +25,7 @@ import {
   Camera,
   Copy,
   ExternalLink,
+  Bell,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { getCookie } from '../../utils/cookies';
@@ -56,6 +57,7 @@ export default function SettingsPage() {
   const [closingTime, setClosingTime] = useState('');
   const [language, setLanguage] = useState('');
   const [pdfEnabled, setPdfEnabled] = useState(false);
+  const [staffAlertsEnabled, setStaffAlertsEnabled] = useState(false); // ✅ New state
 
   // Staff State
   const [staff, setStaff] = useState<StaffMember[]>([]);
@@ -136,6 +138,8 @@ export default function SettingsPage() {
         userData?.settings?.pdfEnabled ??
         false
     );
+    
+    setStaffAlertsEnabled(userData?.settings?.staffTransactionReport ?? false);
   };
 
   useEffect(() => {
@@ -202,6 +206,7 @@ export default function SettingsPage() {
             closingTime,
             language,
             pdfReportsEnabled: pdfEnabled,
+            staffTransactionReport: staffAlertsEnabled, // ✅ Send new setting
           },
         },
         { headers: { Authorization: `Bearer ${token}` } }
@@ -655,6 +660,40 @@ export default function SettingsPage() {
                 />
               </button>
             </div>
+
+            {/* Staff Alerts Toggle */}
+            {isTycoon && (
+              <div
+                className={`flex items-center justify-between p-4 rounded-xl border transition-colors mt-4 ${
+                  staffAlertsEnabled ? 'bg-purple-50/30 border-purple-100' : 'bg-slate-50 border-slate-100'
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <div className={`mt-1 p-1 rounded-full ${staffAlertsEnabled ? 'bg-purple-100 text-purple-600' : 'bg-gray-200 text-gray-400'}`}>
+                    <Bell size={16} /> {/* Use Bell icon, ensure it's imported if not already */}
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900 text-sm">Staff Transaction Alerts</h3>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Get instant WhatsApp notifications when your staff records a sale.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setStaffAlertsEnabled((v) => !v)}
+                  className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors focus:outline-none ${
+                    staffAlertsEnabled ? 'bg-purple-600' : 'bg-gray-300'
+                  } cursor-pointer`}
+                >
+                  <span
+                    className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform ${
+                      staffAlertsEnabled ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Storefront Settings (Tycoon Only) */}

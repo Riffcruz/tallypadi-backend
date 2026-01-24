@@ -21,6 +21,8 @@ import {
   X,
   Sparkles,
   Clipboard,
+  CreditCard,
+  Package,
 } from 'lucide-react';
 import {
   BarChart,
@@ -70,6 +72,9 @@ interface DashboardResponse {
   stats?: {
     revenue?: number; // in user's currency
     itemsSold?: number;
+    debtorsCount?: number;
+    debtorsAmount?: number;
+    pendingOrders?: number;
     // Optional: If your backend supports it, you can send multi-currency totals:
     // revenueByCurrency?: Record<string, number>;
   };
@@ -393,7 +398,7 @@ const topTransactions = filteredTransactions.slice(0, 6);
         </header>
 
         {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
           <StatCard
             title="Total Revenue"
             value={formattedRevenue}
@@ -402,18 +407,25 @@ const topTransactions = filteredTransactions.slice(0, 6);
             accent="emerald"
           />
           <StatCard
-            title="Estimated Stock Value"
-            value={formatCurrency(stockValue, currencyCode, userLocale)}
-            sub="Based on last unit price"
-            icon={Coins}
-            accent="blue"
-          />
-          <StatCard
             title="Items Sold Today"
             value={String(data?.stats?.itemsSold || 0)}
             sub="Live count"
             icon={ShoppingBag}
+            accent="blue"
+          />
+          <StatCard
+            title="Total Debtors"
+            value={formatCurrency(data?.stats?.debtorsAmount || 0, currencyCode, userLocale)}
+            sub={`${data?.stats?.debtorsCount || 0} people owing`}
+            icon={CreditCard}
             accent="orange"
+          />
+          <StatCard
+            title="Pending Orders"
+            value={String(data?.stats?.pendingOrders || 0)}
+            sub="Orders to fulfill"
+            icon={Package}
+            accent="purple"
           />
         </div>
 

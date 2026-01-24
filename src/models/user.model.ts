@@ -39,6 +39,7 @@ export interface IUser extends Document {
     dailySummaryEnabled: boolean;
     language: string;
     pdfReportsEnabled: boolean;
+    staffTransactionReport?: boolean;
   };
 
   // ✅ Security / Suspension
@@ -129,6 +130,7 @@ const userSchema = new Schema<IUser>(
       dailySummaryEnabled: { type: Boolean, default: false },
       language: { type: String, default: 'English' },
       pdfReportsEnabled: { type: Boolean, default: true },
+      staffTransactionReport: { type: Boolean, default: false },
     },
 
     // ✅ Security / Suspension

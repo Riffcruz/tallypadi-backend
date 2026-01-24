@@ -633,6 +633,29 @@ export const processTransaction = async (
       date: todayString,
     });
 
+    // ✅ NOTIFY OWNER OF STAFF SALE (if enabled & active)
+    if (type === 'SALE' && actorRole === 'STAFF') {
+       try {
+          // Re-fetch owner to check latest settings/activity
+          const owner = await User.findById(userId).select('+settings +lastSeen +phoneNumber');
+          
+          if (owner?.settings?.staffTransactionReport && owner.phoneNumber) {
+             const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+             const isOwnerActive = owner.lastSeen && owner.lastSeen >= oneDayAgo;
+
+             if (isOwnerActive) {
+                const itemsStr = finalItems.map(i => `${i.qty} ${i.name}`).join(', ');
+                const staffName = actor.name || 'Staff';
+                const msg = `👤 *Staff Sale Alert*\n\n*${staffName}* sold:\n${itemsStr}\n\n💰 Total: ${finalTotalMoney.toLocaleString()}`;
+                
+                await queueOutboundMessage(owner.phoneNumber, msg);
+             }
+          }
+       } catch (e) {
+          console.error('Failed to send staff sale alert:', e);
+       }
+    }
+
     // ✅ SYNC FRONTEND: Update Debtor balance if CREDIT SALE
     if (isCreditSale && debtorId) {
       await Debtor.findByIdAndUpdate(debtorId, {
