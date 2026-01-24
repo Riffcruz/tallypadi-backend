@@ -71,9 +71,9 @@ const DEFAULT_WHATSAPP_LINK = 'https://wa.me/234XXXXXXXXXX?text=Hello%20Tallypad
 
 // --- Hero Background Images ---
 const HERO_IMAGES = [
-  'https://images.unsplash.com/photo-1556742049-0cfed4f7a07d?q=80&w=2070&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1542744173-8e7e53415bb0?q=80&w=2070&auto=format&fit=crop',
   'https://images.unsplash.com/photo-1578575437130-527eed3abbec?q=80&w=2070&auto=format&fit=crop',
+  'https://images.unsplash.com/photo-1556742049-0cfed4f7a07d?q=80&w=2070&auto=format&fit=crop',
+  'https://static.dw.com/image/69290180_803.webp',
 ];
 
 
