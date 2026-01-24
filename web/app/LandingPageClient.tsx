@@ -408,18 +408,28 @@ const TestimonialSlider = ({ testimonials }: { testimonials: Testimonial[] }) =>
 
 export default function LandingPage() {
   const [currentBg, setCurrentBg] = useState(0);
+  const [isHeroPaused, setIsHeroPaused] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [whatsappLink, setWhatsappLink] = useState(DEFAULT_WHATSAPP_LINK);
   const [openFaq, setOpenFaq] = useState<number>(0);
 
+  const nextHeroSlide = () => {
+    setCurrentBg((prev) => (prev + 1) % HERO_IMAGES.length);
+  };
+
+  const prevHeroSlide = () => {
+    setCurrentBg((prev) => (prev === 0 ? HERO_IMAGES.length - 1 : prev - 1));
+  };
+
 
   // Auto-rotate background
   useEffect(() => {
+    if (isHeroPaused) return;
     const timer = setInterval(() => {
       setCurrentBg((prev) => (prev + 1) % HERO_IMAGES.length);
     }, 6000);
     return () => clearInterval(timer);
-  }, []);
+  }, [isHeroPaused]);
 
   // Fetch Whatsapp Link
   useEffect(() => {
@@ -570,21 +580,25 @@ export default function LandingPage() {
       </nav>
 
       {/* --- Hero Section (Full Screen) --- */}
-      <section className="relative min-h-screen flex items-center justify-center pt-20 overflow-hidden bg-slate-950">
+      <section 
+        className="relative min-h-screen flex items-center justify-center pt-20 overflow-hidden bg-slate-950"
+        onMouseEnter={() => setIsHeroPaused(true)}
+        onMouseLeave={() => setIsHeroPaused(false)}
+      >
         {/* Background Image Slider */}
         {HERO_IMAGES.map((img, index) => (
           <div
             key={index}
-            className={`absolute inset-0 bg-cover bg-center transition-all duration-[2000ms] ease-in-out ${
-              index === currentBg ? 'opacity-40 scale-105' : 'opacity-0 scale-100'
+            className={`absolute inset-0 bg-cover bg-center transition-all duration-[1500ms] ease-in-out ${
+              index === currentBg ? 'opacity-60 scale-105' : 'opacity-0 scale-100'
             }`}
             style={{ backgroundImage: `url(${img})` }}
           />
         ))}
 
-        {/* Heavy Cinematic Gradient Overlay for Contrast */}
-        <div className="absolute inset-0 bg-gradient-to-b from-slate-950/90 via-slate-950/70 to-slate-950 z-10" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-emerald-900/20 via-slate-950/40 to-slate-950 z-10" />
+        {/* Cinematic Gradient Overlay - Lighter for clarity */}
+        <div className="absolute inset-0 bg-gradient-to-b from-slate-950/80 via-slate-950/60 to-slate-950 z-10" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-emerald-900/10 via-slate-950/30 to-slate-950 z-10" />
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-20 w-full grid lg:grid-cols-2 gap-12 lg:gap-20 items-center">
           {/* Text Content */}
@@ -601,7 +615,7 @@ export default function LandingPage() {
               </span>
             </h1>
 
-            <p className="text-lg text-slate-300 mb-10 leading-relaxed max-w-lg font-light drop-shadow-md">
+            <p className="text-lg text-slate-200 mb-10 leading-relaxed max-w-lg font-light drop-shadow-lg shadow-black">
               Stop writing in notebooks. Manage your entire inventory, staff, and sales directly inside WhatsApp. It&apos;s as easy as chatting
               with a friend.
             </p>
@@ -623,7 +637,7 @@ export default function LandingPage() {
               </a>
             </div>
 
-            <div className="mt-12 flex items-center gap-4 p-4 rounded-2xl bg-slate-900/50 border border-slate-800 backdrop-blur-sm w-fit">
+            <div className="mt-12 flex items-center gap-4 p-4 rounded-2xl bg-slate-900/60 border border-slate-800 backdrop-blur-md w-fit shadow-lg">
               <div className="flex -space-x-3">
                 {[1, 2, 3, 4].map((i) => (
                   <div key={i} className="w-10 h-10 rounded-full border-2 border-slate-900 bg-slate-700 overflow-hidden">
@@ -726,6 +740,40 @@ export default function LandingPage() {
             </div>
           </div>
           {/* /phone */}
+        </div>
+
+        {/* --- Hero Slider Controls (New) --- */}
+        <div className="absolute bottom-6 left-0 right-0 z-30 flex justify-center items-center gap-6">
+            <button 
+              onClick={prevHeroSlide} 
+              className="p-3 rounded-full bg-slate-900/40 hover:bg-emerald-500/80 text-white backdrop-blur-md transition-all border border-white/10 hover:border-emerald-500 group"
+              aria-label="Previous slide"
+            >
+                <ChevronLeft size={20} className="group-hover:-translate-x-0.5 transition-transform" />
+            </button>
+            
+            <div className="flex gap-3 bg-slate-900/40 backdrop-blur-md px-4 py-2 rounded-full border border-white/10">
+                {HERO_IMAGES.map((_, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setCurrentBg(idx)}
+                    className={`h-2 rounded-full transition-all duration-500 ${
+                      idx === currentBg 
+                        ? 'w-8 bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.5)]' 
+                        : 'w-2 bg-white/30 hover:bg-white/60'
+                    }`}
+                    aria-label={`Go to slide ${idx + 1}`}
+                  />
+                ))}
+            </div>
+
+            <button 
+              onClick={nextHeroSlide} 
+              className="p-3 rounded-full bg-slate-900/40 hover:bg-emerald-500/80 text-white backdrop-blur-md transition-all border border-white/10 hover:border-emerald-500 group"
+              aria-label="Next slide"
+            >
+                <ChevronRight size={20} className="group-hover:translate-x-0.5 transition-transform" />
+            </button>
         </div>
       </section>
 
@@ -842,6 +890,127 @@ export default function LandingPage() {
   </div>
 </section>
 
+
+      {/* --- Pricing Section (Moved Up) --- */}
+      <section id="pricing" className="py-24 bg-slate-50 relative">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <AnimatedSection className="text-center mb-16">
+            <span className="text-emerald-600 font-bold tracking-wider uppercase text-xs">Pricing Plans</span>
+            <h2 className="text-3xl md:text-5xl font-bold text-slate-900 mt-2">Scale your business, your way.</h2>
+            <p className="text-slate-500 mt-4 max-w-2xl mx-auto">
+              Start with a free trial, then choose the perfect plan for your level of operation.
+            </p>
+          </AnimatedSection>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {/* 1. Free Trial */}
+            <AnimatedSection
+              animation="fade-up"
+              className="bg-white p-6 rounded-3xl border-4 border-dashed border-green-200 flex flex-col shadow-lg transition-all hover:shadow-xl hover:scale-[1.02]"
+            >
+              <div className="flex items-center gap-4 mb-6">
+                <div className="p-3 rounded-xl bg-green-50 text-green-600">
+                  <Gift size={24} />
+                </div>
+                <h3 className="text-2xl font-bold text-slate-900">7-Day Trial</h3>
+              </div>
+
+              <div className="mb-8">
+                <span className="text-5xl font-extrabold text-green-600">₦0</span>
+                <span className="text-slate-500 text-sm"> / 7 Days</span>
+                <p className="text-slate-500 mt-2 text-sm">Experience the full power of Tallypadi with zero commitment.</p>
+              </div>
+
+              <ul className="space-y-4 mb-10 flex-1">
+                <PricingItem text="Full Access to all features" />
+                <PricingItem text="Single User Account" />
+                <PricingItem text="Basic Web Dashboard" />
+                <PricingItem text="WhatsApp Support" />
+                <PricingItem text="No credit card required" />
+              </ul>
+              <a
+                href={whatsappLink}
+                className="w-full block text-center bg-green-600 hover:bg-green-700 text-white font-bold py-3.5 rounded-xl transition shadow-lg shadow-green-600/20 active:scale-95"
+              >
+                Start 7-Day Free Trial
+              </a>
+            </AnimatedSection>
+
+            {/* 2. Oga Boss - Highlighted */}
+            <AnimatedSection
+              animation="fade-up"
+              className="relative bg-white p-6 rounded-3xl shadow-2xl flex flex-col border-4 border-blue-400 transform md:-translate-y-6 transition-all hover:scale-[1.05] hover:shadow-blue-500/40"
+            >
+              <div className="absolute top-0 right-0 bg-blue-500 text-white text-xs font-bold px-4 py-1.5 rounded-bl-xl shadow-md">
+                BEST VALUE
+              </div>
+              <div className="flex items-center gap-4 mb-6">
+                <div className="p-3 rounded-xl bg-blue-100 text-blue-600 shadow-xl">
+                  <Shield size={24} />
+                </div>
+                <h3 className="text-2xl font-bold text-slate-900">Oga Boss</h3>
+              </div>
+
+              <div className="mb-8">
+                <span className="text-5xl font-extrabold text-blue-600">₦3,000</span>
+                <span className="text-slate-500 text-sm"> / month</span>
+                <p className="text-slate-500 mt-2 text-sm">
+                  The essential plan for serious owners focused on maximizing solo profit.
+                </p>
+              </div>
+
+              <ul className="space-y-4 mb-10 flex-1">
+                <PricingItem text="Unlimited Sales & Inventory" />
+                <PricingItem text="Detailed Profit Calculation" />
+                <PricingItem text="Advanced Dashboard Access" />
+                <PricingItem text="1 User Account" />
+                <PricingItem text="Email & WhatsApp Support" />
+                <PricingItem text="Staff Management" unavailable />
+                <PricingItem text="Automated PDF Reports" unavailable />
+              </ul>
+              <a
+                href="/payment?plan=OGA_BOSS"
+                className="w-full block text-center bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl transition shadow-lg shadow-blue-600/20 active:scale-95"
+              >
+                Choose Oga Boss Plan
+              </a>
+            </AnimatedSection>
+
+            {/* 3. Tycoon */}
+            <AnimatedSection
+              animation="fade-up"
+              className="bg-slate-900 p-6 rounded-3xl border border-slate-700 flex flex-col shadow-lg transition-all hover:shadow-xl hover:scale-[1.02]"
+            >
+              <div className="flex items-center gap-4 mb-6">
+                <div className="p-3 rounded-xl bg-white text-amber-500 shadow-xl">
+                  <Crown size={24} />
+                </div>
+                <h3 className="text-2xl font-bold text-white">Tycoon</h3>
+              </div>
+
+              <div className="mb-8">
+                <span className="text-5xl font-extrabold text-amber-400">₦5,000</span>
+                <span className="text-slate-400 text-sm"> / month</span>
+                <p className="text-slate-400 mt-2 text-sm">Full power plan designed for management teams and scaling operations.</p>
+              </div>
+
+              <ul className="space-y-4 mb-10 flex-1">
+                <PricingItem text="Everything in Oga Boss" light />
+                <PricingItem text="Multi-Staff Login (Up to 5)" light />
+                <PricingItem text="Branded PDF Invoices & Export" light />
+                <PricingItem text="Advanced Analytics Suite" light />
+                <PricingItem text="Priority VIP Support" light />
+              </ul>
+              <a
+                href="/payment?plan=TYCOON"
+                className="w-full block text-center bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl transition shadow-lg shadow-amber-500/20 active:scale-95"
+              >
+                Choose Tycoon Plan
+              </a>
+            </AnimatedSection>
+          </div>
+        </div>
+      </section>
 
       {/* --- Features Grid --- */}
       <section id="features" className="py-24 bg-slate-50 relative">
@@ -962,126 +1131,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* --- Pricing Section --- */}
-      <section id="pricing" className="py-24 bg-slate-50 relative">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <AnimatedSection className="text-center mb-16">
-            <span className="text-emerald-600 font-bold tracking-wider uppercase text-xs">Pricing Plans</span>
-            <h2 className="text-3xl md:text-5xl font-bold text-slate-900 mt-2">Scale your business, your way.</h2>
-            <p className="text-slate-500 mt-4 max-w-2xl mx-auto">
-              Start with a free trial, then choose the perfect plan for your level of operation.
-            </p>
-          </AnimatedSection>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {/* 1. Free Trial */}
-            <AnimatedSection
-              animation="fade-up"
-              className="bg-white p-6 rounded-3xl border-4 border-dashed border-green-200 flex flex-col shadow-lg transition-all hover:shadow-xl hover:scale-[1.02]"
-            >
-              <div className="flex items-center gap-4 mb-6">
-                <div className="p-3 rounded-xl bg-green-50 text-green-600">
-                  <Gift size={24} />
-                </div>
-                <h3 className="text-2xl font-bold text-slate-900">7-Day Trial</h3>
-              </div>
-
-              <div className="mb-8">
-                <span className="text-5xl font-extrabold text-green-600">₦0</span>
-                <span className="text-slate-500 text-sm"> / 7 Days</span>
-                <p className="text-slate-500 mt-2 text-sm">Experience the full power of Tallypadi with zero commitment.</p>
-              </div>
-
-              <ul className="space-y-4 mb-10 flex-1">
-                <PricingItem text="Full Access to all features" />
-                <PricingItem text="Single User Account" />
-                <PricingItem text="Basic Web Dashboard" />
-                <PricingItem text="WhatsApp Support" />
-                <PricingItem text="No credit card required" />
-              </ul>
-              <a
-                href={whatsappLink}
-                className="w-full block text-center bg-green-600 hover:bg-green-700 text-white font-bold py-3.5 rounded-xl transition shadow-lg shadow-green-600/20 active:scale-95"
-              >
-                Start 7-Day Free Trial
-              </a>
-            </AnimatedSection>
-
-            {/* 2. Oga Boss - Highlighted */}
-            <AnimatedSection
-              animation="fade-up"
-              className="relative bg-white p-6 rounded-3xl shadow-2xl flex flex-col border-4 border-blue-400 transform md:-translate-y-6 transition-all hover:scale-[1.05] hover:shadow-blue-500/40"
-            >
-              <div className="absolute top-0 right-0 bg-blue-500 text-white text-xs font-bold px-4 py-1.5 rounded-bl-xl shadow-md">
-                BEST VALUE
-              </div>
-              <div className="flex items-center gap-4 mb-6">
-                <div className="p-3 rounded-xl bg-blue-100 text-blue-600 shadow-xl">
-                  <Shield size={24} />
-                </div>
-                <h3 className="text-2xl font-bold text-slate-900">Oga Boss</h3>
-              </div>
-
-              <div className="mb-8">
-                <span className="text-5xl font-extrabold text-blue-600">₦3,000</span>
-                <span className="text-slate-500 text-sm"> / month</span>
-                <p className="text-slate-500 mt-2 text-sm">
-                  The essential plan for serious owners focused on maximizing solo profit.
-                </p>
-              </div>
-
-              <ul className="space-y-4 mb-10 flex-1">
-                <PricingItem text="Unlimited Sales & Inventory" />
-                <PricingItem text="Detailed Profit Calculation" />
-                <PricingItem text="Advanced Dashboard Access" />
-                <PricingItem text="1 User Account" />
-                <PricingItem text="Email & WhatsApp Support" />
-                <PricingItem text="Staff Management" unavailable />
-                <PricingItem text="Automated PDF Reports" unavailable />
-              </ul>
-              <a
-                href="/payment?plan=OGA_BOSS"
-                className="w-full block text-center bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl transition shadow-lg shadow-blue-600/20 active:scale-95"
-              >
-                Choose Oga Boss Plan
-              </a>
-            </AnimatedSection>
-
-            {/* 3. Tycoon */}
-            <AnimatedSection
-              animation="fade-up"
-              className="bg-slate-900 p-6 rounded-3xl border border-slate-700 flex flex-col shadow-lg transition-all hover:shadow-xl hover:scale-[1.02]"
-            >
-              <div className="flex items-center gap-4 mb-6">
-                <div className="p-3 rounded-xl bg-white text-amber-500 shadow-xl">
-                  <Crown size={24} />
-                </div>
-                <h3 className="text-2xl font-bold text-white">Tycoon</h3>
-              </div>
-
-              <div className="mb-8">
-                <span className="text-5xl font-extrabold text-amber-400">₦5,000</span>
-                <span className="text-slate-400 text-sm"> / month</span>
-                <p className="text-slate-400 mt-2 text-sm">Full power plan designed for management teams and scaling operations.</p>
-              </div>
-
-              <ul className="space-y-4 mb-10 flex-1">
-                <PricingItem text="Everything in Oga Boss" light />
-                <PricingItem text="Multi-Staff Login (Up to 5)" light />
-                <PricingItem text="Branded PDF Invoices & Export" light />
-                <PricingItem text="Advanced Analytics Suite" light />
-                <PricingItem text="Priority VIP Support" light />
-              </ul>
-              <a
-                href="/payment?plan=TYCOON"
-                className="w-full block text-center bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl transition shadow-lg shadow-amber-500/20 active:scale-95"
-              >
-                Choose Tycoon Plan
-              </a>
-            </AnimatedSection>
-          </div>
-        </div>
-      </section>
 
       {/* --- Trust / Social Proof (Light-Dark, Lively) --- */}
       <section id="trust" className="py-24 relative overflow-hidden bg-slate-800 text-white">
