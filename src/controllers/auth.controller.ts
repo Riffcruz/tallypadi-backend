@@ -249,13 +249,10 @@ export const requestForgotPasswordOTP = async (req: Request, res: Response) => {
 
     // Check 24h interaction
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    // The ProcessedMessage 'from' field is usually the full number (e.g. 23480...)
-    // user.phoneNumber in DB should be normalized (e.g. 23480...)
     
-    // We check if we have ANY message from this user in the last 24h
-    // The ProcessedMessage model has 'from' field.
+    // The ProcessedMessage model links to 'user' by ObjectId, not by phone number directly.
     const lastMsg = await ProcessedMessage.findOne({
-      from: user.phoneNumber,
+      user: user._id,
       createdAt: { $gte: oneDayAgo }
     });
 

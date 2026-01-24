@@ -214,7 +214,7 @@ const presignUploadLimiter = rateLimit({
 // ✅ Forgot Password limiter (stricter)
 const forgotPasswordLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
-  max: 3, // 3 attempts per hour
+  max: 10, // 3 attempts per hour
   standardHeaders: true,
   legacyHeaders: false,
   message: 'Too many password reset requests. Please try again in an hour.',
