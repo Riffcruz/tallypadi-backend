@@ -122,6 +122,13 @@ export const updateSettings = async (req: AuthReq, res: Response) => {
           }
         }
 
+        if (inputSettings.staffTransactionReport !== undefined) {
+          const isEnabled = validateBoolean(inputSettings.staffTransactionReport);
+          if (isEnabled !== undefined) {
+            $set['settings.staffTransactionReport'] = isEnabled;
+          }
+        }
+
         if (inputSettings.utcOffsetMinutes !== undefined) {
           const offset = validateNumber(inputSettings.utcOffsetMinutes);
           if (offset !== undefined) {
