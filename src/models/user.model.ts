@@ -51,6 +51,10 @@ export interface IUser extends Document {
 
   lastLogin?: Date;
 
+  otp?: string;
+  otpExpires?: Date;
+  tempPhone?: string;
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -135,6 +139,10 @@ const userSchema = new Schema<IUser>(
     },
     
     lastLogin: { type: Date },
+
+    otp: { type: String, select: false },
+    otpExpires: { type: Date, select: false },
+    tempPhone: { type: String, select: false },
   },
   { timestamps: true }
 );

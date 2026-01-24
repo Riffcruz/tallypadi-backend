@@ -67,6 +67,13 @@ export default function SettingsPage() {
   const [newStaffName, setNewStaffName] = useState('');
   const [addingStaff, setAddingStaff] = useState(false);
 
+  // Phone Change State
+  const [changePhoneModalOpen, setChangePhoneModalOpen] = useState(false);
+  const [changePhoneStep, setChangePhoneStep] = useState<1 | 2>(1);
+  const [newOwnerPhone, setNewOwnerPhone] = useState('');
+  const [changePhoneOtp, setChangePhoneOtp] = useState('');
+  const [changingPhone, setChangingPhone] = useState(false);
+
   const getTokenOrRedirect = () => {
     const token = getCookie('tallyToken');
     if (!token) router.push('/login');
@@ -346,6 +353,65 @@ export default function SettingsPage() {
     }
   };
 
+  // --- Phone Change Logic ---
+  const handleRequestChangePhoneOTP = async () => {
+    if (!newOwnerPhone) return;
+    const token = getTokenOrRedirect();
+    if (!token) return;
+
+    setChangingPhone(true);
+    try {
+      // Input is just digits, usually. Prepend +234 or whatever logic.
+      // Or just let backend normalize if full format. 
+      // Let's assume user types full number or we assume NG default if starting with 0?
+      // For now, raw input.
+      await axios.post(`${API_URL}/auth/change-phone`, 
+        { newPhoneNumber: newOwnerPhone },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setChangePhoneStep(2);
+      Swal.fire({
+        title: 'OTP Sent',
+        text: `We sent a code to ${newOwnerPhone} on WhatsApp.`,
+        icon: 'success',
+        timer: 3000
+      });
+    } catch (err: any) {
+       Swal.fire('Error', err?.response?.data?.error || 'Failed to request OTP', 'error');
+    } finally {
+      setChangingPhone(false);
+    }
+  };
+
+  const handleVerifyChangePhone = async () => {
+    if (!changePhoneOtp) return;
+    const token = getTokenOrRedirect();
+    if (!token) return;
+
+    setChangingPhone(true);
+    try {
+      await axios.post(`${API_URL}/auth/change-phone/verify`, 
+        { otp: changePhoneOtp },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      
+      Swal.fire('Success', 'Your phone number has been updated.', 'success');
+      setChangePhoneModalOpen(false);
+      
+      // Update local user state or refresh
+      setUser((prev: any) => ({ ...prev, phoneNumber: newOwnerPhone })); // simplified update
+      
+      // Reset state
+      setChangePhoneStep(1);
+      setNewOwnerPhone('');
+      setChangePhoneOtp('');
+    } catch (err: any) {
+       Swal.fire('Error', err?.response?.data?.error || 'Failed to verify OTP', 'error');
+    } finally {
+      setChangingPhone(false);
+    }
+  };
+
   if (loading)
     return (
       <div className="flex h-screen items-center justify-center bg-slate-50">
@@ -429,6 +495,23 @@ export default function SettingsPage() {
                   onChange={(e) => setBusinessName(e.target.value)}
                   className="w-full border border-gray-200 bg-slate-50/50 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all text-sm font-medium"
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wider">
+                  Owner Phone Number
+                </label>
+                <div className="flex gap-2">
+                   <div className="flex-1 border border-gray-200 bg-slate-100 rounded-xl px-4 py-3 text-sm font-medium text-gray-500 cursor-not-allowed">
+                     {user?.phoneNumber}
+                   </div>
+                   <button 
+                     onClick={() => setChangePhoneModalOpen(true)}
+                     className="bg-slate-900 text-white px-4 rounded-xl text-xs font-bold hover:bg-slate-800 transition"
+                   >
+                     Change
+                   </button>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -883,6 +966,86 @@ export default function SettingsPage() {
             >
               {addingStaff ? <Loader2 className="animate-spin w-5 h-5" /> : 'Send Invitation'}
             </button>
+          </div>
+        </div>
+      )}
+      {/* CHANGE PHONE MODAL */}
+      {changePhoneModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl animate-in zoom-in-95 duration-200 scale-100">
+             <div className="flex justify-between items-center mb-6">
+              <h3 className="text-lg font-bold text-gray-900">Change Phone Number</h3>
+              <button
+                onClick={() => {
+                   setChangePhoneModalOpen(false);
+                   setChangePhoneStep(1);
+                   setNewOwnerPhone('');
+                   setChangePhoneOtp('');
+                }}
+                className="text-gray-400 hover:text-gray-600 bg-gray-50 hover:bg-gray-100 p-1.5 rounded-full transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {changePhoneStep === 1 ? (
+               <div className="space-y-4">
+                  <p className="text-sm text-gray-500">
+                     Enter your new WhatsApp number. We will send a verification code to it.
+                  </p>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wide">
+                      New Phone Number
+                    </label>
+                    <input
+                      type="tel"
+                      placeholder="e.g. 2348012345678"
+                      className="w-full border border-gray-200 bg-slate-50 focus:bg-white rounded-xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-green-500/50 focus:border-green-500 transition-all font-medium text-gray-900 placeholder:text-gray-400"
+                      value={newOwnerPhone}
+                      onChange={(e) => setNewOwnerPhone(e.target.value.replace(/\D/g, ''))}
+                    />
+                    <p className="text-[10px] text-gray-400 mt-1">Format: 234... (No + symbol)</p>
+                  </div>
+                  <button
+                    onClick={handleRequestChangePhoneOTP}
+                    disabled={changingPhone || !newOwnerPhone}
+                    className="w-full bg-slate-900 text-white py-3.5 rounded-xl font-bold hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2"
+                  >
+                    {changingPhone ? <Loader2 className="animate-spin w-5 h-5" /> : 'Send Verification Code'}
+                  </button>
+               </div>
+            ) : (
+               <div className="space-y-4">
+                  <div className="bg-green-50 p-4 rounded-xl flex gap-3 items-start">
+                    <div className="p-1.5 bg-white rounded-full shadow-sm text-green-600 mt-0.5">
+                      <CheckCircle2 size={16} />
+                    </div>
+                    <p className="text-xs text-green-800 leading-relaxed">
+                      OTP Sent to {newOwnerPhone}. Check WhatsApp.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wide">
+                      Enter OTP
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="123456"
+                      className="w-full border border-gray-200 bg-slate-50 focus:bg-white rounded-xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-green-500/50 focus:border-green-500 transition-all font-medium text-gray-900 placeholder:text-gray-400 text-center tracking-widest text-lg"
+                      value={changePhoneOtp}
+                      onChange={(e) => setChangePhoneOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    />
+                  </div>
+                  <button
+                    onClick={handleVerifyChangePhone}
+                    disabled={changingPhone || changePhoneOtp.length < 6}
+                    className="w-full bg-green-600 text-white py-3.5 rounded-xl font-bold hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2"
+                  >
+                    {changingPhone ? <Loader2 className="animate-spin w-5 h-5" /> : 'Verify & Update Number'}
+                  </button>
+               </div>
+            )}
           </div>
         </div>
       )}

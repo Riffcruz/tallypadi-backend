@@ -25,7 +25,14 @@ import orderRouter from './routes/order.routes';
 import shopRouter from './routes/shop.routes';
 
 // --- SERVICES & CONFIG ---
-import { loginUser, registerUser } from './controllers/auth.controller';
+import { 
+  loginUser, 
+  registerUser, 
+  requestForgotPasswordOTP, 
+  resetPassword, 
+  requestChangePhoneOTP, 
+  verifyChangePhoneOTP 
+} from './controllers/auth.controller';
 import { startScheduler } from './services/scheduler';
 import { env } from './config/env';
 
@@ -204,6 +211,20 @@ const presignUploadLimiter = rateLimit({
   keyGenerator: (req: any) => (req.user?.id ? `user:${req.user.id}` : `ip:${ipKeyGenerator(req)}`),
 });
 
+// ✅ Forgot Password limiter (stricter)
+const forgotPasswordLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 3, // 3 attempts per hour
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: 'Too many password reset requests. Please try again in an hour.',
+  keyGenerator: (req: any) => {
+    const identifier = normalizeStr(req.body?.identifier);
+    if (!identifier) return `ip:${ipKeyGenerator(req)}`;
+    return `fp:${normalizePhoneDigits(identifier)}`;
+  },
+});
+
 
 app.use('/api', (req, res, next) => {
   // Skip rate limit for webhooks
@@ -293,6 +314,14 @@ const authRequired = (req: any, res: any, next: any) => {
 // ✅ APPLY: IP + identity + email + phone limiters
 app.post('/api/login', loginLimiterIp, loginLimiterIdentity, emailLimiter, phoneLimiter, loginUser);
 app.post('/api/register', loginLimiterIp, loginLimiterIdentity, emailLimiter, phoneLimiter, registerUser);
+
+// ✅ Forgot Password
+app.post('/api/auth/forgot-password', forgotPasswordLimiter, requestForgotPasswordOTP);
+app.post('/api/auth/reset-password', loginLimiterIp, resetPassword);
+
+// ✅ Change Phone Number
+app.post('/api/auth/change-phone', authRequired, requestChangePhoneOTP);
+app.post('/api/auth/change-phone/verify', authRequired, verifyChangePhoneOTP);
 
 app.get('/api/dashboard', authRequired, getDashboardData);
 

@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { User } from '../models/user.model';
+import { ProcessedMessage } from '../models/processedMessage.model';
+import { sendWhatsAppText } from '../services/whatsapp.service';
 
 // --- Helpers ---
 const sanitizeString = (input: unknown): string | null => {
@@ -224,3 +226,177 @@ export const registerUser = async (req: Request, res: Response) => {
 };
 
 
+// --- Forgot Password ---
+
+export const requestForgotPasswordOTP = async (req: Request, res: Response) => {
+  try {
+    const { identifier } = req.body;
+    if (!identifier) return res.status(400).json({ error: 'Please provide phone number' });
+
+    // Normalize input
+    const digits = normalizePhone(identifier);
+    // Try to find user. Handle 0-prefix or 234-prefix.
+    // We'll use the buildPhoneCandidates helper logic implicitly or just query.
+    // User might enter '090...' or '23490...'
+    const candidates = buildPhoneCandidates(identifier);
+    
+    const user = await User.findOne({ phoneNumber: { $in: candidates } });
+    if (!user) {
+      // Security: don't reveal user existence? 
+      // For this app context (business tool), clear feedback might be better for UX.
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Check 24h interaction
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    // The ProcessedMessage 'from' field is usually the full number (e.g. 23480...)
+    // user.phoneNumber in DB should be normalized (e.g. 23480...)
+    
+    // We check if we have ANY message from this user in the last 24h
+    // The ProcessedMessage model has 'from' field.
+    const lastMsg = await ProcessedMessage.findOne({
+      from: user.phoneNumber,
+      createdAt: { $gte: oneDayAgo }
+    });
+
+    if (!lastMsg) {
+      return res.status(400).json({ 
+        error: 'No recent interaction. Please send a "Hello" to the bot on WhatsApp first to enable OTP.' 
+      });
+    }
+
+    // Generate OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expires = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
+
+    user.otp = otp;
+    user.otpExpires = expires;
+    await user.save();
+
+    // Send via WhatsApp
+    await sendWhatsAppText(user.phoneNumber, `Your TallyPadi Password Reset OTP is: ${otp}`);
+
+    return res.json({ success: true, message: 'OTP sent to WhatsApp' });
+  } catch (err) {
+    console.error('Forgot Password Request Error:', err);
+    return res.status(500).json({ error: 'Server Error' });
+  }
+};
+
+export const resetPassword = async (req: Request, res: Response) => {
+  try {
+    const { identifier, otp, newPassword } = req.body;
+    if (!identifier || !otp || !newPassword) {
+      return res.status(400).json({ error: 'Missing fields' });
+    }
+
+    const candidates = buildPhoneCandidates(identifier);
+    const user: any = await User.findOne({ phoneNumber: { $in: candidates } }).select('+password +otp +otpExpires');
+
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    if (!user.otp || user.otp !== otp) {
+      return res.status(400).json({ error: 'Invalid OTP' });
+    }
+
+    if (!user.otpExpires || user.otpExpires < new Date()) {
+      return res.status(400).json({ error: 'OTP expired' });
+    }
+
+    // Reset
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(newPassword, salt);
+    user.otp = undefined;
+    user.otpExpires = undefined;
+    await user.save();
+
+    return res.json({ success: true, message: 'Password updated successfully' });
+  } catch (err) {
+    console.error('Reset Password Error:', err);
+    return res.status(500).json({ error: 'Server Error' });
+  }
+};
+
+// --- Change Phone Number ---
+
+export const requestChangePhoneOTP = async (req: any, res: Response) => {
+  try {
+    const userId = req.user?.id; // from authRequired
+    const { newPhoneNumber } = req.body;
+
+    if (!newPhoneNumber) return res.status(400).json({ error: 'New phone number required' });
+
+    // Normalize to 234 format
+    let normalized = normalizePhone(newPhoneNumber);
+    if (normalized.startsWith('0')) {
+        normalized = '234' + normalized.slice(1);
+    } else if (normalized.length === 10) { 
+       // rough guess, assume NG if 10 digits without 0? Or just leave it.
+       // The prompt says "number should be saved with this format '2349081888873'"
+       // If user types '234...' it's fine.
+    }
+    // ensure no '+'
+    normalized = normalized.replace('+', '');
+
+    // Check conflict
+    const existing = await User.findOne({ phoneNumber: normalized });
+    if (existing) {
+      return res.status(400).json({ error: 'Phone number already in use' });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    // Generate OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expires = new Date(Date.now() + 10 * 60 * 1000);
+
+    user.otp = otp;
+    user.otpExpires = expires;
+    user.tempPhone = normalized;
+    await user.save();
+
+    // Send OTP to NEW number to verify ownership
+    await sendWhatsAppText(normalized, `Your TallyPadi Phone Verification OTP is: ${otp}`);
+
+    return res.json({ success: true, message: 'OTP sent to new phone number' });
+  } catch (err) {
+    console.error('Change Phone Request Error:', err);
+    return res.status(500).json({ error: 'Server Error' });
+  }
+};
+
+export const verifyChangePhoneOTP = async (req: any, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    const { otp } = req.body;
+
+    if (!otp) return res.status(400).json({ error: 'OTP required' });
+
+    const user: any = await User.findById(userId).select('+otp +otpExpires +tempPhone');
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    if (!user.otp || user.otp !== otp) {
+      return res.status(400).json({ error: 'Invalid OTP' });
+    }
+    if (!user.otpExpires || user.otpExpires < new Date()) {
+      return res.status(400).json({ error: 'OTP expired' });
+    }
+
+    if (!user.tempPhone) {
+        return res.status(400).json({ error: 'No pending phone change' });
+    }
+
+    // Commit change
+    user.phoneNumber = user.tempPhone;
+    user.otp = undefined;
+    user.otpExpires = undefined;
+    user.tempPhone = undefined;
+    await user.save();
+
+    return res.json({ success: true, message: 'Phone number updated successfully' });
+  } catch (err) {
+    console.error('Verify Change Phone Error:', err);
+    return res.status(500).json({ error: 'Server Error' });
+  }
+};
