@@ -361,18 +361,19 @@ export default function SettingsPage() {
 
     setChangingPhone(true);
     try {
-      // Input is just digits, usually. Prepend +234 or whatever logic.
-      // Or just let backend normalize if full format. 
-      // Let's assume user types full number or we assume NG default if starting with 0?
-      // For now, raw input.
+      // Clean local number (remove leading 0)
+      const cleanLocal = newOwnerPhone.replace(/^0+/, '');
+      const cleanCode = staffCountryCode.replace('+', '');
+      const finalNumber = `${cleanCode}${cleanLocal}`;
+
       await axios.post(`${API_URL}/auth/change-phone`, 
-        { newPhoneNumber: newOwnerPhone },
+        { newPhoneNumber: finalNumber },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       setChangePhoneStep(2);
       Swal.fire({
         title: 'OTP Sent',
-        text: `We sent a code to ${newOwnerPhone} on WhatsApp.`,
+        text: `We sent a code to your CURRENT WhatsApp number.`,
         icon: 'success',
         timer: 3000
       });
@@ -991,20 +992,36 @@ export default function SettingsPage() {
             {changePhoneStep === 1 ? (
                <div className="space-y-4">
                   <p className="text-sm text-gray-500">
-                     Enter your new WhatsApp number. We will send a verification code to it.
+                     Enter your new phone number below. For security, we will send the OTP to your <b>current</b> WhatsApp number.
                   </p>
                   <div>
                     <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wide">
                       New Phone Number
                     </label>
-                    <input
-                      type="tel"
-                      placeholder="e.g. 2348012345678"
-                      className="w-full border border-gray-200 bg-slate-50 focus:bg-white rounded-xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-green-500/50 focus:border-green-500 transition-all font-medium text-gray-900 placeholder:text-gray-400"
-                      value={newOwnerPhone}
-                      onChange={(e) => setNewOwnerPhone(e.target.value.replace(/\D/g, ''))}
-                    />
-                    <p className="text-[10px] text-gray-400 mt-1">Format: 234... (No + symbol)</p>
+                    <div className="flex gap-2">
+                      <select
+                        className="w-28 border border-gray-200 bg-slate-50 focus:bg-white rounded-xl px-3 py-3.5 focus:outline-none focus:ring-2 focus:ring-green-500/50 focus:border-green-500 transition-all font-medium text-gray-900 text-sm cursor-pointer"
+                        value={staffCountryCode}
+                        onChange={(e) => setStaffCountryCode(e.target.value)}
+                      >
+                        <option value="+234">🇳🇬 +234</option>
+                        <option value="+233">🇬🇭 +233</option>
+                        <option value="+254">🇰🇪 +254</option>
+                        <option value="+27">🇿🇦 +27</option>
+                        <option value="+20">🇪🇬 +20</option>
+                        <option value="+256">🇺🇬 +256</option>
+                        <option value="+250">🇷🇼 +250</option>
+                        <option value="+1">🇺🇸 +1</option>
+                        <option value="+44">🇬🇧 +44</option>
+                      </select>
+                      <input
+                        type="tel"
+                        placeholder="8012345678"
+                        className="flex-1 border border-gray-200 bg-slate-50 focus:bg-white rounded-xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-green-500/50 focus:border-green-500 transition-all font-medium text-gray-900 placeholder:text-gray-400"
+                        value={newOwnerPhone}
+                        onChange={(e) => setNewOwnerPhone(e.target.value.replace(/\D/g, ''))}
+                      />
+                    </div>
                   </div>
                   <button
                     onClick={handleRequestChangePhoneOTP}
@@ -1021,7 +1038,7 @@ export default function SettingsPage() {
                       <CheckCircle2 size={16} />
                     </div>
                     <p className="text-xs text-green-800 leading-relaxed">
-                      OTP Sent to {newOwnerPhone}. Check WhatsApp.
+                      OTP Sent to your <b>current</b> WhatsApp number. Please check it.
                     </p>
                   </div>
 

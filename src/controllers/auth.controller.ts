@@ -362,10 +362,10 @@ export const requestChangePhoneOTP = async (req: any, res: Response) => {
     user.tempPhone = normalized;
     await user.save();
 
-    // Send OTP to NEW number to verify ownership
-    await sendWhatsAppText(normalized, `Your TallyPadi Phone Verification OTP is: ${otp}`);
+    // Send OTP to CURRENT number to verify ownership (Security)
+    await sendWhatsAppText(user.phoneNumber, `Security Check: Use OTP ${otp} to change your TallyPadi phone number to ${normalized}.`);
 
-    return res.json({ success: true, message: 'OTP sent to new phone number' });
+    return res.json({ success: true, message: 'OTP sent to your CURRENT WhatsApp number.' });
   } catch (err) {
     console.error('Change Phone Request Error:', err);
     return res.status(500).json({ error: 'Server Error' });
