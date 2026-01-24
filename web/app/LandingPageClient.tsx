@@ -637,25 +637,7 @@ export default function LandingPage() {
               </a>
             </div>
 
-            <div className="mt-12 flex items-center gap-4 p-4 rounded-2xl bg-slate-900/60 border border-slate-800 backdrop-blur-md w-fit shadow-lg">
-              <div className="flex -space-x-3">
-                {[1, 2, 3, 4].map((i) => (
-                  <div key={i} className="w-10 h-10 rounded-full border-2 border-slate-900 bg-slate-700 overflow-hidden">
-                    <img src={`https://i.pravatar.cc/100?img=${i + 15}`} alt="User" className="w-full h-full object-cover" />
-                  </div>
-                ))}
-              </div>
-              <div className="flex flex-col">
-                <span className="text-slate-200 font-semibold text-sm">Trusted by 500+ Vendors</span>
-                <div className="flex text-yellow-400 text-xs gap-0.5">
-                  <Star size={12} fill="currentColor" />
-                  <Star size={12} fill="currentColor" />
-                  <Star size={12} fill="currentColor" />
-                  <Star size={12} fill="currentColor" />
-                  <Star size={12} fill="currentColor" />
-                </div>
-              </div>
-            </div>
+            
           </div>
 
           {/* Dynamic Phone Mockup with 3D Float */}
