@@ -456,7 +456,7 @@ export default function LandingPage() {
 
   return (
      
-    <div className="bg-slate-50 text-slate-600 font-sans selection:bg-emerald-500 selection:text-white h-screen overflow-y-scroll snap-y snap-mandatory scroll-smooth">
+    <div className="bg-slate-50 text-slate-600 overflow-x-hidden font-sans selection:bg-emerald-500 selection:text-white">
       {/* --- Navbar --- */}
       <nav className="fixed w-full z-50 transition-all duration-300 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 shadow-lg">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -585,7 +585,7 @@ export default function LandingPage() {
 
       {/* --- Hero Section (Full Screen) --- */}
       <section 
-        className="relative min-h-screen flex items-center justify-center pt-20 overflow-hidden bg-slate-950 snap-start"
+        className="relative min-h-screen flex items-center justify-center pt-20 overflow-hidden bg-slate-950"
         onMouseEnter={() => setIsHeroPaused(true)}
         onMouseLeave={() => setIsHeroPaused(false)}
       >
@@ -764,7 +764,7 @@ export default function LandingPage() {
       </section>
 
       {/* --- How It Works (Dark Theme for Contrast) --- */}
-    <section id="how-it-works" className="py-24 bg-slate-900 relative overflow-hidden text-white min-h-screen snap-start flex flex-col justify-center">
+    <section id="how-it-works" className="py-24 bg-slate-900 relative overflow-hidden text-white">
   <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-600/10 rounded-full blur-[100px]"></div>
   <div className="absolute bottom-0 left-0 w-96 h-96 bg-blue-600/10 rounded-full blur-[100px]"></div>
 
@@ -878,7 +878,7 @@ export default function LandingPage() {
 
 
       {/* --- Pricing Section (Moved Up) --- */}
-      <section id="pricing" className="py-24 bg-slate-50 relative min-h-screen snap-start flex flex-col justify-center">
+      <section id="pricing" className="py-24 bg-slate-50 relative">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <AnimatedSection className="text-center mb-16">
             <span className="text-emerald-600 font-bold tracking-wider uppercase text-xs">Pricing Plans</span>
@@ -999,7 +999,7 @@ export default function LandingPage() {
       </section>
 
       {/* --- Features Grid --- */}
-      <section id="features" className="py-24 bg-slate-50 relative min-h-screen snap-start flex flex-col justify-center">
+      <section id="features" className="py-24 bg-slate-50 relative">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           <AnimatedSection className="text-center mb-16">
             <span className="text-emerald-600 font-bold tracking-wider uppercase text-xs">Powerful Features</span>
@@ -1049,7 +1049,7 @@ export default function LandingPage() {
       </section>
 
       {/* --- Gallery / Photo Edits Section --- */}
-      <section id="gallery" className="py-24 bg-white border-t border-slate-100 min-h-screen snap-start flex flex-col justify-center">
+      <section id="gallery" className="py-24 bg-white border-t border-slate-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <AnimatedSection className="flex flex-col md:flex-row justify-between items-end mb-12 gap-6">
             <div className="max-w-2xl">
@@ -1120,7 +1120,7 @@ export default function LandingPage() {
 
 
       {/* --- Trust / Social Proof (Light-Dark, Lively) --- */}
-      <section id="trust" className="py-24 relative overflow-hidden bg-slate-800 text-white min-h-screen snap-start flex flex-col justify-center">
+      <section id="trust" className="py-24 relative overflow-hidden bg-slate-800 text-white">
         {/* Glow blobs */}
         <div className="absolute -top-24 right-0 w-[520px] h-[520px] bg-emerald-400/15 rounded-full blur-[120px]" />
         <div className="absolute -bottom-32 left-0 w-[520px] h-[520px] bg-blue-400/15 rounded-full blur-[120px]" />
@@ -1221,7 +1221,7 @@ export default function LandingPage() {
       </section>
 
       {/* --- FAQ (Animated Accordion) --- */}
-      <section id="faq" className="py-24 relative overflow-hidden bg-slate-900 text-white min-h-screen snap-start flex flex-col justify-center">
+      <section id="faq" className="py-24 relative overflow-hidden bg-slate-900 text-white">
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[700px] h-[700px] bg-emerald-500/10 rounded-full blur-[140px]" />
         <div className="absolute bottom-0 right-0 w-[600px] h-[600px] bg-blue-500/10 rounded-full blur-[140px]" />
 
@@ -1261,7 +1261,7 @@ export default function LandingPage() {
       </section>
 
       {/* --- CTA --- */}
-      <section className="py-24 bg-slate-950 text-white relative overflow-hidden min-h-screen snap-start flex flex-col justify-center">
+      <section className="py-24 bg-slate-950 text-white relative overflow-hidden">
         <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-emerald-600/10 rounded-full blur-[120px] animate-pulse"></div>
         <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-blue-500/10 rounded-full blur-[120px]"></div>
 
@@ -1286,7 +1286,7 @@ export default function LandingPage() {
       </section>
 
       {/* --- Footer --- */}
-      <footer className="relative bg-slate-950 text-slate-300 py-16 overflow-hidden snap-start">
+      <footer className="relative bg-slate-950 text-slate-300 py-16 overflow-hidden">
         {/* Background Image & Overlay */}
         <div className="absolute inset-0 z-0">
           <Image
