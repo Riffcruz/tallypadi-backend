@@ -59,11 +59,14 @@ export const getHqDashboardData = async (req: Request, res: Response) => {
 
         if (branchIds.length === 0) {
             return res.json({
-                totalRevenue: 0,
-                totalSalesCount: 0,
-                activeBranches: 0,
-                topPerformingBranch: null,
-                recentSales: []
+                overview: {
+                    totalRevenue: 0,
+                    totalSales: 0,
+                    todayRevenue: 0,
+                    todaySales: 0,
+                    activeBranches: 0
+                },
+                recentNetworkSales: []
             });
         }
 
