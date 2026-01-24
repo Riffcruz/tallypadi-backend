@@ -1286,38 +1286,92 @@ export default function LandingPage() {
       </section>
 
       {/* --- Footer --- */}
-      <footer className="bg-slate-950 text-slate-400 py-12 border-t border-slate-900">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col md:flex-row justify-between items-center gap-8">
-           <div className="cursor-pointer">
-  <div className="relative w-[180px] h-[44px] sm:w-[220px] sm:h-[54px] lg:w-[250px] lg:h-[60px]">
-    <Image
-      src="/tallypadi-logo.png"
-      alt="TallyPadi logo"
-      fill
-      className="object-contain"
-      priority
-    />
-  </div>
-</div>
+      <footer className="relative bg-slate-950 text-slate-300 py-16 overflow-hidden">
+        {/* Background Image & Overlay */}
+        <div className="absolute inset-0 z-0">
+          <Image
+            src="https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=2072&auto=format&fit=crop"
+            alt="Footer Background"
+            fill
+            className="object-cover opacity-20"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/80 to-slate-900/90" />
+        </div>
 
-            <div className="flex gap-8 text-sm font-medium">
-              <a href="/policy" className="hover:text-emerald-400 transition">
-                Privacy Policy
-              </a>
-              <a href="/help" className="hover:text-emerald-400 transition">
-                Documentation
-              </a>
-              <a href="/policy#terms" className="hover:text-emerald-400 transition">
-                Terms of Service
-              </a>
-              <a href={whatsappLink} className="hover:text-emerald-400 transition">
-                Contact Support
-              </a>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 mb-12">
+            {/* Brand Column */}
+            <div className="space-y-4">
+              <div className="cursor-pointer group inline-block">
+                <div className="relative w-[160px] h-[40px] transition-transform duration-300 group-hover:scale-105">
+                  <Image
+                    src="/tallypadi-logo.png"
+                    alt="TallyPadi logo"
+                    fill
+                    className="object-contain"
+                  />
+                </div>
+              </div>
+              <p className="text-slate-400 text-sm leading-relaxed max-w-xs">
+                Empowering African businesses with AI-driven inventory and sales management tools. Built for growth, designed for simplicity.
+              </p>
+              <div className="flex gap-4 pt-2">
+                {/* Social Placeholders */}
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="w-8 h-8 rounded-full bg-slate-800/50 flex items-center justify-center hover:bg-emerald-500 hover:text-white transition-all cursor-pointer border border-white/5">
+                     <span className="w-2 h-2 bg-current rounded-full" />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Quick Links */}
+            <div>
+              <h4 className="text-white font-bold mb-6 text-lg">Platform</h4>
+              <ul className="space-y-3 text-sm">
+                <li><a href="#features" className="hover:text-emerald-400 transition-colors flex items-center gap-2"><ArrowRight size={12} className="opacity-0 hover:opacity-100 transition-opacity" />Features</a></li>
+                <li><a href="#pricing" className="hover:text-emerald-400 transition-colors flex items-center gap-2"><ArrowRight size={12} className="opacity-0 hover:opacity-100 transition-opacity" />Pricing</a></li>
+                <li><a href="#gallery" className="hover:text-emerald-400 transition-colors flex items-center gap-2"><ArrowRight size={12} className="opacity-0 hover:opacity-100 transition-opacity" />Showcase</a></li>
+                <li><a href="/login" className="hover:text-emerald-400 transition-colors flex items-center gap-2"><ArrowRight size={12} className="opacity-0 hover:opacity-100 transition-opacity" />Login</a></li>
+              </ul>
+            </div>
+
+            {/* Support */}
+            <div>
+              <h4 className="text-white font-bold mb-6 text-lg">Support</h4>
+              <ul className="space-y-3 text-sm">
+                <li><a href="/help" className="hover:text-emerald-400 transition-colors">Help Center</a></li>
+                <li><a href={whatsappLink} className="hover:text-emerald-400 transition-colors">Chat on WhatsApp</a></li>
+                <li><a href="#faq" className="hover:text-emerald-400 transition-colors">FAQs</a></li>
+                <li><a href="/policy" className="hover:text-emerald-400 transition-colors">Privacy Policy</a></li>
+                <li><a href="/policy#terms" className="hover:text-emerald-400 transition-colors">Terms of Service</a></li>
+              </ul>
+            </div>
+
+            {/* Newsletter / CTA */}
+            <div className="bg-slate-800/30 backdrop-blur-sm p-6 rounded-2xl border border-white/5">
+              <h4 className="text-white font-bold mb-2 text-lg">Stay Updated</h4>
+              <p className="text-xs text-slate-400 mb-4">Get the latest business tips and feature updates.</p>
+              <div className="flex gap-2">
+                <input 
+                  type="email" 
+                  placeholder="Enter email" 
+                  className="bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:border-emerald-500 transition-colors"
+                />
+                <button className="bg-emerald-500 hover:bg-emerald-400 text-white rounded-lg px-3 py-2 transition-colors">
+                  <ArrowRight size={16} />
+                </button>
+              </div>
             </div>
           </div>
-          <div className="mt-12 text-center text-xs text-slate-600 border-t border-slate-900 pt-8">
-            &copy; {new Date().getFullYear()} Tallypadi. Built for SMEs.
+
+          <div className="border-t border-slate-800/50 pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-slate-500">
+            <p>&copy; {new Date().getFullYear()} Tallypadi. All rights reserved.</p>
+            <div className="flex gap-6">
+              <span>Built For SMEs</span>
+              <span className="w-px h-4 bg-slate-800" />
+              <span>Lagos, Nigeria</span>
+            </div>
           </div>
         </div>
       </footer>
