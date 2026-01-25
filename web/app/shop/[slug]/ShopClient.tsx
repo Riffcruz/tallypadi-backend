@@ -255,9 +255,8 @@ export default function ShopClient({ initialShop, slug }: ShopClientProps) {
                    <>
                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 md:gap-6">
                          {products.map((product) => {
-                             const productUrl = typeof window !== 'undefined' 
-                                  ? `${window.location.origin}/shop/${slug}?productId=${product.id}&ref=whatsapp` 
-                                  : `https://tallypadi.com/shop/${slug}?productId=${product.id}&ref=whatsapp`;
+                             const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://tallypadi.com';
+                             const productUrl = `${baseUrl}/shop/${slug}?productId=${product.id}&ref=whatsapp`;
 
                              const whatsappText = `Hi ${initialShop.name}, I want to buy:\n\n*${product.name}*\nPrice: ${formatMoney(product.price)}\n\nLink: ${productUrl}`;
                              const encodedText = encodeURIComponent(whatsappText);
