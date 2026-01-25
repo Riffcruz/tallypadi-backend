@@ -4,7 +4,8 @@ import {
   getShopProducts, 
   getShopMe, 
   updateShopSettings,
-  getShopProductById
+  getShopProductById,
+  recordShopVisit
 } from '../controllers/shop.controller';
 import { authRequired } from '../middleware/authRequired';
 
@@ -15,6 +16,7 @@ router.get('/me', authRequired, getShopMe);
 router.put('/me', authRequired, updateShopSettings);
 
 // 🌍 Public Routes
+router.post('/:slug/visit', recordShopVisit);
 router.get('/:slug', getShopBySlug);
 router.get('/:slug/products', getShopProducts);
 router.get('/:slug/products/:productId', getShopProductById);

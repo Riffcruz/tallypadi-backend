@@ -12,6 +12,8 @@ import {
   MessageSquare,
   Send,
   Unlink,
+  ExternalLink,
+  Edit2,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import jsPDF from 'jspdf';
@@ -436,6 +438,42 @@ export default function UserDeepDiveModal({
     );
   }
 
+  const handleUpdatePhone = async () => {
+    const currentPhone = details?.profile?.phoneNumber || '';
+    const { value: newPhone } = await Swal.fire({
+      title: 'Update WhatsApp Number',
+      input: 'text',
+      inputValue: currentPhone,
+      inputLabel: 'Enter new phone number (with country code)',
+      showCancelButton: true,
+      inputValidator: (value) => {
+        if (!value) return 'You need to write something!';
+        if (value.length < 7) return 'Phone number too short!';
+        return null; // Add return null for valid input
+      }
+    });
+
+    if (newPhone && newPhone !== currentPhone) {
+      try {
+        await onAction(userId, 'update_phone', { phone: newPhone });
+        
+        setDetails((prev: any) => ({
+          ...prev,
+          profile: {
+            ...prev.profile,
+            phoneNumber: newPhone,
+          },
+        }));
+        
+        // No need for success swal here as AdminDashboard handles it, 
+        // BUT AdminDashboard says: "if (!['set_expiry', 'change_plan', 'cancel'].includes(action)) { Swal... }"
+        // update_phone is not in that list, so it will show success.
+      } catch (error) {
+        // Error handled by parent
+      }
+    }
+  };
+
   const tabBtn = (m: ViewType) =>
     `px-4 sm:px-6 py-3 text-sm font-semibold capitalize whitespace-nowrap ${
       view === m ? 'text-emerald-300 border-b-2 border-emerald-400' : 'text-slate-400 hover:text-white'
@@ -451,9 +489,30 @@ export default function UserDeepDiveModal({
               {details?.profile?.businessName || 'User'}
               {details?.profile?.planType === 'TYCOON' && <Crown className="text-purple-400 w-5 h-5 shrink-0" />}
             </h2>
-            <p className="text-slate-400 text-xs sm:text-sm font-mono break-words">
-              {details?.profile?.phoneNumber || '—'}
-            </p>
+            
+            <div className="flex items-center gap-2 mt-1">
+              <p className="text-slate-400 text-xs sm:text-sm font-mono break-words">
+                {details?.profile?.phoneNumber || '—'}
+              </p>
+              <button
+                onClick={handleUpdatePhone}
+                className="text-slate-500 hover:text-white transition"
+                title="Edit Phone Number"
+              >
+                <Edit2 size={14} />
+              </button>
+            </div>
+
+            {details?.profile?.shopSlug && (
+               <a 
+                 href={`https://tallypadi.com/shop/${details.profile.shopSlug}`}
+                 target="_blank"
+                 rel="noopener noreferrer"
+                 className="text-xs text-emerald-400 hover:underline flex items-center gap-1 mt-1"
+               >
+                 tallypadi.com/shop/{details.profile.shopSlug} <ExternalLink size={12} />
+               </a>
+            )}
           </div>
 
           <button

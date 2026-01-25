@@ -4,6 +4,7 @@ import { Transaction } from '../models/transaction.model';
 import { Inventory } from '../models/inventory.model';
 import { Debtor } from '../models/debtor.model';
 import { Order } from '../models/order.model';
+import { DailyStats } from '../models/dailyStats.model';
 import { getRelevantUserIds } from '../services/report.service';
 const UNKNOWN_ITEM_NAMES = ['unknown_item', 'unknown', 'item', 'null', 'undefined'];
 
@@ -83,7 +84,8 @@ export const getDashboardData = async (req: Request | any, res: Response) => {
       topItems,
       totalDebtors,
       pendingOrders,
-      inventoryDocs
+      inventoryDocs,
+      visitStatsRaw
     ] = await Promise.all([
       // 1. Total Revenue
       Transaction.aggregate([
@@ -154,11 +156,55 @@ export const getDashboardData = async (req: Request | any, res: Response) => {
       Order.countDocuments({ user: { $in: relevantIds }, status: 'PENDING' }),
 
       // 8. Inventory (for legacy frontend compat)
-      Inventory.find({ user: { $in: relevantIds } })
+      Inventory.find({ user: { $in: relevantIds } }),
+
+      // 9. Visit Stats Aggregation
+      DailyStats.aggregate([
+        { 
+          $match: { 
+            user: { $in: relevantIds },
+            totalVisits: { $gt: 0 }
+          } 
+        },
+        {
+          $group: {
+            _id: null,
+            all: { $push: { date: '$date', count: '$totalVisits' } }
+          }
+        }
+      ])
     ]);
 
     const totalRevenue = totalRevenueRaw[0]?.total || 0;
     const itemsSold = itemsSoldRaw[0]?.total || 0;
+    
+    // Process Visit Stats
+    const visitData = (visitStatsRaw[0]?.all || []) as { date: string; count: number }[];
+    const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
+    
+    // Week start (Sunday)
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() - now.getDay());
+    const weekStartStr = weekStart.toISOString().split('T')[0];
+
+    // Month start
+    const monthStartStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+    
+    // Year start
+    const yearStartStr = `${now.getFullYear()}-01-01`;
+
+    let visitsToday = 0;
+    let visitsWeek = 0;
+    let visitsMonth = 0;
+    let visitsYear = 0;
+
+    for (const v of visitData) {
+       if (v.date === todayStr) visitsToday += v.count;
+       if (v.date >= weekStartStr) visitsWeek += v.count;
+       if (v.date >= monthStartStr) visitsMonth += v.count;
+       if (v.date >= yearStartStr) visitsYear += v.count;
+    }
 
     // Fill chart gaps
     const map: Record<string, number> = { Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0, Sat: 0, Sun: 0 };
@@ -228,7 +274,13 @@ export const getDashboardData = async (req: Request | any, res: Response) => {
         stockValue: 0,
         debtorsCount: totalDebtors[0]?.count || 0,
         debtorsAmount: totalDebtors[0]?.totalAmount || 0,
-        pendingOrders: pendingOrders
+        pendingOrders: pendingOrders,
+        visits: {
+          today: visitsToday,
+          week: visitsWeek,
+          month: visitsMonth,
+          year: visitsYear
+        }
       },
       inventory,
       transactions,

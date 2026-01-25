@@ -88,6 +88,7 @@ const manageUserSchema = z
       'cancel',
       'change_plan',
       'set_expiry',
+      'update_phone',
     ]),
     payload: z.any().optional(),
   })
@@ -122,6 +123,10 @@ const changePlanSchema = z.object({
 
 const setExpirySchema = z.object({
   date: z.string().trim().min(1),
+});
+
+const updatePhoneSchema = z.object({
+  phone: phoneSchema,
 });
 
 const deleteUserPayloadSchema = z.object({
@@ -449,6 +454,15 @@ export const manageUser = async (req: Request, res: Response) => {
       owner.trialEndsAt = newDate;
       owner.nextBillingDate = newDate;
       if (newDate < new Date()) owner.subscriptionStatus = 'cancelled';
+    } else if (action === 'update_phone') {
+      const p = updatePhoneSchema.safeParse(payload || {});
+      if (!p.success) return res.status(400).json({ error: p.error.flatten() });
+
+      const existing = await User.findOne({ phoneNumber: p.data.phone });
+      if (existing && existing._id.toString() !== ownerId.toString()) {
+        return res.status(409).json({ error: 'Phone number already in use' });
+      }
+      owner.phoneNumber = p.data.phone;
     }
 
     await owner.save();

@@ -45,6 +45,21 @@ export default function ShopClient({ initialShop, slug }: ShopClientProps) {
   // Debounce search
   const [debouncedSearch, setDebouncedSearch] = useState('');
 
+  // Record Visit on Mount
+  useEffect(() => {
+    const recordVisit = async () => {
+       // Avoid counting dev mode hot reloads excessively or if initialShop is null
+       if (!initialShop) return; 
+       try {
+          // Fire and forget
+          await axios.post(`${API_URL}/shop/${slug}/visit`);
+       } catch (err) {
+          // ignore error
+       }
+    };
+    recordVisit();
+  }, [slug, initialShop]);
+
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 500);
     return () => clearTimeout(timer);

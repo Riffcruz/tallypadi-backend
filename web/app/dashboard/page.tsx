@@ -23,6 +23,7 @@ import {
   Clipboard,
   CreditCard,
   Package,
+  Eye,
 } from 'lucide-react';
 import {
   BarChart,
@@ -75,6 +76,12 @@ interface DashboardResponse {
     debtorsCount?: number;
     debtorsAmount?: number;
     pendingOrders?: number;
+    visits?: {
+      today: number;
+      week: number;
+      month: number;
+      year: number;
+    };
     // Optional: If your backend supports it, you can send multi-currency totals:
     // revenueByCurrency?: Record<string, number>;
   };
@@ -427,6 +434,41 @@ const topTransactions = filteredTransactions.slice(0, 6);
             icon={Package}
             accent="purple"
           />
+        </div>
+
+        {/* Visit Stats */}
+        <div className="mt-6">
+          <h3 className="text-sm font-black text-slate-500 uppercase tracking-widest mb-3">Shop Visits</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <StatCard
+              title="Today"
+              value={String(data?.stats?.visits?.today || 0)}
+              sub="Visits"
+              icon={Eye}
+              accent="emerald"
+            />
+            <StatCard
+              title="This Week"
+              value={String(data?.stats?.visits?.week || 0)}
+              sub="Visits"
+              icon={Eye}
+              accent="blue"
+            />
+            <StatCard
+              title="This Month"
+              value={String(data?.stats?.visits?.month || 0)}
+              sub="Visits"
+              icon={Eye}
+              accent="orange"
+            />
+            <StatCard
+              title="This Year"
+              value={String(data?.stats?.visits?.year || 0)}
+              sub="Visits"
+              icon={Eye}
+              accent="purple"
+            />
+          </div>
         </div>
 
         {/* Mid row */}

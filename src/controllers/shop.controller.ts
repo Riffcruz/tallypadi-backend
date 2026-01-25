@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { User } from '../models/user.model';
 import { Inventory } from '../models/inventory.model';
+import { DailyStats } from '../models/dailyStats.model';
 import { z } from 'zod';
 import { r2Service } from '../services/r2.service';
 
@@ -248,6 +249,36 @@ export const getShopProductById = async (req: Request, res: Response): Promise<a
     });
   } catch (error) {
     console.error('Error fetching product:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+/**
+ * POST /api/shop/:slug/visit
+ * Record a visit to the shop
+ */
+export const recordShopVisit = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { slug } = req.params;
+    if (!slug) return res.status(400).json({ error: 'Slug required' });
+
+    const shopOwner = await User.findOne({ shopSlug: slug }).select('_id planType');
+    if (!shopOwner) return res.status(404).json({ error: 'Shop not found' });
+    
+    // We count visits even if plan is expired, so owner sees missed traffic? 
+    // Or only active shops? Let's count all valid slugs.
+
+    const today = new Date().toISOString().split('T')[0]; // "YYYY-MM-DD"
+
+    await DailyStats.updateOne(
+      { user: shopOwner._id, date: today },
+      { $inc: { totalVisits: 1 } },
+      { upsert: true }
+    );
+
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Error recording visit:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 };

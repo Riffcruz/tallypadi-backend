@@ -5,13 +5,15 @@ export interface IDailyStats extends Document {
   date: string; // "2025-12-09"
   totalRevenue: number;
   totalTransactions: number;
+  totalVisits: number;
 }
 
 const dailyStatsSchema = new Schema<IDailyStats>({
   user: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   date: { type: String, required: true },
   totalRevenue: { type: Number, default: 0 },
-  totalTransactions: { type: Number, default: 0 }
+  totalTransactions: { type: Number, default: 0 },
+  totalVisits: { type: Number, default: 0 }
 });
 
 // Index for fast lookup
