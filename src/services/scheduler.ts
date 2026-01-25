@@ -316,12 +316,18 @@ export function startScheduler() {
   cron.schedule('0 * * * *', async () => {
     try {
       const now = new Date();
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
       // Expire Trials
       const trialResult = await User.updateMany(
         {
           subscriptionStatus: 'trial',
-          trialEndsAt: { $lt: now },
+          $or: [
+            // Case 1: trialEndsAt is set and is in the past
+            { trialEndsAt: { $lt: now } },
+            // Case 2: trialEndsAt is NOT set, and user was created more than 7 days ago (data integrity)
+            { trialEndsAt: { $exists: false }, createdAt: { $lt: sevenDaysAgo } },
+          ],
         },
         {
           $set: { subscriptionStatus: 'past_due' },
