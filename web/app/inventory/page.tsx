@@ -76,6 +76,10 @@ export default function InventoryPage() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isUploadingImage, setIsLoadingImage] = useState(false); // New state for upload status
 
+  // ✅ Dropdown states
+  const [showAddCategoryDropdown, setShowAddCategoryDropdown] = useState(false);
+  const [showEditCategoryDropdown, setShowEditCategoryDropdown] = useState(false);
+
   // ✅ POPUP EDIT (Modal)
   const [editOpen, setEditOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -886,16 +890,44 @@ export default function InventoryPage() {
                         <div className="relative">
                            <input
                             type="text"
-                            list="categories-list"
                             value={newItemCategory}
                             onChange={(e) => setNewItemCategory(e.target.value)}
+                            onFocus={() => setShowAddCategoryDropdown(true)}
+                            onBlur={() => setTimeout(() => setShowAddCategoryDropdown(false), 200)}
                             className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 text-base font-bold text-slate-900 placeholder:text-slate-400 transition-all"
                             placeholder="Select or type..."
                             disabled={showLockUI}
                           />
-                          <datalist id="categories-list">
-                            {categories.map(c => <option key={c} value={c} />)}
-                          </datalist>
+                          
+                          {/* Custom Dropdown */}
+                          {showAddCategoryDropdown && (
+                             <ul className="absolute z-50 left-0 right-0 top-full mt-2 bg-white border border-slate-200 rounded-2xl shadow-xl max-h-60 overflow-y-auto py-2 animate-scale-in">
+                                {categories
+                                  .filter(c => c.toLowerCase().includes(newItemCategory.toLowerCase()))
+                                  .map((c) => (
+                                   <li
+                                     key={c}
+                                     onMouseDown={() => {
+                                        setNewItemCategory(c);
+                                        setShowAddCategoryDropdown(false);
+                                     }}
+                                     className="px-5 py-3 hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 font-bold text-sm cursor-pointer transition-colors flex items-center justify-between"
+                                   >
+                                      {c}
+                                      {newItemCategory.toLowerCase() === c.toLowerCase() && <Check className="w-4 h-4 text-emerald-600"/>}
+                                   </li>
+                                ))}
+                                {newItemCategory && !categories.some(c => c.toLowerCase() === newItemCategory.toLowerCase()) && (
+                                   <li className="px-5 py-3 text-emerald-600 font-bold text-sm bg-emerald-50/50 border-t border-slate-100 flex items-center gap-2">
+                                      <Plus className="w-4 h-4" /> Create "{newItemCategory}"
+                                   </li>
+                                )}
+                                {categories.length === 0 && !newItemCategory && (
+                                   <li className="px-5 py-3 text-slate-400 text-xs font-semibold text-center">No categories yet</li>
+                                )}
+                             </ul>
+                          )}
+
                           <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
                              <Filter className="w-4 h-4" />
                           </div>
@@ -1315,15 +1347,43 @@ export default function InventoryPage() {
                     <div className="relative">
                       <input
                         type="text"
-                        list="categories-list-mobile"
                         value={newItemCategory}
                         onChange={(e) => setNewItemCategory(e.target.value)}
+                        onFocus={() => setShowAddCategoryDropdown(true)}
+                        onBlur={() => setTimeout(() => setShowAddCategoryDropdown(false), 200)}
                         className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 text-base font-bold text-slate-900 placeholder:text-slate-400"
                         placeholder="Select or type..."
                       />
-                      <datalist id="categories-list-mobile">
-                        {categories.map(c => <option key={c} value={c} />)}
-                      </datalist>
+                      
+                      {/* Custom Dropdown Mobile */}
+                      {showAddCategoryDropdown && (
+                             <ul className="absolute z-50 left-0 right-0 top-full mt-2 bg-white border border-slate-200 rounded-2xl shadow-xl max-h-48 overflow-y-auto py-2 animate-scale-in">
+                                {categories
+                                  .filter(c => c.toLowerCase().includes(newItemCategory.toLowerCase()))
+                                  .map((c) => (
+                                   <li
+                                     key={c}
+                                     onMouseDown={() => {
+                                        setNewItemCategory(c);
+                                        setShowAddCategoryDropdown(false);
+                                     }}
+                                     className="px-5 py-3 hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 font-bold text-sm cursor-pointer transition-colors flex items-center justify-between"
+                                   >
+                                      {c}
+                                      {newItemCategory.toLowerCase() === c.toLowerCase() && <Check className="w-4 h-4 text-emerald-600"/>}
+                                   </li>
+                                ))}
+                                {newItemCategory && !categories.some(c => c.toLowerCase() === newItemCategory.toLowerCase()) && (
+                                   <li className="px-5 py-3 text-emerald-600 font-bold text-sm bg-emerald-50/50 border-t border-slate-100 flex items-center gap-2">
+                                      <Plus className="w-4 h-4" /> Create "{newItemCategory}"
+                                   </li>
+                                )}
+                                {categories.length === 0 && !newItemCategory && (
+                                   <li className="px-5 py-3 text-slate-400 text-xs font-semibold text-center">No categories yet</li>
+                                )}
+                             </ul>
+                      )}
+
                       <Filter className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                     </div>
                   </div>
@@ -1438,19 +1498,48 @@ export default function InventoryPage() {
                 </div>
               </div>
 
-               <div className="mb-3">
+               <div className="mb-3 relative">
                   <label className="block text-xs font-extrabold text-slate-600 mb-1">Category (Optional)</label>
-                  <input
-                    type="text"
-                    list="categories-list-edit"
-                    value={editCategory}
-                    onChange={(e) => setEditCategory(e.target.value)}
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 text-sm font-semibold"
-                    placeholder="e.g. Drinks"
-                  />
-                  <datalist id="categories-list-edit">
-                    {categories.map(c => <option key={c} value={c} />)}
-                  </datalist>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={editCategory}
+                      onChange={(e) => setEditCategory(e.target.value)}
+                      onFocus={() => setShowEditCategoryDropdown(true)}
+                      onBlur={() => setTimeout(() => setShowEditCategoryDropdown(false), 200)}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 text-sm font-semibold"
+                      placeholder="e.g. Drinks"
+                    />
+                    
+                    {/* Custom Dropdown Edit */}
+                    {showEditCategoryDropdown && (
+                             <ul className="absolute z-50 left-0 right-0 top-full mt-2 bg-white border border-slate-200 rounded-2xl shadow-xl max-h-48 overflow-y-auto py-2 animate-scale-in">
+                                {categories
+                                  .filter(c => c.toLowerCase().includes(editCategory.toLowerCase()))
+                                  .map((c) => (
+                                   <li
+                                     key={c}
+                                     onMouseDown={() => {
+                                        setEditCategory(c);
+                                        setShowEditCategoryDropdown(false);
+                                     }}
+                                     className="px-5 py-3 hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 font-bold text-sm cursor-pointer transition-colors flex items-center justify-between"
+                                   >
+                                      {c}
+                                      {editCategory.toLowerCase() === c.toLowerCase() && <Check className="w-4 h-4 text-emerald-600"/>}
+                                   </li>
+                                ))}
+                                {editCategory && !categories.some(c => c.toLowerCase() === editCategory.toLowerCase()) && (
+                                   <li className="px-5 py-3 text-emerald-600 font-bold text-sm bg-emerald-50/50 border-t border-slate-100 flex items-center gap-2">
+                                      <Plus className="w-4 h-4" /> Create "{editCategory}"
+                                   </li>
+                                )}
+                                {categories.length === 0 && !editCategory && (
+                                   <li className="px-5 py-3 text-slate-400 text-xs font-semibold text-center">No categories yet</li>
+                                )}
+                             </ul>
+                    )}
+                  </div>
                </div>
 
               <div className="grid grid-cols-3 gap-3">
