@@ -30,23 +30,47 @@ export default function Sidebar() {
     router.push('/login');
   };
 
-  const menuItems = [
-    { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-    { href: '/sales', icon: ShoppingCart, label: 'Sales' },
-    { href: '/orders', icon: ClipboardList, label: 'Orders' },
-    { href: '/inventory', icon: Package, label: 'Product/Stocks' },
-    // ✅ New Debtors Navigation Item
-    { href: '/debtors', icon: Users, label: 'Debtors' },
-    { href: '/settings', icon: Settings, label: 'Settings' },
-    { href: '/help', icon: BookOpen, label: 'Guide' },
-  ];
+  // ✅ Define items dynamically based on user/permissions
+  const getMenuItems = () => {
+    const baseItems = [
+      { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', key: 'canViewDashboard' },
+      { href: '/sales', icon: ShoppingCart, label: 'Sales' }, // Always allowed (Core)
+      { href: '/orders', icon: ClipboardList, label: 'Orders' }, // Always allowed (Core)
+      { href: '/inventory', icon: Package, label: 'Product/Stocks', key: 'canManageInventory' },
+      { href: '/debtors', icon: Users, label: 'Debtors', key: 'canManageCustomers' },
+      { href: '/settings', icon: Settings, label: 'Settings', key: 'canViewSettings' },
+      { href: '/help', icon: BookOpen, label: 'Guide' },
+    ];
 
-  const isTycoon = String(user?.planType || '').toUpperCase() === 'TYCOON';
+    if (!user) return baseItems;
 
-  if (user && (user.role === 'HQ' || user.isHqManager || isTycoon)) {
-    // Add HQ link at the top or appropriate place. Let's add it at the top.
-    menuItems.unshift({ href: '/hq/dashboard', icon: LayoutDashboard, label: 'HQ Dashboard' });
-  }
+    // HQ Logic
+    const isTycoon = String(user?.planType || '').toUpperCase() === 'TYCOON';
+    if (user.role === 'HQ' || user.isHqManager || isTycoon) {
+       // Check duplication before unshifting if re-renders happen (though this function runs on render)
+       if (!baseItems.find(i => i.label === 'HQ Dashboard')) {
+         baseItems.unshift({ href: '/hq/dashboard', icon: LayoutDashboard, label: 'HQ Dashboard' });
+       }
+    }
+
+    // Staff Permission Filtering
+    if (user.role === 'STAFF') {
+      const perms = user.settings?.staffPermissions || {};
+      return baseItems.filter(item => {
+        // If it has a specific permission key, check it
+        if (item.key) {
+           // If key is present in perms, use it. If not, fallback to defaults matching model.
+           // Dashboard: def false, Inventory: def true, Debtors: def true, Settings: def false
+           return perms[item.key] === true; 
+        }
+        return true; // No key = always show (Sales, Orders, Guide)
+      });
+    }
+
+    return baseItems;
+  };
+
+  const menuItems = getMenuItems();
 
   return (
     <div className="w-64 bg-white h-[100dvh] border-r border-gray-200 flex flex-col fixed left-0 top-0 z-10">

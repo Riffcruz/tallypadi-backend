@@ -129,6 +129,28 @@ export const updateSettings = async (req: AuthReq, res: Response) => {
           }
         }
 
+        // ✅ Staff Permissions Update
+        if (inputSettings.staffPermissions && typeof inputSettings.staffPermissions === 'object') {
+           const sp = inputSettings.staffPermissions;
+           const allowedKeys = [
+             'canViewDashboard',
+             'canManageInventory',
+             'canViewSalesHistory',
+             'canViewReports',
+             'canManageCustomers',
+             'canViewSettings'
+           ];
+
+           for (const key of allowedKeys) {
+             if (sp[key] !== undefined) {
+               const val = validateBoolean(sp[key]);
+               if (val !== undefined) {
+                 $set[`settings.staffPermissions.${key}`] = val;
+               }
+             }
+           }
+        }
+
         if (inputSettings.utcOffsetMinutes !== undefined) {
           const offset = validateNumber(inputSettings.utcOffsetMinutes);
           if (offset !== undefined) {

@@ -167,6 +167,17 @@ export default function InventoryPage() {
       setInventory(normalized.filter((i) => i.id && i.name));
       setUser(userRes.data.user);
       setCategories(Array.isArray(catRes.data) ? catRes.data : []);
+
+      // ✅ Staff Permission Check
+      const u = userRes.data.user;
+      if (u.role === 'STAFF') {
+         // Default is true, so only block if explicitly false
+         const canManage = u.settings?.staffPermissions?.canManageInventory !== false;
+         if (!canManage) {
+            router.replace('/sales');
+            return;
+         }
+      }
     } catch (err) {
       console.error('Failed to fetch data:', err);
     } finally {

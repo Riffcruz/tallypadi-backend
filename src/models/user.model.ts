@@ -42,6 +42,16 @@ export interface IUser extends Document {
     language: string;
     pdfReportsEnabled: boolean;
     staffTransactionReport?: boolean;
+    
+    // ✅ Staff Permissions
+    staffPermissions?: {
+       canViewDashboard?: boolean;
+       canManageInventory?: boolean;
+       canViewSalesHistory?: boolean;
+       canViewReports?: boolean;
+       canManageCustomers?: boolean;
+       canViewSettings?: boolean;
+    };
   };
 
   // ✅ Security / Suspension
@@ -135,6 +145,16 @@ const userSchema = new Schema<IUser>(
       language: { type: String, default: 'English' },
       pdfReportsEnabled: { type: Boolean, default: true },
       staffTransactionReport: { type: Boolean, default: false },
+      
+      // ✅ Staff Permission Toggles (Controlled by Owner)
+      staffPermissions: {
+         canViewDashboard: { type: Boolean, default: false },     // See main stats
+         canManageInventory: { type: Boolean, default: true },    // Add/Edit products
+         canViewSalesHistory: { type: Boolean, default: false },  // See all shop sales
+         canViewReports: { type: Boolean, default: false },       // Access reports page
+         canManageCustomers: { type: Boolean, default: true },    // Access debtors
+         canViewSettings: { type: Boolean, default: false },      // Access settings page
+      }
     },
 
     // ✅ Security / Suspension

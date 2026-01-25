@@ -60,6 +60,16 @@ export default function SettingsPage() {
   const [language, setLanguage] = useState('');
   const [pdfEnabled, setPdfEnabled] = useState(false);
   const [staffAlertsEnabled, setStaffAlertsEnabled] = useState(false); // ✅ New state
+  
+  // ✅ Staff Permission State
+  const [staffPermissions, setStaffPermissions] = useState({
+    canViewDashboard: false,
+    canManageInventory: true,
+    canViewSalesHistory: false,
+    canViewReports: false,
+    canManageCustomers: true,
+    canViewSettings: false,
+  });
 
   // Staff State
   const [staff, setStaff] = useState<StaffMember[]>([]);
@@ -142,6 +152,15 @@ export default function SettingsPage() {
     );
     
     setStaffAlertsEnabled(userData?.settings?.staffTransactionReport ?? false);
+
+    setStaffPermissions({
+      canViewDashboard: userData?.settings?.staffPermissions?.canViewDashboard ?? false,
+      canManageInventory: userData?.settings?.staffPermissions?.canManageInventory ?? true,
+      canViewSalesHistory: userData?.settings?.staffPermissions?.canViewSalesHistory ?? false,
+      canViewReports: userData?.settings?.staffPermissions?.canViewReports ?? false,
+      canManageCustomers: userData?.settings?.staffPermissions?.canManageCustomers ?? true,
+      canViewSettings: userData?.settings?.staffPermissions?.canViewSettings ?? false,
+    });
   };
 
   useEffect(() => {
@@ -209,6 +228,7 @@ export default function SettingsPage() {
             language,
             pdfReportsEnabled: pdfEnabled,
             staffTransactionReport: staffAlertsEnabled, // ✅ Send new setting
+            staffPermissions, // ✅ Send permissions
           },
         },
         { headers: { Authorization: `Bearer ${token}` } }
@@ -876,6 +896,53 @@ export default function SettingsPage() {
                   </button>
                 </div>
              </div>
+          )}
+
+          {/* Staff Permissions (Tycoon Only) */}
+          {isTycoon && (
+            <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-indigo-100">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 bg-indigo-50 rounded-xl text-indigo-600">
+                  <Shield size={20} />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-gray-900">Staff Permissions</h2>
+                  <p className="text-xs text-gray-400">Control what your staff can see and do.</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {[
+                  { key: 'canViewDashboard', label: 'View Dashboard Stats', desc: 'See total revenue and daily stats.' },
+                  { key: 'canManageInventory', label: 'Manage Inventory', desc: 'Add products and update stock/prices.' },
+                  { key: 'canViewSalesHistory', label: 'View Sales History', desc: 'See transaction history of other staff.' },
+                  { key: 'canViewReports', label: 'Access Reports', desc: 'View detailed sales and profit reports.' },
+                  { key: 'canManageCustomers', label: 'Manage Debtors', desc: 'View and edit customer debt records.' },
+                  { key: 'canViewSettings', label: 'Access Settings', desc: 'View store configuration (Read-only).' },
+                ].map((perm) => (
+                  <div key={perm.key} className="flex items-center justify-between p-4 rounded-xl border border-slate-100 hover:border-indigo-100 transition-colors">
+                    <div>
+                      <h3 className="font-bold text-gray-900 text-sm">{perm.label}</h3>
+                      <p className="text-[10px] text-gray-500 mt-0.5">{perm.desc}</p>
+                    </div>
+                    <button
+                      onClick={() =>
+                        setStaffPermissions((prev: any) => ({ ...prev, [perm.key]: !prev[perm.key] }))
+                      }
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                        (staffPermissions as any)[perm.key] ? 'bg-indigo-600' : 'bg-gray-300'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${
+                          (staffPermissions as any)[perm.key] ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
 
           {/* Save Button */}

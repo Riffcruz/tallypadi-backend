@@ -206,6 +206,16 @@ export default function DashboardPage() {
 
         setData(dashRes.data as DashboardResponse);
         if (fxRes?.data) setFx(fxRes.data as FxRatesResponse);
+
+        // ✅ Staff Permission Check
+        const u = dashRes.data.user as any;
+        if (u?.role === 'STAFF') {
+           const canView = u?.settings?.staffPermissions?.canViewDashboard === true;
+           if (!canView) {
+             router.replace('/sales');
+             return;
+           }
+        }
       } catch (err) {
         console.error('Dashboard Fetch Error:', err);
       } finally {
