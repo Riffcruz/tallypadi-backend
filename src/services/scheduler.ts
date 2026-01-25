@@ -312,5 +312,44 @@ export function startScheduler() {
     }
   });
 
+  // 5) Auto-expire subscriptions (Every hour)
+  cron.schedule('0 * * * *', async () => {
+    try {
+      const now = new Date();
+
+      // Expire Trials
+      const trialResult = await User.updateMany(
+        {
+          subscriptionStatus: 'trial',
+          trialEndsAt: { $lt: now },
+        },
+        {
+          $set: { subscriptionStatus: 'past_due' },
+        }
+      );
+
+      if (trialResult.modifiedCount > 0) {
+        console.log(`📉 Expired ${trialResult.modifiedCount} trial users.`);
+      }
+
+      // Expire Active Plans
+      const activeResult = await User.updateMany(
+        {
+          subscriptionStatus: 'active',
+          nextBillingDate: { $lt: now },
+        },
+        {
+          $set: { subscriptionStatus: 'past_due' },
+        }
+      );
+
+      if (activeResult.modifiedCount > 0) {
+        console.log(`📉 Expired ${activeResult.modifiedCount} active users.`);
+      }
+    } catch (err) {
+      console.error('❌ Auto-expire scheduler error:', err);
+    }
+  });
+
   console.log('✅ Scheduler initialized');
 }
