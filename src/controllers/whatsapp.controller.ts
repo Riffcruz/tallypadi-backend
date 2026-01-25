@@ -1804,7 +1804,22 @@ if (btn?.txId && btn?.action) {
 
       case 'HQ_DASHBOARD': {
           if (actor.role !== 'HQ') {
-              await queueOutboundMessage(from, "❌ Access denied. This command is for HQ accounts only.");
+              // ✅ Shop Owner / Staff Dashboard (Fallback)
+              const { startUtc, endUtc } = getUtcRangeForUser(offsetMinutes, startDate, endDate);
+              
+              // Parallel fetch for speed
+              const [summary, pendingRes] = await Promise.all([
+                  getDailySummary(actor._id as any, startUtc, endUtc),
+                  orderService.getOrders(shopId, { status: 'PENDING' })
+              ]);
+
+              const msg = `🏪 *Shop Dashboard (${dateLabel})*\n\n` +
+                          `💰 Revenue: ${symbol}${Number(summary.totalRevenue || 0).toLocaleString(locale)}\n` +
+                          `🛒 Items Sold: ${(summary.items || []).length}\n` +
+                          `📦 Pending Orders: ${pendingRes.orders.length}\n\n` +
+                          `_Reply "full report" for detailed inventory status._`;
+              
+              await queueOutboundMessage(from, msg);
               break;
           }
 

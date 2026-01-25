@@ -312,8 +312,8 @@ export function startScheduler() {
     }
   });
 
-  // 5) Auto-expire subscriptions (Every hour)
-  cron.schedule('0 * * * *', async () => {
+  // 5) Auto-expire subscriptions (Every 10 minutes)
+  cron.schedule('*/10 * * * *', async () => {
     try {
       const now = new Date();
       const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
@@ -325,7 +325,8 @@ export function startScheduler() {
           $or: [
             // Case 1: trialEndsAt is set and is in the past
             { trialEndsAt: { $lt: now } },
-            // Case 2: trialEndsAt is NOT set, and user was created more than 7 days ago (data integrity)
+            // Case 2: trialEndsAt is NOT set (null/undefined), and user was created more than 7 days ago
+            { trialEndsAt: null, createdAt: { $lt: sevenDaysAgo } },
             { trialEndsAt: { $exists: false }, createdAt: { $lt: sevenDaysAgo } },
           ],
         },
