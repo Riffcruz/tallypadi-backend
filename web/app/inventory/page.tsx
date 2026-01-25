@@ -799,140 +799,179 @@ export default function InventoryPage() {
 
         {/* Desktop: Add form + stats */}
         <div className="hidden lg:grid grid-cols-3 gap-6 mb-8">
-          <div className="col-span-2 bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
-            <div className="flex items-center gap-2 mb-4">
+          <div className="col-span-2 bg-white rounded-3xl border border-slate-200 shadow-sm p-6 relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-50 rounded-bl-full -mr-10 -mt-10 transition-transform group-hover:scale-110" />
+            
+            <div className="flex items-center gap-3 mb-6 relative z-10">
               <div
-                className={`w-10 h-10 rounded-2xl flex items-center justify-center border ${
-                  showLockUI ? 'bg-rose-50 text-rose-700 border-rose-100' : 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                className={`w-12 h-12 rounded-2xl flex items-center justify-center border shadow-sm transition-colors ${
+                  showLockUI ? 'bg-rose-50 text-rose-600 border-rose-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100'
                 }`}
               >
-                {showLockUI ? <Lock className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
+                {showLockUI ? <Lock className="w-6 h-6" /> : <Sparkles className="w-6 h-6" />}
               </div>
               <div>
-                <p className="font-black text-slate-900 leading-tight">{showLockUI ? 'Adding Locked' : 'Add New Item'}</p>
-                <p className="text-xs text-slate-500 font-semibold">Create items quickly without leaving the page.</p>
+                <p className="font-black text-xl text-slate-900 leading-tight">
+                  {showLockUI ? 'Inventory Locked' : 'Add New Product'}
+                </p>
+                <p className="text-sm text-slate-500 font-medium">
+                  {showLockUI ? 'Upgrade to manage stock' : 'Fill in the details below'}
+                </p>
               </div>
             </div>
 
-            <form onSubmit={handleAddItem} className="grid grid-cols-12 gap-3 items-end">
-              <div className="col-span-12 md:col-span-3">
-                <label className="block text-xs font-bold text-slate-500 mb-1 ml-1">Item Name</label>
-                <div className="flex gap-2">
-                  <div className="relative w-16 h-12 shrink-0 group">
+            <form onSubmit={handleAddItem} className="relative z-10">
+              <div className="grid grid-cols-12 gap-6">
+                {/* Left: Image Upload */}
+                <div className="col-span-12 md:col-span-4 lg:col-span-3">
+                   <div className="relative w-full aspect-square group/image cursor-pointer">
                     <input
                       type="file"
                       accept="image/*"
                       onChange={(e) => handleImageSelect(e, setNewItemImage)}
-                      className="absolute inset-0 opacity-0 cursor-pointer z-10"
+                      className="absolute inset-0 opacity-0 cursor-pointer z-20"
                       disabled={showLockUI || isUploadingImage}
                     />
+                    
                     {newItemImage ? (
-                      <img src={newItemImage} className="w-full h-full rounded-xl object-cover border border-slate-200" />
+                      <div className="w-full h-full rounded-3xl overflow-hidden border-2 border-slate-200 shadow-sm relative">
+                        <img 
+                          src={newItemImage} 
+                          className="w-full h-full object-cover transition-transform duration-500 group-hover/image:scale-105" 
+                        />
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/image:opacity-100 transition-opacity flex items-center justify-center">
+                           <p className="text-white font-bold text-sm flex items-center gap-2">
+                             <Edit2 className="w-4 h-4"/> Change
+                           </p>
+                        </div>
+                      </div>
                     ) : (
-                      <div className="w-full h-full rounded-xl bg-slate-50 border-2 border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 group-hover:bg-slate-100 group-hover:border-emerald-400 transition-colors">
-                        <Upload size={14} className="mb-0.5" />
-                        <span className="text-[8px] font-bold uppercase">Img</span>
+                      <div className="w-full h-full rounded-3xl bg-slate-50 border-2 border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 group-hover/image:bg-slate-100 group-hover/image:border-emerald-400 group-hover/image:text-emerald-500 transition-all">
+                        <div className="w-12 h-12 rounded-full bg-white shadow-sm flex items-center justify-center mb-3">
+                           <Upload className="w-6 h-6" />
+                        </div>
+                        <span className="text-xs font-black uppercase tracking-wide">Upload Image</span>
+                        <span className="text-[10px] font-semibold mt-1 opacity-60">Tap to browse</span>
                       </div>
                     )}
+                    
+                    {isUploadingImage && (
+                        <div className="absolute inset-0 z-30 bg-white/80 backdrop-blur-sm rounded-3xl flex items-center justify-center">
+                            <Loader2 className="w-8 h-8 text-emerald-600 animate-spin" />
+                        </div>
+                    )}
                   </div>
-                  <input
-                    type="text"
-                    value={newItemName}
-                    onChange={(e) => setNewItemName(e.target.value)}
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 text-sm font-semibold"
-                    placeholder="e.g. Rice"
-                    required
-                    disabled={showLockUI}
-                  />
                 </div>
-              </div>
 
-              <div className="col-span-6 md:col-span-3">
-                 <label className="block text-xs font-bold text-slate-500 mb-1 ml-1">Category (Opt)</label>
-                 <input
-                    type="text"
-                    list="categories-list"
-                    value={newItemCategory}
-                    onChange={(e) => setNewItemCategory(e.target.value)}
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 text-sm font-semibold"
-                    placeholder="Category"
-                    disabled={showLockUI}
-                  />
-                  <datalist id="categories-list">
-                    {categories.map(c => <option key={c} value={c} />)}
-                  </datalist>
-              </div>
+                {/* Right: Inputs */}
+                <div className="col-span-12 md:col-span-8 lg:col-span-9 space-y-5">
+                   
+                   {/* Name & Category Row */}
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-extrabold text-slate-600 uppercase tracking-wider ml-1">Product Name</label>
+                        <input
+                          type="text"
+                          value={newItemName}
+                          onChange={(e) => setNewItemName(e.target.value)}
+                          className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 text-base font-bold text-slate-900 placeholder:text-slate-400 transition-all"
+                          placeholder="e.g. Nike Air Max"
+                          required
+                          disabled={showLockUI}
+                        />
+                      </div>
 
-              <div className="col-span-6 md:col-span-3">
-                <label className="block text-xs font-bold text-slate-500 mb-1 ml-1">Quantity</label>
-                <input
-                  type="number"
-                  value={newItemStock}
-                  onChange={(e) => setNewItemStock(e.target.value)}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 text-sm font-semibold"
-                  placeholder="0"
-                  required
-                  disabled={showLockUI}
-                />
-              </div>
+                      <div className="space-y-1.5 relative">
+                        <label className="text-xs font-extrabold text-slate-600 uppercase tracking-wider ml-1">Category</label>
+                        <div className="relative">
+                           <input
+                            type="text"
+                            list="categories-list"
+                            value={newItemCategory}
+                            onChange={(e) => setNewItemCategory(e.target.value)}
+                            className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 text-base font-bold text-slate-900 placeholder:text-slate-400 transition-all"
+                            placeholder="Select or type..."
+                            disabled={showLockUI}
+                          />
+                          <datalist id="categories-list">
+                            {categories.map(c => <option key={c} value={c} />)}
+                          </datalist>
+                          <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                             <Filter className="w-4 h-4" />
+                          </div>
+                        </div>
+                      </div>
+                   </div>
 
-              <div className="col-span-4 md:col-span-3">
-                <label className="block text-xs font-bold text-slate-500 mb-1 ml-1">Cost Price</label>
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-extrabold">
-                    {prefix}
-                  </span>
-                  <input
-                    type="number"
-                    value={newItemCostPrice}
-                    onChange={(e) => setNewItemCostPrice(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 text-sm font-semibold text-right"
-                    placeholder="0"
-                  />
+                   {/* Numbers Row */}
+                   <div className="grid grid-cols-3 gap-4">
+                      <div className="space-y-1.5">
+                         <label className="text-xs font-extrabold text-slate-600 uppercase tracking-wider ml-1">Stock</label>
+                         <input
+                          type="number"
+                          value={newItemStock}
+                          onChange={(e) => setNewItemStock(e.target.value)}
+                          className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 text-sm font-bold text-slate-900 placeholder:text-slate-400"
+                          placeholder="0"
+                          required
+                          disabled={showLockUI}
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                         <label className="text-xs font-extrabold text-slate-600 uppercase tracking-wider ml-1">Cost</label>
+                         <div className="relative">
+                           <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-black">{prefix}</span>
+                           <input
+                            type="number"
+                            value={newItemCostPrice}
+                            onChange={(e) => setNewItemCostPrice(e.target.value)}
+                            className="w-full pl-8 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 text-sm font-bold text-slate-900 placeholder:text-slate-400 text-right"
+                            placeholder="0"
+                          />
+                         </div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                         <label className="text-xs font-extrabold text-slate-600 uppercase tracking-wider ml-1">Selling Price</label>
+                         <div className="relative">
+                           <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-black">{prefix}</span>
+                           <input
+                            type="number"
+                            value={newItemPrice}
+                            onChange={(e) => setNewItemPrice(e.target.value)}
+                            className="w-full pl-8 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 text-sm font-bold text-slate-900 placeholder:text-slate-400 text-right"
+                            placeholder="0"
+                            required
+                            disabled={showLockUI}
+                          />
+                         </div>
+                      </div>
+                   </div>
+
+                   {/* Action Button */}
+                   <div className="pt-2">
+                      <button
+                        type="submit"
+                        disabled={showLockUI || isUploadingImage}
+                        className={`w-full py-4 rounded-2xl font-black text-sm shadow-xl shadow-emerald-200/50 transition-all active:scale-[0.98] flex items-center justify-center gap-3 ${
+                          showLockUI || isUploadingImage
+                            ? 'bg-slate-100 text-slate-400 cursor-not-allowed shadow-none border border-slate-200'
+                            : 'bg-emerald-600 hover:bg-emerald-700 text-white border border-transparent'
+                        }`}
+                      >
+                        {showLockUI ? <Lock className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
+                        <span className="text-base">Add Product to Inventory</span>
+                      </button>
+                      
+                      {showLockUI && (
+                        <p className="text-center mt-3 text-xs font-bold text-emerald-700 cursor-pointer hover:underline" onClick={showLockedModal}>
+                           Tap here to upgrade plan
+                        </p>
+                      )}
+                   </div>
+
                 </div>
-              </div>
-
-              <div className="col-span-4 md:col-span-3">
-                <label className="block text-xs font-bold text-slate-500 mb-1 ml-1">Unit Price</label>
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-extrabold">
-                    {prefix}
-                  </span>
-                  <input
-                    type="number"
-                    value={newItemPrice}
-                    onChange={(e) => setNewItemPrice(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 text-sm font-semibold text-right"
-                    placeholder="0"
-                    required
-                    disabled={showLockUI}
-                  />
-                </div>
-              </div>
-
-              <div className="col-span-12 flex items-center gap-3 pt-2">
-                <button
-                  type="submit"
-                  disabled={showLockUI || isUploadingImage}
-                  className={`px-6 py-3 rounded-2xl font-extrabold text-sm shadow-lg transition active:scale-[0.98] ${
-                    showLockUI || isUploadingImage
-                      ? 'bg-slate-200 text-slate-500 cursor-not-allowed shadow-none'
-                      : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20'
-                  }`}
-                >
-                  {showLockUI ? <Lock className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-                  Add Item
-                </button>
-
-                {showLockUI ? (
-                  <button
-                    type="button"
-                    onClick={showLockedModal}
-                    className="text-sm font-extrabold text-emerald-700 hover:underline"
-                  >
-                    Upgrade to unlock
-                  </button>
-                ) : null}
               </div>
             </form>
           </div>
@@ -1200,131 +1239,158 @@ export default function InventoryPage() {
       {/* ✅ ADD MODAL (Mobile friendly) */}
       {addOpen && (
         <div className="fixed inset-0 z-[90] flex items-end md:items-center justify-center">
-          <div className="absolute inset-0 bg-slate-900/45 backdrop-blur-sm" onClick={() => setAddOpen(false)} />
-          <div className="relative w-full md:max-w-lg bg-white rounded-t-3xl md:rounded-3xl border border-slate-200 shadow-2xl overflow-hidden">
-            <div className="p-5 border-b border-slate-200 flex items-start justify-between gap-3">
-              <div>
-                <p className="text-slate-900 font-black text-lg">Add Item</p>
-                <p className="text-slate-500 text-sm font-semibold mt-1">Name, quantity, and price.</p>
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity" onClick={() => setAddOpen(false)} />
+          <div className="relative w-full md:max-w-lg bg-white rounded-t-[2rem] md:rounded-3xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col animate-slide-in-from-bottom">
+            
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-white sticky top-0 z-10">
+              <div className="flex items-center gap-3">
+                 <div className="w-10 h-10 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600">
+                    <Sparkles className="w-5 h-5" />
+                 </div>
+                 <div>
+                    <p className="text-slate-900 font-black text-lg leading-tight">Add Product</p>
+                    <p className="text-slate-500 text-xs font-bold">New Inventory Item</p>
+                 </div>
               </div>
               <button
-                className="w-10 h-10 rounded-2xl border border-slate-200 bg-white hover:bg-slate-50 flex items-center justify-center"
+                className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center active:scale-90 transition-transform"
                 onClick={() => setAddOpen(false)}
               >
-                <X className="w-4 h-4 text-slate-700" />
+                <X className="w-5 h-5 text-slate-500" />
               </button>
             </div>
 
-            <form onSubmit={handleAddItem} className="p-5 space-y-4">
-              <div>
-                <label className="block text-xs font-extrabold text-slate-600 mb-1">Item Name</label>
-                <div className="flex gap-2">
-                   <div className="relative w-16 h-12 shrink-0 group">
-                    <input
+            <div className="overflow-y-auto p-5 space-y-6">
+               {/* Image Upload */}
+               <div className="w-full aspect-[4/3] relative group rounded-3xl overflow-hidden border-2 border-dashed border-slate-300 bg-slate-50">
+                  <input
                       type="file"
                       accept="image/*"
                       onChange={(e) => handleImageSelect(e, setNewItemImage)}
-                      className="absolute inset-0 opacity-0 cursor-pointer z-10"
+                      className="absolute inset-0 opacity-0 z-20"
                       disabled={isUploadingImage}
                     />
+                    
                     {newItemImage ? (
-                      <img src={newItemImage} className="w-full h-full rounded-xl object-cover border border-slate-200" />
+                      <>
+                        <img src={newItemImage} className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                           <span className="bg-white/90 px-4 py-2 rounded-xl text-xs font-black shadow-sm flex items-center gap-2">
+                             <Edit2 className="w-3 h-3" /> Change Image
+                           </span>
+                        </div>
+                      </>
                     ) : (
-                      <div className="w-full h-full rounded-xl bg-slate-50 border-2 border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 group-hover:bg-slate-100 group-hover:border-emerald-400 transition-colors">
-                        <Upload size={16} className="mb-0.5" />
-                        <span className="text-[8px] font-bold uppercase">Img</span>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400">
+                         <div className="w-14 h-14 bg-white rounded-full shadow-sm flex items-center justify-center mb-3 text-emerald-500">
+                            <Upload className="w-6 h-6" />
+                         </div>
+                         <p className="text-sm font-black text-slate-600">Tap to upload image</p>
+                         <p className="text-xs font-semibold opacity-60">Supports JPG, PNG</p>
                       </div>
                     )}
-                  </div>
-                  <input
-                    type="text"
-                    value={newItemName}
-                    onChange={(e) => setNewItemName(e.target.value)}
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 text-sm font-semibold"
-                    placeholder="e.g. Indomie carton"
-                    required
-                  />
-                </div>
-              </div>
 
-              <div>
-                <label className="block text-xs font-extrabold text-slate-600 mb-1">Category (Optional)</label>
-                <input
-                  type="text"
-                  list="categories-list-mobile"
-                  value={newItemCategory}
-                  onChange={(e) => setNewItemCategory(e.target.value)}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 text-sm font-semibold"
-                  placeholder="e.g. Grains"
-                />
-                <datalist id="categories-list-mobile">
-                  {categories.map(c => <option key={c} value={c} />)}
-                </datalist>
-              </div>
+                    {isUploadingImage && (
+                        <div className="absolute inset-0 z-30 bg-white/80 backdrop-blur-sm flex items-center justify-center">
+                            <Loader2 className="w-8 h-8 text-emerald-600 animate-spin" />
+                        </div>
+                    )}
+               </div>
 
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-extrabold text-slate-600 mb-1">Quantity</label>
-                  <input
-                    type="number"
-                    value={newItemStock}
-                    onChange={(e) => setNewItemStock(e.target.value)}
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 text-sm font-semibold"
-                    placeholder="0"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-extrabold text-slate-600 mb-1">Cost</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[10px] font-extrabold">
-                      {prefix}
-                    </span>
+               <form onSubmit={handleAddItem} className="space-y-5">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-extrabold text-slate-500 uppercase tracking-wider ml-1">Product Name</label>
                     <input
-                      type="number"
-                      value={newItemCostPrice}
-                      onChange={(e) => setNewItemCostPrice(e.target.value)}
-                      className="w-full pl-7 pr-3 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 text-sm font-semibold text-right"
-                      placeholder="0"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-extrabold text-slate-600 mb-1">Unit Price</label>
-                  <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-extrabold">
-                      {prefix}
-                    </span>
-                    <input
-                      type="number"
-                      value={newItemPrice}
-                      onChange={(e) => setNewItemPrice(e.target.value)}
-                      className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 text-sm font-semibold text-right"
-                      placeholder="0"
+                      type="text"
+                      value={newItemName}
+                      onChange={(e) => setNewItemName(e.target.value)}
+                      className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 text-base font-bold text-slate-900 placeholder:text-slate-400"
+                      placeholder="e.g. Nike Sneakers"
                       required
                     />
                   </div>
-                </div>
-              </div>
 
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setAddOpen(false)}
-                  className="flex-1 py-3 rounded-2xl font-extrabold border border-slate-200 bg-white hover:bg-slate-50 text-slate-900 transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isUploadingImage}
-                  className="flex-1 py-3 rounded-2xl font-extrabold bg-slate-900 hover:bg-black text-white transition inline-flex items-center justify-center gap-2"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add
-                </button>
-              </div>
-            </form>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-extrabold text-slate-500 uppercase tracking-wider ml-1">Category</label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        list="categories-list-mobile"
+                        value={newItemCategory}
+                        onChange={(e) => setNewItemCategory(e.target.value)}
+                        className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 text-base font-bold text-slate-900 placeholder:text-slate-400"
+                        placeholder="Select or type..."
+                      />
+                      <datalist id="categories-list-mobile">
+                        {categories.map(c => <option key={c} value={c} />)}
+                      </datalist>
+                      <Filter className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                     <div className="space-y-1.5">
+                        <label className="text-xs font-extrabold text-slate-500 uppercase tracking-wider ml-1">Quantity</label>
+                        <input
+                          type="number"
+                          value={newItemStock}
+                          onChange={(e) => setNewItemStock(e.target.value)}
+                          className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 text-sm font-bold text-slate-900 placeholder:text-slate-400"
+                          placeholder="0"
+                          required
+                        />
+                     </div>
+                     
+                     <div className="space-y-1.5">
+                        <label className="text-xs font-extrabold text-slate-500 uppercase tracking-wider ml-1">Cost Price</label>
+                        <div className="relative">
+                          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-black">{prefix}</span>
+                          <input
+                            type="number"
+                            value={newItemCostPrice}
+                            onChange={(e) => setNewItemCostPrice(e.target.value)}
+                            className="w-full pl-8 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 text-sm font-bold text-slate-900 placeholder:text-slate-400 text-right"
+                            placeholder="0"
+                          />
+                        </div>
+                     </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                      <label className="text-xs font-extrabold text-slate-500 uppercase tracking-wider ml-1">Selling Price</label>
+                      <div className="relative">
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-black">{prefix}</span>
+                        <input
+                          type="number"
+                          value={newItemPrice}
+                          onChange={(e) => setNewItemPrice(e.target.value)}
+                          className="w-full pl-8 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 text-sm font-bold text-slate-900 placeholder:text-slate-400 text-right"
+                          placeholder="0"
+                          required
+                        />
+                      </div>
+                  </div>
+
+                  <div className="pt-4 pb-safe">
+                    <button
+                      type="submit"
+                      disabled={isUploadingImage}
+                      className="w-full py-4 rounded-2xl font-black text-base shadow-xl shadow-emerald-200/50 bg-emerald-600 hover:bg-emerald-700 text-white active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                    >
+                      <Plus className="w-5 h-5" />
+                      Add to Inventory
+                    </button>
+                    
+                    <button
+                      type="button"
+                      onClick={() => setAddOpen(false)}
+                      className="w-full py-3 mt-3 rounded-2xl font-bold text-sm text-slate-500 hover:text-slate-800 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+               </form>
+            </div>
           </div>
         </div>
       )}
