@@ -24,6 +24,8 @@ import {
   CreditCard,
   Package,
   Eye,
+  Copy,
+  ExternalLink,
 } from 'lucide-react';
 import {
   BarChart,
@@ -65,6 +67,7 @@ interface DashboardResponse {
   user?: {
     name?: string;
     shopName?: string;
+    shopSlug?: string;
     initials?: string;
     currencyCode?: string; // e.g. NGN, USD, GHS
     locale?: string; // e.g. en-NG
@@ -177,6 +180,7 @@ export default function DashboardPage() {
   const [fx, setFx] = useState<FxRatesResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [visitDuration, setVisitDuration] = useState<'today' | 'week' | 'month' | 'year'>('today');
   const [copied, setCopied] = useState(false); // New state for copy feedback
 
   // Chat dock
@@ -217,13 +221,12 @@ export default function DashboardPage() {
   const inventory = data?.inventory || [];
 
   const shopUrl = useMemo(() => {
-    if (data?.user?.shopName) {
-      // Extract base URL from API_URL
-      const baseUrl = API_URL.replace('/api', '');
-      return `${baseUrl}/shop/${data.user.shopName}`;
+    const slug = data?.user?.shopSlug;
+    if (slug) {
+      return `https://tallypadi.com/shop/${slug}`;
     }
     return '';
-  }, [data?.user?.shopName, API_URL]);
+  }, [data?.user?.shopSlug]);
 
   const handleCopyShopLink = async () => {
     if (shopUrl) {
@@ -323,6 +326,8 @@ const topTransactions = filteredTransactions.slice(0, 6);
     );
   }
 
+  const visitCount = data?.stats?.visits?.[visitDuration] || 0;
+
   return (
     <div className="flex min-h-screen bg-slate-50 text-slate-900 relative overflow-x-hidden">
       {/* Sidebar Overlay */}
@@ -360,23 +365,41 @@ const topTransactions = filteredTransactions.slice(0, 6);
                 <span className="text-emerald-700">
                   <span className="inline-flex items-center gap-2"> {/* New wrapper for shop name and button */}
                     {data?.user?.shopName || 'Owner'}
-                    {shopUrl && ( // Only show button if shopUrl exists
-                      <button
-                        onClick={handleCopyShopLink}
-                        className="p-1.5 bg-white rounded-lg border border-slate-200 text-slate-400 hover:text-emerald-600 hover:border-emerald-200 transition-all shadow-sm text-sm font-bold"
-                        title="Copy shop link"
-                      >
-                        {copied ? (
-                          <span className="text-emerald-600 text-xs">Copied!</span>
-                        ) : (
-                          <Clipboard className="w-4 h-4" />
-                        )}
-                      </button>
-                    )}
                   </span>
                 </span>
               </h1>
-              <p className="text-slate-500 text-sm mt-2 flex items-center gap-2 font-semibold">
+              <div className="mt-4">
+                {shopUrl && (
+                  <div className="inline-flex flex-col sm:flex-row items-start sm:items-center bg-white border border-slate-200 rounded-xl p-1.5 shadow-sm gap-2">
+                     <div className="flex items-center bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-sm text-slate-500 font-medium min-w-[200px]">
+                        tallypadi.com/shop/<span className="text-slate-900 font-bold ml-0.5">{data?.user?.shopSlug}</span>
+                     </div>
+                     
+                     <div className="flex items-center gap-1 w-full sm:w-auto">
+                       <button
+                         onClick={handleCopyShopLink}
+                         className="flex-1 sm:flex-none px-3 py-2 bg-white hover:bg-slate-50 border border-transparent hover:border-slate-200 rounded-lg text-slate-600 transition-all flex items-center justify-center gap-2 text-xs font-bold"
+                       >
+                         {copied ? <Clipboard className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                         <span className={copied ? "text-emerald-600" : ""}>{copied ? 'Copied!' : 'Copy Link'}</span>
+                       </button>
+
+                       <div className="hidden sm:block w-px h-5 bg-slate-200 mx-1"></div>
+
+                       <a
+                         href={shopUrl}
+                         target="_blank"
+                         rel="noopener noreferrer"
+                         className="flex-1 sm:flex-none px-3 py-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-100 rounded-lg text-emerald-700 transition-all flex items-center justify-center gap-2 text-xs font-bold"
+                       >
+                         <ExternalLink className="w-3.5 h-3.5" />
+                         <span>Go to Shop</span>
+                       </a>
+                     </div>
+                  </div>
+                )}
+              </div>
+              <p className="text-slate-500 text-sm mt-4 flex items-center gap-2 font-semibold">
                 <Calendar className="w-4 h-4 text-emerald-600" />
                 {headerDate}
                 <span className="ml-2 text-[11px] font-black uppercase tracking-widest text-slate-400">
@@ -438,36 +461,35 @@ const topTransactions = filteredTransactions.slice(0, 6);
 
         {/* Visit Stats */}
         <div className="mt-6">
-          <h3 className="text-sm font-black text-slate-500 uppercase tracking-widest mb-3">Shop Visits</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <StatCard
-              title="Today"
-              value={String(data?.stats?.visits?.today || 0)}
-              sub="Visits"
-              icon={Eye}
-              accent="emerald"
-            />
-            <StatCard
-              title="This Week"
-              value={String(data?.stats?.visits?.week || 0)}
-              sub="Visits"
-              icon={Eye}
-              accent="blue"
-            />
-            <StatCard
-              title="This Month"
-              value={String(data?.stats?.visits?.month || 0)}
-              sub="Visits"
-              icon={Eye}
-              accent="orange"
-            />
-            <StatCard
-              title="This Year"
-              value={String(data?.stats?.visits?.year || 0)}
-              sub="Visits"
-              icon={Eye}
-              accent="purple"
-            />
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 flex flex-col md:flex-row items-center justify-between gap-6">
+             <div className="flex items-center gap-4">
+                <div className="h-12 w-12 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center shrink-0">
+                   <Eye className="w-6 h-6 text-indigo-600" />
+                </div>
+                <div>
+                   <h3 className="text-sm font-black text-slate-500 uppercase tracking-widest">Shop Visits</h3>
+                   <p className="text-3xl font-black tracking-tight text-slate-900 mt-1">
+                      {visitCount}
+                      <span className="text-sm text-slate-400 font-bold ml-2 lowercase">visits</span>
+                   </p>
+                </div>
+             </div>
+
+             <div className="flex bg-slate-100 p-1 rounded-xl">
+                {(['today', 'week', 'month', 'year'] as const).map((d) => (
+                   <button
+                      key={d}
+                      onClick={() => setVisitDuration(d)}
+                      className={`px-4 py-2 rounded-lg text-xs font-black uppercase transition-all ${
+                         visitDuration === d
+                            ? 'bg-white text-emerald-700 shadow-sm'
+                            : 'text-slate-400 hover:text-slate-600'
+                      }`}
+                   >
+                      {d}
+                   </button>
+                ))}
+             </div>
           </div>
         </div>
 
