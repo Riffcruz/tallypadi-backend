@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import axios from 'axios';
 import Swal from 'sweetalert2';
 import { useRouter } from 'next/navigation';
@@ -564,7 +565,7 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
       </div>
 
       {/* Confirmation Modal */}
-      {confirmOpen && (
+      {confirmOpen && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
           <div
             className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
@@ -655,7 +656,8 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
               
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
