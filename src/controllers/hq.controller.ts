@@ -40,83 +40,87 @@ export const getBranches = async (req: Request, res: Response) => {
 
 // GET /hq/dashboard
 // Aggregated stats across all branches
-    try {
-        const user = await getAuthUser(req);
-        if (!user) return res.status(401).json({ error: 'Unauthorized' });
+// GET /hq/dashboard
+// Aggregated stats across all branches
+export const getHqDashboard = async (req: Request, res: Response) => {
+  try {
+    const user = await getAuthUser(req);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
 
-        const isHq = user.role === 'HQ' || user.role === 'OWNER';
-        const isHqManager = user.role === 'STAFF' && user.isHqManager;
+    const isHq = user.role === 'HQ' || user.role === 'OWNER';
+    const isHqManager = user.role === 'STAFF' && user.isHqManager;
 
-        if (!isHq && !isHqManager) {
-            return res.status(403).json({ error: 'Access denied. HQ privileges required.' });
-        }
-
-        const hqId = (user.role === 'STAFF') ? user.ownerId : user._id;
-
-        const branchDocs = await User.find({ hqId: hqId, role: 'OWNER' }).select('_id businessName').lean();
-        const branchIds = branchDocs.map(b => b._id);
-
-        if (branchIds.length === 0) {
-            return res.json({
-                overview: {
-                    totalRevenue: 0,
-                    totalSales: 0,
-                    todayRevenue: 0,
-                    todaySales: 0,
-                    activeBranches: 0
-                },
-                recentNetworkSales: []
-            });
-        }
-
-        // 1. Total Revenue & Sales Count (Today or All Time? Let's do All Time for "God View" summary, or maybe Last 30 Days?)
-        // Let's do "All Time" for now or match typical dashboard "Today" vs "Total". 
-        // The prompt says "real-time aggregated sales", implying Today or current period.
-        // But typical "God View" shows totals. Let's return Total Revenue + Today's Revenue.
-
-        const todayStart = new Date();
-        todayStart.setHours(0, 0, 0, 0);
-
-        const [totalStats, todayStats, recentSales] = await Promise.all([
-            // Total Revenue
-            Transaction.aggregate([
-                { $match: { user: { $in: branchIds }, type: 'SALE', isUndone: { $ne: true } } },
-                { $group: { _id: null, revenue: { $sum: '$totalMoney' }, count: { $sum: 1 } } }
-            ]),
-            // Today's Stats
-            Transaction.aggregate([
-                { $match: { user: { $in: branchIds }, type: 'SALE', isUndone: { $ne: true }, timestamp: { $gte: todayStart } } },
-                { $group: { _id: null, revenue: { $sum: '$totalMoney' }, count: { $sum: 1 } } }
-            ]),
-            // Recent Sales (across network)
-            Transaction.find({ user: { $in: branchIds }, type: 'SALE', isUndone: { $ne: true } })
-                .sort({ timestamp: -1 })
-                .limit(10)
-                .populate('user', 'businessName shopSlug') // To show which branch made the sale
-                .lean()
-        ]);
-
-        return res.json({
-            overview: {
-                totalRevenue: totalStats[0]?.revenue || 0,
-                totalSales: totalStats[0]?.count || 0,
-                todayRevenue: todayStats[0]?.revenue || 0,
-                todaySales: todayStats[0]?.count || 0,
-                activeBranches: branchIds.length
-            },
-            recentNetworkSales: recentSales.map((t: any) => ({
-                id: t._id,
-                branchName: t.user?.businessName || 'Unknown Branch',
-                amount: t.totalMoney,
-                items: t.items?.map((i: any) => i.name).join(', '),
-                date: t.timestamp
-            }))
-        });
-
-    } catch (error) {
-        console.error('HQ Dashboard Error:', error);
-        return res.status(500).json({ error: 'Server Error' });
+    if (!isHq && !isHqManager) {
+      return res.status(403).json({ error: 'Access denied. HQ privileges required.' });
     }
+
+    const hqId = user.role === 'STAFF' ? user.ownerId : user._id;
+
+    const branchDocs = await User.find({ hqId, role: 'OWNER' })
+      .select('_id businessName')
+      .lean();
+
+    const branchIds = branchDocs.map((b) => b._id);
+
+    if (branchIds.length === 0) {
+      return res.json({
+        overview: {
+          totalRevenue: 0,
+          totalSales: 0,
+          todayRevenue: 0,
+          todaySales: 0,
+          activeBranches: 0,
+        },
+        recentNetworkSales: [],
+      });
+    }
+
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const [totalStats, todayStats, recentSales] = await Promise.all([
+      Transaction.aggregate([
+        { $match: { user: { $in: branchIds }, type: 'SALE', isUndone: { $ne: true } } },
+        { $group: { _id: null, revenue: { $sum: '$totalMoney' }, count: { $sum: 1 } } },
+      ]),
+      Transaction.aggregate([
+        {
+          $match: {
+            user: { $in: branchIds },
+            type: 'SALE',
+            isUndone: { $ne: true },
+            timestamp: { $gte: todayStart },
+          },
+        },
+        { $group: { _id: null, revenue: { $sum: '$totalMoney' }, count: { $sum: 1 } } },
+      ]),
+      Transaction.find({ user: { $in: branchIds }, type: 'SALE', isUndone: { $ne: true } })
+        .sort({ timestamp: -1 })
+        .limit(10)
+        .populate('user', 'businessName shopSlug')
+        .lean(),
+    ]);
+
+    return res.json({
+      overview: {
+        totalRevenue: totalStats[0]?.revenue || 0,
+        totalSales: totalStats[0]?.count || 0,
+        todayRevenue: todayStats[0]?.revenue || 0,
+        todaySales: todayStats[0]?.count || 0,
+        activeBranches: branchIds.length,
+      },
+      recentNetworkSales: recentSales.map((t: any) => ({
+        id: t._id,
+        branchName: t.user?.businessName || 'Unknown Branch',
+        amount: t.totalMoney,
+        items: t.items?.map((i: any) => i.name).join(', '),
+        date: t.timestamp,
+      })),
+    });
+  } catch (error) {
+    console.error('HQ Dashboard Error:', error);
+    return res.status(500).json({ error: 'Server Error' });
+  }
 };
 
 // POST /hq/transfer
