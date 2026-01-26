@@ -211,6 +211,7 @@ export default function DashboardPage() {
         const u = dashRes.data.user as any;
         if (u?.role === 'STAFF') {
            const canView = u?.settings?.staffPermissions?.canViewDashboard === true;
+           // Default: staff -> sales if no specific permission (or even if canView is false)
            if (!canView) {
              router.replace('/sales');
              return;

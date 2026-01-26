@@ -166,8 +166,8 @@ export default function LoginPage() {
              setCookie('tallyToken', res.data.token, 7);
              const user = res.data.user;
              sessionStorage.setItem('tallyUser', JSON.stringify(user));
-             // Staff usually go to dashboard, or check permission?
-             router.push('/dashboard');
+             // Staff go to sales page
+             router.push('/sales');
              return;
           }
           setError('Invalid OTP. Please try again.');

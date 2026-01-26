@@ -52,10 +52,13 @@ const getAuthUser = async (req: Request) => {
 // GET all inventory items
 export const getInventory = async (req: Request, res: Response) => {
   try {
-    const user = await getAuthUser(req);
+    const user: any = await getAuthUser(req);
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
 
-    const items = await Inventory.find({ user: user._id }).lean();
+    // ✅ If staff, fetch owner's inventory
+    const targetUserId = (user.role === 'STAFF' && user.ownerId) ? user.ownerId : user._id;
+
+    const items = await Inventory.find({ user: targetUserId }).lean();
 
     const formattedItems = (items || []).map((item: any) => ({
       id: item._id,

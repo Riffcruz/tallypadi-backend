@@ -107,8 +107,10 @@ export const recordSale = async (req: Request | any, res: Response) => {
     if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
     // Fetch the specific user
-    const user = await User.findById(userId); 
+    const user: any = await User.findById(userId); 
     if (!user) return res.status(404).json({ error: "User not found" });
+
+    const inventoryOwnerId = (user.role === 'STAFF' && user.ownerId) ? user.ownerId : userId;
 
     const items = normalizeSalePayload(req.body);
     if (!items.length) {
@@ -130,10 +132,10 @@ export const recordSale = async (req: Request | any, res: Response) => {
     }
     const finalItems = Array.from(merged.values());
 
-    // 1. Fetch Inventory (Scoped to User)
+    // 1. Fetch Inventory (Scoped to Owner)
     const invDocs = await Inventory.find({
       _id: { $in: finalItems.map(i => i.itemId) },
-      user: userId // ✅ Ensure we only fetch THIS user's items
+      user: inventoryOwnerId // ✅ Ensure we only fetch OWNER's items
     });
 
     const invMap = new Map<string, any>();
@@ -178,10 +180,10 @@ export const recordSale = async (req: Request | any, res: Response) => {
       });
     }
 
-    // 3. Apply Stock Changes
+    // 3. Apply Stock Changes (Scoped to Owner)
     for (const it of finalItems) {
       await Inventory.updateOne(
-        { _id: it.itemId, user: userId },
+        { _id: it.itemId, user: inventoryOwnerId },
         { $inc: { quantity: -it.quantity } }
       );
     }
