@@ -144,7 +144,7 @@ export default function LoginPage() {
         if (!otpSent) {
           // Step 1: Request OTP
           const res = await axios.post(
-            `${API_URL}/auth/staff/otp/request`,
+            `${API_URL}/login/staff/request-otp`,
             { identifier },
             { timeout: 20000 }
           );
@@ -157,7 +157,7 @@ export default function LoginPage() {
         } else {
           // Step 2: Verify OTP
           const res = await axios.post(
-             `${API_URL}/auth/staff/otp/verify`,
+             `${API_URL}/login/staff`,
              { identifier, otp: otpCode },
              { timeout: 20000 }
           );
