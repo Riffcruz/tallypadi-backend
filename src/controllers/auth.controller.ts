@@ -74,24 +74,8 @@ export const requestStaffLoginOTP = async (req: Request, res: Response) => {
     user.otpExpires = expires;
     await user.save();
 
-    // Send via WhatsApp Template "login_code"
-    // Assuming body param {{1}} is the code and copy_code button uses the code.
-    await sendWhatsAppTemplate({
-        to: user.phoneNumber,
-        name: 'login_code',
-        components: [
-            {
-                type: 'body',
-                parameters: [ { type: 'text', text: otp } ]
-            },
-            {
-                type: 'button',
-                sub_type: 'copy_code',
-                index: 0,
-                parameters: [ { type: 'text', text: otp } ]
-            }
-        ]
-    });
+    // Send via WhatsApp Text (Simpler/Safer than template for now)
+    await sendWhatsAppText(user.phoneNumber, `Your TallyPadi Staff Login Code: ${otp}`);
 
     return res.json({ success: true, message: 'OTP sent to WhatsApp' });
 
