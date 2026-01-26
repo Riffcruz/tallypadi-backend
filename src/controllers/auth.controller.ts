@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { User } from '../models/user.model';
 import { ProcessedMessage } from '../models/processedMessage.model';
-import { sendWhatsAppText } from '../services/whatsapp.service';
+import { sendWhatsAppText, sendWhatsAppTemplate } from '../services/whatsapp.service';
 
 // --- Helpers ---
 const sanitizeString = (input: unknown): string | null => {
@@ -36,6 +36,150 @@ const buildPhoneCandidates = (raw: string): string[] => {
   }
 
   return Array.from(out);
+};
+
+// --- Staff OTP Login ---
+
+export const requestStaffLoginOTP = async (req: Request, res: Response) => {
+  try {
+    const { identifier } = req.body;
+    if (!identifier) return res.status(400).json({ error: 'Please provide phone number' });
+
+    // Normalize phone
+    const candidates = buildPhoneCandidates(identifier);
+    const user = await User.findOne({ phoneNumber: { $in: candidates } });
+
+    if (!user) {
+      // For security, maybe mimic success? But for staff UX, failure is better.
+      return res.status(404).json({ error: 'Staff user not found' });
+    }
+
+    if (user.role !== 'STAFF') {
+        return res.status(403).json({ error: 'This login method is only for staff members.' });
+    }
+    
+    // Check if suspended
+    if (user.subscriptionStatus === 'suspended') {
+      return res.status(403).json({
+        error: 'Account suspended',
+        reason: user.suspensionReason || 'Security policy',
+      });
+    }
+
+    // Generate OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expires = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
+
+    user.otp = otp;
+    user.otpExpires = expires;
+    await user.save();
+
+    // Send via WhatsApp Template "login_code"
+    // Assuming body param {{1}} is the code and copy_code button uses the code.
+    await sendWhatsAppTemplate({
+        to: user.phoneNumber,
+        name: 'login_code',
+        components: [
+            {
+                type: 'body',
+                parameters: [ { type: 'text', text: otp } ]
+            },
+            {
+                type: 'button',
+                sub_type: 'copy_code',
+                index: 0,
+                parameters: [ { type: 'text', text: otp } ]
+            }
+        ]
+    });
+
+    return res.json({ success: true, message: 'OTP sent to WhatsApp' });
+
+  } catch (err) {
+    console.error('Staff Login OTP Request Error:', err);
+    return res.status(500).json({ error: 'Server Error' });
+  }
+};
+
+export const loginStaffWithOTP = async (req: Request, res: Response) => {
+    try {
+        const { identifier, otp } = req.body;
+        if (!identifier || !otp) {
+            return res.status(400).json({ error: 'Please provide phone number and OTP' });
+        }
+        
+        const candidates = buildPhoneCandidates(identifier);
+        
+        // Select fields needed
+        const user: any = await User.findOne({ phoneNumber: { $in: candidates } }).select('+otp +otpExpires +password');
+
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        
+        if (user.role !== 'STAFF') {
+             return res.status(403).json({ error: 'This login method is only for staff members.' });
+        }
+
+        if (user.subscriptionStatus === 'suspended') {
+             return res.status(403).json({
+                error: 'Account suspended',
+                reason: user.suspensionReason || 'Security policy',
+            });
+        }
+
+        if (!user.otp || user.otp !== otp) {
+            return res.status(400).json({ error: 'Invalid OTP' });
+        }
+
+        if (!user.otpExpires || user.otpExpires < new Date()) {
+            return res.status(400).json({ error: 'OTP expired' });
+        }
+
+        // Success - Clear OTP
+        user.otp = undefined;
+        user.otpExpires = undefined;
+        user.lastLogin = new Date();
+        await user.save();
+
+        const secret = process.env.JWT_SECRET;
+        if (!secret) throw new Error('JWT_SECRET missing');
+
+        const token = jwt.sign(
+            {
+                id: String(user._id),
+                role: user.role,
+            },
+            secret,
+            {
+                expiresIn: '1y',
+                algorithm: 'HS256',
+                issuer: process.env.JWT_ISSUER || 'tallypadi',
+                audience: process.env.JWT_AUDIENCE || 'tallypadi-web',
+            }
+        );
+
+        return res.json({
+            success: true,
+            token,
+            user: {
+                id: String(user._id),
+                name: user.name || 'Staff',
+                phoneNumber: user.phoneNumber,
+                email: user.email,
+                businessName: user.businessName,
+                role: user.role,
+                planType: user.planType,
+                subscriptionStatus: user.subscriptionStatus,
+                trialEndsAt: user.trialEndsAt,
+                countryCode: user.countryCode,
+            }
+        });
+
+    } catch (err) {
+        console.error('Staff Login Error:', err);
+        return res.status(500).json({ error: 'Server Error' });
+    }
 };
 
 export const loginUser = async (req: Request, res: Response) => {

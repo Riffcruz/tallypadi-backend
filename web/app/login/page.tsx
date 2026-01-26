@@ -12,7 +12,9 @@ import {
   EyeOff,
   Loader2,
   ChevronDown,
-  ArrowLeft
+  ArrowLeft,
+  Users,
+  Briefcase
 } from 'lucide-react';
 import { setCookie, getCookie } from '../../utils/cookies';
 
@@ -77,42 +79,54 @@ export default function LoginPage() {
     }
   }, [router]);
 
+  // Login Mode: 'owner' or 'staff'
+  const [isStaffLogin, setIsStaffLogin] = useState(false);
+
+  // Auth Method (Owner only): 'phone' or 'email'
   const [loginMethod, setLoginMethod] = useState<'phone' | 'email'>('phone');
+  
   const [countryCode, setCountryCode] = useState('+234');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
+  // Staff OTP Flow
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const canSubmit = useMemo(() => {
     if (loading) return false;
+    
+    // Staff Flow
+    if (isStaffLogin) {
+      if (!phoneNumber.trim()) return false;
+      if (otpSent && otpCode.length < 4) return false;
+      return true;
+    }
+
+    // Owner Flow
     if (!password.trim()) return false;
     if (loginMethod === 'email') return isValidEmail(email);
     return Boolean(phoneNumber.trim());
-  }, [loading, password, loginMethod, email, phoneNumber]);
+  }, [loading, password, loginMethod, email, phoneNumber, isStaffLogin, otpSent, otpCode]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
-    const pass = password.trim();
-    if (pass.length < 1) {
-      setError('Please enter your password');
-      return;
-    }
-
+    // --- SHARED IDENTIFIER BUILDER ---
     let identifier = '';
-
-    if (loginMethod === 'phone') {
+    if (isStaffLogin || loginMethod === 'phone') {
       const phoneId = buildPhoneIdentifier(phoneNumber, countryCode);
       if (!phoneId) {
         setError('Please enter your phone number');
         return;
       }
-      identifier = phoneId; // ✅ send "+234...."
+      identifier = phoneId;
     } else {
       const em = email.trim().toLowerCase();
       if (!isValidEmail(em)) {
@@ -125,37 +139,73 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const res = await axios.post(
-        `${API_URL}/login`,
-        { identifier, password: pass },
-        { timeout: 20000 }
-      );
-
-      if (res.data?.success) {
-        // ✅ Safer storage: Cookie for token, sessionStorage for user
-        setCookie('tallyToken', res.data.token, 7);
-        const user = res.data.user;
-        sessionStorage.setItem('tallyUser', JSON.stringify(user));
-
-        if (user.role === 'HQ') {
-          router.push('/hq/dashboard');
-        } else if (user.role === 'INVESTOR') {
-          router.push('/investor/dashboard');
-        } else if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') {
-          router.push('/admin/dashboard');
+      if (isStaffLogin) {
+        // --- STAFF LOGIN FLOW ---
+        if (!otpSent) {
+          // Step 1: Request OTP
+          const res = await axios.post(
+            `${API_URL}/auth/staff/otp/request`,
+            { identifier },
+            { timeout: 20000 }
+          );
+          if (res.data?.success) {
+            setOtpSent(true);
+            setError(''); // Clear any prev errors
+          } else {
+             setError(res.data?.message || 'Failed to send OTP');
+          }
         } else {
-          router.push('/dashboard');
+          // Step 2: Verify OTP
+          const res = await axios.post(
+             `${API_URL}/auth/staff/otp/verify`,
+             { identifier, otp: otpCode },
+             { timeout: 20000 }
+          );
+          
+          if (res.data?.success) {
+             setCookie('tallyToken', res.data.token, 7);
+             const user = res.data.user;
+             sessionStorage.setItem('tallyUser', JSON.stringify(user));
+             // Staff usually go to dashboard, or check permission?
+             router.push('/dashboard');
+             return;
+          }
+          setError('Invalid OTP. Please try again.');
         }
-        return;
+
+      } else {
+        // --- OWNER LOGIN FLOW (Standard) ---
+        const pass = password.trim();
+        const res = await axios.post(
+          `${API_URL}/login`,
+          { identifier, password: pass },
+          { timeout: 20000 }
+        );
+
+        if (res.data?.success) {
+          setCookie('tallyToken', res.data.token, 7);
+          const user = res.data.user;
+          sessionStorage.setItem('tallyUser', JSON.stringify(user));
+
+          if (user.role === 'HQ') {
+            router.push('/hq/dashboard');
+          } else if (user.role === 'INVESTOR') {
+            router.push('/investor/dashboard');
+          } else if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') {
+            router.push('/admin/dashboard');
+          } else {
+            router.push('/dashboard');
+          }
+          return;
+        }
+        setError('Login failed. Please try again.');
       }
 
-      setError('Login failed. Please try again.');
     } catch (err: any) {
+      console.error(err);
       const status = err?.response?.status;
-
-      // ✅ Nice limiter message
       if (status === 429) {
-        setError('Too many login attempts. Please wait a few minutes and try again.');
+        setError('Too many attempts. Please wait a few minutes.');
       } else {
         const msg =
           err?.response?.data?.error ||
@@ -199,63 +249,91 @@ export default function LoginPage() {
           <p className="text-slate-500 text-sm mt-2">Log in to manage your inventory and sales.</p>
         </div>
 
-        {/* Toggle */}
-        <div className="flex p-1.5 bg-slate-100 rounded-xl mb-6">
-          <button
-            type="button"
-            onClick={() => {
-              setLoginMethod('phone');
-              setError('');
-            }}
-            className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200 ${
-              loginMethod === 'phone'
-                ? 'bg-white text-green-700 shadow-sm ring-1 ring-black/5'
-                : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            <Phone size={16} />
-            <span>WhatsApp</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setLoginMethod('email');
-              setError('');
-            }}
-            className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200 ${
-              loginMethod === 'email'
-                ? 'bg-white text-green-700 shadow-sm ring-1 ring-black/5'
-                : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            <Mail size={16} />
-            <span>Email</span>
-          </button>
+        {/* --- OWNER vs STAFF Toggle --- */}
+        <div className="flex p-1 bg-slate-200/50 rounded-xl mb-6">
+           <button
+             type="button"
+             onClick={() => { setIsStaffLogin(false); setError(''); }}
+             className={`flex-1 flex items-center justify-center gap-2 py-2 text-sm font-bold rounded-lg transition-all ${
+               !isStaffLogin ? 'bg-white text-slate-900 shadow-sm ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'
+             }`}
+           >
+             <Briefcase size={16} />
+             <span>Owner</span>
+           </button>
+           <button
+             type="button"
+             onClick={() => { setIsStaffLogin(true); setError(''); setOtpSent(false); }}
+             className={`flex-1 flex items-center justify-center gap-2 py-2 text-sm font-bold rounded-lg transition-all ${
+               isStaffLogin ? 'bg-white text-green-700 shadow-sm ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'
+             }`}
+           >
+             <Users size={16} />
+             <span>Staff</span>
+           </button>
         </div>
+
+        {/* --- AUTH METHOD TOGGLE (Owner Only) --- */}
+        {!isStaffLogin && (
+          <div className="flex p-1.5 bg-slate-100 rounded-xl mb-6">
+            <button
+              type="button"
+              onClick={() => {
+                setLoginMethod('phone');
+                setError('');
+              }}
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200 ${
+                loginMethod === 'phone'
+                  ? 'bg-white text-green-700 shadow-sm ring-1 ring-black/5'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <Phone size={16} />
+              <span>WhatsApp</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setLoginMethod('email');
+                setError('');
+              }}
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200 ${
+                loginMethod === 'email'
+                  ? 'bg-white text-green-700 shadow-sm ring-1 ring-black/5'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <Mail size={16} />
+              <span>Email</span>
+            </button>
+          </div>
+        )}
 
         {/* Error */}
         {error && (
-          <div className="mb-6 bg-red-50 border border-red-100 text-red-600 px-4 py-3 rounded-xl text-sm flex items-start">
+          <div className="mb-6 bg-red-50 border border-red-100 text-red-600 px-4 py-3 rounded-xl text-sm flex items-start animate-in fade-in slide-in-from-top-1">
             <div className="mt-0.5 mr-2">⚠️</div>
             {error}
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
-          {/* Identifier */}
+          {/* Identifier Input */}
           <div className="space-y-1.5">
             <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">
-              {loginMethod === 'phone' ? 'Phone Number' : 'Email Address'}
+              {isStaffLogin ? 'WhatsApp Number' : (loginMethod === 'phone' ? 'Phone Number' : 'Email Address')}
             </label>
 
-            {loginMethod === 'phone' ? (
+            {/* PHONE INPUT (Used for Staff OR Owner Phone) */}
+            {(isStaffLogin || loginMethod === 'phone') ? (
               <div className="flex gap-2">
                 <div className="relative w-[35%]">
                   <select
                     value={countryCode}
                     onChange={(e) => setCountryCode(e.target.value)}
                     className="w-full h-12 pl-3 pr-8 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 text-sm focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all appearance-none cursor-pointer font-medium"
+                    disabled={otpSent}
                   >
                     {COUNTRY_CODES.map((c) => (
                       <option key={c.code} value={c.code}>
@@ -271,14 +349,16 @@ export default function LoginPage() {
 
                 <input
                   type="tel"
-                  className="flex-1 h-12 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all outline-none text-slate-900 placeholder:text-slate-400 font-medium"
-                  placeholder="e.g. 0908 118 8473 or +234 908 118 8473"
+                  className="flex-1 h-12 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all outline-none text-slate-900 placeholder:text-slate-400 font-medium disabled:opacity-50"
+                  placeholder="e.g. 0908 118 8473"
                   value={phoneNumber}
                   onChange={(e) => setPhoneNumber(e.target.value)}
+                  disabled={otpSent}
                   autoComplete="tel"
                 />
               </div>
             ) : (
+              // EMAIL INPUT (Owner Only)
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                   <Mail className="h-5 w-5 text-slate-400" />
@@ -295,41 +375,65 @@ export default function LoginPage() {
             )}
           </div>
 
-          {/* Password */}
-          <div className="space-y-1.5">
-            <div className="flex justify-between items-center">
-              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">
-                Password
-              </label>
-              <Link href="/forgot-password" className="text-xs font-semibold text-green-600 hover:text-green-700 hover:underline">
-                Forgot Password?
-              </Link>
-            </div>
+          {/* OTP Input (Staff + Sent) */}
+          {isStaffLogin && otpSent && (
+             <div className="space-y-1.5 animate-in fade-in slide-in-from-bottom-2">
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">
+                  Enter Login Code
+                </label>
+                <input
+                  type="text"
+                  maxLength={6}
+                  className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all outline-none text-slate-900 placeholder:text-slate-400 font-bold tracking-widest text-center text-lg"
+                  placeholder="000 000"
+                  value={otpCode}
+                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                />
+                <div className="text-right">
+                    <button type="button" onClick={() => setOtpSent(false)} className="text-xs text-green-600 font-medium hover:underline">
+                        Change Number?
+                    </button>
+                </div>
+             </div>
+          )}
 
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                <Lock className="h-5 w-5 text-slate-400" />
+          {/* Password (Owner Only) */}
+          {!isStaffLogin && (
+            <div className="space-y-1.5 animate-in fade-in">
+              <div className="flex justify-between items-center">
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">
+                  Password
+                </label>
+                <Link href="/forgot-password" className="text-xs font-semibold text-green-600 hover:text-green-700 hover:underline">
+                  Forgot Password?
+                </Link>
               </div>
 
-              <input
-                type={showPassword ? 'text' : 'password'}
-                className="w-full h-12 pl-11 pr-11 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all outline-none text-slate-900 placeholder:text-slate-400 font-medium"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete="current-password"
-              />
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                  <Lock className="h-5 w-5 text-slate-400" />
+                </div>
 
-              <button
-                type="button"
-                onClick={() => setShowPassword((v) => !v)}
-                className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
-              >
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  className="w-full h-12 pl-11 pr-11 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all outline-none text-slate-900 placeholder:text-slate-400 font-medium"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="current-password"
+                />
+
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Submit */}
           <button
@@ -339,10 +443,14 @@ export default function LoginPage() {
             {loading ? (
               <>
                 <Loader2 className="animate-spin" size={20} />
-                <span>Authenticating...</span>
+                <span>{isStaffLogin ? 'Processing...' : 'Authenticating...'}</span>
               </>
             ) : (
-              <span>Login to Dashboard</span>
+              <span>
+                  {isStaffLogin 
+                    ? (otpSent ? 'Verify & Login' : 'Get Login Code') 
+                    : 'Login to Dashboard'}
+              </span>
             )}
           </button>
         </form>

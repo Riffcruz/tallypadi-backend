@@ -26,13 +26,15 @@ import shopRouter from './routes/shop.routes';
 import hqRouter from './routes/hq.routes';
 
 // --- SERVICES & CONFIG ---
-import { 
-  loginUser, 
-  registerUser, 
-  requestForgotPasswordOTP, 
-  resetPassword, 
-  requestChangePhoneOTP, 
-  verifyChangePhoneOTP 
+import {
+  loginUser,
+  registerUser,
+  requestForgotPasswordOTP,
+  resetPassword,
+  requestChangePhoneOTP,
+  verifyChangePhoneOTP,
+  requestStaffLoginOTP,
+  loginStaffWithOTP,
 } from './controllers/auth.controller';
 import { startScheduler } from './services/scheduler';
 import { env } from './config/env';
@@ -212,6 +214,15 @@ const presignUploadLimiter = rateLimit({
   keyGenerator: (req: any) => (req.user?.id ? `user:${req.user.id}` : `ip:${ipKeyGenerator(req)}`),
 });
 
+// ✅ Register limiter
+const registerLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5, // 5 accounts per hour
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: 'Too many accounts created from this IP, please try again after an hour',
+});
+
 // ✅ Forgot Password limiter (stricter)
 const forgotPasswordLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
@@ -314,7 +325,10 @@ const authRequired = (req: any, res: any, next: any) => {
 // --- AUTH & DASHBOARD ---
 // ✅ APPLY: IP + identity + email + phone limiters
 app.post('/api/login', loginLimiterIp, loginLimiterIdentity, emailLimiter, phoneLimiter, loginUser);
-app.post('/api/register', loginLimiterIp, loginLimiterIdentity, emailLimiter, phoneLimiter, registerUser);
+app.post('/api/login/staff/request-otp', loginLimiterIp, phoneLimiter, requestStaffLoginOTP);
+app.post('/api/login/staff', loginLimiterIp, loginLimiterIdentity, phoneLimiter, loginStaffWithOTP);
+app.post('/api/register', registerLimiter, registerUser);
+
 
 // ✅ Forgot Password
 app.post('/api/auth/forgot-password', forgotPasswordLimiter, requestForgotPasswordOTP);
