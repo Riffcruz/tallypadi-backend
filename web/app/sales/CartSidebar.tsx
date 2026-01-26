@@ -565,7 +565,7 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
 
       {/* Confirmation Modal */}
       {confirmOpen && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
           <div
             className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
             onClick={() => (!loading ? setConfirmOpen(false) : null)}
