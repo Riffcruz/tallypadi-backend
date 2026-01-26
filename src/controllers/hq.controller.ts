@@ -40,7 +40,6 @@ export const getBranches = async (req: Request, res: Response) => {
 
 // GET /hq/dashboard
 // Aggregated stats across all branches
-export const getHqDashboardData = async (req: Request, res: Response) => {
     try {
         const user = await getAuthUser(req);
         if (!user) return res.status(401).json({ error: 'Unauthorized' });
