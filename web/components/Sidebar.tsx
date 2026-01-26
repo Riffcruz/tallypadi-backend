@@ -46,7 +46,12 @@ export default function Sidebar() {
 
     // HQ Logic
     const isTycoon = String(user?.planType || '').toUpperCase() === 'TYCOON';
-    if (user.role === 'HQ' || user.isHqManager || isTycoon) {
+    // Only show HQ dashboard if user is HQ, or an HQ Manager (strict check), or a Tycoon OWNER
+    const isHqUser = user.role === 'HQ';
+    const isHqManager = user.isHqManager === true;
+    const isOwnerTycoon = isTycoon && user.role === 'OWNER';
+
+    if (isHqUser || isHqManager || isOwnerTycoon) {
        // Check duplication before unshifting if re-renders happen (though this function runs on render)
        if (!baseItems.find(i => i.label === 'HQ Dashboard')) {
          baseItems.unshift({ href: '/hq/dashboard', icon: LayoutDashboard, label: 'HQ Dashboard' });

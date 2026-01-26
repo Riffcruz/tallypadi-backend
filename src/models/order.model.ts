@@ -126,7 +126,6 @@ const orderSchema = new Schema<IOrder>(
 
     messageId: {
       type: String,
-      default: null,
       unique: true,
       sparse: true,
       trim: true,

@@ -1,7 +1,7 @@
-// src/controllers/order.controller.ts
 import { Request, Response } from 'express';
 import { Types } from 'mongoose';
 import { orderService } from '../services/order.service';
+import { User } from '../models/user.model';
 
 // If you already exported these from your model, prefer importing them instead:
 // import { ORDER_STATUSES, OrderStatus } from '../models/order.model';
@@ -69,10 +69,25 @@ const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const getUserId = (req: AuthedReq) => req.user?.id || req.user?._id;
 
+// ✅ Helper to resolve effective Owner ID for Staff
+const resolveOwnerId = async (userId: string): Promise<string | null> => {
+  const user = await User.findById(userId).select('role ownerId').lean();
+  if (!user) return null;
+  // If staff, operate on behalf of owner
+  if (user.role === 'STAFF' && user.ownerId) {
+    return String(user.ownerId);
+  }
+  return userId;
+};
+
 export const createOrder = async (req: AuthedReq, res: Response) => {
   try {
     const userId = getUserId(req);
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    // Resolve owner logic
+    const ownerId = await resolveOwnerId(userId);
+    if (!ownerId) return res.status(401).json({ error: 'User not found' });
 
     const description = normalizeText(req.body?.description, 500);
     const customerName = normalizeText(req.body?.customerName, 120);
@@ -99,7 +114,7 @@ export const createOrder = async (req: AuthedReq, res: Response) => {
       return res.status(400).json({ error: 'amountPaid cannot exceed price' });
     }
 
-    const order = await orderService.createOrder(userId, {
+    const order = await orderService.createOrder(ownerId, {
       description,
       customerName,
       customerPhone: customerPhone ?? undefined, // null or string or undefined
@@ -120,6 +135,9 @@ export const getOrders = async (req: AuthedReq, res: Response) => {
   try {
     const userId = getUserId(req);
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    const ownerId = await resolveOwnerId(userId);
+    if (!ownerId) return res.status(401).json({ error: 'User not found' });
 
     const status = normalizeStatus((req.query as any)?.status);
     const startDate = parseDate((req.query as any)?.startDate);
@@ -144,7 +162,7 @@ export const getOrders = async (req: AuthedReq, res: Response) => {
     const rawSearch = normalizeText((req.query as any)?.search, 100);
     const search = rawSearch ? escapeRegExp(rawSearch) : undefined; // ✅ avoid regex injection
 
-    const result = await orderService.getOrders(userId, {
+    const result = await orderService.getOrders(ownerId, {
       status,
       startDate,
       endDate,
@@ -165,12 +183,15 @@ export const getOrder = async (req: AuthedReq, res: Response) => {
     const userId = getUserId(req);
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
+    const ownerId = await resolveOwnerId(userId);
+    if (!ownerId) return res.status(401).json({ error: 'User not found' });
+
     const id = String(req.params?.id || '');
     if (!Types.ObjectId.isValid(id)) {
       return res.status(400).json({ error: 'Invalid order id' });
     }
 
-    const order = await orderService.getOrder(userId, id);
+    const order = await orderService.getOrder(ownerId, id);
     if (!order) return res.status(404).json({ error: 'Order not found' });
 
     return res.json(order);
@@ -184,6 +205,9 @@ export const updateOrder = async (req: AuthedReq, res: Response) => {
   try {
     const userId = getUserId(req);
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    const ownerId = await resolveOwnerId(userId);
+    if (!ownerId) return res.status(401).json({ error: 'User not found' });
 
     const id = String(req.params?.id || '');
     if (!Types.ObjectId.isValid(id)) {
@@ -255,7 +279,7 @@ export const updateOrder = async (req: AuthedReq, res: Response) => {
       return res.status(400).json({ error: 'amountPaid cannot exceed price' });
     }
 
-    const order = await orderService.updateOrder(userId, id, updates);
+    const order = await orderService.updateOrder(ownerId, id, updates);
     if (!order) return res.status(404).json({ error: 'Order not found' });
 
     return res.json({ success: true, order });
@@ -270,12 +294,15 @@ export const deleteOrder = async (req: AuthedReq, res: Response) => {
     const userId = getUserId(req);
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
+    const ownerId = await resolveOwnerId(userId);
+    if (!ownerId) return res.status(401).json({ error: 'User not found' });
+
     const id = String(req.params?.id || '');
     if (!Types.ObjectId.isValid(id)) {
       return res.status(400).json({ error: 'Invalid order id' });
     }
 
-    const order = await orderService.deleteOrder(userId, id);
+    const order = await orderService.deleteOrder(ownerId, id);
     if (!order) return res.status(404).json({ error: 'Order not found' });
 
     return res.json({ success: true, message: 'Order deleted' });

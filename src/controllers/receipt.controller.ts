@@ -597,14 +597,29 @@ export const generateSaleReceiptPdf = async (req: Request | any, res: Response) 
     const user: any = await User.findById(userId).lean();
     if (!user) return res.status(404).json({ error: 'User not found' });
 
+    // ✅ Improved Permission Check: Allow Owner to see Staff sales
     const tx: any = await Transaction.findOne({
       _id: saleId,
-      user: userId,
       type: 'SALE',
       isUndone: { $ne: true },
-    }).lean();
+    })
+    .populate({ path: 'user', select: 'ownerId hqId _id' })
+    .lean();
 
     if (!tx) return res.status(404).json({ error: 'Sale not found' });
+
+    const creator: any = tx.user;
+    const creatorId = String(creator?._id || creator);
+    
+    const creatorOwnerId = creator?.ownerId ? String(creator.ownerId) : null;
+    const creatorHqId = creator?.hqId ? String(creator.hqId) : null;
+    
+    const isAuthorized = 
+      creatorId === userId || 
+      creatorOwnerId === userId || 
+      creatorHqId === userId;
+
+    if (!isAuthorized) return res.status(404).json({ error: 'Sale not found' });
 
     const offsetMinutes = user?.settings?.utcOffsetMinutes ?? 60;
     const businessName = String(user?.businessName || user?.shopName || 'My Shop');
