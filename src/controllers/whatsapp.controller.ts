@@ -1153,7 +1153,10 @@ export const handleMessageLogic = async (
     let parsed: any;
 
     if (btn && btn.id.startsWith('CMD_')) {
-        if (btn.id === 'CMD_HELP') parsed = { intent: 'HELP' };
+        if (btn.id === 'CMD_HELP') {
+            const { parseMessageWithGemini } = await import('../services/gemini.service');
+            parsed = await parseMessageWithGemini('help', currentLang);
+        }
         else if (btn.id === 'CMD_SHOW_SETTINGS') parsed = { intent: 'SHOW_SETTINGS' };
         else if (btn.id === 'CMD_SUPPORT') parsed = { intent: 'SUPPORT' };
         else if (btn.id === 'CMD_FAQ') parsed = { intent: 'FAQ' };
