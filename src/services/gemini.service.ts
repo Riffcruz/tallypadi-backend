@@ -705,6 +705,7 @@ C. PRICE/MONEY EXTRACTION (POSITION-INDEPENDENT & SMART SCALING)
   Turn 1: "Sold 2 Rice"
   Turn 2: "Undo it" -> Intent: UNDO_LAST_SALE
 
+  
 *** 3. CREDIT/DEBT DETECTION ***
 Credit sale triggers: "on credit", "owe", "pay later", "debt", "balance remaining"
 Debt payment triggers: "paid", "settled", "cleared", "balance paid"
