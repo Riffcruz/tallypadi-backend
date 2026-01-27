@@ -2152,7 +2152,7 @@ export const handleMessageLogic = async (
         await queueSaleResponse(
           from,
           helpText,
-          "Choose an action 👇",
+          "Your can choose other actions 👇",
           [
             { id: 'CMD_CREATE_INVOICE', title: 'Create Invoice' },
             { id: 'CMD_SHOW_SETTINGS', title: 'My Settings' },
