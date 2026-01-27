@@ -145,22 +145,23 @@ const normalizePhone = (raw: any): string | undefined => {
 
 // ==========================================
 // 💱 CURRENCY SYMBOL DETECTOR (for reply_text only)
-// If user typed a symbol, we echo it back.
-// If none, return '' so reply_text does NOT force ₦ (prevents mismatch with USD reports).
+// If user typed a symbol or currency name, we echo the symbol back.
 // ==========================================
 const detectMoneySymbol = (raw: any): string => {
-  const s = String(raw || '');
-  if (s.includes('$')) return '$';
-  if (s.includes('£')) return '£';
-  if (s.includes('€')) return '€';
-  if (s.includes('₵')) return '₵';
-  if (s.includes('₦')) return '₦';
+  const s = String(raw || '').toLowerCase();
+  if (s.includes('$') || s.includes('dollar') || s.includes('usd')) return '$';
+  if (s.includes('£') || s.includes('pound') || s.includes('gbp')) return '£';
+  if (s.includes('€') || s.includes('euro') || s.includes('eur')) return '€';
+  if (s.includes('₵') || s.includes('cedi') || s.includes('ghs')) return '₵';
+  if (s.includes('₦') || s.includes('naira') || s.includes('ngn')) return '₦';
+  if (s.includes('rand') || s.includes('zar')) return 'R';
+  if (s.includes('shilling') || s.includes('kes') || s.includes('ugx') || s.includes('tzs')) return 'KSh';
   return '';
 };
 
 // ==========================================
 // 💰 MONEY PARSER (number only)
-// Supports 100k, 1.5m, ₦20,000, $50 etc.
+// Supports 100k, 1.5m, 10 thousand, 2 million, ₦20,000, $50 etc.
 // ==========================================
 const parseMoney = (raw: any): number | null => {
   if (raw == null) return null;
@@ -169,9 +170,23 @@ const parseMoney = (raw: any): number | null => {
   const s0 = String(raw).toLowerCase().trim();
   if (!s0) return null;
 
-  const s = s0.replace(/\s+/g, '').replace(/,/g, '');
-  const mult = s.includes('m') ? 1_000_000 : s.includes('k') ? 1_000 : 1;
-  const num = parseFloat(s.replace(/[^\d.]/g, ''));
+  // Check for text multipliers before stripping characters
+  let mult = 1;
+  if (s0.includes('million') || s0.match(/\b(?<!\.)m\b/)) { 
+     mult = 1_000_000;
+  } else if (s0.includes('thousand') || s0.match(/\b(?<!\.)k\b/)) {
+     mult = 1_000;
+  } else if (s0.includes('m') && !s0.includes('million')) { // fallback for just '1.5m'
+     mult = 1_000_000;
+  } else if (s0.includes('k') && !s0.includes('thousand')) { // fallback for just '100k'
+     mult = 1_000;
+  }
+
+  // Remove currency symbols, commas, and text
+  const numStr = s0.replace(/,/g, '').match(/[\d.]+/)?.[0];
+  if (!numStr) return null;
+
+  const num = parseFloat(numStr);
 
   if (Number.isNaN(num)) return null;
   const v = num * mult;
@@ -549,7 +564,7 @@ if (wantsDownload && !isToggle) {
   // "Sold 2 coke at ₦500 per"
   // "Sold 4 bread for 2000 total"
   const saleRegex =
-    /(?:i|we)?\s*\b(?:sold|sell)\b\s+(\d+(?:\.\d+)?)\s*(bags?|pcs?|pieces?|cartons?|packs?|sachets?|bottles?|rolls?|liters?|ltrs?|kg)?\s*(?:of)?\s+(.+?)\s+(?:for|at|price)\s+([₦$€£₵]?\s*[\d,]+(?:k|m)?)(?:\s*(?:naira|dollars?|cedis?|pounds?|shillings?|rand|ngn|usd|ghs|gbp|eur))?\s*(each|per|\/each|\/per|total)?\b/i;
+    /(?:i|we)?\s*\b(?:sold|sell)\b\s+(\d+(?:\.\d+)?)\s*(bags?|pcs?|pieces?|cartons?|packs?|sachets?|bottles?|rolls?|liters?|ltrs?|kg)?\s*(?:of)?\s+(.+?)\s+(?:for|at|price)\s+([₦$€£₵]?\s*[\d,]+(?:\s*(?:k|m|thousand|million))?)(?:\s*(?:naira|dollars?|cedis?|pounds?|shillings?|rand|ngn|usd|ghs|gbp|eur))?\s*(each|per|\/each|\/per|total)?\b/i;
 
   const match = raw.match(saleRegex);
 
@@ -669,7 +684,9 @@ C. PRICE/MONEY EXTRACTION (POSITION-INDEPENDENT & SMART SCALING)
     Never set total_money equal to unit_price in "each/per" cases.
   - If user explicitly says "total" → treat as total_money (do NOT multiply).
   - Words like "for", "total", "in total" → total_money
-  - Support multipliers: k = thousand, m = million (e.g., 5k = 5000).
+  - Support multipliers: k = thousand, m = million, "thousand", "million".
+    Examples: "5k" = 5000, "1.2 million" = 1200000, "10 thousand" = 10000.
+  - Recognize currencies: "naira", "dollars", "cedis", "pounds", "shillings", "rand", etc.
   - Report sales with user's currency symbol in reply_text.
 
   PDF TOGGLE PRIORITY OVERRIDE:
