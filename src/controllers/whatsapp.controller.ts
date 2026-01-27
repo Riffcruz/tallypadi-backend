@@ -1259,7 +1259,7 @@ export const handleMessageLogic = async (
   [
     { id: saleBtnId('UNDO', txId), title: '↩️ Undo' },
     { id: saleBtnId('RECEIPT', txId), title: '🧾 Receipt' },
-    { id: saleBtnId('CREDIT', txId), title: '💳 Credit' },
+    { id: saleBtnId('CREDIT', txId), title: '💳 Sold As Credit' },
   ],
   `sale_${messageId}`
 );
