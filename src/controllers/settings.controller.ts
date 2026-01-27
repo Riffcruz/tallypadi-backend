@@ -163,6 +163,14 @@ export const updateSettings = async (req: AuthReq, res: Response) => {
         }
       }
 
+      // ✅ Bank Details Update
+      if (body.bankDetails && typeof body.bankDetails === 'object') {
+          const bd = body.bankDetails;
+          if (bd.bankName !== undefined) $set['bankDetails.bankName'] = sanitizeString(bd.bankName);
+          if (bd.accountNumber !== undefined) $set['bankDetails.accountNumber'] = sanitizeString(bd.accountNumber);
+          if (bd.accountName !== undefined) $set['bankDetails.accountName'] = sanitizeString(bd.accountName);
+      }
+
       // ✅ Only update if we actually have fields to set
       if (Object.keys($set).length) {
         const updated = await User.findByIdAndUpdate(userId, { $set }, { new: true, runValidators: true }).lean();

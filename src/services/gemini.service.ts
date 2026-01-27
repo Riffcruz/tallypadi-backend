@@ -37,6 +37,8 @@ export type ParsedIntent =
   | 'HQ_DASHBOARD'
   | 'HQ_COMPARE_BRANCHES'
   | 'HQ_STOCK_TRANSFER'
+  | 'CREATE_INVOICE'
+  | 'UPDATE_BANK_DETAILS'
   | 'HELP'
   | 'UNKNOWN';
 
@@ -77,6 +79,11 @@ export interface ParsedResult {
   transfer_params?: {
     from_branch: string | null;
     to_branch: string | null;
+  };
+  bank_details?: {
+    bank_name: string | null;
+    account_number: string | null;
+    account_name: string | null;
   };
   settings_update: { key: string | null; value: string | boolean | null };
   reply_text: string;
@@ -245,6 +252,8 @@ function safeParsedResult(p: any): ParsedResult {
   'HQ_DASHBOARD',
   'HQ_COMPARE_BRANCHES',
   'HQ_STOCK_TRANSFER',
+  'CREATE_INVOICE',
+  'UPDATE_BANK_DETAILS',
 
   'HELP',
   'UNKNOWN',
@@ -333,6 +342,11 @@ function safeParsedResult(p: any): ParsedResult {
     transfer_params: {
       from_branch: p?.transfer_params?.from_branch || null,
       to_branch: p?.transfer_params?.to_branch || null,
+    },
+    bank_details: {
+      bank_name: p?.bank_details?.bank_name || null,
+      account_number: p?.bank_details?.account_number || null,
+      account_name: p?.bank_details?.account_name || null,
     },
     settings_update: {
       key: p?.settings_update?.key || null,
@@ -1113,6 +1127,11 @@ Distinct from "Sales" (which are immediate).
     "from_branch": string | null,
     "to_branch": string | null
   },
+  "bank_details": {
+    "bank_name": string | null,
+    "account_number": string | null,
+    "account_name": string | null
+  },
   "settings_update": { "key": string | null, "value": any | null },
   "reply_text": string
 }
@@ -1142,6 +1161,34 @@ Distinct from "Sales" (which are immediate).
   intent = HQ_STOCK_TRANSFER
   items = [{ name: "Indomie", qty: 50, ... }]
   transfer_params = { from_branch: "Warehouse", to_branch: "Surulere" }
+
+*** 5H. INVOICE & BANKING ***
+
+1) UPDATE_BANK_DETAILS
+- Triggers: "Update bank details", "Save my account number", "My bank is Access 1234567890", "Change bank details".
+- ACTION: Save user's bank info for invoices.
+- EXTRACTION RULES:
+  - bank_name: Extract bank name (e.g. "Access Bank", "GTB", "Zenith").
+  - account_number: Extract 10-digit number.
+  - account_name: Extract account name if provided.
+- Output:
+  intent = UPDATE_BANK_DETAILS
+  bank_details = { bank_name: "Access Bank", account_number: "1234567890", account_name: "John Doe" }
+  needs_clarification = true if bank name or account number missing.
+
+2) CREATE_INVOICE
+- Triggers: "Create invoice", "Generate invoice for <Client>", "Send invoice to <Client>", "Invoice for <Client> <Item> <Price>".
+- ACTION: Generate a PDF invoice.
+- EXTRACTION RULES:
+  - customer_name: MUST be extracted.
+  - items: Extract items (name, qty, price).
+  - total_money: Extract total if explicitly stated, otherwise computed from items.
+  - description: Optional description of service/goods.
+- Output:
+  intent = CREATE_INVOICE
+  customer_name = <Client Name>
+  items = [{ name: "Branding Service", qty: 1, unit_price: 50000 }]
+  needs_clarification = true if client name or items missing.
 `;
 
 

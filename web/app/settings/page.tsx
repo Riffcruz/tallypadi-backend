@@ -61,6 +61,11 @@ export default function SettingsPage() {
   const [pdfEnabled, setPdfEnabled] = useState(false);
   const [staffAlertsEnabled, setStaffAlertsEnabled] = useState(false); // ✅ New state
   
+  // ✅ Bank Details State
+  const [bankName, setBankName] = useState('');
+  const [accountNumber, setAccountNumber] = useState('');
+  const [accountName, setAccountName] = useState('');
+
   // ✅ Staff Permission State
   const [staffPermissions, setStaffPermissions] = useState({
     canViewDashboard: false,
@@ -143,6 +148,11 @@ export default function SettingsPage() {
     setHeroImageUrl(userData?.heroImageUrl || '');
     setClosingTime(userData?.settings?.closingTime || '20:00');
     setLanguage(userData?.settings?.language || 'English');
+
+    // Bank Details
+    setBankName(userData?.bankDetails?.bankName || '');
+    setAccountNumber(userData?.bankDetails?.accountNumber || '');
+    setAccountName(userData?.bankDetails?.accountName || '');
 
     // allow both names just in case
     setPdfEnabled(
@@ -230,6 +240,11 @@ export default function SettingsPage() {
             staffTransactionReport: staffAlertsEnabled, // ✅ Send new setting
             staffPermissions, // ✅ Send permissions
           },
+          bankDetails: {
+             bankName,
+             accountNumber,
+             accountName
+          }
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -672,6 +687,59 @@ export default function SettingsPage() {
                   </div>
                 )}
               </div>
+            </div>
+          </div>
+
+          {/* Bank Details Card */}
+          <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-gray-100">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-2 bg-emerald-50 rounded-xl text-emerald-600">
+                 <ClipboardList size={20} />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">Bank Details</h2>
+                <p className="text-xs text-gray-400">For Invoices & Receipts</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+               <div>
+                  <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wider">
+                    Bank Name
+                  </label>
+                  <input
+                    type="text"
+                    value={bankName}
+                    onChange={(e) => setBankName(e.target.value)}
+                    placeholder="e.g. GTBank"
+                    className="w-full border border-gray-200 bg-slate-50/50 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-sm font-medium"
+                  />
+               </div>
+               <div>
+                  <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wider">
+                    Account Number
+                  </label>
+                  <input
+                    type="text"
+                    value={accountNumber}
+                    onChange={(e) => setAccountNumber(e.target.value.replace(/\D/g, ''))}
+                    placeholder="0123456789"
+                    maxLength={10}
+                    className="w-full border border-gray-200 bg-slate-50/50 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-sm font-medium"
+                  />
+               </div>
+               <div className="md:col-span-2">
+                  <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wider">
+                    Account Name
+                  </label>
+                  <input
+                    type="text"
+                    value={accountName}
+                    onChange={(e) => setAccountName(e.target.value)}
+                    placeholder="e.g. My Shop Enterprise"
+                    className="w-full border border-gray-200 bg-slate-50/50 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-sm font-medium"
+                  />
+               </div>
             </div>
           </div>
 

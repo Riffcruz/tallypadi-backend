@@ -24,6 +24,7 @@ import healthRouter from './routes/health.routes';
 import orderRouter from './routes/order.routes';
 import shopRouter from './routes/shop.routes';
 import hqRouter from './routes/hq.routes';
+import invoiceRouter from './routes/invoice.routes';
 
 // --- SERVICES & CONFIG ---
 import {
@@ -381,6 +382,7 @@ app.use('/api/health', healthRouter);
 app.use('/api/orders', authRequired, orderRouter);
 app.use('/api/shop', shopRouter);
 app.use('/api/hq', hqRouter);
+app.use('/api/invoices', authRequired, invoiceRouter);
 
 // --- ADMIN (SITE OWNER) ---
 const adminLimiterPerUser = rateLimit({

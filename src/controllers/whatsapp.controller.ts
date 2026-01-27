@@ -9,6 +9,7 @@ import { Inventory } from '../models/inventory.model';
 import { Transaction } from '../models/transaction.model';
 import { Debtor } from '../models/debtor.model';
 import { AdminSettings } from '../models/adminSettings.model';
+import { DailyStats } from '../models/dailyStats.model';
 
 import { processTransaction } from '../services/transaction.service';
 import { checkSubscriptionStatus } from '../services/billing.service';
@@ -30,6 +31,8 @@ import { undoLastSale } from '../services/undo.service';
 
 import { resolveDebtor, normName } from '../services/debtor.service';
 import { hqService } from '../services/hq.service';
+import { Invoice } from '../models/invoice.model';
+import { generateInvoicePdf } from '../services/invoice.pdf.service';
 
 // Reports / PDF (your existing services)
 import {
@@ -439,13 +442,24 @@ function saleBtnId(action: 'UNDO' | 'RECEIPT' | 'CREDIT', txId: string) {
   return `SALEACT|${action}|${txId}`;
 }
 
+function invoiceBtnId(action: 'PAID' | 'CANCEL', invoiceId: string) {
+  return `INVACT|${action}|${invoiceId}`;
+}
+
 function parseBtnText(rawText: string) {
   if (!rawText.startsWith('__BTN__:')) return null;
   const parts = rawText.split(':'); // __BTN__:ID:TITLE
   const btnId = parts[1] || '';
-  const seg = btnId.split('|'); // SALEACT|ACTION|txId
-  if (seg[0] !== 'SALEACT') return null;
-  return { action: seg[1] || '', txId: seg[2] || '' };
+  const seg = btnId.split('|'); // PREFIX|ACTION|ID
+  
+  if (seg[0] === 'SALEACT') {
+      return { type: 'SALEACT', action: seg[1] || '', id: seg[2] || '' };
+  }
+  if (seg[0] === 'INVACT') {
+      return { type: 'INVACT', action: seg[1] || '', id: seg[2] || '' };
+  }
+  
+  return null;
 }
 
 // =====================================================
@@ -997,39 +1011,102 @@ export const handleMessageLogic = async (
     // =====================================================
     // ✅ BUTTON fast path
     // =====================================================
-   // ✅ BUTTON fast path
-const btn = parseBtnText(rawText);
+    const btn = parseBtnText(rawText);
 
-if (btn?.txId && btn?.action) {
-  if (btn.action === 'RECEIPT') {
-    await queueOutboundMessage(from, '🧾 Generating receipt PDF…');
+    if (btn) {
+      // ✅ SALE ACTIONS
+      if (btn.type === 'SALEACT') {
+        if (btn.action === 'RECEIPT') {
+          await queueOutboundMessage(from, '🧾 Generating receipt PDF…');
+          await queueSaleReceipt(
+            from,
+            String(actor._id),
+            String(btn.id),
+            `receipt_${btn.id}_${messageId}`
+          );
+          return;
+        }
 
-    // Use actor._id because transaction is saved under actor (Staff or Owner)
-    await queueSaleReceipt(
-      from,                    // send to whoever clicked
-      String(actor._id),       // owner/user id for fetching tx
-      String(btn.txId),        // sale id
-      `receipt_${btn.txId}_${messageId}`
-    );
+        if (btn.action === 'CREDIT') {
+          const r = await markSaleCredit(actor._id, btn.id);
+          await queueOutboundMessage(from, r.msg);
+          return;
+        }
 
-    return;
-  }
+        if (btn.action === 'UNDO') {
+          const r = await undoSaleById(actor._id, shopId, btn.id, messageId);
+          await queueOutboundMessage(from, r.message);
+          return;
+        }
+      }
 
-  if (btn.action === 'CREDIT') {
-    const r = await markSaleCredit(actor._id, btn.txId);
-    await queueOutboundMessage(from, r.msg);
-    return;
-  }
+      // ✅ INVOICE BUTTONS
+      if (btn.type === 'INVACT') {
+          const action = btn.action;
+          const invId = btn.id;
 
-  if (btn.action === 'UNDO') {
-    const r = await undoSaleById(actor._id, shopId, btn.txId, messageId);
-    await queueOutboundMessage(from, r.message);
-    return;
-  }
+          const inv = await Invoice.findById(invId);
+          if (!inv) {
+              await queueOutboundMessage(from, "⚠️ Invoice not found.");
+              return;
+          }
 
-  await queueOutboundMessage(from, 'Unknown action.');
-  return;
-}
+          if (action === 'CANCEL') {
+              inv.status = 'CANCELLED';
+              await inv.save();
+              await queueOutboundMessage(from, `🚫 Invoice *${inv.invoiceNumber}* cancelled.`);
+              return;
+          }
+
+          if (action === 'PAID') {
+              if (inv.status === 'PAID') {
+                 await queueOutboundMessage(from, "✅ This invoice is already marked as PAID.");
+                 return;
+              }
+
+              // 1. Mark Invoice Paid
+              inv.status = 'PAID';
+              await inv.save();
+
+              // 2. Record Sale Transaction
+              const now = new Date();
+              const todayString = toISODateForOffset(actor.settings?.utcOffsetMinutes ?? 60);
+
+              await Transaction.create({
+                  user: actor._id,
+                  type: 'SALE',
+                  paymentStatus: 'PAID',
+                  items: inv.items.map(i => ({
+                      name: i.name,
+                      qty: i.qty,
+                      unit: i.unit || 'pcs',
+                      unitPrice: i.unitPrice,
+                      total: i.total
+                  })),
+                  totalMoney: inv.totalAmount,
+                  amountPaid: inv.totalAmount,
+                  balance: 0,
+                  customerName: inv.customerName,
+                  date: todayString,
+                  timestamp: now,
+                  messageId: `inv_${invId}_paid`,
+              });
+
+              // 3. Update Stats
+              await DailyStats.findOneAndUpdate(
+                { user: actor._id, date: todayString },
+                { $inc: { totalRevenue: inv.totalAmount, totalTransactions: 1 } },
+                { upsert: true }
+              );
+
+              await queueOutboundMessage(from, `✅ Payment Received!\nRecorded sale of *${symbol}${inv.totalAmount.toLocaleString(locale)}* for *${inv.customerName}*.`);
+              return;
+          }
+      }
+
+      await queueOutboundMessage(from, 'Unknown action.');
+      return;
+    }
 
 
     // =====================================================
@@ -1571,6 +1648,7 @@ if (btn?.txId && btn?.action) {
         break;
       }
 
+      
       case 'SHOW_SETTINGS': {
   // shopUser is owner||actor already in your code ✅
   const s = shopUser.settings || {};
@@ -1886,6 +1964,105 @@ if (btn?.txId && btn?.action) {
               await queueOutboundMessage(from, `✅ Transfer Successful!\n\nMoved *${item.qty} ${item.name}*\nFrom: ${result.fromBranch}\nTo: ${result.toBranch}`);
           } catch (e: any) {
               await queueOutboundMessage(from, `❌ Transfer Failed: ${e.message}`);
+          }
+          break;
+      }
+
+      case 'UPDATE_BANK_DETAILS': {
+          if (actor.role !== 'OWNER') {
+              await queueOutboundMessage(from, "❌ Only the shop owner can update bank details.");
+              break;
+          }
+
+          if (parsed.needs_clarification || !parsed.bank_details?.account_number || !parsed.bank_details?.bank_name) {
+               await queueOutboundMessage(from, "Please provide Bank Name and Account Number. Example:\n'Update bank GTB 0123456789'");
+               break;
+          }
+
+          actor.bankDetails = {
+              bankName: parsed.bank_details.bank_name,
+              accountNumber: parsed.bank_details.account_number,
+              accountName: parsed.bank_details.account_name || actor.businessName // Fallback to shop name if not provided
+          };
+          await actor.save();
+
+          await queueOutboundMessage(from, `✅ Bank details saved!\n\n🏦 ${actor.bankDetails.bankName}\n🔢 ${actor.bankDetails.accountNumber}\n👤 ${actor.bankDetails.accountName}`);
+          break;
+      }
+
+      case 'CREATE_INVOICE': {
+          // 1. Resolve Shop Owner (to get Bank Details & Business Name)
+          const shopOwner = actor.role === 'OWNER' ? actor : (owner || actor);
+          
+          // 2. Check Bank Details
+          if (!shopOwner.bankDetails?.accountNumber) {
+              await queueOutboundMessage(from, "⚠️ Please save your bank details first.\nReply like: *Update bank GTB 0123456789*");
+              break;
+          }
+
+          // 3. Check Clarification
+          if (parsed.needs_clarification || !parsed.customer_name || !parsed.items?.length) {
+              await queueOutboundMessage(from, parsed.reply_text || "I need details. Try: *Invoice for Dangote: 2 trucks of cement 5m*");
+              break;
+          }
+
+          await queueOutboundMessage(from, "📄 Generating invoice...");
+
+          try {
+              // 4. Calculate Total
+              let totalAmount = 0;
+              const invoiceItems = parsed.items.map(i => {
+                  const t = (i.unit_price || 0) * i.qty; // ParsedItem only has unit_price
+                  totalAmount += t;
+                  return {
+                      name: i.name,
+                      qty: i.qty,
+                      unitPrice: i.unit_price || 0,
+                      total: t,
+                      unit: i.unit
+                  };
+              });
+
+              // Override total if explicitly provided and higher/different? 
+              // Usually computed is safer, but if user said "Total 5m", we respect it if items sum up weirdly?
+              // Let's stick to computed for consistency, or parsed.total_money if items have 0 price.
+              if (totalAmount === 0 && parsed.total_money && parsed.total_money > 0) {
+                  totalAmount = parsed.total_money;
+                  // If single item, assign total to it
+                  if (invoiceItems.length === 1) {
+                      invoiceItems[0].total = totalAmount;
+                      invoiceItems[0].unitPrice = totalAmount / invoiceItems[0].qty;
+                  }
+              }
+
+              // 5. Create Invoice Record
+              const inv = await Invoice.create({
+                  user: actor._id, // Created by (Staff/Owner)
+                  customerName: parsed.customer_name,
+                  items: invoiceItems,
+                  totalAmount: totalAmount,
+                  invoiceNumber: `INV-${Date.now().toString().slice(-6)}`, // Simple unique-ish number
+                  status: 'GENERATED',
+                  bankDetailsSnapshot: shopOwner.bankDetails,
+                  description: parsed.order_params?.description || 'Goods/Services'
+              });
+
+              // 6. Generate PDF
+              const pdfFileName = await generateInvoicePdf(inv, shopOwner.businessName || 'My Shop');
+              
+              // 7. Send PDF
+              await queueOutboundMessage(from, `📄 Invoice #${inv.invoiceNumber} Generated:`);
+              await queueOutboundMessage(from, `📄 PDF: ${REPORT_BASE_URL}${pdfFileName}`);
+
+              // 8. Send Interactive Buttons
+              await sendWhatsAppButtons3(from, `Invoice for *${inv.customerName}* (${symbol}${totalAmount.toLocaleString(locale)})\nWhat next?`, [
+                  { id: invoiceBtnId('PAID', String(inv._id)), title: '✅ Mark Paid' },
+                  { id: invoiceBtnId('CANCEL', String(inv._id)), title: '🚫 Cancel' }
+              ]);
+
+          } catch (e) {
+              console.error("Create Invoice Error:", e);
+              await queueOutboundMessage(from, "❌ Failed to generate invoice. Please try again.");
           }
           break;
       }

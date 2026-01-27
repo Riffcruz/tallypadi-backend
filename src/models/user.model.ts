@@ -54,6 +54,12 @@ export interface IUser extends Document {
     };
   };
 
+  bankDetails?: {
+    bankName?: string;
+    accountNumber?: string;
+    accountName?: string;
+  };
+
   // ✅ Security / Suspension
   suspendedAt?: Date;
   suspensionReason?: string;
@@ -155,6 +161,13 @@ const userSchema = new Schema<IUser>(
          canManageCustomers: { type: Boolean, default: true },    // Access debtors
          canViewSettings: { type: Boolean, default: false },      // Access settings page
       }
+    },
+
+    // ✅ Bank Details for Invoices
+    bankDetails: {
+      bankName: { type: String },
+      accountNumber: { type: String },
+      accountName: { type: String },
     },
 
     // ✅ Security / Suspension
