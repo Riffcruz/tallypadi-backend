@@ -1156,6 +1156,14 @@ export const handleMessageLogic = async (
         if (btn.id === 'CMD_HELP') parsed = { intent: 'HELP' };
         else if (btn.id === 'CMD_SHOW_SETTINGS') parsed = { intent: 'SHOW_SETTINGS' };
         else if (btn.id === 'CMD_SUPPORT') parsed = { intent: 'SUPPORT' };
+        else if (btn.id === 'CMD_FAQ') parsed = { intent: 'FAQ' };
+        
+        // Settings Toggles
+        else if (btn.id === 'CMD_SET_PDF_ON') parsed = { intent: 'SETTINGS', settings_update: { key: 'pdfReportsEnabled', value: true }, reply_text: '✅ PDF reports enabled.' };
+        else if (btn.id === 'CMD_SET_PDF_OFF') parsed = { intent: 'SETTINGS', settings_update: { key: 'pdfReportsEnabled', value: false }, reply_text: '✅ PDF reports disabled.' };
+        else if (btn.id === 'CMD_SET_DAILY_ON') parsed = { intent: 'SETTINGS', settings_update: { key: 'dailySummaryEnabled', value: true }, reply_text: '🔔 Daily summary enabled.' };
+        else if (btn.id === 'CMD_SET_DAILY_OFF') parsed = { intent: 'SETTINGS', settings_update: { key: 'dailySummaryEnabled', value: false }, reply_text: '🔕 Daily summary disabled.' };
+
         else if (btn.id === 'CMD_CREATE_INVOICE') parsed = { intent: 'CREATE_INVOICE', needs_clarification: true, reply_text: "To create an invoice, I need details. Example: 'Invoice for John, 2 shoes for 50k'." };
 
         parsed = allowlistParsed(parsed);
@@ -1699,7 +1707,7 @@ export const handleMessageLogic = async (
   const mm = String(abs % 60).padStart(2, '0');
   const tz = `UTC${sign}${hh}:${mm}`;
 
-  const msg =
+  let msg =
     `⚙️ *Your Current Settings*\n\n` +
     `• Language: *${lang}*\n` +
     `• Closing Time: *${closing}*\n` +
@@ -1707,9 +1715,46 @@ export const handleMessageLogic = async (
     `• PDF Reports: *${pdf}*\n` +
     `• Timezone: *${tz}*`;
 
-  await queueOutboundMessage(from, msg);
+  // ✅ Bank Details
+  if (shopUser.bankDetails?.accountNumber) {
+      msg += `\n\n🏦 *Bank Details:*\n` + 
+             `• ${shopUser.bankDetails.bankName}\n` + 
+             `• ${shopUser.bankDetails.accountNumber}\n` + 
+             `• ${shopUser.bankDetails.accountName}`;
+  } else {
+      msg += `\n\n🏦 *Bank Details:* _Not Set_ (Reply "Update bank GTB 0123...")`;
+  }
+
+  // ✅ Staff List (If Owner)
+  if (actor.role === 'OWNER') {
+      const staffList = await User.find({ ownerId: actor._id }).limit(5);
+      if (staffList.length > 0) {
+          msg += `\n\n👥 *Staff (${staffList.length}):*\n` + 
+                 staffList.map(s => `• ${s.name} (${s.phoneNumber})`).join('\n');
+      } else {
+          msg += `\n\n👥 *Staff:* _None_ (Reply "Add staff 080...")`;
+      }
+  }
+
+  // ✅ Dynamic Buttons
+  const btns: { id: string; title: string }[] = [];
+  
+  if (s.dailySummaryEnabled) btns.push({ id: 'CMD_SET_DAILY_OFF', title: '🔕 Stop Daily Summary' });
+  else btns.push({ id: 'CMD_SET_DAILY_ON', title: '🔔 Enable Daily Summary' });
+
+  if (s.pdfReportsEnabled) btns.push({ id: 'CMD_SET_PDF_OFF', title: '📄 Disable PDF' });
+  else btns.push({ id: 'CMD_SET_PDF_ON', title: '📄 Enable PDF' });
+
+  btns.push({ id: 'CMD_FAQ', title: '❓ FAQ / Help' });
+
+  await queueOutboundButtons(from, msg, btns);
   break;
 }
+
+      case 'FAQ': {
+          await queueOutboundMessage(from, "📚 *TallyPadi FAQ*\n\nHave questions? Check our help center:\nhttps://tallypadi.com/help");
+          break;
+      }
 
 
       case 'REPORT_DEBTS': {

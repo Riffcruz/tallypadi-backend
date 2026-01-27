@@ -264,6 +264,8 @@ export const getDashboardData = async (req: Request | any, res: Response) => {
         shopDescription: user.shopDescription || null,
         heroImageUrl: user.heroImageUrl || null,
 
+        bankDetails: user.bankDetails, // ✅ Added
+
         countryCode: user.countryCode,
         currencyCode: currencyCode,
         locale: locale
