@@ -1257,7 +1257,7 @@ export const handleMessageLogic = async (
   parsed.reply_text || '✅ Sale recorded.',
   'After sale:\nChoose action 👇',
   [
-    { id: saleBtnId('UNDO', txId), title: '↩️ Undo' },
+    { id: saleBtnId('UNDO', txId), title: '↩️ Delet This Sale (UNDO)' },
     { id: saleBtnId('RECEIPT', txId), title: '🧾 Receipt' },
     { id: saleBtnId('CREDIT', txId), title: '💳 Sold As Credit' },
   ],
