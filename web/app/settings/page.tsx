@@ -27,6 +27,7 @@ import {
   ExternalLink,
   Bell,
   Pencil,
+  ClipboardList,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { getCookie } from '../../utils/cookies';
