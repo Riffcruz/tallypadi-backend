@@ -41,6 +41,39 @@ export const supportController = {
     res.json(agents);
   },
 
+  async updateAgent(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const { username, password } = req.body;
+
+      const updateData: any = {};
+      if (username) updateData.username = username;
+      if (password) {
+        const salt = await bcrypt.genSalt(10);
+        updateData.passwordHash = await bcrypt.hash(password, salt);
+      }
+
+      const agent = await SupportAgent.findByIdAndUpdate(id, updateData, { new: true }).select('-passwordHash');
+      if (!agent) return res.status(404).json({ error: 'Agent not found' });
+
+      res.json(agent);
+    } catch (e: any) {
+      if (e.code === 11000) return res.status(400).json({ error: 'Username taken' });
+      res.status(500).json({ error: e.message });
+    }
+  },
+
+  async deleteAgent(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const agent = await SupportAgent.findByIdAndDelete(id);
+      if (!agent) return res.status(404).json({ error: 'Agent not found' });
+      res.json({ message: 'Agent deleted' });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  },
+
   // --- AGENT AUTH ---
   async login(req: Request, res: Response) {
     const { username, password } = req.body;

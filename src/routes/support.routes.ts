@@ -7,6 +7,8 @@ const router = Router();
 // Admin
 router.post('/admin/agents', adminAuth, supportController.createAgent);
 router.get('/admin/agents', adminAuth, supportController.listAgents);
+router.put('/admin/agents/:id', adminAuth, supportController.updateAgent);
+router.delete('/admin/agents/:id', adminAuth, supportController.deleteAgent);
 
 // Agent Auth
 router.post('/auth/login', supportController.login);

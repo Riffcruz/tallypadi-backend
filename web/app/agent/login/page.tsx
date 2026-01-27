@@ -14,8 +14,8 @@ export default function AgentLogin() {
     setError('');
 
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-      const res = await fetch(`${API_URL}/api/support/auth/login`, {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
+      const res = await fetch(`${API_URL}/support/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),
