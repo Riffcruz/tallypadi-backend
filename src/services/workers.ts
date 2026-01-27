@@ -3,6 +3,11 @@ import { Worker } from 'bullmq';
 import { connection } from './queue.service';
 import { sendWhatsAppText, sendWhatsAppButtons, sendWhatsAppDocumentBuffer } from './whatsapp.service';
 import { generateSaleReceiptPdfBuffer } from '../controllers/receipt.controller';
+import { Invoice } from '../models/invoice.model';
+import { generateInvoicePdf } from './invoice.pdf.service';
+import fs from 'fs';
+import path from 'path';
+import { User } from '../models/user.model';
 
 export const replyWorker = new Worker(
   'outbound-replies',
@@ -26,6 +31,13 @@ export const replyWorker = new Worker(
       const { phoneNumber, message, loginUrl } = job.data;
       await sendWhatsAppText(phoneNumber, message); // ✅ first
       await sendWhatsAppText(phoneNumber, `🌐 *Web Access*\n\nLogin here to manage your shop on the web:\n${loginUrl}`); // ✅ then
+
+      // ✅ NEW: Post-registration buttons
+      await sendWhatsAppButtons(phoneNumber, 'What would you like to do next?', [
+        { id: 'CMD_CREATE_INVOICE', title: 'Invoice Generation' },
+        { id: 'CMD_HELP', title: 'Help' },
+        { id: 'CMD_SUPPORT', title: 'Contact Support' },
+      ]);
       return;
     }
 
@@ -49,6 +61,50 @@ export const replyWorker = new Worker(
 
   return;
 }
+
+    // ✅ NEW: Send Invoice PDF
+    if (job.name === 'send-invoice-pdf') {
+        const { phoneNumber, invoiceId } = job.data as { phoneNumber: string, invoiceId: string };
+        
+        try {
+            const inv = await Invoice.findById(invoiceId);
+            if (!inv) return;
+
+            // Need user/business name
+            const user = await User.findById(inv.user);
+            let businessName = 'My Shop';
+            
+            if (user) {
+                if (user.role === 'STAFF' && user.ownerId) {
+                    const owner = await User.findById(user.ownerId);
+                    businessName = owner?.businessName || 'My Shop';
+                } else {
+                    businessName = user.businessName || 'My Shop';
+                }
+            }
+
+            // Generate File
+            const pdfFileName = await generateInvoicePdf(inv, businessName);
+            const filePath = path.join(process.cwd(), 'public', 'reports', pdfFileName);
+
+            if (fs.existsSync(filePath)) {
+                const buffer = fs.readFileSync(filePath);
+                
+                await sendWhatsAppDocumentBuffer({
+                    to: phoneNumber,
+                    buffer,
+                    filename: pdfFileName,
+                    caption: `📄 Invoice #${inv.invoiceNumber}`,
+                });
+
+                // Cleanup: Delete file after sending (to avoid storage maxing out)
+                fs.unlinkSync(filePath);
+            }
+        } catch (e) {
+            console.error('Failed to send invoice PDF:', e);
+        }
+        return;
+    }
 
 
     if (job.name === 'send-buttons') {

@@ -158,3 +158,21 @@ export async function queueSaleReceipt(
     { jobId: finalJobId }
   );
 }
+
+// ============================================================
+// ✅ Invoice PDF (GENERATE + SEND DOCUMENT)
+// Worker must handle job.name === 'send-invoice-pdf'
+// ============================================================
+export async function queueInvoicePdf(
+  phoneNumber: string,
+  invoiceId: string,
+  jobId?: string
+) {
+  const finalJobId = safeJobId(jobId || `invoice_${phoneNumber}_${invoiceId}_${Date.now()}`);
+
+  await replyQueue.add(
+    'send-invoice-pdf',
+    { phoneNumber, invoiceId },
+    { jobId: finalJobId }
+  );
+}

@@ -18,11 +18,10 @@ import {
   messageQueue,
   queueOutboundMessage,
   queueOutboundButtons, // ✅ NEW: queued buttons helper
-queueSaleResponse,
-queueWelcomeResponse,
-queueSaleReceipt
-
-
+  queueSaleResponse,
+  queueWelcomeResponse,
+  queueSaleReceipt,
+  queueInvoicePdf
 } from '../services/queue.service';
 import { sendWhatsAppDocumentBuffer } from '../services/whatsapp.service';
 
@@ -446,7 +445,7 @@ function invoiceBtnId(action: 'PAID' | 'CANCEL', invoiceId: string) {
   return `INVACT|${action}|${invoiceId}`;
 }
 
-function parseBtnText(rawText: string) {
+function parseBtnText(rawText: string): { type: string; action: string; id: string } | null {
   if (!rawText.startsWith('__BTN__:')) return null;
   const parts = rawText.split(':'); // __BTN__:ID:TITLE
   const btnId = parts[1] || '';
@@ -459,7 +458,7 @@ function parseBtnText(rawText: string) {
       return { type: 'INVACT', action: seg[1] || '', id: seg[2] || '' };
   }
   
-  return null;
+  return { type: 'GENERIC', action: '', id: btnId };
 }
 
 // =====================================================
@@ -871,6 +870,7 @@ export const handleMessageLogic = async (
 ) => {
   try {
     const rawText = cleanTextForSecurity(text);
+    const btn = parseBtnText(rawText);
 
     // --- limits ---
     let MAX_HISTORY = 5;
@@ -923,9 +923,14 @@ export const handleMessageLogic = async (
       owner = actor;
       ownerId = actor._id;
 
-      await queueOutboundMessage(
+      await queueOutboundButtons(
         from,
-        `Welcome to *Tallypadi*, ${profileName || 'Friend'}! 👋\n\nTo start, reply with your *EMAIL ADDRESS*.`
+        `Welcome to *Tallypadi*, ${profileName || 'Friend'}! 👋\n\nTo start, please choose an option:`,
+        [
+          { id: 'CMD_REGISTER', title: 'Register' },
+          { id: 'CMD_HELP', title: 'Help' },
+          { id: 'CMD_SHOW_SETTINGS', title: 'Show My Settings' },
+        ]
       );
       return;
     }
@@ -940,47 +945,62 @@ export const handleMessageLogic = async (
     }
 
     // ✅ owner registration
-    if (actor.role === 'OWNER') {
-      if (actor.registrationStage === 'EMAIL') {
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(rawText)) {
-          await queueOutboundMessage(from, '❌ Invalid email format.');
+    if (actor.role === 'OWNER' && actor.registrationStage !== 'COMPLETED') {
+      
+      // 1. Handle "Register" button
+      if (btn?.id === 'CMD_REGISTER') {
+          await queueOutboundMessage(from, "To start, reply with your *EMAIL ADDRESS*.");
           return;
-        }
-
-        const existingUser = await User.findOne({ email: rawText });
-        if (existingUser) {
-          await queueOutboundMessage(from, '❌ This email is already registered. Please provide a different email address.');
-          return;
-        }
-
-        actor.email = rawText;
-        actor.registrationStage = 'PASSWORD';
-        await actor.save();
-
-        await queueOutboundMessage(from, `✅ Email Saved! Now reply with a *SECRET PASSWORD (min 8 chars)*.`);
-        return;
       }
 
-      if (actor.registrationStage === 'PASSWORD') {
-        if (rawText.length < 8) {
-          await queueOutboundMessage(from, '❌ Password too short (min 8 chars).');
-          return;
-        }
-        const salt = await bcrypt.genSalt(10);
-        actor.password = await bcrypt.hash(rawText, salt);
-        actor.registrationStage = 'COMPLETED';
-        await actor.save();
+      // 2. Allow bypass for Help/Settings/Support
+      const isSafeCmd = 
+          btn?.id === 'CMD_HELP' || 
+          btn?.id === 'CMD_SHOW_SETTINGS' || 
+          btn?.id === 'CMD_SUPPORT';
 
-        const { generateWelcomeMessage } = await import('../services/gemini.service');
-        const welcomeMsg = await generateWelcomeMessage(actor.settings?.language || 'English');
-        
-        await queueWelcomeResponse(
-          from,
-          welcomeMsg,
-          'https://tallypadi.com/login'
-        );
-        return;
+      if (!isSafeCmd) {
+          if (actor.registrationStage === 'EMAIL') {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(rawText)) {
+              await queueOutboundMessage(from, '❌ Invalid email format.');
+              return;
+            }
+
+            const existingUser = await User.findOne({ email: rawText });
+            if (existingUser) {
+              await queueOutboundMessage(from, '❌ This email is already registered. Please provide a different email address.');
+              return;
+            }
+
+            actor.email = rawText;
+            actor.registrationStage = 'PASSWORD';
+            await actor.save();
+
+            await queueOutboundMessage(from, `✅ Email Saved! Now reply with a *SECRET PASSWORD (min 8 chars)*.`);
+            return;
+          }
+
+          if (actor.registrationStage === 'PASSWORD') {
+            if (rawText.length < 8) {
+              await queueOutboundMessage(from, '❌ Password too short (min 8 chars).');
+              return;
+            }
+            const salt = await bcrypt.genSalt(10);
+            actor.password = await bcrypt.hash(rawText, salt);
+            actor.registrationStage = 'COMPLETED';
+            await actor.save();
+
+            const { generateWelcomeMessage } = await import('../services/gemini.service');
+            const welcomeMsg = await generateWelcomeMessage(actor.settings?.language || 'English');
+            
+            await queueWelcomeResponse(
+              from,
+              welcomeMsg,
+              'https://tallypadi.com/login'
+            );
+            return;
+          }
       }
     }
 
@@ -1011,7 +1031,7 @@ export const handleMessageLogic = async (
     // =====================================================
     // ✅ BUTTON fast path
     // =====================================================
-    const btn = parseBtnText(rawText);
+    // const btn = parseBtnText(rawText); // Removed duplicate declaration
 
     if (btn) {
       // ✅ SALE ACTIONS
@@ -1104,8 +1124,13 @@ export const handleMessageLogic = async (
           }
       }
 
-      await queueOutboundMessage(from, 'Unknown action.');
-      return;
+      // ✅ GENERIC COMMANDS (CMD_) -> fall through
+      if (btn.type === 'GENERIC' && btn.id.startsWith('CMD_')) {
+          // Do nothing, let it proceed to next logic blocks
+      } else {
+          await queueOutboundMessage(from, 'Unknown action.');
+          return;
+      }
     }
 
 
@@ -1120,16 +1145,26 @@ export const handleMessageLogic = async (
     }
 
     // =====================================================
-    // 🧠 PARSE WITH GEMINI
+    // 🧠 PARSE WITH GEMINI (or Manual Override)
     // =====================================================
     const currentLang = (shopUser.settings?.language || 'English') as string;
     const contextHistory = actor.messageHistory || [];
 
-    const { parseMessageWithGemini } = await import('../services/gemini.service');
+    let parsed: any;
 
-    let parsed = await parseMessageWithGemini(rawText, currentLang, contextHistory, imageBuffer, imageMime);
-    parsed = allowlistParsed(parsed);
-    parsed = normalizeSettingsUpdate(parsed);
+    if (btn && btn.id.startsWith('CMD_')) {
+        if (btn.id === 'CMD_HELP') parsed = { intent: 'HELP' };
+        else if (btn.id === 'CMD_SHOW_SETTINGS') parsed = { intent: 'SHOW_SETTINGS' };
+        else if (btn.id === 'CMD_SUPPORT') parsed = { intent: 'SUPPORT' };
+        else if (btn.id === 'CMD_CREATE_INVOICE') parsed = { intent: 'CREATE_INVOICE', needs_clarification: true, reply_text: "To create an invoice, I need details. Example: 'Invoice for John, 2 shoes for 50k'." };
+
+        parsed = allowlistParsed(parsed);
+    } else {
+        const { parseMessageWithGemini } = await import('../services/gemini.service');
+        parsed = await parseMessageWithGemini(rawText, currentLang, contextHistory, imageBuffer, imageMime);
+        parsed = allowlistParsed(parsed);
+        parsed = normalizeSettingsUpdate(parsed);
+    }
 
 
     // =====================================================
@@ -1727,7 +1762,7 @@ export const handleMessageLogic = async (
 
           try {
               const desc = order_params?.description || 
-                           (parsed.items.length > 0 ? parsed.items.map(i => i.name).join(', ') : 'Order');
+                           (parsed.items.length > 0 ? parsed.items.map((i: any) => i.name).join(', ') : 'Order');
 
               const order = await orderService.createOrder(shopId, {
                   customerName: customer_name,
@@ -2011,7 +2046,7 @@ export const handleMessageLogic = async (
           try {
               // 4. Calculate Total
               let totalAmount = 0;
-              const invoiceItems = parsed.items.map(i => {
+              const invoiceItems = parsed.items.map((i: any) => {
                   const t = (i.unit_price || 0) * i.qty; // ParsedItem only has unit_price
                   totalAmount += t;
                   return {
@@ -2047,14 +2082,10 @@ export const handleMessageLogic = async (
                   description: parsed.order_params?.description || 'Goods/Services'
               });
 
-              // 6. Generate PDF
-              const pdfFileName = await generateInvoicePdf(inv, shopOwner.businessName || 'My Shop');
-              
-              // 7. Send PDF
-              await queueOutboundMessage(from, `📄 Invoice #${inv.invoiceNumber} Generated:`);
-              await queueOutboundMessage(from, `📄 PDF: ${REPORT_BASE_URL}${pdfFileName}`);
+              // 6. Send PDF directly (via Queue to avoid storage issues)
+              await queueInvoicePdf(from, String(inv._id));
 
-              // 8. Send Interactive Buttons
+              // 7. Send Interactive Buttons
               await sendWhatsAppButtons3(from, `Invoice for *${inv.customerName}* (${symbol}${totalAmount.toLocaleString(locale)})\nWhat next?`, [
                   { id: invoiceBtnId('PAID', String(inv._id)), title: '✅ Mark Paid' },
                   { id: invoiceBtnId('CANCEL', String(inv._id)), title: '🚫 Cancel' }
@@ -2067,7 +2098,25 @@ export const handleMessageLogic = async (
           break;
       }
 
-      case 'HELP':
+      case 'HELP': {
+        await queueOutboundButtons(
+          from,
+          "🤖 *TallyPadi Help*\n\nHere are some things I can do:",
+          [
+            { id: 'CMD_CREATE_INVOICE', title: 'Create Invoice' },
+            { id: 'CMD_SHOW_SETTINGS', title: 'My Settings' },
+            { id: 'CMD_SUPPORT', title: 'Contact Support' }
+          ]
+        );
+        await queueOutboundMessage(from, "• Record Sales: 'Sold 2 coke 500'\n• Check Stock: 'How many coke left?'\n• Reports: 'Sales report today'\n• Add Staff: 'Add staff 08123456789'");
+        break;
+      }
+
+      case 'SUPPORT': {
+        await queueOutboundMessage(from, "📞 *Contact Support*\n\nNeed help? Chat with us:\nhttps://wa.me/2349079963240\n\nOr email: support@tallypadi.com");
+        break;
+      }
+
       case 'UNKNOWN':
       default: {
         await queueOutboundMessage(from, parsed.reply_text || 'Noted.');
