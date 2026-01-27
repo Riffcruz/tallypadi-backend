@@ -2144,16 +2144,19 @@ export const handleMessageLogic = async (
       }
 
       case 'HELP': {
-        await queueOutboundButtons(
+        const helpText = parsed.reply_text || "🤖 *TallyPadi Help*\n\nHere are some things I can do:";
+        
+        await queueSaleResponse(
           from,
-          "🤖 *TallyPadi Help*\n\nHere are some things I can do:",
+          helpText,
+          "Choose an action 👇",
           [
             { id: 'CMD_CREATE_INVOICE', title: 'Create Invoice' },
             { id: 'CMD_SHOW_SETTINGS', title: 'My Settings' },
             { id: 'CMD_SUPPORT', title: 'Contact Support' }
-          ]
+          ],
+          `help_${messageId}`
         );
-        await queueOutboundMessage(from, "• Record Sales: 'Sold 2 coke 500'\n• Check Stock: 'How many coke left?'\n• Reports: 'Sales report today'\n• Add Staff: 'Add staff 08123456789'");
         break;
       }
 
