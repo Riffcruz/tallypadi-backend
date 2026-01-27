@@ -11,6 +11,7 @@ const MAX_ACTIVE_TICKETS = Number(process.env.MAX_ACTIVE_TICKETS_PER_AGENT || 1)
 const WHATSAPP_SUPPORT_TOKEN = process.env.WHATSAPP_SUPPORT_TOKEN || process.env.WHATSAPP_TOKEN;
 const SUPPORT_PHONE_NUMBER_ID = process.env.SUPPORT_PHONE_NUMBER_ID;
 
+
 // Helper to safely emit socket events
 const safeEmit = (room: string, event: string, data: any) => {
   try {
