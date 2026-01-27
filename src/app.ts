@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Request, Response } from 'express';
 import cors from 'cors';
 import { json } from 'express';
 import whatsappRouter from './routes/whatsapp.routes';
@@ -14,7 +14,7 @@ const app = express();
 app.use(cors());
 app.use(json());
 
-app.get('/', (_req, res) => {
+app.get('/', (_req: Request, res: Response) => {
   res.send('InventoryBot API is running');
 });
 

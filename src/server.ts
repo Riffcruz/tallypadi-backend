@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import helmet from 'helmet';
@@ -7,12 +7,11 @@ import sanitize from 'mongo-sanitize';
 import crypto from 'crypto';
 import path from 'path';
 import jwt from 'jsonwebtoken';
+import { createServer } from 'http';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 
 import { generateSaleReceiptPdf } from './controllers/receipt.controller';
-
-
-
+import { initSocket } from './socket';
 
 // --- ROUTERS ---
 import whatsappRouter from './routes/whatsapp.routes';
@@ -25,6 +24,8 @@ import orderRouter from './routes/order.routes';
 import shopRouter from './routes/shop.routes';
 import hqRouter from './routes/hq.routes';
 import invoiceRouter from './routes/invoice.routes';
+import supportRouter from './routes/support.routes';
+import supportWebhookRouter from './routes/support.webhook.routes';
 
 // --- SERVICES & CONFIG ---
 import {
@@ -88,7 +89,7 @@ app.use(cors(corsOptions));
 app.options(/.*/, cors(corsOptions));
 
 // Logging
-app.use((req, _res, next) => {
+app.use((req: Request, _res: Response, next: NextFunction) => {
   console.log(`📨 ${req.method} ${req.originalUrl} from ${req.ip}`);
   next();
 });
@@ -103,7 +104,7 @@ const verifySignature = (req: any, _res: any, buf: Buffer) => {
   req.rawBody = buf;
 
   // Only verify WhatsApp signature on WhatsApp webhook routes
-  if (!req.originalUrl.startsWith('/api/whatsapp') || req.method !== 'POST') return;
+  if ((!req.originalUrl.startsWith('/api/whatsapp') && !req.originalUrl.startsWith('/api/support/webhook')) || req.method !== 'POST') return;
 
   const header = req.headers['x-hub-signature-256'];
   const appSecret = process.env.WHATSAPP_APP_SECRET;
@@ -239,7 +240,7 @@ const forgotPasswordLimiter = rateLimit({
 });
 
 
-app.use('/api', (req, res, next) => {
+app.use('/api', (req: Request, res: Response, next: NextFunction) => {
   // Skip rate limit for webhooks
   if (req.originalUrl.startsWith('/api/whatsapp') || req.originalUrl.startsWith('/api/webhook')) {
     return next();
@@ -252,7 +253,7 @@ app.use('/api', (req, res, next) => {
 // ==========================================
 app.use(
   '/api/whatsapp',
-  (req: any, res, next) => {
+  (req: any, res: Response, next: NextFunction) => {
     if (process.env.NODE_ENV === 'production' && req.method === 'POST' && req.signatureValid === false) {
       console.error('❌ WhatsApp webhook rejected: invalid/missing signature');
       return res.sendStatus(401);
@@ -263,13 +264,14 @@ app.use(
 );
 
 app.use('/api/webhook', webhookRoutes);
+app.use('/api/support/webhook', supportWebhookRouter); // ✅ New Support Webhook
 
 // ==========================================
 // 🧼 SECURITY SANITIZATION
 // ==========================================
 
 
-app.use((req: any, _res, next) => {
+app.use((req: any, _res: Response, next: NextFunction) => {
   if (req.body) req.body = sanitize(req.body);
 
   // DO NOT reassign req.query / req.params — mutate in place
@@ -293,7 +295,7 @@ app.use((req: any, _res, next) => {
 // ==========================================
 // 🛡️ AUTH MIDDLEWARE (NO jwt.decode FALLBACK)
 // ==========================================
-const authRequired = (req: any, res: any, next: any) => {
+const authRequired = (req: any, res: Response, next: NextFunction) => {
   const auth = String(req.headers.authorization || '');
   if (!auth.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Unauthorized' });
@@ -384,6 +386,9 @@ app.use('/api/shop', shopRouter);
 app.use('/api/hq', hqRouter);
 app.use('/api/invoices', authRequired, invoiceRouter);
 
+// --- LIVE SUPPORT ---
+app.use('/api/support', supportRouter);
+
 // --- ADMIN (SITE OWNER) ---
 const adminLimiterPerUser = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -407,13 +412,16 @@ app.use('/api/investor', authRequired, investorRouter);
 app.use('/reports', express.static(path.join(__dirname, '..', 'public', 'reports')));
 app.use('/uploads', express.static(path.join(__dirname, '..', 'public', 'uploads')));
 
-app.get('/', (_req, res) => {
+app.get('/', (_req: Request, res: Response) => {
   res.send('🛡️ Tallypadi Server is Secured & Running');
 });
 
 // ==========================================
 // 🔌 START SERVER
 // ==========================================
+const server = createServer(app);
+initSocket(server);
+
 mongoose
   .connect(env.mongoUri)
   .then(() => {
@@ -423,7 +431,7 @@ mongoose
     const PORT = Number(env.port ?? process.env.PORT ?? 5000);
     if (!Number.isFinite(PORT)) throw new Error(`Invalid PORT: ${env.port}`);
 
-    app.listen(PORT, '127.0.0.1', () => {
+    server.listen(PORT, '127.0.0.1', () => {
       console.log(`🚀 Server running on http://127.0.0.1:${PORT}`);
     });
 

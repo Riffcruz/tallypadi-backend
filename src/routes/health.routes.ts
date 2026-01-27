@@ -1,10 +1,10 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import { messageQueue, replyQueue, bulkQueue } from '../services/queue.service';
 
 const router = Router();
 
 // GET /api/health/queue
-router.get('/queue', async (req, res) => {
+router.get('/queue', async (req: Request, res: Response) => {
   try {
     const [
       msgWaiting, msgActive, msgFailed, msgCompleted,
@@ -51,7 +51,7 @@ router.get('/queue', async (req, res) => {
 });
 
 // POST /api/health/retry
-router.post('/retry', async (req, res) => {
+router.post('/retry', async (req: Request, res: Response) => {
   try {
     await Promise.all([
       messageQueue.retryJobs({ count: 200 }),

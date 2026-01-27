@@ -254,7 +254,7 @@ export const getInvestors = async (req: Request, res: Response) => {
 export const deleteInvestor = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    if (!isValidObjectId(id)) return res.status(400).json({ error: 'Invalid id' });
+    if (typeof id !== 'string' || !isValidObjectId(id)) return res.status(400).json({ error: 'Invalid id' });
 
     const investor = await User.findOne({ _id: id, role: 'INVESTOR' });
     if (!investor) return res.status(404).json({ error: 'Investor not found' });
@@ -340,7 +340,7 @@ export const getAllUsers = async (req: Request, res: Response) => {
 export const getUserDeepDive = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    if (!isValidObjectId(id)) return res.status(400).json({ error: 'Invalid id' });
+    if (typeof id !== 'string' || !isValidObjectId(id)) return res.status(400).json({ error: 'Invalid id' });
 
     const user = await User.findById(id);
     if (!user) return res.status(404).json({ error: 'User not found' });
@@ -378,7 +378,7 @@ export const getUserDeepDive = async (req: Request, res: Response) => {
 export const manageUser = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    if (!isValidObjectId(id)) return res.status(400).json({ error: 'Invalid id' });
+    if (typeof id !== 'string' || !isValidObjectId(id)) return res.status(400).json({ error: 'Invalid id' });
 
     const parsed = manageUserSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
@@ -553,7 +553,7 @@ export const broadcastMessage = async (req: Request, res: Response) => {
 export const adminAddStaff = async (req: Request, res: Response) => {
   try {
     const { ownerId } = req.params;
-    if (!isValidObjectId(ownerId)) return res.status(400).json({ error: 'Invalid ownerId' });
+    if (typeof ownerId !== 'string' || !isValidObjectId(ownerId)) return res.status(400).json({ error: 'Invalid ownerId' });
 
     const parsed = adminAddStaffSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
@@ -607,7 +607,7 @@ export const adminAddStaff = async (req: Request, res: Response) => {
 export const deleteStaffMember = async (req: Request, res: Response) => {
   try {
     const { staffId } = req.params;
-    if (!isValidObjectId(staffId)) return res.status(400).json({ error: 'Invalid staffId' });
+    if (typeof staffId !== 'string' || !isValidObjectId(staffId)) return res.status(400).json({ error: 'Invalid staffId' });
 
     const staff = await User.findById(staffId);
     if (!staff) return res.status(404).json({ error: 'Staff not found' });
@@ -630,7 +630,7 @@ export const deleteStaffMember = async (req: Request, res: Response) => {
 export const unlinkStaffMember = async (req: Request, res: Response) => {
   try {
     const { staffId } = req.params;
-    if (!isValidObjectId(staffId)) return res.status(400).json({ error: 'Invalid staffId' });
+    if (typeof staffId !== 'string' || !isValidObjectId(staffId)) return res.status(400).json({ error: 'Invalid staffId' });
 
     const staff = await User.findById(staffId);
     if (!staff) return res.status(404).json({ error: 'Staff not found' });
