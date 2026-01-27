@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { User } from '../models/user.model';
+import { User, IUser } from '../models/user.model';
 import { Invoice } from '../models/invoice.model';
 import { Transaction } from '../models/transaction.model';
 import { DailyStats } from '../models/dailyStats.model';
@@ -9,14 +9,14 @@ import { toUserLocalDate } from '../utils/dates';
 type AuthReq = Request & { user?: { id?: string } };
 
 // Helper to check permissions
-const checkTycoonAndRole = async (userId: string) => {
+const checkTycoonAndRole = async (userId: string): Promise<{ allowed: boolean; error?: string; owner?: IUser; actor?: IUser }> => {
     const user = await User.findById(userId);
     if (!user) return { allowed: false, error: 'User not found' };
 
     let owner = user;
     if (user.role === 'STAFF') {
         if (!user.ownerId) return { allowed: false, error: 'Staff not linked to owner' };
-        owner = await User.findById(user.ownerId) || user;
+        owner = (await User.findById(user.ownerId)) || user;
     }
 
     const plan = String(owner.planType || '').toUpperCase();
@@ -31,8 +31,10 @@ export const createInvoice = async (req: AuthReq, res: Response) => {
         if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
         const perm = await checkTycoonAndRole(userId);
-        if (!perm.allowed) return res.status(403).json({ error: perm.error });
-        const { owner, actor } = perm!; // Non-null assertion safely
+        if (!perm.allowed || !perm.owner || !perm.actor) {
+            return res.status(403).json({ error: perm.error || 'Access denied' });
+        }
+        const { owner, actor } = perm;
 
         const { customerName, items, description, bankDetailsOverride } = req.body;
         if (!customerName || !Array.isArray(items) || items.length === 0) {
@@ -97,7 +99,9 @@ export const getInvoices = async (req: AuthReq, res: Response) => {
 
         // Strategy: Find all users in this shop (Owner + Staff)
         let ownerId = user._id;
-        if (user.role === 'STAFF') ownerId = user.ownerId;
+        if (user.role === 'STAFF' && user.ownerId) {
+             ownerId = user.ownerId;
+        }
 
         // Find all users belonging to this owner
         const shopUserIds = await User.find({ $or: [{ _id: ownerId }, { ownerId: ownerId }] }).distinct('_id');

@@ -11,10 +11,8 @@ import {
   Plus,
   Search,
   Loader2,
-  MoreVertical,
   CheckCircle2,
   XCircle,
-  Download,
   Trash2,
   ExternalLink,
   Menu
