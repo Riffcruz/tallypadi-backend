@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import io, { Socket } from 'socket.io-client';
 
@@ -22,7 +22,7 @@ interface Message {
   timestamp: string;
 }
 
-export default function AgentDashboard() {
+function AgentDashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialTicketId = searchParams.get('ticketId');
@@ -309,5 +309,13 @@ export default function AgentDashboard() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function AgentDashboard() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <AgentDashboardContent />
+    </Suspense>
   );
 }
