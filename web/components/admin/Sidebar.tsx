@@ -1,5 +1,6 @@
 'use client';
-import { LayoutDashboard, Users, Settings as SettingsIcon, Send, ShieldAlert, Briefcase, Headphones } from 'lucide-react';
+import Link from 'next/link';
+import { LayoutDashboard, Users, Settings as SettingsIcon, Send, ShieldAlert, Briefcase, Headphones, MessageSquare } from 'lucide-react';
 
 export default function Sidebar({ tab, setTab }: { tab: string, setTab: (t: any) => void }) {
     // 🔴 Removed: isOpen state and setIsOpen setter
@@ -9,6 +10,7 @@ export default function Sidebar({ tab, setTab }: { tab: string, setTab: (t: any)
         { id: 'users', icon: Users, label: 'User Management' },
         { id: 'investors', icon: Briefcase, label: 'Investors' },
         { id: 'support', icon: Headphones, label: 'Customer Care' },
+        { id: 'live_support', icon: MessageSquare, label: 'Live Support', href: '/admin/support' },
         { id: 'settings', icon: SettingsIcon, label: 'Global Settings' },
         { id: 'broadcast', icon: Send, label: 'Broadcast' },
     ];
@@ -28,23 +30,33 @@ export default function Sidebar({ tab, setTab }: { tab: string, setTab: (t: any)
             </h1>
             
             <nav className="flex flex-col gap-2">
-                {menu.map((item) => (
-                    <button 
-                        key={item.id} 
-                        onClick={() => {
-                            setTab(item.id);
-                            // 🔴 Removed: setIsOpen(false) 
-                        }} 
-                        className={`
-                            p-3 rounded-lg flex items-center gap-3 text-sm font-medium transition-all duration-200
-                            ${tab === item.id 
-                                ? 'bg-slate-700 text-white shadow-md translate-x-1' 
-                                : 'text-slate-400 hover:bg-slate-700/50 hover:text-slate-200'
-                            }
-                        `}
-                    >
-                        <item.icon size={18} /> {item.label}
-                    </button>
+                {menu.map((item: any) => (
+                    item.href ? (
+                        <Link
+                            key={item.id}
+                            href={item.href}
+                            className="p-3 rounded-lg flex items-center gap-3 text-sm font-medium transition-all duration-200 text-slate-400 hover:bg-slate-700/50 hover:text-slate-200"
+                        >
+                            <item.icon size={18} /> {item.label}
+                        </Link>
+                    ) : (
+                        <button 
+                            key={item.id} 
+                            onClick={() => {
+                                setTab(item.id);
+                                // 🔴 Removed: setIsOpen(false) 
+                            }} 
+                            className={`
+                                p-3 rounded-lg flex items-center gap-3 text-sm font-medium transition-all duration-200
+                                ${tab === item.id 
+                                    ? 'bg-slate-700 text-white shadow-md translate-x-1' 
+                                    : 'text-slate-400 hover:bg-slate-700/50 hover:text-slate-200'
+                                }
+                            `}
+                        >
+                            <item.icon size={18} /> {item.label}
+                        </button>
+                    )
                 ))}
             </nav>
 
