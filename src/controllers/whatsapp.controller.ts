@@ -890,7 +890,7 @@ export const handleMessageLogic = async (
              rawText.toLowerCase() === 'stop chat' || 
              rawText.toLowerCase() === 'end support' ||
              ['leave', 'quit', 'exit', 'cancel'].includes(rawText.toLowerCase()) ||
-             (btn && btn.id === 'CMD_END_CHAT');
+             (btn && (btn.id === 'CMD_END_CHAT' || btn.id === 'END_CHAT'));
 
         if (isEndCmd) {
              await supportService.endTicketByUser(from);
@@ -898,14 +898,26 @@ export const handleMessageLogic = async (
              return;
         }
 
+        // Clean text for support chat if it's a button
+        let supportText = rawText;
+        if (rawText.startsWith('__BTN__:')) {
+             // __BTN__:ID:TITLE
+             const parts = rawText.split(':');
+             if (parts.length >= 3) {
+                 supportText = parts.slice(2).join(':') || parts[1]; // Use Title, fallback to ID
+             } else {
+                 supportText = parts[1] || rawText;
+             }
+        }
+
         // Safety Valve: detailed warning if they try to use bot commands
-        if (/^(sold|stock|help|menu|report|receipt|inv|create|list|update)/i.test(rawText)) {
+        if (/^(sold|stock|help|menu|report|receipt|inv|create|list|update)/i.test(supportText)) {
             await queueOutboundMessage(from, `⚠️ You are in a support chat. To use the bot, type *'end chat'* first.`);
         }
 
         // If it's a "Close Ticket" command from user, maybe handle it? 
         // For now, pass everything to support service.
-        await supportService.handleInboundMessage(from, rawText, messageId, profileName);
+        await supportService.handleInboundMessage(from, supportText, messageId, profileName);
         return; 
     }
 
