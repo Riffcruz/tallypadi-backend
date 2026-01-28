@@ -3,7 +3,7 @@ import axios from 'axios';
 import { SupportAgent } from '../models/supportAgent.model';
 import { SupportTicket, ISupportTicket } from '../models/supportTicket.model';
 import { SupportMessage } from '../models/supportMessage.model';
-import { sendPushNotification } from './push.service';
+import { sendPushNotification, sendGlobalPushNotification } from './push.service';
 import { sendWhatsAppText, sendWhatsAppButtons } from './whatsapp.service';
 import { getIO } from '../socket';
 import { env } from '../config/env';
@@ -76,11 +76,7 @@ export const supportService = {
         message: msg 
       });
       
-      await sendPushNotification(agentIdStr, {
-        title: `New Message: ${from}`,
-        body: text.substring(0, 50),
-        data: { ticketId: ticket._id }
-      });
+      // Removed individual push - promoting to Global below
     } else {
         // If queued, still emit to ticket room
         safeEmit(`ticket:${ticket._id}`, 'ticket:message', { 
@@ -93,6 +89,13 @@ export const supportService = {
     safeEmit('agents', 'ticket:message', { 
         ticketId: ticket._id, 
         message: msg 
+    });
+
+    // GLOBAL PUSH: Notify all agents/admins of the new message
+    await sendGlobalPushNotification({
+        title: `New Message: ${from}`,
+        body: text.substring(0, 50),
+        data: { ticketId: ticket._id }
     });
 
     // AUTO-REPLY with "End Chat" button

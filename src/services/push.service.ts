@@ -39,3 +39,32 @@ export const sendPushNotification = async (agentId: string, payload: { title: st
     console.error('Error sending push notification:', error);
   }
 };
+
+export const sendGlobalPushNotification = async (payload: { title: string; body: string; data?: any }) => {
+  try {
+    // Send to ALL subscriptions (Admins + Agents)
+    const subscriptions = await PushSubscription.find({});
+    if (!subscriptions.length) return;
+
+    const notification = JSON.stringify(payload);
+
+    const promises = subscriptions.map(async (sub) => {
+      try {
+        await webpush.sendNotification({
+          endpoint: sub.endpoint,
+          keys: sub.keys
+        }, notification);
+      } catch (err: any) {
+        if (err.statusCode === 410 || err.statusCode === 404) {
+          await PushSubscription.deleteOne({ _id: sub._id });
+        } else {
+          console.error('Push error for global sub:', sub._id, err);
+        }
+      }
+    });
+
+    await Promise.all(promises);
+  } catch (error) {
+    console.error('Error sending global push notification:', error);
+  }
+};
