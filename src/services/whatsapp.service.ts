@@ -52,10 +52,12 @@ export async function sendWhatsAppText(to: string, message: string) {
     text: { body: safeText(message, 4096) },
   };
 
-  await axios.post(messagesUrl(), payload, {
+  const res = await axios.post(messagesUrl(), payload, {
     headers: authHeaders(),
     timeout: 20_000,
   });
+
+  return res.data?.messages?.[0]?.id;
 }
 
 // ============================================================

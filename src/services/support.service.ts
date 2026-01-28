@@ -4,12 +4,11 @@ import { SupportAgent } from '../models/supportAgent.model';
 import { SupportTicket, ISupportTicket } from '../models/supportTicket.model';
 import { SupportMessage } from '../models/supportMessage.model';
 import { sendPushNotification } from './push.service';
+import { sendWhatsAppText } from './whatsapp.service';
 import { getIO } from '../socket';
 import { env } from '../config/env';
 
 const MAX_ACTIVE_TICKETS = Number(process.env.MAX_ACTIVE_TICKETS_PER_AGENT || 1);
-const WHATSAPP_SUPPORT_TOKEN = process.env.WHATSAPP_SUPPORT_TOKEN || process.env.WHATSAPP_TOKEN;
-const SUPPORT_PHONE_NUMBER_ID = process.env.SUPPORT_PHONE_NUMBER_ID;
 
 
 // Helper to safely emit socket events
@@ -128,24 +127,8 @@ export const supportService = {
     // Send to WhatsApp
     let waMsgId = '';
     try {
-      if (!SUPPORT_PHONE_NUMBER_ID) throw new Error('SUPPORT_PHONE_NUMBER_ID not set');
-      
-      const res = await axios.post(
-        `https://graph.facebook.com/v20.0/${SUPPORT_PHONE_NUMBER_ID}/messages`,
-        {
-          messaging_product: 'whatsapp',
-          to: ticket.userPhone,
-          type: 'text',
-          text: { body: text }
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${WHATSAPP_SUPPORT_TOKEN}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-      waMsgId = res.data.messages?.[0]?.id;
+      const resId = await sendWhatsAppText(ticket.userPhone, text);
+      waMsgId = resId || '';
     } catch (err: any) {
       console.error('WhatsApp Send Error:', err.response?.data || err.message);
       throw new Error('Failed to send WhatsApp message');
@@ -250,6 +233,52 @@ export const supportService = {
     }
 
     return ticket;
+  },
+
+  // 7. Admin Delete Ticket
+  async deleteTicket(ticketId: string) {
+    const ticket = await SupportTicket.findById(ticketId);
+    if (!ticket) return; // Already gone
+
+    // Decrement agent count if active
+    if (ticket.assignedAgentId && (ticket.status === 'ASSIGNED' || ticket.status === 'ACTIVE')) {
+        await SupportAgent.findByIdAndUpdate(ticket.assignedAgentId, { $inc: { activeTicketsCount: -1 } });
+        safeEmit(`agent:${ticket.assignedAgentId}`, 'ticket:removed', { ticketId });
+    }
+
+    await SupportMessage.deleteMany({ ticketId });
+    await SupportTicket.findByIdAndDelete(ticketId);
+  },
+
+  // 8. Admin Assign Ticket
+  async adminAssignTicket(ticketId: string, agentId: string) {
+    const ticket = await SupportTicket.findById(ticketId);
+    if (!ticket) throw new Error('Ticket not found');
+
+    const targetAgent = await SupportAgent.findById(agentId);
+    if (!targetAgent) throw new Error('Agent not found');
+
+    // Handle previous agent
+    if (ticket.assignedAgentId && String(ticket.assignedAgentId) !== agentId) {
+        if (ticket.status === 'ASSIGNED' || ticket.status === 'ACTIVE') {
+            await SupportAgent.findByIdAndUpdate(ticket.assignedAgentId, { $inc: { activeTicketsCount: -1 } });
+            safeEmit(`agent:${ticket.assignedAgentId}`, 'ticket:removed', { ticketId });
+        }
+    }
+
+    // Assign to new
+    const isNewAssignment = String(ticket.assignedAgentId) !== agentId;
+    
+    ticket.assignedAgentId = targetAgent._id as any;
+    ticket.status = 'ASSIGNED';
+    ticket.assignedAt = new Date();
+    await ticket.save();
+
+    if (isNewAssignment) {
+        await SupportAgent.findByIdAndUpdate(agentId, { $inc: { activeTicketsCount: 1 } });
+    }
+
+    safeEmit(`agent:${agentId}`, 'ticket:assigned', ticket);
   },
 
   // Helper: Assign next queued ticket to specific agent

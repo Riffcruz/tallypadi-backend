@@ -103,6 +103,27 @@ export const supportController = {
     res.json(messages);
   },
 
+  async adminDeleteTicket(req: Request, res: Response) {
+    const { ticketId } = req.params;
+    try {
+        await supportService.deleteTicket(String(ticketId));
+        res.json({ success: true });
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+  },
+
+  async adminAssignTicket(req: Request, res: Response) {
+    const { ticketId } = req.params;
+    const { agentId } = req.body;
+    try {
+        await supportService.adminAssignTicket(String(ticketId), agentId);
+        res.json({ success: true });
+    } catch (e: any) {
+        res.status(400).json({ error: e.message });
+    }
+  },
+
   // --- AGENT AUTH ---
   async login(req: Request, res: Response) {
     const { username, password } = req.body;

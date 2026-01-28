@@ -12,6 +12,8 @@ router.delete('/admin/agents/:id', adminAuth, supportController.deleteAgent);
 
 router.get('/admin/tickets', adminAuth, supportController.adminListTickets);
 router.get('/admin/tickets/:ticketId/messages', adminAuth, supportController.adminGetTicketMessages);
+router.delete('/admin/tickets/:ticketId', adminAuth, supportController.adminDeleteTicket);
+router.post('/admin/tickets/:ticketId/assign', adminAuth, supportController.adminAssignTicket);
 
 // Agent Auth
 router.post('/auth/login', supportController.login);
