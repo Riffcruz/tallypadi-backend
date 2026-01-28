@@ -28,6 +28,8 @@ router.get('/tickets', supportAgentAuth, supportController.getTickets);
 router.get('/tickets/:ticketId/messages', supportAgentAuth, supportController.getMessages);
 router.post('/tickets/:ticketId/send', supportAgentAuth, supportController.sendMessage);
 router.post('/tickets/:ticketId/close', supportAgentAuth, supportController.closeTicket);
+router.delete('/tickets/:ticketId', supportAgentAuth, supportController.agentDeleteTicket);
+router.post('/tickets/:ticketId/pickup', supportAgentAuth, supportController.agentPickupTicket);
 router.post('/tickets/:ticketId/escalate', supportAgentAuth, supportController.escalateTicket);
 
 export default router;

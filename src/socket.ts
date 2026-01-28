@@ -17,6 +17,7 @@ export const initSocket = (httpServer: HttpServer) => {
     socket.on('join_agent', (agentId: string) => {
       console.log(`🔌 Agent ${agentId} joined their room`);
       socket.join(`agent:${agentId}`);
+      socket.join('agents');
     });
 
     socket.on('disconnect', () => {

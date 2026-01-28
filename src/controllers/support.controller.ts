@@ -125,6 +125,28 @@ export const supportController = {
   },
 
   // --- AGENT AUTH ---
+  async agentDeleteTicket(req: any, res: Response) {
+    const { ticketId } = req.params;
+    try {
+        // Optional: Check if agent owns the ticket or has permission
+        // For now, allow deletion as requested
+        await supportService.deleteTicket(String(ticketId));
+        res.json({ success: true });
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+  },
+
+  async agentPickupTicket(req: any, res: Response) {
+    const { ticketId } = req.params;
+    try {
+        await supportService.pickupTicket(req.agent.id, ticketId);
+        res.json({ success: true });
+    } catch (e: any) {
+        res.status(400).json({ error: e.message });
+    }
+  },
+
   async login(req: Request, res: Response) {
     const { username, password } = req.body;
     const agent = await SupportAgent.findOne({ username });

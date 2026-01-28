@@ -44,6 +44,10 @@ export const supportService = {
       
       // Try to assign immediately
       await this.tryAssignTicket(ticket);
+
+      if (ticket.status === 'QUEUED') {
+        safeEmit('agents', 'ticket:queued', ticket);
+      }
     } else {
       ticket.lastMessageAt = new Date();
       await ticket.save();
@@ -244,6 +248,8 @@ export const supportService = {
     if (ticket.assignedAgentId && (ticket.status === 'ASSIGNED' || ticket.status === 'ACTIVE')) {
         await SupportAgent.findByIdAndUpdate(ticket.assignedAgentId, { $inc: { activeTicketsCount: -1 } });
         safeEmit(`agent:${ticket.assignedAgentId}`, 'ticket:removed', { ticketId });
+    } else if (ticket.status === 'QUEUED') {
+        safeEmit('agents', 'ticket:removed', { ticketId });
     }
 
     await SupportMessage.deleteMany({ ticketId });
@@ -278,6 +284,27 @@ export const supportService = {
         await SupportAgent.findByIdAndUpdate(agentId, { $inc: { activeTicketsCount: 1 } });
     }
 
+    safeEmit(`agent:${agentId}`, 'ticket:assigned', ticket);
+  },
+
+  async pickupTicket(agentId: string, ticketId: string) {
+    const ticket = await SupportTicket.findById(ticketId);
+    if (!ticket) throw new Error('Ticket not found');
+    if (ticket.assignedAgentId) throw new Error('Already assigned');
+    
+    const agent = await SupportAgent.findById(agentId);
+    if (!agent) throw new Error('Agent not found');
+
+    ticket.assignedAgentId = agent._id as any;
+    ticket.status = 'ASSIGNED';
+    ticket.assignedAt = new Date();
+    await ticket.save();
+    
+    await SupportAgent.findByIdAndUpdate(agentId, { $inc: { activeTicketsCount: 1 } });
+    
+    // Notify everyone it's gone from queue
+    safeEmit('agents', 'ticket:removed', { ticketId }); 
+    // Notify agent explicitly
     safeEmit(`agent:${agentId}`, 'ticket:assigned', ticket);
   },
 

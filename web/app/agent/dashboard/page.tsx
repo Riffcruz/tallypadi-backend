@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import io, { Socket } from 'socket.io-client';
 import { 
   Send, User, LogOut, MessageSquare, CheckCircle, Clock, 
-  XCircle, Bell, Phone, Search, MoreVertical, ArrowLeft
+  Trash2, Hand, Search, ArrowLeft
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 
@@ -19,6 +19,7 @@ interface Ticket {
   lastMessageAt: string;
   priority: string;
   assignedAt?: string;
+  assignedAgentId?: string;
 }
 
 interface Message {
@@ -52,12 +53,21 @@ function AgentDashboardContent() {
   const initialTicketId = searchParams.get('ticketId');
 
   const [socket, setSocket] = useState<Socket | null>(null);
-  const [tickets, setTickets] = useState<Ticket[]>([]);
+  
+  // Ticket State
+  const [myTickets, setMyTickets] = useState<Ticket[]>([]);
+  const [queueTickets, setQueueTickets] = useState<Ticket[]>([]);
+  const [viewMode, setViewMode] = useState<'MINE' | 'QUEUE'>('MINE');
+
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
+  
+  // Agent Info
   const [agentStatus, setAgentStatus] = useState('OFFLINE');
   const [agentName, setAgentName] = useState('');
+  const [agentId, setAgentId] = useState('');
+  
   const [loading, setLoading] = useState(true);
   const [showSidebar, setShowSidebar] = useState(true); // Mobile toggle
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -91,6 +101,7 @@ function AgentDashboardContent() {
             const me = await meRes.json();
             setAgentStatus(me.status);
             setAgentName(me.username);
+            setAgentId(me._id);
 
             // 2. Initialize Socket
             const baseUrl = API_URL.endsWith('/api') ? API_URL.slice(0, -4) : API_URL;
@@ -103,17 +114,35 @@ function AgentDashboardContent() {
                 socketConn.emit('join_agent', me._id);
             });
 
+            // Assigned to me (or anyone, but we filter)
             socketConn.on('ticket:assigned', (ticket: Ticket) => {
-                setTickets(prev => {
+                const isAssignedToMe = String(ticket.assignedAgentId) === String(me._id);
+                
+                if (isAssignedToMe) {
+                    setMyTickets(prev => {
+                        if (prev.find(t => t._id === ticket._id)) return prev;
+                        const audio = new Audio('/sounds/notification.mp3'); 
+                        audio.play().catch(() => {});
+                        return [ticket, ...prev];
+                    });
+                    // If it was in queue, remove it
+                    setQueueTickets(prev => prev.filter(t => t._id !== ticket._id));
+                } else {
+                    // Assigned to someone else -> Remove from Queue
+                    setQueueTickets(prev => prev.filter(t => t._id !== ticket._id));
+                }
+            });
+
+            // New ticket in Queue
+            socketConn.on('ticket:queued', (ticket: Ticket) => {
+                setQueueTickets(prev => {
                     if (prev.find(t => t._id === ticket._id)) return prev;
-                    const audio = new Audio('/sounds/notification.mp3'); 
-                    audio.play().catch(() => {});
                     return [ticket, ...prev];
                 });
             });
 
             socketConn.on('ticket:message', (data: { ticketId: string, message: Message }) => {
-                setTickets(prev => {
+                setMyTickets(prev => {
                     const others = prev.filter(t => t._id !== data.ticketId);
                     const target = prev.find(t => t._id === data.ticketId);
                     if (target) {
@@ -129,16 +158,18 @@ function AgentDashboardContent() {
             });
 
             socketConn.on('ticket:removed', (data: { ticketId: string }) => {
-                setTickets(prev => prev.filter(t => t._id !== data.ticketId));
+                setMyTickets(prev => prev.filter(t => t._id !== data.ticketId));
+                setQueueTickets(prev => prev.filter(t => t._id !== data.ticketId));
+                
                 if (selectedTicket?._id === data.ticketId) {
                     setSelectedTicket(null);
                     setMessages([]);
-                    setShowSidebar(true); // Return to list on mobile
+                    setShowSidebar(true); 
                 }
             });
 
             // 3. Fetch Tickets
-            fetchTickets(token);
+            await fetchTickets(token);
 
         } catch (e) {
             console.error('Init error', e);
@@ -162,22 +193,29 @@ function AgentDashboardContent() {
 
   // Handle URL param selection
   useEffect(() => {
-    if (initialTicketId && tickets.length > 0 && !selectedTicket) {
-        const t = tickets.find(x => x._id === initialTicketId);
-        if (t) selectTicket(t);
+    if (initialTicketId && myTickets.length > 0 && !selectedTicket) {
+        const t = myTickets.find(x => x._id === initialTicketId);
+        if (t) {
+            setViewMode('MINE');
+            selectTicket(t);
+        }
     }
-  }, [initialTicketId, tickets, selectedTicket]);
+  }, [initialTicketId, myTickets, selectedTicket]);
 
   const fetchTickets = async (token: string) => {
     try {
-      // ✅ FIX: Fetch both ASSIGNED and ACTIVE
-      const res = await fetch(`${API_URL}/support/tickets?status=ASSIGNED,ACTIVE`, { 
+      // 1. My Tickets
+      const resMine = await fetch(`${API_URL}/support/tickets?status=ASSIGNED,ACTIVE`, { 
         headers: { Authorization: `Bearer ${token}` }
       });
-      if (res.ok) {
-        const data = await res.json();
-        setTickets(data);
-      }
+      if (resMine.ok) setMyTickets(await resMine.json());
+
+      // 2. Queue Tickets
+      const resQueue = await fetch(`${API_URL}/support/tickets?status=QUEUED`, { 
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (resQueue.ok) setQueueTickets(await resQueue.json());
+
     } catch (e) { console.error(e); }
   };
 
@@ -217,7 +255,6 @@ function AgentDashboardContent() {
       setMessages(prev => prev.map(m => m._id === tempId ? realMsg : m));
     } catch (e) {
       console.error(e);
-      // Revert if failed (simplified)
     }
   };
 
@@ -232,13 +269,6 @@ function AgentDashboardContent() {
         
         if (res.ok) {
             setAgentStatus(newStatus);
-            // Update local storage just in case, though we rely on DB now
-            const infoStr = localStorage.getItem('agent_info');
-            if (infoStr) {
-                const info = JSON.parse(infoStr);
-                info.status = newStatus;
-                localStorage.setItem('agent_info', JSON.stringify(info));
-            }
         }
       } catch (e) {
           console.error(e);
@@ -250,10 +280,11 @@ function AgentDashboardContent() {
       
       const result = await Swal.fire({
           title: 'Close Ticket?',
-          text: 'This will archive the chat and remove it from your active list.',
+          text: 'This will archive the chat.',
           icon: 'warning',
           showCancelButton: true,
-          confirmButtonColor: '#d33',
+          confirmButtonColor: '#10b981',
+          cancelButtonColor: '#d33',
           confirmButtonText: 'Yes, close it'
       });
 
@@ -263,15 +294,69 @@ function AgentDashboardContent() {
             method: 'POST',
             headers: { Authorization: `Bearer ${token}` }
         });
-        setTickets(prev => prev.filter(t => t._id !== selectedTicket._id));
+        setMyTickets(prev => prev.filter(t => t._id !== selectedTicket._id));
         setSelectedTicket(null);
         setMessages([]);
-        setShowSidebar(true); // Return to list
+        setShowSidebar(true);
         Swal.fire('Closed!', 'Ticket has been closed.', 'success');
       }
   };
 
-  const filteredTickets = tickets.filter(t => t.userPhone.includes(searchTerm));
+  const deleteTicket = async () => {
+    if (!selectedTicket) return;
+    
+    const result = await Swal.fire({
+        title: 'Delete Ticket?',
+        text: 'This will permanently delete the ticket and all messages. This cannot be undone.',
+        icon: 'error',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#64748b',
+        confirmButtonText: 'Yes, DELETE it'
+    });
+
+    if (result.isConfirmed) {
+      const token = localStorage.getItem('agent_token');
+      await fetch(`${API_URL}/support/tickets/${selectedTicket._id}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` }
+      });
+      // Socket event 'ticket:removed' usually handles the UI update, but we do it optimistically too
+      setMyTickets(prev => prev.filter(t => t._id !== selectedTicket._id));
+      setQueueTickets(prev => prev.filter(t => t._id !== selectedTicket._id));
+      setSelectedTicket(null);
+      setMessages([]);
+      setShowSidebar(true);
+      Swal.fire('Deleted!', 'Ticket has been deleted.', 'success');
+    }
+  };
+
+  const pickupTicket = async () => {
+      if (!selectedTicket) return;
+      
+      const token = localStorage.getItem('agent_token');
+      try {
+          const res = await fetch(`${API_URL}/support/tickets/${selectedTicket._id}/pickup`, {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${token}` }
+          });
+          
+          if (res.ok) {
+              // Move to MINE locally (socket will also confirm)
+              const t = { ...selectedTicket, status: 'ASSIGNED', assignedAgentId: agentId };
+              setMyTickets(prev => [t, ...prev]);
+              setQueueTickets(prev => prev.filter(x => x._id !== t._id));
+              setViewMode('MINE');
+              setSelectedTicket(t); // Update selected ref
+              Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Ticket picked up!', timer: 2000, showConfirmButton: false });
+          }
+      } catch (e) {
+          console.error(e);
+      }
+  };
+
+  const activeList = viewMode === 'MINE' ? myTickets : queueTickets;
+  const filteredTickets = activeList.filter(t => t.userPhone.includes(searchTerm));
 
   if (loading) {
       return (
@@ -318,7 +403,7 @@ function AgentDashboardContent() {
            </div>
            
            {/* Status Toggle */}
-           <div className="flex p-1 bg-slate-100 rounded-xl">
+           <div className="flex p-1 bg-slate-100 rounded-xl mb-4">
                {['ONLINE', 'BUSY', 'OFFLINE'].map(status => (
                    <button
                     key={status}
@@ -334,6 +419,34 @@ function AgentDashboardContent() {
                        {status}
                    </button>
                ))}
+           </div>
+
+           {/* Tabs: MINE vs QUEUE */}
+           <div className="flex border-b border-slate-200">
+               <button 
+                onClick={() => setViewMode('MINE')}
+                className={`flex-1 pb-2 text-sm font-bold transition-colors relative ${
+                    viewMode === 'MINE' ? 'text-emerald-600' : 'text-slate-400 hover:text-slate-600'
+                }`}
+               >
+                   My Tickets
+                   {viewMode === 'MINE' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-emerald-500" />}
+                   <span className="ml-2 px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded-full text-[10px]">
+                       {myTickets.length}
+                   </span>
+               </button>
+               <button 
+                onClick={() => setViewMode('QUEUE')}
+                className={`flex-1 pb-2 text-sm font-bold transition-colors relative ${
+                    viewMode === 'QUEUE' ? 'text-emerald-600' : 'text-slate-400 hover:text-slate-600'
+                }`}
+               >
+                   Queue
+                   {viewMode === 'QUEUE' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-emerald-500" />}
+                   <span className="ml-2 px-1.5 py-0.5 bg-red-100 text-red-500 rounded-full text-[10px]">
+                       {queueTickets.length}
+                   </span>
+               </button>
            </div>
         </div>
 
@@ -355,7 +468,7 @@ function AgentDashboardContent() {
         <div className="flex-1 overflow-y-auto px-2 pb-2 space-y-1">
             {filteredTickets.length === 0 ? (
                 <div className="text-center py-10 text-slate-400 text-sm">
-                    {searchTerm ? 'No tickets match' : 'No active tickets'}
+                    {searchTerm ? 'No tickets match' : (viewMode === 'MINE' ? 'No active tickets' : 'Queue is empty')}
                 </div>
             ) : (
                 filteredTickets.map(ticket => (
@@ -415,23 +528,37 @@ function AgentDashboardContent() {
                             </div>
                         </div>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
+                        {/* Only show CLOSE if assigned to me */}
+                        {viewMode === 'MINE' && (
+                            <button 
+                                onClick={closeTicket}
+                                className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-xl text-xs md:text-sm font-bold hover:bg-slate-50 hover:border-slate-300 transition-colors"
+                            >
+                                <CheckCircle size={16} /> <span className="hidden md:inline">Resolve</span>
+                            </button>
+                        )}
+
+                        {/* Delete Button (Always available or restricted?) - Requested feature */}
                         <button 
-                            onClick={closeTicket}
+                            onClick={deleteTicket}
                             className="flex items-center gap-2 px-3 py-1.5 bg-white border border-red-200 text-red-600 rounded-xl text-xs md:text-sm font-bold hover:bg-red-50 hover:border-red-300 transition-colors"
+                            title="Delete Ticket"
                         >
-                            <CheckCircle size={16} /> <span className="hidden md:inline">Mark Resolved</span>
+                            <Trash2 size={16} />
                         </button>
                     </div>
                 </div>
 
                 {/* Messages */}
                 <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
+                    {messages.length === 0 && viewMode === 'QUEUE' && (
+                        <div className="text-center text-slate-400 text-sm mt-10">
+                            This ticket is in the queue. Pick it up to start chatting.
+                        </div>
+                    )}
                     {messages.map((msg, idx) => {
-                        // isOut = Agent Message. User requested Agent on LEFT, User on RIGHT.
                         const isOut = msg.direction === 'OUT'; 
-                        // If isOut (Agent), show on LEFT (justify-start).
-                        // If !isOut (User), show on RIGHT (justify-end).
                         const alignClass = isOut ? 'justify-start' : 'justify-end';
                         const itemsClass = isOut ? 'items-start' : 'items-end';
                         
@@ -458,24 +585,35 @@ function AgentDashboardContent() {
                     <div ref={messagesEndRef} />
                 </div>
 
-                {/* Input Area */}
+                {/* Input Area or Pickup Action */}
                 <div className="p-3 md:p-4 bg-white border-t border-slate-200">
-                    <form onSubmit={sendMessage} className="max-w-4xl mx-auto relative flex items-center gap-2 md:gap-3">
-                        <input 
-                            type="text" 
-                            className="flex-1 bg-slate-100 border-0 rounded-xl px-4 py-3 text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:bg-white transition-all placeholder:text-slate-400 text-sm md:text-base"
-                            placeholder="Type reply..."
-                            value={inputText}
-                            onChange={e => setInputText(e.target.value)}
-                        />
-                        <button 
-                            type="submit" 
-                            disabled={!inputText.trim()}
-                            className="p-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-emerald-600/20"
-                        >
-                            <Send size={20} />
-                        </button>
-                    </form>
+                    {viewMode === 'MINE' ? (
+                        <form onSubmit={sendMessage} className="max-w-4xl mx-auto relative flex items-center gap-2 md:gap-3">
+                            <input 
+                                type="text" 
+                                className="flex-1 bg-slate-100 border-0 rounded-xl px-4 py-3 text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:bg-white transition-all placeholder:text-slate-400 text-sm md:text-base"
+                                placeholder="Type reply..."
+                                value={inputText}
+                                onChange={e => setInputText(e.target.value)}
+                            />
+                            <button 
+                                type="submit" 
+                                disabled={!inputText.trim()}
+                                className="p-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-emerald-600/20"
+                            >
+                                <Send size={20} />
+                            </button>
+                        </form>
+                    ) : (
+                        <div className="max-w-4xl mx-auto flex justify-center">
+                            <button 
+                                onClick={pickupTicket}
+                                className="flex items-center gap-2 px-6 py-3 bg-emerald-600 text-white rounded-xl font-bold shadow-lg shadow-emerald-500/30 hover:bg-emerald-500 transition-all"
+                            >
+                                <Hand size={20} /> Pick Up Ticket
+                            </button>
+                        </div>
+                    )}
                 </div>
             </>
         ) : (
