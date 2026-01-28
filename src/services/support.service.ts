@@ -129,8 +129,14 @@ export const supportService = {
     // B. If Queued -> Notify ALL Active WhatsApp Agents
     if (ticket.status === 'QUEUED') {
         const activeAgents = await SupportAgent.find({ isWhatsAppActive: true, phoneNumber: { $exists: true } });
+        
+        console.log(`DEBUG: Found ${activeAgents.length} active agents for broadcast.`);
+        
         for (const ag of activeAgents) {
             if (!ag.phoneNumber) continue;
+            
+            console.log(`DEBUG: Queueing broadcast to agent ${ag.phoneNumber}`);
+            
             // Use queue for broadcasting to agents
             await queueOutboundButtons(
                 ag.phoneNumber,
