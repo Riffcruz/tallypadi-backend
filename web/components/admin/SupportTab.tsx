@@ -252,6 +252,7 @@ function AgentsManager({ adminToken }: { adminToken: string }) {
   const [editId, setEditId] = useState('');
   
   const [username, setUsername] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [password, setPassword] = useState('');
 
   useEffect(() => {
@@ -277,6 +278,7 @@ function AgentsManager({ adminToken }: { adminToken: string }) {
   const openCreate = () => {
       setIsEditing(false);
       setUsername('');
+      setPhoneNumber('');
       setPassword('');
       setEditId('');
       setShowForm(true);
@@ -285,6 +287,7 @@ function AgentsManager({ adminToken }: { adminToken: string }) {
   const openEdit = (agent: any) => {
       setIsEditing(true);
       setUsername(agent.username);
+      setPhoneNumber(agent.phoneNumber || '');
       setPassword(''); // Don't prefill password
       setEditId(agent._id);
       setShowForm(true);
@@ -293,7 +296,7 @@ function AgentsManager({ adminToken }: { adminToken: string }) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const payload: any = { username };
+      const payload: any = { username, phoneNumber };
       if (password) payload.password = password;
 
       if (isEditing) {
@@ -308,13 +311,14 @@ function AgentsManager({ adminToken }: { adminToken: string }) {
               return;
           }
           await axios.post(`${API_URL}/support/admin/agents`, 
-            { username, password },
+            { username, phoneNumber, password },
             { headers: { Authorization: `Bearer ${adminToken}` } }
           );
           Swal.fire('Success', 'Agent created successfully!', 'success');
       }
       
       setUsername('');
+      setPhoneNumber('');
       setPassword('');
       setShowForm(false);
       fetchAgents();
@@ -399,6 +403,17 @@ function AgentsManager({ adminToken }: { adminToken: string }) {
                     />
                 </div>
                 <div>
+                    <label className="block text-sm font-medium text-slate-400 mb-1">WhatsApp Phone Number</label>
+                    <input 
+                        type="text" 
+                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-emerald-500"
+                        value={phoneNumber}
+                        onChange={e => setPhoneNumber(e.target.value)}
+                        placeholder="e.g. 2348012345678"
+                    />
+                    <p className="text-xs text-slate-500 mt-1">Required for WhatsApp alerts & routing.</p>
+                </div>
+                <div>
                     <label className="block text-sm font-medium text-slate-400 mb-1">
                         {isEditing ? 'New Password (Optional)' : 'Password'}
                     </label>
@@ -447,7 +462,10 @@ function AgentsManager({ adminToken }: { adminToken: string }) {
                 ) : (
                     agents.map((agent: any) => (
                         <tr key={agent._id} className="hover:bg-slate-700/30 transition-colors">
-                            <td className="px-6 py-4 font-bold text-white">{agent.username}</td>
+                            <td className="px-6 py-4 font-bold text-white">
+                                <div>{agent.username}</div>
+                                {agent.phoneNumber && <div className="text-xs text-slate-500 font-normal">{agent.phoneNumber}</div>}
+                            </td>
                             <td className="px-6 py-4">
                                 <span className={`inline-flex items-center px-2 py-1 rounded-full text-[11px] font-extrabold border ${
                                     agent.status === 'ONLINE' ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20' :
