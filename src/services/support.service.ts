@@ -5,6 +5,7 @@ import { SupportTicket, ISupportTicket } from '../models/supportTicket.model';
 import { SupportMessage } from '../models/supportMessage.model';
 import { sendPushNotification, sendGlobalPushNotification } from './push.service';
 import { sendWhatsAppText, sendWhatsAppButtons } from './whatsapp.service';
+import { queueOutboundMessage } from './queue.service';
 import { getIO } from '../socket';
 import { env } from '../config/env';
 
@@ -110,7 +111,113 @@ export const supportService = {
         console.error('Failed to send auto-reply button', e);
     }
 
-    // Also notify admin/dashboard if we have a general room? Not required yet.
+    // ---------------------------------------------------------
+    // 🆕 WHATSAPP AGENT ROUTING
+    // ---------------------------------------------------------
+    
+    // A. If assigned to an agent who is active on WhatsApp -> Forward to Agent
+    if (ticket.assignedAgentId) {
+        const agent = await SupportAgent.findById(ticket.assignedAgentId);
+        if (agent && agent.isWhatsAppActive && agent.phoneNumber) {
+            await sendWhatsAppText(
+                agent.phoneNumber, 
+                `📩 *User:* ${text}\n(Reply to chat)`
+            );
+        }
+    }
+    
+    // B. If Queued -> Notify ALL Active WhatsApp Agents
+    if (ticket.status === 'QUEUED') {
+        const activeAgents = await SupportAgent.find({ isWhatsAppActive: true, phoneNumber: { $exists: true } });
+        for (const ag of activeAgents) {
+            if (!ag.phoneNumber) continue;
+            await sendWhatsAppButtons(
+                ag.phoneNumber,
+                `🔔 *New Ticket*\nFrom: ${from}\nMsg: "${text.substring(0, 50)}..."`,
+                [
+                    { id: `AGENT_ACCEPT_${ticket._id}`, title: 'Accept' },
+                    { id: 'AGENT_BUSY', title: 'Busy' }
+                ]
+            );
+        }
+    }
+  },
+
+  // --- NEW AGENT WHATSAPP METHODS ---
+
+  async activateAgentByPhone(phone: string) {
+      // Normalize phone if needed, but assuming exact match for now
+      const agent = await SupportAgent.findOne({ phoneNumber: phone });
+      if (!agent) return false;
+
+      agent.isWhatsAppActive = true;
+      agent.status = 'ONLINE'; // Auto set online
+      await agent.save();
+
+      await sendWhatsAppText(phone, `✅ You are now *ACTIVE*.\nYou will receive ticket alerts here.\nReply "End Chat" to close a session.`);
+      return true;
+  },
+
+  async handleAgentWhatsAppMessage(phone: string, text: string) {
+      const agent = await SupportAgent.findOne({ phoneNumber: phone });
+      if (!agent) return false; // Not an agent
+
+      const cleanText = text.trim();
+
+      // 1. Activation Command
+      if (cleanText.toLowerCase().includes('agent') && cleanText.toLowerCase().includes('active')) {
+          return this.activateAgentByPhone(phone);
+      }
+
+      // 2. End Chat Command
+      if (cleanText.toLowerCase() === 'end chat') {
+          if (agent.currentTicketId) {
+              await this.closeTicket(agent._id as any, String(agent.currentTicketId));
+              agent.currentTicketId = undefined;
+              await agent.save();
+              await sendWhatsAppText(phone, "✅ Chat ended. You are free.");
+              return true;
+          } else {
+              await sendWhatsAppText(phone, "⚠️ You are not in a chat.");
+              return true;
+          }
+      }
+
+      // 3. Proxy Chat to User
+      if (agent.currentTicketId) {
+          try {
+            await this.sendOutboundMessage(agent._id as any, String(agent.currentTicketId), text);
+            // Optionally confirm sent? No, too noisy.
+          } catch (e: any) {
+            await sendWhatsAppText(phone, `❌ Failed to send: ${e.message}`);
+          }
+          return true;
+      }
+
+      // 4. Fallback (Idle)
+      await sendWhatsAppText(phone, "💤 You are active but not in a chat. Wait for alerts.");
+      return true;
+  },
+
+  async acceptTicketViaWhatsApp(agentId: string, ticketId: string) {
+      const agent = await SupportAgent.findById(agentId);
+      if (!agent || !agent.phoneNumber) return;
+
+      try {
+          await this.pickupTicket(agentId, ticketId);
+          
+          agent.currentTicketId = ticketId as any;
+          await agent.save();
+
+          const ticket = await SupportTicket.findById(ticketId);
+          
+          await sendWhatsAppText(
+              agent.phoneNumber, 
+              `✅ You are connected to *${ticket?.userPhone}*.\n\nReply here to chat with them directly.`
+          );
+      } catch (e: any) {
+          await sendWhatsAppText(agent.phoneNumber, `❌ Could not pick up: ${e.message}`);
+      }
   },
 
   // 2. Try Assign Ticket
@@ -161,30 +268,28 @@ export const supportService = {
       await ticket.save();
     }
 
-    // Send to WhatsApp
-    let waMsgId = '';
-    try {
-      // Agent messages are just text. Auto-reply handles the "End Chat" button.
-      const resId = await sendWhatsAppText(ticket.userPhone, text);
-      waMsgId = resId || '';
-    } catch (err: any) {
-      console.error('WhatsApp Send Error:', err.response?.data || err.message);
-      throw new Error('Failed to send WhatsApp message');
-    }
-
-    // Store Message
+    // 1. Create Message Record First (Pending)
     const msg = await SupportMessage.create({
       ticketId: ticket._id,
       direction: 'OUT',
       text,
-      waMessageId: waMsgId
+      waMessageId: undefined // Will be updated by worker
     });
 
-    // Update Last Message Time
+    // 2. Queue for sending
+    // Use queue to handle rate limits (safe for bulk usage)
+    await queueOutboundMessage(
+        ticket.userPhone, 
+        text, 
+        `support_${ticket._id}_${Date.now()}`, 
+        { dbMessageId: msg._id.toString() }
+    );
+
+    // 3. Update Last Message Time
     ticket.lastMessageAt = new Date();
     await ticket.save();
 
-    // Emit real-time update
+    // 4. Emit real-time update
     safeEmit(`ticket:${ticket._id}`, 'ticket:message', { ticketId: ticket._id, message: msg });
     
     return msg;
@@ -205,6 +310,16 @@ export const supportService = {
 
     // Decrement agent count
     await SupportAgent.findByIdAndUpdate(agentId, { $inc: { activeTicketsCount: -1 } });
+
+    // Clear WhatsApp Session if active
+    const agentObj = await SupportAgent.findById(agentId);
+    if (agentObj && String(agentObj.currentTicketId) === String(ticketId)) {
+        agentObj.currentTicketId = undefined;
+        await agentObj.save();
+        if (agentObj.isWhatsAppActive && agentObj.phoneNumber) {
+            await sendWhatsAppText(agentObj.phoneNumber, "ℹ️ Ticket closed via Dashboard.");
+        }
+    }
 
     // Try to assign pending tickets to this now-free agent
     this.assignNextToAgent(agentId);
@@ -307,33 +422,27 @@ export const supportService = {
     
     if (ticket.status === 'CLOSED') throw new Error('Ticket is closed');
 
-    // Send to WhatsApp
-    let waMsgId = '';
-    try {
-        // Send as is, or maybe prepend Admin name? 
-        // "Admin: Hello..." might be better context for user.
-        // But for now, let's keep it clean or use the text provided.
-        // Let's assume the admin types what they want.
-        const resId = await sendWhatsAppText(ticket.userPhone, text);
-        waMsgId = resId || '';
-    } catch (err: any) {
-      console.error('WhatsApp Send Error:', err.response?.data || err.message);
-      throw new Error('Failed to send WhatsApp message');
-    }
-
-    // Store Message
+    // 1. Create Message Record First
     const msg = await SupportMessage.create({
       ticketId: ticket._id,
       direction: 'OUT',
       text, // Stored as is
-      waMessageId: waMsgId
+      waMessageId: undefined
     });
 
-    // Update Last Message Time
+    // 2. Queue for sending
+    await queueOutboundMessage(
+        ticket.userPhone, 
+        text, 
+        `admin_${ticket._id}_${Date.now()}`,
+        { dbMessageId: msg._id.toString() }
+    );
+
+    // 3. Update Last Message Time
     ticket.lastMessageAt = new Date();
     await ticket.save();
 
-    // Emit real-time update
+    // 4. Emit real-time update
     safeEmit(`ticket:${ticket._id}`, 'ticket:message', { ticketId: ticket._id, message: msg });
     
     // Also emit to assigned agent if any, so they see admin's message

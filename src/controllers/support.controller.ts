@@ -14,7 +14,7 @@ export const supportController = {
   // --- ADMIN ---
   async createAgent(req: Request, res: Response) {
     try {
-      const { username, password } = req.body;
+      const { username, password, phoneNumber } = req.body;
       if (!username || !password) return res.status(400).json({ error: 'Missing fields' });
 
       const salt = await bcrypt.genSalt(10);
@@ -23,6 +23,7 @@ export const supportController = {
       const agent = await SupportAgent.create({
         username,
         passwordHash,
+        phoneNumber,
         status: 'OFFLINE'
       });
 
@@ -31,7 +32,7 @@ export const supportController = {
         agent: { id: agent._id, username: agent.username } 
       });
     } catch (e: any) {
-      if (e.code === 11000) return res.status(400).json({ error: 'Username taken' });
+      if (e.code === 11000) return res.status(400).json({ error: 'Username or Phone taken' });
       res.status(500).json({ error: e.message });
     }
   },
@@ -44,10 +45,11 @@ export const supportController = {
   async updateAgent(req: Request, res: Response) {
     try {
       const { id } = req.params;
-      const { username, password } = req.body;
+      const { username, password, phoneNumber } = req.body;
 
       const updateData: any = {};
       if (username) updateData.username = username;
+      if (phoneNumber) updateData.phoneNumber = phoneNumber;
       if (password) {
         const salt = await bcrypt.genSalt(10);
         updateData.passwordHash = await bcrypt.hash(password, salt);
@@ -58,7 +60,7 @@ export const supportController = {
 
       res.json(agent);
     } catch (e: any) {
-      if (e.code === 11000) return res.status(400).json({ error: 'Username taken' });
+      if (e.code === 11000) return res.status(400).json({ error: 'Username or Phone taken' });
       res.status(500).json({ error: e.message });
     }
   },

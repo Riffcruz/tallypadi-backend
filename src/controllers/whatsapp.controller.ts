@@ -10,8 +10,9 @@ import { Transaction } from '../models/transaction.model';
 import { Debtor } from '../models/debtor.model';
 import { AdminSettings } from '../models/adminSettings.model';
 import { DailyStats } from '../models/dailyStats.model';
-import { SupportTicket } from '../models/supportTicket.model'; // ✅ Import
-import { supportService } from '../services/support.service'; // ✅ Import
+import { SupportTicket } from '../models/supportTicket.model';
+import { SupportAgent } from '../models/supportAgent.model'; // ✅ Import Agent
+import { supportService } from '../services/support.service';
 
 import { processTransaction } from '../services/transaction.service';
 import { checkSubscriptionStatus } from '../services/billing.service';
@@ -875,8 +876,34 @@ export const handleMessageLogic = async (
     const btn = parseBtnText(rawText);
 
     // =====================================================
-    // 🚨 SUPPORT INTERCEPT (High Priority)
-    // If user is in an active support session, route ALL messages to support service.
+    // 🕵️ SUPPORT AGENT INTERCEPT (High Priority)
+    // Check if sender is an Agent operating via WhatsApp
+    // =====================================================
+    
+    // 1. Handle Agent Buttons
+    if (btn && btn.id.startsWith('AGENT_')) {
+        const agent = await SupportAgent.findOne({ phoneNumber: from });
+        if (agent) {
+            if (btn.id.startsWith('AGENT_ACCEPT_')) {
+                const ticketId = btn.id.replace('AGENT_ACCEPT_', '');
+                await supportService.acceptTicketViaWhatsApp(String(agent._id), ticketId);
+            } else if (btn.id === 'AGENT_BUSY') {
+                // Just silent ack or mark busy status?
+                // await supportService.setAgentStatus(agent._id, 'BUSY'); 
+                await queueOutboundMessage(from, "👍 Marked busy for now.");
+            }
+            return;
+        }
+    }
+
+    // 2. Handle Agent Chat / Commands
+    // This returns true if `from` was found in SupportAgent table and processed
+    const isAgentAction = await supportService.handleAgentWhatsAppMessage(from, rawText);
+    if (isAgentAction) return;
+
+
+    // =====================================================
+    // 🚨 SUPPORT USER INTERCEPT (User seeking help)
     // =====================================================
     const activeTicket = await SupportTicket.findOne({
         userPhone: from,

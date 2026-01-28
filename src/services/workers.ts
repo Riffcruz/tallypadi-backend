@@ -8,6 +8,7 @@ import { generateInvoicePdf } from './invoice.pdf.service';
 import fs from 'fs';
 import path from 'path';
 import { User } from '../models/user.model';
+import { SupportMessage } from '../models/supportMessage.model';
 
 export const replyWorker = new Worker(
   'outbound-replies',
@@ -15,8 +16,16 @@ export const replyWorker = new Worker(
     console.log('📌 Reply job:', job.name, job.data?.phoneNumber);
 
     if (job.name === 'send-text') {
-      const { phoneNumber, message } = job.data;
-      await sendWhatsAppText(phoneNumber, message);
+      const { phoneNumber, message, dbMessageId } = job.data;
+      const waId = await sendWhatsAppText(phoneNumber, message);
+      
+      if (dbMessageId && waId) {
+        try {
+          await SupportMessage.findByIdAndUpdate(dbMessageId, { waMessageId: waId });
+        } catch (e) {
+          console.error('Failed to update SupportMessage with waId', e);
+        }
+      }
       return;
     }
 
