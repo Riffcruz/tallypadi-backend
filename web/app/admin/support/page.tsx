@@ -113,7 +113,32 @@ function AdminSupportContent() {
     };
   }, []);
 
-  // Poll messages if ticket selected (Admin Specific Workaround)
+  // Socket: Join Ticket Room & Listen
+  useEffect(() => {
+      if (!socket) return;
+      
+      const onMessage = (data: { ticketId: string, message: Message }) => {
+          if (selectedTicketRef.current?._id === data.ticketId) {
+              setMessages(prev => [...prev, data.message]);
+              scrollToBottom();
+          }
+      };
+
+      socket.on('ticket:message', onMessage);
+
+      return () => {
+          socket.off('ticket:message', onMessage);
+      };
+  }, [socket]);
+
+  // Join Room when ticket selected
+  useEffect(() => {
+    if (socket && selectedTicket) {
+        socket.emit('join_ticket', selectedTicket._id);
+    }
+  }, [socket, selectedTicket]);
+
+  // Poll messages (Backup)
   useEffect(() => {
       let interval: NodeJS.Timeout;
       if (selectedTicket) {

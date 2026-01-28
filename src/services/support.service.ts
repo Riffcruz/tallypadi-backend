@@ -65,7 +65,13 @@ export const supportService = {
     // Notify assigned agent if any
     if (ticket.assignedAgentId) {
       const agentIdStr = ticket.assignedAgentId.toString();
+      // Emit to Agent Room
       safeEmit(`agent:${agentIdStr}`, 'ticket:message', { 
+        ticketId: ticket._id, 
+        message: msg 
+      });
+      // Emit to Ticket Room (for Admin/Agent real-time)
+      safeEmit(`ticket:${ticket._id}`, 'ticket:message', { 
         ticketId: ticket._id, 
         message: msg 
       });
@@ -75,6 +81,27 @@ export const supportService = {
         body: text.substring(0, 50),
         data: { ticketId: ticket._id }
       });
+    } else {
+        // If queued, still emit to ticket room (Admin viewing queued ticket)
+        safeEmit(`ticket:${ticket._id}`, 'ticket:message', { 
+            ticketId: ticket._id, 
+            message: msg 
+        });
+    }
+
+    // AUTO-REPLY with "End Chat" button (User Convenience)
+    // Only if it's a text message (not a button reply itself, though button replies come as interactive)
+    // We want to give them the option to end the session after they speak.
+    try {
+        // Simple acknowledgement + Option to end
+        // Only if ticket is NOT closed
+        if (ticket.status !== 'CLOSED') {
+             await sendWhatsAppButtons(from, "Received. Reply coming soon.", [
+                { id: 'END_CHAT', title: 'End Chat' }
+            ]);
+        }
+    } catch (e) {
+        console.error('Failed to send auto-reply button', e);
     }
 
     // Also notify admin/dashboard if we have a general room? Not required yet.
@@ -159,6 +186,9 @@ export const supportService = {
     ticket.lastMessageAt = new Date();
     await ticket.save();
 
+    // Emit real-time update
+    safeEmit(`ticket:${ticket._id}`, 'ticket:message', { ticketId: ticket._id, message: msg });
+    
     return msg;
   },
 

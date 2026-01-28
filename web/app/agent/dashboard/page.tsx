@@ -225,6 +225,13 @@ function AgentDashboardContent() {
     } catch (e) { console.error(e); }
   };
 
+  // Join Ticket Room on Selection
+  useEffect(() => {
+    if (socket && selectedTicket) {
+        socket.emit('join_ticket', selectedTicket._id);
+    }
+  }, [socket, selectedTicket]);
+
   const selectTicket = async (ticket: Ticket) => {
     setSelectedTicket(ticket);
     setShowSidebar(false); // Mobile: Hide sidebar

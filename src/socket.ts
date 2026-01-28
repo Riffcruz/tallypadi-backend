@@ -20,6 +20,11 @@ export const initSocket = (httpServer: HttpServer) => {
       socket.join('agents');
     });
 
+    socket.on('join_ticket', (ticketId: string) => {
+      console.log(`🔌 Socket ${socket.id} joined ticket room: ticket:${ticketId}`);
+      socket.join(`ticket:${ticketId}`);
+    });
+
     socket.on('disconnect', () => {
       console.log('🔌 Agent disconnected:', socket.id);
     });
