@@ -10,6 +10,8 @@ import { Transaction } from '../models/transaction.model';
 import { Debtor } from '../models/debtor.model';
 import { AdminSettings } from '../models/adminSettings.model';
 import { DailyStats } from '../models/dailyStats.model';
+import { SupportTicket } from '../models/supportTicket.model'; // ✅ Import
+import { supportService } from '../services/support.service'; // ✅ Import
 
 import { processTransaction } from '../services/transaction.service';
 import { checkSubscriptionStatus } from '../services/billing.service';
@@ -871,6 +873,22 @@ export const handleMessageLogic = async (
   try {
     const rawText = cleanTextForSecurity(text);
     const btn = parseBtnText(rawText);
+
+    // =====================================================
+    // 🚨 SUPPORT INTERCEPT (High Priority)
+    // If user is in an active support session, route ALL messages to support service.
+    // =====================================================
+    const activeTicket = await SupportTicket.findOne({
+        userPhone: from,
+        status: { $in: ['QUEUED', 'ASSIGNED', 'ACTIVE'] }
+    });
+
+    if (activeTicket) {
+        // If it's a "Close Ticket" command from user, maybe handle it? 
+        // For now, pass everything to support service.
+        await supportService.handleInboundMessage(from, rawText, messageId, profileName);
+        return; 
+    }
 
     // --- limits ---
     let MAX_HISTORY = 5;
@@ -2164,8 +2182,10 @@ export const handleMessageLogic = async (
       }
 
       case 'SUPPORT': {
-        await queueOutboundMessage(from, "📞 *Contact Support*\n\nNeed help? Chat with us:\nhttps://wa.me/2349079963240\n\nOr email: support@tallypadi.com");
-        break;
+          await queueOutboundMessage(from, "Connecting you to a support agent... 🎧\nPlease state your issue.");
+          // Trigger inbound flow to create ticket
+          await supportService.handleInboundMessage(from, "Requesting Support", messageId, profileName);
+          break;
       }
 
       case 'UNKNOWN':
