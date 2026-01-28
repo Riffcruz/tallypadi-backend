@@ -70,7 +70,7 @@ export const supportService = {
         ticketId: ticket._id, 
         message: msg 
       });
-      // Emit to Ticket Room (for Admin/Agent real-time)
+      // Emit to Ticket Room (for Admin/Agent real-time chat)
       safeEmit(`ticket:${ticket._id}`, 'ticket:message', { 
         ticketId: ticket._id, 
         message: msg 
@@ -82,20 +82,23 @@ export const supportService = {
         data: { ticketId: ticket._id }
       });
     } else {
-        // If queued, still emit to ticket room (Admin viewing queued ticket)
+        // If queued, still emit to ticket room
         safeEmit(`ticket:${ticket._id}`, 'ticket:message', { 
             ticketId: ticket._id, 
             message: msg 
         });
     }
+    
+    // Emit to ALL agents/admins so the Ticket List updates (lastMessageAt, snippet)
+    safeEmit('agents', 'ticket:message', { 
+        ticketId: ticket._id, 
+        message: msg 
+    });
 
-    // AUTO-REPLY with "End Chat" button (User Convenience)
-    // Only if it's a text message (not a button reply itself, though button replies come as interactive)
-    // We want to give them the option to end the session after they speak.
+    // AUTO-REPLY with "End Chat" button
     try {
-        // Simple acknowledgement + Option to end
-        // Only if ticket is NOT closed
-        if (ticket.status !== 'CLOSED') {
+        // Don't reply if user said "End Chat" (handled by webhook mostly, but safety check)
+        if (ticket.status !== 'CLOSED' && text.toLowerCase() !== 'end chat') {
              await sendWhatsAppButtons(from, "Received. Reply coming soon.", [
                 { id: 'END_CHAT', title: 'End Chat' }
             ]);

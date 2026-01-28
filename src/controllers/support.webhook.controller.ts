@@ -47,29 +47,35 @@ export const handleSupportWebhook = async (req: Request, res: Response) => {
     const messageId = msg.id;
     const profileName = value.contacts?.[0]?.profile?.name;
 
-    let text = '';
-    
+    let isEndChat = false;
+
     if (msg.type === 'text') {
       text = msg.text.body;
+      if (text.trim().toLowerCase() === 'end chat') {
+          isEndChat = true;
+      }
     } else if (msg.type === 'interactive') {
       const interactive = msg.interactive;
       if (interactive.type === 'button_reply') {
         const btnId = interactive.button_reply.id;
         const btnTitle = interactive.button_reply.title;
         
-        if (btnId === 'END_CHAT') {
-            await supportService.endTicketByUser(from);
-            return res.sendStatus(200);
+        if (btnId === 'END_CHAT' || btnTitle.trim().toLowerCase() === 'end chat') {
+            isEndChat = true;
         }
         
-        text = btnTitle; // Treat button click as text message for chat history
+        text = btnTitle; 
       } else {
          text = '[Interactive Message]';
       }
     } else {
-      // Handle other types as text fallback
       text = `[${msg.type.toUpperCase()}]`; 
       if (msg.caption) text += ` ${msg.caption}`;
+    }
+
+    if (isEndChat) {
+        await supportService.endTicketByUser(from);
+        return res.sendStatus(200);
     }
 
     // Process

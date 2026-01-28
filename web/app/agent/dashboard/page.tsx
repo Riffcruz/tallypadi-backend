@@ -149,13 +149,17 @@ function AgentDashboardContent() {
 
             socketConn.on('ticket:message', (data: { ticketId: string, message: Message }) => {
                 setMyTickets(prev => {
+                    const targetIndex = prev.findIndex(t => t._id === data.ticketId);
+                    if (targetIndex === -1) return prev;
+
+                    const updatedTicket = { 
+                        ...prev[targetIndex], 
+                        lastMessageAt: data.message.timestamp || new Date().toISOString() 
+                    };
+                    
                     const others = prev.filter(t => t._id !== data.ticketId);
-                    const target = prev.find(t => t._id === data.ticketId);
-                    if (target) {
-                        target.lastMessageAt = new Date().toISOString();
-                        return [target, ...others];
-                    }
-                    return prev;
+                    // Move to top
+                    return [updatedTicket, ...others];
                 });
 
                 if (selectedTicketRef.current?._id === data.ticketId) {

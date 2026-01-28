@@ -117,28 +117,13 @@ function AdminSupportContent() {
 
             socketConn.on('connect', () => {
                 console.log('Admin Socket connected');
-                // Admin might join a specific room if we had one, but 'agents' room receives general updates
-                // Or we can rely on polling + specific ticket rooms?
-                // For now, let's just listen. 
-                // Since we don't have an "admin" room in backend explicitly emitting everything, 
-                // we might miss some events unless we join 'agents' or similar.
-                // But admin auth usually doesn't have an agentId.
-                // Let's rely on fetching mostly, or maybe modify backend to emit to 'admins'?
-                // For this prototype, real-time might be limited to the OPEN ticket if we join it?
-                // Actually, let's try to join 'agents' room effectively by emitting 'join_agent' with a fake ID? No.
+                // Join 'agents' room to receive global ticket updates (list view)
+                socketConn.emit('join_agent', 'ADMIN_VIEWER');
             });
 
-            // We can manually poll or just rely on 'ticket:message' if it was broadcasted globally.
-            // Currently `ticket:message` is emitted to `agent:{id}`.
-            // Admin won't receive it unless we change backend.
-            // However, `supportService` emits `ticket:queued` to `agents` room.
-            
-            // WORKAROUND: For real-time chat in Admin, we need to poll messages or update backend.
-            // For now, I'll poll messages when a ticket is selected every 3 seconds. 
-            // It's not "true" socket real-time but it works for "getting real time update" requirement if backend changes are risky.
-            // BUT, I can check if I can emit to a global room.
-            
-            await fetchTickets();
+            // ... (keep listeners)
+
+            // 3. Fetch Tickets
         } catch (e) {
             console.error(e);
         } finally {
@@ -158,10 +143,27 @@ function AdminSupportContent() {
       if (!socket) return;
       
       const onMessage = (data: { ticketId: string, message: Message }) => {
+          // 1. Update Chat View
           if (selectedTicketRef.current?._id === data.ticketId) {
               setMessages(prev => [...prev, data.message]);
               scrollToBottom();
           }
+
+          // 2. Update List View (Real-time)
+          setTickets(prev => {
+              const targetIndex = prev.findIndex(t => t._id === data.ticketId);
+              if (targetIndex === -1) return prev; // Ticket not in current list (maybe filtered out)
+
+              const updatedTicket = { 
+                  ...prev[targetIndex], 
+                  lastMessageAt: data.message.timestamp 
+              };
+              
+              // Move to top
+              const newTickets = [...prev];
+              newTickets.splice(targetIndex, 1);
+              return [updatedTicket, ...newTickets];
+          });
       };
 
       socket.on('ticket:message', onMessage);
