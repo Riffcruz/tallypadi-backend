@@ -47,6 +47,7 @@ export const handleSupportWebhook = async (req: Request, res: Response) => {
     const messageId = msg.id;
     const profileName = value.contacts?.[0]?.profile?.name;
 
+    let text = '';
     let isEndChat = false;
 
     if (msg.type === 'text') {
