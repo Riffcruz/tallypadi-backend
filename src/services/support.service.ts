@@ -225,6 +225,8 @@ export const supportService = {
   async tryAssignTicket(ticket: any) {
     if (ticket.status !== 'QUEUED') return;
 
+    // Disabled auto-assignment to allow agents to accept manually
+    /*
     // Find available agent: ONLINE, activeTickets < MAX
     const agent = await SupportAgent.findOne({
       status: 'ONLINE',
@@ -249,7 +251,16 @@ export const supportService = {
         body: `User: ${ticket.userPhone}`,
         data: { ticketId: ticket._id }
       });
+
+      // ✅ NEW: Notify Agent via WhatsApp if active
+      if (agent.isWhatsAppActive && agent.phoneNumber) {
+        await queueOutboundMessage(
+            agent.phoneNumber,
+            `🔔 *New Ticket Assigned*\nUser: ${ticket.userPhone}\n\nReply "Hello" to start chatting.`
+        );
+      }
     }
+    */
   },
 
   // 3. Agent Send Message
@@ -525,6 +536,7 @@ export const supportService = {
 
   // Helper: Assign next queued ticket to specific agent
   async assignNextToAgent(agentId: string) {
+    /*
     const agent = await SupportAgent.findById(agentId);
     if (!agent || agent.status !== 'ONLINE') return;
     if (agent.activeTicketsCount >= MAX_ACTIVE_TICKETS) return;
@@ -545,6 +557,15 @@ export const supportService = {
         body: `User: ${nextTicket.userPhone}`,
         data: { ticketId: nextTicket._id }
       });
+
+      // ✅ NEW: Notify Agent via WhatsApp if active
+      if (agent.isWhatsAppActive && agent.phoneNumber) {
+        await queueOutboundMessage(
+            agent.phoneNumber,
+            `🔔 *New Ticket Assigned*\nUser: ${nextTicket.userPhone}\n\nReply "Hello" to start chatting.`
+        );
+      }
     }
+    */
   }
 };
