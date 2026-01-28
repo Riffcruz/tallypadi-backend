@@ -52,7 +52,8 @@ export const handleSupportWebhook = async (req: Request, res: Response) => {
 
     if (msg.type === 'text') {
       text = msg.text.body;
-      if (text.trim().toLowerCase() === 'end chat') {
+      const lower = text.trim().toLowerCase();
+      if (lower === 'end chat' || text.includes('__BTN__:END_CHAT')) {
           isEndChat = true;
       }
     } else if (msg.type === 'interactive') {

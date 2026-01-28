@@ -161,17 +161,9 @@ export const supportService = {
     // Send to WhatsApp
     let waMsgId = '';
     try {
-      if (text.length <= 1000) {
-        // Use buttons
-        const resId = await sendWhatsAppButtons(ticket.userPhone, text, [
-            { id: 'END_CHAT', title: 'End Chat' }
-        ]);
-        waMsgId = resId || '';
-      } else {
-        // Fallback to text
-        const resId = await sendWhatsAppText(ticket.userPhone, text);
-        waMsgId = resId || '';
-      }
+      // Agent messages are just text. Auto-reply handles the "End Chat" button.
+      const resId = await sendWhatsAppText(ticket.userPhone, text);
+      waMsgId = resId || '';
     } catch (err: any) {
       console.error('WhatsApp Send Error:', err.response?.data || err.message);
       throw new Error('Failed to send WhatsApp message');
