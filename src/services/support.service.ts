@@ -4,8 +4,8 @@ import { SupportAgent } from '../models/supportAgent.model';
 import { SupportTicket, ISupportTicket } from '../models/supportTicket.model';
 import { SupportMessage } from '../models/supportMessage.model';
 import { sendPushNotification, sendGlobalPushNotification } from './push.service';
-import { sendWhatsAppText, sendWhatsAppButtons } from './whatsapp.service';
-import { queueOutboundMessage } from './queue.service';
+import { sendWhatsAppText } from './whatsapp.service';
+import { queueOutboundMessage, queueOutboundButtons } from './queue.service';
 import { getIO } from '../socket';
 import { env } from '../config/env';
 
@@ -103,7 +103,7 @@ export const supportService = {
     try {
         // Don't reply if user said "End Chat" (handled by webhook mostly, but safety check)
         if (ticket.status !== 'CLOSED' && text.toLowerCase() !== 'end chat') {
-             await sendWhatsAppButtons(from, "Received. Reply coming soon.", [
+             await queueOutboundButtons(from, "Received. Reply coming soon.", [
                 { id: 'END_CHAT', title: 'End Chat' }
             ]);
         }
@@ -119,7 +119,7 @@ export const supportService = {
     if (ticket.assignedAgentId) {
         const agent = await SupportAgent.findById(ticket.assignedAgentId);
         if (agent && agent.isWhatsAppActive && agent.phoneNumber) {
-            await sendWhatsAppText(
+            await queueOutboundMessage(
                 agent.phoneNumber, 
                 `📩 *User:* ${text}\n(Reply to chat)`
             );
@@ -131,7 +131,8 @@ export const supportService = {
         const activeAgents = await SupportAgent.find({ isWhatsAppActive: true, phoneNumber: { $exists: true } });
         for (const ag of activeAgents) {
             if (!ag.phoneNumber) continue;
-            await sendWhatsAppButtons(
+            // Use queue for broadcasting to agents
+            await queueOutboundButtons(
                 ag.phoneNumber,
                 `🔔 *New Ticket*\nFrom: ${from}\nMsg: "${text.substring(0, 50)}..."`,
                 [
@@ -154,7 +155,7 @@ export const supportService = {
       agent.status = 'ONLINE'; // Auto set online
       await agent.save();
 
-      await sendWhatsAppText(phone, `✅ You are now *ACTIVE*.\nYou will receive ticket alerts here.\nReply "End Chat" to close a session.`);
+      await queueOutboundMessage(phone, `✅ You are now *ACTIVE*.\nYou will receive ticket alerts here.\nReply "End Chat" to close a session.`);
       return true;
   },
 
@@ -175,10 +176,10 @@ export const supportService = {
               await this.closeTicket(agent._id as any, String(agent.currentTicketId));
               agent.currentTicketId = undefined;
               await agent.save();
-              await sendWhatsAppText(phone, "✅ Chat ended. You are free.");
+              await queueOutboundMessage(phone, "✅ Chat ended. You are free.");
               return true;
           } else {
-              await sendWhatsAppText(phone, "⚠️ You are not in a chat.");
+              await queueOutboundMessage(phone, "⚠️ You are not in a chat.");
               return true;
           }
       }
@@ -189,13 +190,13 @@ export const supportService = {
             await this.sendOutboundMessage(agent._id as any, String(agent.currentTicketId), text);
             // Optionally confirm sent? No, too noisy.
           } catch (e: any) {
-            await sendWhatsAppText(phone, `❌ Failed to send: ${e.message}`);
+            await queueOutboundMessage(phone, `❌ Failed to send: ${e.message}`);
           }
           return true;
       }
 
       // 4. Fallback (Idle)
-      await sendWhatsAppText(phone, "💤 You are active but not in a chat. Wait for alerts.");
+      await queueOutboundMessage(phone, "💤 You are active but not in a chat. Wait for alerts.");
       return true;
   },
 
@@ -211,12 +212,12 @@ export const supportService = {
 
           const ticket = await SupportTicket.findById(ticketId);
           
-          await sendWhatsAppText(
+          await queueOutboundMessage(
               agent.phoneNumber, 
               `✅ You are connected to *${ticket?.userPhone}*.\n\nReply here to chat with them directly.`
           );
       } catch (e: any) {
-          await sendWhatsAppText(agent.phoneNumber, `❌ Could not pick up: ${e.message}`);
+          await queueOutboundMessage(agent.phoneNumber, `❌ Could not pick up: ${e.message}`);
       }
   },
 
@@ -317,7 +318,7 @@ export const supportService = {
         agentObj.currentTicketId = undefined;
         await agentObj.save();
         if (agentObj.isWhatsAppActive && agentObj.phoneNumber) {
-            await sendWhatsAppText(agentObj.phoneNumber, "ℹ️ Ticket closed via Dashboard.");
+            await queueOutboundMessage(agentObj.phoneNumber, "ℹ️ Ticket closed via Dashboard.");
         }
     }
 
@@ -373,7 +374,7 @@ export const supportService = {
 
     // 1. Notify User on WhatsApp
     try {
-        await sendWhatsAppText(userPhone, "Session ended. Thank you for contacting us.");
+        await queueOutboundMessage(userPhone, "Session ended. Thank you for contacting us.");
     } catch (e) {
         console.error("Failed to send end session confirmation", e);
     }

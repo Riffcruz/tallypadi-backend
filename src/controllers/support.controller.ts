@@ -19,12 +19,15 @@ export const supportController = {
 
       const salt = await bcrypt.genSalt(10);
       const passwordHash = await bcrypt.hash(password, salt);
+      
+      const cleanPhone = phoneNumber ? String(phoneNumber).replace(/\D/g, '') : undefined;
 
       const agent = await SupportAgent.create({
         username,
         passwordHash,
-        phoneNumber,
-        status: 'OFFLINE'
+        phoneNumber: cleanPhone,
+        status: 'OFFLINE',
+        isWhatsAppActive: !!cleanPhone // Auto-activate if phone provided
       });
 
       res.status(201).json({ 
@@ -49,7 +52,11 @@ export const supportController = {
 
       const updateData: any = {};
       if (username) updateData.username = username;
-      if (phoneNumber) updateData.phoneNumber = phoneNumber;
+      if (phoneNumber) {
+          const cleanPhone = String(phoneNumber).replace(/\D/g, '');
+          updateData.phoneNumber = cleanPhone;
+          updateData.isWhatsAppActive = true; // Auto-activate if phone updated
+      }
       if (password) {
         const salt = await bcrypt.genSalt(10);
         updateData.passwordHash = await bcrypt.hash(password, salt);
