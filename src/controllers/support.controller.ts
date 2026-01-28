@@ -74,6 +74,35 @@ export const supportController = {
     }
   },
 
+  async adminListTickets(req: Request, res: Response) {
+    const { status, search } = req.query;
+    const filter: any = {};
+    
+    if (status) {
+         if (typeof status === 'string' && status.includes(',')) {
+            filter.status = { $in: status.split(',') };
+        } else {
+            filter.status = status;
+        }
+    }
+
+    if (search) {
+        filter.userPhone = { $regex: search, $options: 'i' };
+    }
+
+    const tickets = await SupportTicket.find(filter)
+        .populate('assignedAgentId', 'username')
+        .sort({ lastMessageAt: -1 });
+    
+    res.json(tickets);
+  },
+
+  async adminGetTicketMessages(req: Request, res: Response) {
+    const { ticketId } = req.params;
+    const messages = await SupportMessage.find({ ticketId }).sort({ timestamp: 1 });
+    res.json(messages);
+  },
+
   // --- AGENT AUTH ---
   async login(req: Request, res: Response) {
     const { username, password } = req.body;
@@ -125,17 +154,20 @@ export const supportController = {
     
     const filter: any = {};
     if (status) {
-        filter.status = status;
+        if (typeof status === 'string' && status.includes(',')) {
+            filter.status = { $in: status.split(',') };
+        } else {
+            filter.status = status;
+        }
     }
     
     // Agents see:
     // 1. Their own assigned/active tickets
     // 2. QUEUED tickets (optional, if they want to cherry pick, or just view count)
-    // 3. For CLOSED, maybe their own only?
     
     // Simplification: 
     // If querying QUEUED, anyone can see.
-    // If querying ASSIGNED/ACTIVE/CLOSED, filter by agentId UNLESS admin.
+    // If querying ASSIGNED/ACTIVE/CLOSED, filter by agentId.
     
     if (status === 'QUEUED') {
        // Global queue

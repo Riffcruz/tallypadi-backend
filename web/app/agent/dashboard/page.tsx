@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import io, { Socket } from 'socket.io-client';
 import { 
   Send, User, LogOut, MessageSquare, CheckCircle, Clock, 
-  XCircle, Bell, Phone, Search, MoreVertical 
+  XCircle, Bell, Phone, Search, MoreVertical, ArrowLeft
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 
@@ -28,6 +28,24 @@ interface Message {
   timestamp: string;
 }
 
+function safeDate(d: any) {
+    if (!d) return null;
+    const date = new Date(d);
+    return isNaN(date.getTime()) ? null : date;
+}
+
+function formatTime(d: any) {
+    const date = safeDate(d);
+    if (!date) return '';
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatDate(d: any) {
+    const date = safeDate(d);
+    if (!date) return '';
+    return date.toLocaleDateString();
+}
+
 function AgentDashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -41,6 +59,7 @@ function AgentDashboardContent() {
   const [agentStatus, setAgentStatus] = useState('OFFLINE');
   const [agentName, setAgentName] = useState('');
   const [loading, setLoading] = useState(true);
+  const [showSidebar, setShowSidebar] = useState(true); // Mobile toggle
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
   // Search state
@@ -57,9 +76,6 @@ function AgentDashboardContent() {
 
         try {
             // 1. Fetch Current Agent Status & Info from DB (Single Source of Truth)
-            // Note: API_URL already includes /api usually, but check login fix logic.
-            // If API_URL = https://tallypadi.com/api
-            // Endpoint = /support/me  -> https://tallypadi.com/api/support/me
             const meRes = await fetch(`${API_URL}/support/me`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
@@ -77,23 +93,6 @@ function AgentDashboardContent() {
             setAgentName(me.username);
 
             // 2. Initialize Socket
-            const newSocket = io(API_URL.replace('/api', ''), { // Socket usually connects to base URL
-                path: '/socket.io' // adjust if needed based on backend setup
-            }); 
-            // Actually, usually io(BASE_URL). If API_URL is .../api, base is ...
-            // Let's assume io(process.env.NEXT_PUBLIC_API_URL without /api)
-            // But if your socket init is standard, just io() might work if same origin, 
-            // or io('https://tallypadi.com')
-            
-            // Re-using the socket connection logic from previous file:
-            // const newSocket = io(API_URL); 
-            // This might be wrong if API_URL has /api path. 
-            
-            // Let's stick to the previous working socket logic but be careful.
-            // If previous file used `io(API_URL)`, and API_URL was `http://localhost:5000` (no /api), it worked.
-            // Now API_URL is `.../api`.
-            
-            // Let's extract base URL.
             const baseUrl = API_URL.endsWith('/api') ? API_URL.slice(0, -4) : API_URL;
             const socketConn = io(baseUrl);
 
@@ -107,8 +106,7 @@ function AgentDashboardContent() {
             socketConn.on('ticket:assigned', (ticket: Ticket) => {
                 setTickets(prev => {
                     if (prev.find(t => t._id === ticket._id)) return prev;
-                    // Play sound
-                    const audio = new Audio('/sounds/notification.mp3'); // Ensure this exists or catch error
+                    const audio = new Audio('/sounds/notification.mp3'); 
                     audio.play().catch(() => {});
                     return [ticket, ...prev];
                 });
@@ -135,6 +133,7 @@ function AgentDashboardContent() {
                 if (selectedTicket?._id === data.ticketId) {
                     setSelectedTicket(null);
                     setMessages([]);
+                    setShowSidebar(true); // Return to list on mobile
                 }
             });
 
@@ -171,7 +170,8 @@ function AgentDashboardContent() {
 
   const fetchTickets = async (token: string) => {
     try {
-      const res = await fetch(`${API_URL}/support/tickets?status=ASSIGNED`, { // Removed /api prefix logic if API_URL has it
+      // ✅ FIX: Fetch both ASSIGNED and ACTIVE
+      const res = await fetch(`${API_URL}/support/tickets?status=ASSIGNED,ACTIVE`, { 
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
@@ -183,6 +183,7 @@ function AgentDashboardContent() {
 
   const selectTicket = async (ticket: Ticket) => {
     setSelectedTicket(ticket);
+    setShowSidebar(false); // Mobile: Hide sidebar
     const token = localStorage.getItem('agent_token');
     try {
       const res = await fetch(`${API_URL}/support/tickets/${ticket._id}/messages`, {
@@ -265,6 +266,7 @@ function AgentDashboardContent() {
         setTickets(prev => prev.filter(t => t._id !== selectedTicket._id));
         setSelectedTicket(null);
         setMessages([]);
+        setShowSidebar(true); // Return to list
         Swal.fire('Closed!', 'Ticket has been closed.', 'success');
       }
   };
@@ -283,9 +285,13 @@ function AgentDashboardContent() {
   }
 
   return (
-    <div className="flex h-screen bg-white overflow-hidden font-sans text-slate-900">
+    <div className="flex h-screen bg-white overflow-hidden font-sans text-slate-900 relative">
       {/* SIDEBAR */}
-      <div className="w-80 border-r border-slate-200 flex flex-col bg-slate-50">
+      <div className={`
+        flex-col bg-slate-50 border-r border-slate-200 
+        absolute inset-0 z-20 md:static md:w-80 md:flex
+        ${showSidebar ? 'flex' : 'hidden md:flex'}
+      `}>
         {/* Agent Header */}
         <div className="p-4 bg-white border-b border-slate-200 shrink-0">
            <div className="flex items-center justify-between mb-4">
@@ -365,7 +371,7 @@ function AgentDashboardContent() {
                         <div className="flex justify-between items-start mb-1">
                             <span className="font-bold text-sm text-slate-800">{ticket.userPhone}</span>
                             <span className="text-[10px] text-slate-400">
-                                {new Date(ticket.lastMessageAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                {formatTime(ticket.lastMessageAt)}
                             </span>
                         </div>
                         <div className="flex items-center justify-between">
@@ -374,7 +380,6 @@ function AgentDashboardContent() {
                             }`}>
                                 {ticket.status}
                             </span>
-                            {/* Unread indicator could go here */}
                         </div>
                     </div>
                 ))
@@ -383,20 +388,29 @@ function AgentDashboardContent() {
       </div>
 
       {/* CHAT AREA */}
-      <div className="flex-1 flex flex-col bg-slate-50/50">
+      <div className={`
+        flex-1 flex-col bg-slate-50/50 relative
+        ${!showSidebar ? 'flex' : 'hidden md:flex'}
+      `}>
         {selectedTicket ? (
             <>
                 {/* Chat Header */}
-                <div className="bg-white px-6 py-4 border-b border-slate-200 flex justify-between items-center shadow-sm z-10">
-                    <div className="flex items-center gap-4">
+                <div className="bg-white px-4 py-3 border-b border-slate-200 flex justify-between items-center shadow-sm z-10">
+                    <div className="flex items-center gap-3">
+                        <button 
+                            onClick={() => setShowSidebar(true)}
+                            className="p-1 md:hidden text-slate-500 hover:bg-slate-100 rounded-full"
+                        >
+                            <ArrowLeft size={20} />
+                        </button>
                         <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600">
                             <User size={20} />
                         </div>
                         <div>
-                            <h2 className="font-bold text-slate-800">{selectedTicket.userPhone}</h2>
+                            <h2 className="font-bold text-slate-800 text-sm md:text-base">{selectedTicket.userPhone}</h2>
                             <div className="flex items-center gap-2 text-xs text-slate-500">
                                 <span className="flex items-center gap-1">
-                                    <Clock size={12} /> Started {new Date(selectedTicket.assignedAt || Date.now()).toLocaleDateString()}
+                                    <Clock size={12} /> Started {formatDate(selectedTicket.assignedAt || Date.now())}
                                 </span>
                             </div>
                         </div>
@@ -404,21 +418,21 @@ function AgentDashboardContent() {
                     <div className="flex items-center gap-3">
                         <button 
                             onClick={closeTicket}
-                            className="flex items-center gap-2 px-4 py-2 bg-white border border-red-200 text-red-600 rounded-xl text-sm font-bold hover:bg-red-50 hover:border-red-300 transition-colors"
+                            className="flex items-center gap-2 px-3 py-1.5 bg-white border border-red-200 text-red-600 rounded-xl text-xs md:text-sm font-bold hover:bg-red-50 hover:border-red-300 transition-colors"
                         >
-                            <CheckCircle size={16} /> Mark Resolved
+                            <CheckCircle size={16} /> <span className="hidden md:inline">Mark Resolved</span>
                         </button>
                     </div>
                 </div>
 
                 {/* Messages */}
-                <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
                     {messages.map((msg, idx) => {
                         const isOut = msg.direction === 'OUT';
                         return (
                             <div key={idx} className={`flex ${isOut ? 'justify-end' : 'justify-start'}`}>
-                                <div className={`max-w-[65%] flex flex-col ${isOut ? 'items-end' : 'items-start'}`}>
-                                    <div className={`px-5 py-3 rounded-2xl text-sm leading-relaxed shadow-sm ${
+                                <div className={`max-w-[85%] md:max-w-[65%] flex flex-col ${isOut ? 'items-end' : 'items-start'}`}>
+                                    <div className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed shadow-sm ${
                                         isOut 
                                         ? 'bg-emerald-600 text-white rounded-tr-none' 
                                         : 'bg-white text-slate-700 border border-slate-100 rounded-tl-none'
@@ -426,7 +440,7 @@ function AgentDashboardContent() {
                                         {msg.text}
                                     </div>
                                     <span className="text-[10px] text-slate-400 mt-1 px-1">
-                                        {new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                        {formatTime(msg.timestamp)}
                                     </span>
                                 </div>
                             </div>
@@ -436,19 +450,19 @@ function AgentDashboardContent() {
                 </div>
 
                 {/* Input Area */}
-                <div className="p-4 bg-white border-t border-slate-200">
-                    <form onSubmit={sendMessage} className="max-w-4xl mx-auto relative flex items-center gap-3">
+                <div className="p-3 md:p-4 bg-white border-t border-slate-200">
+                    <form onSubmit={sendMessage} className="max-w-4xl mx-auto relative flex items-center gap-2 md:gap-3">
                         <input 
                             type="text" 
-                            className="flex-1 bg-slate-100 border-0 rounded-xl px-5 py-3.5 text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:bg-white transition-all placeholder:text-slate-400"
-                            placeholder="Type your reply here..."
+                            className="flex-1 bg-slate-100 border-0 rounded-xl px-4 py-3 text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:bg-white transition-all placeholder:text-slate-400 text-sm md:text-base"
+                            placeholder="Type reply..."
                             value={inputText}
                             onChange={e => setInputText(e.target.value)}
                         />
                         <button 
                             type="submit" 
                             disabled={!inputText.trim()}
-                            className="p-3.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-emerald-600/20"
+                            className="p-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-emerald-600/20"
                         >
                             <Send size={20} />
                         </button>
@@ -456,14 +470,20 @@ function AgentDashboardContent() {
                 </div>
             </>
         ) : (
-            <div className="flex-1 flex flex-col items-center justify-center text-slate-300">
-                <div className="w-24 h-24 bg-slate-100 rounded-full flex items-center justify-center mb-6 text-slate-300">
-                    <MessageSquare size={40} />
+            <div className="flex-1 flex flex-col items-center justify-center text-slate-300 p-8 text-center">
+                <div className="w-20 h-20 md:w-24 md:h-24 bg-slate-100 rounded-full flex items-center justify-center mb-6 text-slate-300">
+                    <MessageSquare size={32} className="md:w-10 md:h-10" />
                 </div>
-                <h3 className="text-xl font-bold text-slate-400">No Ticket Selected</h3>
-                <p className="max-w-xs text-center text-sm mt-2 text-slate-400">
-                    Select a ticket from the sidebar to start chatting with the customer.
+                <h3 className="text-lg md:text-xl font-bold text-slate-400">No Ticket Selected</h3>
+                <p className="max-w-xs text-sm mt-2 text-slate-400">
+                    Select a ticket from the sidebar to start chatting.
                 </p>
+                <button 
+                    onClick={() => setShowSidebar(true)}
+                    className="mt-6 md:hidden px-6 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold shadow-lg shadow-emerald-500/30"
+                >
+                    View Tickets
+                </button>
             </div>
         )}
       </div>

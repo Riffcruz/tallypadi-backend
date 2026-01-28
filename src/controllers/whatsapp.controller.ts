@@ -884,6 +884,25 @@ export const handleMessageLogic = async (
     });
 
     if (activeTicket) {
+        // Check for User End Chat
+        const isEndCmd = 
+             rawText.toLowerCase() === 'end chat' || 
+             rawText.toLowerCase() === 'stop chat' || 
+             rawText.toLowerCase() === 'end support' ||
+             ['leave', 'quit', 'exit', 'cancel'].includes(rawText.toLowerCase()) ||
+             (btn && btn.id === 'CMD_END_CHAT');
+
+        if (isEndCmd) {
+             await supportService.endTicketByUser(from);
+             await queueOutboundMessage(from, '✅ Support chat ended. You can continue using TallyPadi normally.');
+             return;
+        }
+
+        // Safety Valve: detailed warning if they try to use bot commands
+        if (/^(sold|stock|help|menu|report|receipt|inv|create|list|update)/i.test(rawText)) {
+            await queueOutboundMessage(from, `⚠️ You are in a support chat. To use the bot, type *'end chat'* first.`);
+        }
+
         // If it's a "Close Ticket" command from user, maybe handle it? 
         // For now, pass everything to support service.
         await supportService.handleInboundMessage(from, rawText, messageId, profileName);

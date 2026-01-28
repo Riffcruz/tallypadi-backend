@@ -10,6 +10,9 @@ router.get('/admin/agents', adminAuth, supportController.listAgents);
 router.put('/admin/agents/:id', adminAuth, supportController.updateAgent);
 router.delete('/admin/agents/:id', adminAuth, supportController.deleteAgent);
 
+router.get('/admin/tickets', adminAuth, supportController.adminListTickets);
+router.get('/admin/tickets/:ticketId/messages', adminAuth, supportController.adminGetTicketMessages);
+
 // Agent Auth
 router.post('/auth/login', supportController.login);
 

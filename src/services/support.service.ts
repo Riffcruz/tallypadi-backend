@@ -223,6 +223,35 @@ export const supportService = {
     this.assignNextToAgent(fromAgentId);
   },
 
+  // 6. User End Chat
+  async endTicketByUser(userPhone: string) {
+    const ticket = await SupportTicket.findOne({
+      userPhone,
+      status: { $in: ['QUEUED', 'ASSIGNED', 'ACTIVE'] }
+    });
+
+    if (!ticket) return null;
+
+    ticket.status = 'CLOSED';
+    ticket.closedAt = new Date();
+    await ticket.save();
+
+    if (ticket.assignedAgentId) {
+       const agentIdStr = ticket.assignedAgentId.toString();
+       
+       // Decrement agent count
+       await SupportAgent.findByIdAndUpdate(agentIdStr, { $inc: { activeTicketsCount: -1 } });
+       
+       // Notify Agent to remove from UI
+       safeEmit(`agent:${agentIdStr}`, 'ticket:removed', { ticketId: ticket._id });
+       
+       // Try assign next
+       this.assignNextToAgent(agentIdStr);
+    }
+
+    return ticket;
+  },
+
   // Helper: Assign next queued ticket to specific agent
   async assignNextToAgent(agentId: string) {
     const agent = await SupportAgent.findById(agentId);
