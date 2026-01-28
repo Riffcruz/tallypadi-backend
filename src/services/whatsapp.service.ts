@@ -92,10 +92,12 @@ export async function sendWhatsAppButtons(
     },
   };
 
-  await axios.post(messagesUrl(), payload, {
+  const res = await axios.post(messagesUrl(), payload, {
     headers: authHeaders(),
     timeout: 20_000,
   });
+  
+  return res.data?.messages?.[0]?.id;
 }
 
 // ============================================================

@@ -4,7 +4,7 @@ import { SupportAgent } from '../models/supportAgent.model';
 import { SupportTicket, ISupportTicket } from '../models/supportTicket.model';
 import { SupportMessage } from '../models/supportMessage.model';
 import { sendPushNotification } from './push.service';
-import { sendWhatsAppText } from './whatsapp.service';
+import { sendWhatsAppText, sendWhatsAppButtons } from './whatsapp.service';
 import { getIO } from '../socket';
 import { env } from '../config/env';
 
@@ -131,8 +131,17 @@ export const supportService = {
     // Send to WhatsApp
     let waMsgId = '';
     try {
-      const resId = await sendWhatsAppText(ticket.userPhone, text);
-      waMsgId = resId || '';
+      if (text.length <= 1000) {
+        // Use buttons
+        const resId = await sendWhatsAppButtons(ticket.userPhone, text, [
+            { id: 'END_CHAT', title: 'End Chat' }
+        ]);
+        waMsgId = resId || '';
+      } else {
+        // Fallback to text
+        const resId = await sendWhatsAppText(ticket.userPhone, text);
+        waMsgId = resId || '';
+      }
     } catch (err: any) {
       console.error('WhatsApp Send Error:', err.response?.data || err.message);
       throw new Error('Failed to send WhatsApp message');

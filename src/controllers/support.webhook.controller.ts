@@ -51,6 +51,21 @@ export const handleSupportWebhook = async (req: Request, res: Response) => {
     
     if (msg.type === 'text') {
       text = msg.text.body;
+    } else if (msg.type === 'interactive') {
+      const interactive = msg.interactive;
+      if (interactive.type === 'button_reply') {
+        const btnId = interactive.button_reply.id;
+        const btnTitle = interactive.button_reply.title;
+        
+        if (btnId === 'END_CHAT') {
+            await supportService.endTicketByUser(from);
+            return res.sendStatus(200);
+        }
+        
+        text = btnTitle; // Treat button click as text message for chat history
+      } else {
+         text = '[Interactive Message]';
+      }
     } else {
       // Handle other types as text fallback
       text = `[${msg.type.toUpperCase()}]`; 

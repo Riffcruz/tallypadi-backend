@@ -60,6 +60,12 @@ function AgentDashboardContent() {
   const [viewMode, setViewMode] = useState<'MINE' | 'QUEUE'>('MINE');
 
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
+  const selectedTicketRef = useRef<Ticket | null>(null);
+
+  useEffect(() => {
+    selectedTicketRef.current = selectedTicket;
+  }, [selectedTicket]);
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   
@@ -152,7 +158,7 @@ function AgentDashboardContent() {
                     return prev;
                 });
 
-                if (selectedTicket?._id === data.ticketId) {
+                if (selectedTicketRef.current?._id === data.ticketId) {
                     setMessages(prev => [...prev, data.message]);
                 }
             });
@@ -161,7 +167,7 @@ function AgentDashboardContent() {
                 setMyTickets(prev => prev.filter(t => t._id !== data.ticketId));
                 setQueueTickets(prev => prev.filter(t => t._id !== data.ticketId));
                 
-                if (selectedTicket?._id === data.ticketId) {
+                if (selectedTicketRef.current?._id === data.ticketId) {
                     setSelectedTicket(null);
                     setMessages([]);
                     setShowSidebar(true); 
