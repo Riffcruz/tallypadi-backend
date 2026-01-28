@@ -124,6 +124,20 @@ export const supportController = {
     }
   },
 
+  async adminSendMessage(req: Request, res: Response) {
+      const { ticketId } = req.params;
+      const { text } = req.body;
+      // Assume admin name is in req.user or generic
+      const adminName = (req as any).user?.name || 'Admin';
+      
+      try {
+          const msg = await supportService.adminSendOutboundMessage(ticketId, text, adminName);
+          res.json(msg);
+      } catch (e: any) {
+          res.status(400).json({ error: e.message });
+      }
+  },
+
   // --- AGENT AUTH ---
   async agentDeleteTicket(req: any, res: Response) {
     const { ticketId } = req.params;

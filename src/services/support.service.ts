@@ -258,6 +258,28 @@ export const supportService = {
 
     if (!ticket) return null;
 
+    // 1. Notify User on WhatsApp
+    try {
+        await sendWhatsAppText(userPhone, "Session ended. Thank you for contacting us.");
+    } catch (e) {
+        console.error("Failed to send end session confirmation", e);
+    }
+
+    // 2. Record in Chat History
+    const endMsg = await SupportMessage.create({
+        ticketId: ticket._id,
+        direction: 'IN',
+        text: '[User ended the session]',
+        timestamp: new Date()
+    });
+    
+    // 3. Notify Agent/Room immediately (before closing)
+    safeEmit(`ticket:${ticket._id}`, 'ticket:message', { ticketId: ticket._id, message: endMsg });
+    if (ticket.assignedAgentId) {
+        safeEmit(`agent:${ticket.assignedAgentId}`, 'ticket:message', { ticketId: ticket._id, message: endMsg });
+    }
+
+    // 4. Close Ticket
     ticket.status = 'CLOSED';
     ticket.closedAt = new Date();
     await ticket.save();
@@ -268,7 +290,7 @@ export const supportService = {
        // Decrement agent count
        await SupportAgent.findByIdAndUpdate(agentIdStr, { $inc: { activeTicketsCount: -1 } });
        
-       // Notify Agent to remove from UI
+       // Notify Agent to remove from UI (or update status)
        safeEmit(`agent:${agentIdStr}`, 'ticket:removed', { ticketId: ticket._id });
        
        // Try assign next
@@ -276,6 +298,52 @@ export const supportService = {
     }
 
     return ticket;
+  },
+
+  // 9. Admin Send Message (Intervention)
+  async adminSendOutboundMessage(ticketId: string, text: string, adminName: string) {
+    const ticket = await SupportTicket.findById(ticketId);
+    if (!ticket) throw new Error('Ticket not found');
+    
+    // No assignment check - Admin can intervene
+    
+    if (ticket.status === 'CLOSED') throw new Error('Ticket is closed');
+
+    // Send to WhatsApp
+    let waMsgId = '';
+    try {
+        // Send as is, or maybe prepend Admin name? 
+        // "Admin: Hello..." might be better context for user.
+        // But for now, let's keep it clean or use the text provided.
+        // Let's assume the admin types what they want.
+        const resId = await sendWhatsAppText(ticket.userPhone, text);
+        waMsgId = resId || '';
+    } catch (err: any) {
+      console.error('WhatsApp Send Error:', err.response?.data || err.message);
+      throw new Error('Failed to send WhatsApp message');
+    }
+
+    // Store Message
+    const msg = await SupportMessage.create({
+      ticketId: ticket._id,
+      direction: 'OUT',
+      text, // Stored as is
+      waMessageId: waMsgId
+    });
+
+    // Update Last Message Time
+    ticket.lastMessageAt = new Date();
+    await ticket.save();
+
+    // Emit real-time update
+    safeEmit(`ticket:${ticket._id}`, 'ticket:message', { ticketId: ticket._id, message: msg });
+    
+    // Also emit to assigned agent if any, so they see admin's message
+    if (ticket.assignedAgentId) {
+        safeEmit(`agent:${ticket.assignedAgentId}`, 'ticket:message', { ticketId: ticket._id, message: msg });
+    }
+
+    return msg;
   },
 
   // 7. Admin Delete Ticket

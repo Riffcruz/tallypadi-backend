@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, Suspense } from 'react';
 import { useRouter } from 'next/navigation';
 import io, { Socket } from 'socket.io-client';
 import { 
-  Trash2, Search, User, Clock, MessageSquare, ArrowLeft, RefreshCw, AlertTriangle
+  Trash2, Search, User, Clock, MessageSquare, ArrowLeft, RefreshCw, AlertTriangle, Send
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 
@@ -58,6 +58,7 @@ function AdminSupportContent() {
   // UI
   const [filterStatus, setFilterStatus] = useState('ALL');
   const [searchTerm, setSearchTerm] = useState('');
+  const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(true);
   const [showSidebar, setShowSidebar] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -65,6 +66,45 @@ function AdminSupportContent() {
   useEffect(() => {
     selectedTicketRef.current = selectedTicket;
   }, [selectedTicket]);
+
+  // ... (keep init logic)
+
+  const sendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedTicket || !inputText.trim()) return;
+
+    // Optimistic UI
+    const tempId = 'temp-' + Date.now();
+    const tempMsg: Message = { 
+        _id: tempId, 
+        text: inputText, 
+        direction: 'OUT', 
+        timestamp: new Date().toISOString() 
+    };
+    setMessages(prev => [...prev, tempMsg]);
+    setInputText('');
+    scrollToBottom();
+
+    try {
+        const res = await fetch(`${API_URL}/support/admin/tickets/${selectedTicket._id}/send`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: tempMsg.text })
+        });
+        
+        if (res.ok) {
+            const realMsg = await res.json();
+            setMessages(prev => prev.map(m => m._id === tempId ? realMsg : m));
+        } else {
+             console.error('Failed to send');
+             // maybe remove tempMsg or show error
+        }
+    } catch (e) {
+        console.error(e);
+    }
+  };
+
+  // ... (keep fetch functions)
 
   // Init
   useEffect(() => {
@@ -346,12 +386,24 @@ function AdminSupportContent() {
                     <div ref={messagesEndRef} />
                 </div>
 
-                {/* Read Only Input */}
+                {/* Input Area */}
                 <div className="p-4 border-t border-slate-200 bg-white">
-                    <div className="flex items-center justify-center gap-2 text-slate-400 text-sm bg-slate-50 py-3 rounded-xl border border-dashed border-slate-300">
-                        <AlertTriangle size={16} />
-                        <span>Admin View Only. To chat, assign to an agent.</span>
-                    </div>
+                    <form onSubmit={sendMessage} className="flex items-center gap-2">
+                        <input 
+                            type="text" 
+                            className="flex-1 bg-slate-100 border-0 rounded-xl px-4 py-3 text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:bg-white transition-all placeholder:text-slate-400 text-sm"
+                            placeholder="Type reply as Admin..."
+                            value={inputText}
+                            onChange={e => setInputText(e.target.value)}
+                        />
+                        <button 
+                            type="submit" 
+                            disabled={!inputText.trim()}
+                            className="p-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-indigo-600/20"
+                        >
+                            <Send size={20} />
+                        </button>
+                    </form>
                 </div>
               </>
           ) : (
