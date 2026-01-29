@@ -186,8 +186,29 @@ export default function DashboardPage() {
   // Chat dock
   const [chatOpen, setChatOpen] = useState(false);
   const [chatSending, setChatSending] = useState(false);
+  const [showExpiredModal, setShowExpiredModal] = useState(false);
 
   const router = useRouter();
+
+  useEffect(() => {
+    if (data?.user) {
+      const u = data.user as any;
+      const status = u.subscriptionStatus;
+      const trialEnds = u.trialEndsAt ? new Date(u.trialEndsAt) : null;
+      const now = new Date();
+
+      let isExpired = false;
+      if (status === 'past_due' || status === 'cancelled' || status === 'suspended') {
+        isExpired = true;
+      } else if (status === 'trial' && trialEnds && now > trialEnds) {
+        isExpired = true;
+      }
+
+      if (isExpired) {
+        setShowExpiredModal(true);
+      }
+    }
+  }, [data]);
 
   useEffect(() => {
     const token = getCookie('tallyToken');
@@ -687,6 +708,35 @@ const topTransactions = filteredTransactions.slice(0, 6);
           </div>
         </div>
       </main>
+
+      {/* Expired Plan Modal */}
+      {showExpiredModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl border border-slate-100 text-center animate-in fade-in zoom-in duration-300">
+            <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4 border border-red-100">
+              <Clock className="w-8 h-8" />
+            </div>
+            <h2 className="text-2xl font-black text-slate-900 mb-2">Plan Expired</h2>
+            <p className="text-slate-500 font-medium mb-8 leading-relaxed">
+              Your subscription plan has expired. Please renew to continue accessing all features.
+            </p>
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={() => router.push('/payment')}
+                className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold transition-all shadow-lg shadow-emerald-200 active:scale-95"
+              >
+                Renew Plan Now
+              </button>
+              <button
+                onClick={() => setShowExpiredModal(false)}
+                className="w-full py-3.5 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-xl font-bold transition-all active:scale-95"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     
     </div>

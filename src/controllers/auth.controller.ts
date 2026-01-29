@@ -195,7 +195,7 @@ export const loginUser = async (req: Request, res: Response) => {
     const looksLikeEmail = isValidEmail(identifier);
 
     const userQuery = looksLikeEmail
-      ? { email: identifier.toLowerCase() }
+      ? { email: { $regex: `^${identifier}$`, $options: 'i' } }
       : { phoneNumber: { $in: buildPhoneCandidates(identifier) } };
 
     // select password explicitly
