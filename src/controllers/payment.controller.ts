@@ -62,7 +62,7 @@ export const startPayment = async (req: Request, res: Response) => {
     let user = await User.findOne({ phoneNumber: cleanPhone });
 
     // fallback: by email
-    if (!user) user = await User.findOne({ email: cleanEmail });
+    if (!user) user = await User.findOne({ email: { $regex: new RegExp(`^${cleanEmail}$`, 'i') } });
 
     // ✅ If found by email but has a DIFFERENT phone, block
     if (user?.phoneNumber) {

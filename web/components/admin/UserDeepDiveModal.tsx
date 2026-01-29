@@ -464,12 +464,40 @@ export default function UserDeepDiveModal({
             phoneNumber: newPhone,
           },
         }));
-        
-        // No need for success swal here as AdminDashboard handles it, 
-        // BUT AdminDashboard says: "if (!['set_expiry', 'change_plan', 'cancel'].includes(action)) { Swal... }"
-        // update_phone is not in that list, so it will show success.
       } catch (error) {
         // Error handled by parent
+      }
+    }
+  };
+
+  const handleUpdateEmail = async () => {
+    const currentEmail = details?.profile?.email || '';
+    const { value: newEmail } = await Swal.fire({
+      title: 'Update Email Address',
+      input: 'email',
+      inputValue: currentEmail,
+      inputLabel: 'Enter new email address',
+      showCancelButton: true,
+      inputValidator: (value) => {
+        if (!value) return 'You need to write something!';
+        return null;
+      }
+    });
+
+    if (newEmail && newEmail !== currentEmail) {
+      try {
+        await onAction(userId, 'update_email', { email: newEmail });
+        
+        setDetails((prev: any) => ({
+          ...prev,
+          profile: {
+            ...prev.profile,
+            email: newEmail,
+          },
+        }));
+        Swal.fire('Success', 'Email updated successfully', 'success');
+      } catch (error) {
+        // Error handled by parent/onAction
       }
     }
   };
@@ -504,9 +532,26 @@ export default function UserDeepDiveModal({
                 </button>
               </div>
               {details?.profile?.email && (
-                <p className="text-slate-500 text-xs font-mono break-words">
-                  {details.profile.email}
-                </p>
+                <div className="flex items-center gap-2">
+                   <p className="text-slate-500 text-xs font-mono break-words">
+                     {details.profile.email}
+                   </p>
+                   <button
+                     onClick={handleUpdateEmail}
+                     className="text-slate-500 hover:text-white transition"
+                     title="Edit Email"
+                   >
+                     <Edit2 size={14} />
+                   </button>
+                </div>
+              )}
+              {!details?.profile?.email && (
+                 <button
+                    onClick={handleUpdateEmail}
+                    className="text-xs text-emerald-500 hover:text-emerald-400 font-bold flex items-center gap-1 mt-1"
+                 >
+                    + Add Email
+                 </button>
               )}
             </div>
 

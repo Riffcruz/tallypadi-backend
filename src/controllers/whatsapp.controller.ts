@@ -1037,19 +1037,22 @@ export const handleMessageLogic = async (
 
       if (!isSafeCmd) {
           if (actor.registrationStage === 'EMAIL') {
+            const emailInput = rawText.trim().toLowerCase(); // ✅ Enforce lowercase
             const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-            if (!emailRegex.test(rawText)) {
+            
+            if (!emailRegex.test(emailInput)) {
               await queueOutboundMessage(from, '❌ Invalid email format.');
               return;
             }
 
-            const existingUser = await User.findOne({ email: rawText });
+            // Check if email used (case-insensitive)
+            const existingUser = await User.findOne({ email: { $regex: new RegExp(`^${emailInput}$`, 'i') } });
             if (existingUser) {
               await queueOutboundMessage(from, '❌ This email is already registered. Please provide a different email address.');
               return;
             }
 
-            actor.email = rawText;
+            actor.email = emailInput;
             actor.registrationStage = 'PASSWORD';
             await actor.save();
 
