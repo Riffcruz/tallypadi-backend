@@ -4,6 +4,7 @@ import { Inventory } from '../models/inventory.model';
 import { DailyStats } from '../models/dailyStats.model';
 import { z } from 'zod';
 import { r2Service } from '../services/r2.service';
+import { isSubActive, isTycoon } from '../utils/permissions';
 
 // Schema for updating shop settings
 const updateShopSchema = z.object({
@@ -63,15 +64,12 @@ export const getShopBySlug = async (req: Request, res: Response): Promise<any> =
 
     if (!shopOwner) return res.status(404).json({ error: 'Shop not found' });
 
-    if (shopOwner.planType !== 'TYCOON') {
+    // ✅ Enforce Plan & Subscription
+    if (!isTycoon(shopOwner) || !isSubActive(shopOwner)) {
        return res.status(404).json({ error: 'Shop is currently unavailable' });
     }
 
-    const now = new Date();
-    const isTrial = shopOwner.subscriptionStatus === 'trial';
-    const isTrialExpired = isTrial && !!shopOwner.trialEndsAt && shopOwner.trialEndsAt < now;
-    const isPlanExpired = ['past_due', 'cancelled', 'suspended'].includes(shopOwner.subscriptionStatus || '');
-    const planExpired = isTrialExpired || isPlanExpired;
+    const planExpired = !isSubActive(shopOwner); // Should be false here if we passed above, but kept for frontend prop compatibility if needed.
 
     // Fetch categories for filtering
     const categories = await Inventory.distinct('category', { user: shopOwner._id });
@@ -107,7 +105,9 @@ export const getShopProducts = async (req: Request, res: Response): Promise<any>
     if (!shopOwner) return res.status(404).json({ error: 'Shop not found' });
 
     // Ensure shop is active (Tycoon + Valid Sub)
-    if (shopOwner.planType !== 'TYCOON') return res.status(404).json({ error: 'Shop unavailable' });
+    if (!isTycoon(shopOwner) || !isSubActive(shopOwner)) {
+        return res.status(404).json({ error: 'Shop unavailable' });
+    }
     
     // Check expiration logic if needed, or allow browsing but disable cart? 
     // For now, let's allow browsing.
@@ -227,10 +227,12 @@ export const getShopProductById = async (req: Request, res: Response): Promise<a
   try {
     const { slug, productId } = req.params;
 
-    const shopOwner = await User.findOne({ shopSlug: slug }).select('_id planType');
+    const shopOwner = await User.findOne({ shopSlug: slug }).select('_id planType subscriptionStatus trialEndsAt');
     if (!shopOwner) return res.status(404).json({ error: 'Shop not found' });
 
-    if (shopOwner.planType !== 'TYCOON') return res.status(404).json({ error: 'Shop unavailable' });
+    if (!isTycoon(shopOwner) || !isSubActive(shopOwner)) {
+        return res.status(404).json({ error: 'Shop unavailable' });
+    }
 
     const product = await Inventory.findOne({ 
       _id: productId, 
