@@ -5,6 +5,7 @@ import { Transaction } from '../models/transaction.model';
 import { DailyStats } from '../models/dailyStats.model';
 import { generateInvoicePdf } from '../services/invoice.pdf.service';
 import { toUserLocalDate } from '../utils/dates';
+import { isSubActive, isTycoon } from '../utils/permissions';
 
 type AuthReq = Request & { user?: { id?: string } };
 
@@ -19,8 +20,11 @@ const checkTycoonAndRole = async (userId: string): Promise<{ allowed: boolean; e
         owner = (await User.findById(user.ownerId)) || user;
     }
 
-    const plan = String(owner.planType || '').toUpperCase();
-    if (plan !== 'TYCOON') return { allowed: false, error: 'Invoices are available on Tycoon plan only' };
+    if (!isSubActive(owner)) {
+        return { allowed: false, error: 'Subscription expired. Cannot generate invoices.' };
+    }
+
+    if (!isTycoon(owner)) return { allowed: false, error: 'Invoices are available on Tycoon plan only' };
 
     return { allowed: true, owner, actor: user };
 };

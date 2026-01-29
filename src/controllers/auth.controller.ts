@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import { User } from '../models/user.model';
 import { ProcessedMessage } from '../models/processedMessage.model';
 import { sendWhatsAppText, sendWhatsAppTemplate } from '../services/whatsapp.service';
+import { isSubActive, isTycoon } from '../utils/permissions';
 
 // --- Helpers ---
 const sanitizeString = (input: unknown): string | null => {
@@ -103,6 +104,19 @@ export const loginStaffWithOTP = async (req: Request, res: Response) => {
         
         if (user.role !== 'STAFF') {
              return res.status(403).json({ error: 'This login method is only for staff members.' });
+        }
+
+        // ✅ Check Owner Status (Plan & Subscription)
+        if (user.ownerId) {
+             const owner = await User.findById(user.ownerId);
+             if (owner) {
+                 if (!isSubActive(owner)) {
+                     return res.status(403).json({ error: "Shop owner's subscription is inactive. Staff login disabled." });
+                 }
+                 if (!isTycoon(owner)) {
+                     return res.status(403).json({ error: "Staff access is only available on the Tycoon plan." });
+                 }
+             }
         }
 
         if (user.subscriptionStatus === 'suspended') {

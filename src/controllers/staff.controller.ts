@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { User } from '../models/user.model';
 import { sendWhatsAppText } from '../services/whatsapp.service';
 import { env } from '../config/env';
+import { isSubActive, isTycoon } from '../utils/permissions';
 
 // --- Helpers ---
 const sanitizeString = (input: unknown) => typeof input === 'string' ? input.trim() : null;
@@ -11,6 +12,12 @@ export const getStaff = async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user?.id;
         if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+        const owner = await User.findById(userId);
+        if (!owner) return res.status(404).json({ error: "User not found" });
+
+        if (!isSubActive(owner)) return res.status(403).json({ error: "Subscription expired. Restore plan to manage staff." });
+        if (!isTycoon(owner)) return res.status(403).json({ error: "Staff management is a Tycoon feature." });
 
         const staffMembers = await User.find({ ownerId: userId });
 
@@ -46,8 +53,11 @@ export const addStaff = async (req: Request, res: Response) => {
         const owner = await User.findById(userId);
         if (!owner) return res.status(404).json({ error: "Owner account not found" });
 
-        // 2. CHECK PLAN: Tycoon Only
-        if (owner.planType !== 'TYCOON') {
+        // 2. CHECK PLAN: Tycoon Only & Active Sub
+        if (!isSubActive(owner)) {
+            return res.status(403).json({ error: "Subscription expired. Cannot add staff." });
+        }
+        if (!isTycoon(owner)) {
             return res.status(403).json({ error: "Staff accounts are for Tycoon Plan users only." });
         }
 
@@ -120,6 +130,9 @@ export const removeStaff = async (req: Request, res: Response) => {
         const owner = await User.findById(userId);
         if (!owner) return res.status(401).json({ error: "Unauthorized" });
 
+        if (!isSubActive(owner)) return res.status(403).json({ error: "Subscription expired." });
+        if (!isTycoon(owner)) return res.status(403).json({ error: "Tycoon plan required." });
+
         const staff = await User.findOne({ _id: id, ownerId: owner._id });
 
         if (!staff) {
@@ -152,6 +165,9 @@ export const updateStaff = async (req: Request, res: Response) => {
 
         const owner = await User.findById(userId);
         if (!owner) return res.status(401).json({ error: "Unauthorized" });
+
+        if (!isSubActive(owner)) return res.status(403).json({ error: "Subscription expired." });
+        if (!isTycoon(owner)) return res.status(403).json({ error: "Tycoon plan required." });
 
         const staff = await User.findOne({ _id: id, ownerId: owner._id });
 

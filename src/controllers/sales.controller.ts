@@ -7,6 +7,7 @@ import { getRelevantUserIds } from '../services/report.service';
 import PDFDocument from 'pdfkit';
 import path from 'path';
 import fs from 'fs';
+import { isSubActive } from '../utils/permissions';
 
 // --- Helpers ---
 const toNumber = (input: unknown): number | null => {
@@ -109,6 +110,19 @@ export const recordSale = async (req: Request | any, res: Response) => {
     // Fetch the specific user
     const user: any = await User.findById(userId); 
     if (!user) return res.status(404).json({ error: "User not found" });
+
+    // ✅ Subscription Check (Owner Level)
+    const ownerIdForSub = (user.role === 'STAFF' && user.ownerId) ? user.ownerId : user._id;
+    // We might need to fetch owner if different
+    let ownerForSub = user;
+    if (String(ownerIdForSub) !== String(user._id)) {
+        ownerForSub = await User.findById(ownerIdForSub);
+        if (!ownerForSub) return res.status(403).json({ error: "Owner account invalid" });
+    }
+
+    if (!isSubActive(ownerForSub)) {
+         return res.status(403).json({ error: "Subscription expired. Cannot record sales." });
+    }
 
     const inventoryOwnerId = (user.role === 'STAFF' && user.ownerId) ? user.ownerId : userId;
 
