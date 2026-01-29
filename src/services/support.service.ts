@@ -211,8 +211,8 @@ export const supportService = {
       }
 
       // 4. Fallback (Idle)
-      await queueOutboundMessage(phone, "💤 You are active but not in a chat. Wait for alerts.");
-      return true;
+      // ✅ Allow idle agents to use the main bot (Sales/Inventory)
+      return false;
   },
 
   async acceptTicketViaWhatsApp(agentId: string, ticketId: string) {
