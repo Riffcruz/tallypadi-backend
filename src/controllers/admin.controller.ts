@@ -319,6 +319,7 @@ export const getAllUsers = async (req: Request, res: Response) => {
         $project: {
           id: '$_id',
           businessName: 1,
+          email: 1,
           phone: '$phoneNumber',
           plan: '$planType',
           status: '$subscriptionStatus',

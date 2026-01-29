@@ -490,17 +490,24 @@ export default function UserDeepDiveModal({
               {details?.profile?.planType === 'TYCOON' && <Crown className="text-purple-400 w-5 h-5 shrink-0" />}
             </h2>
             
-            <div className="flex items-center gap-2 mt-1">
-              <p className="text-slate-400 text-xs sm:text-sm font-mono break-words">
-                {details?.profile?.phoneNumber || '—'}
-              </p>
-              <button
-                onClick={handleUpdatePhone}
-                className="text-slate-500 hover:text-white transition"
-                title="Edit Phone Number"
-              >
-                <Edit2 size={14} />
-              </button>
+            <div className="flex flex-col gap-1 mt-1">
+              <div className="flex items-center gap-2">
+                <p className="text-slate-400 text-xs sm:text-sm font-mono break-words">
+                  {details?.profile?.phoneNumber || '—'}
+                </p>
+                <button
+                  onClick={handleUpdatePhone}
+                  className="text-slate-500 hover:text-white transition"
+                  title="Edit Phone Number"
+                >
+                  <Edit2 size={14} />
+                </button>
+              </div>
+              {details?.profile?.email && (
+                <p className="text-slate-500 text-xs font-mono break-words">
+                  {details.profile.email}
+                </p>
+              )}
             </div>
 
             {details?.profile?.shopSlug && (

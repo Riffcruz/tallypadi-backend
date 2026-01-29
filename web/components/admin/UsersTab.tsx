@@ -117,6 +117,7 @@ export default function UsersTab({
                 <div className="min-w-0">
                   <p className="text-white font-extrabold truncate">{u.businessName || '—'}</p>
                   <p className="text-xs text-slate-400 font-mono break-words">{u.phone || '—'}</p>
+                  {u.email && <p className="text-xs text-slate-500 font-mono break-words">{u.email}</p>}
                 </div>
 
                 <div className="flex flex-col items-end gap-2 shrink-0">
@@ -188,6 +189,7 @@ export default function UsersTab({
                     <td className="px-6 py-4">
                       <div className="font-extrabold text-white">{u.businessName}</div>
                       <div className="text-xs text-slate-500 font-mono">{u.phone}</div>
+                      {u.email && <div className="text-xs text-slate-500 font-mono">{u.email}</div>}
                     </td>
 
                     <td className="px-6 py-4">
