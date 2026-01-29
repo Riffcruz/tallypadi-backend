@@ -679,12 +679,17 @@ export default function SettingsPage() {
                     )}
                   </div>
                 ) : (
-                  <div
-                    onClick={() => router.push('/payment')}
-                    className="inline-flex items-center gap-2 bg-red-50 border border-red-100 text-red-700 px-3 py-2 rounded-xl text-xs font-bold cursor-pointer hover:bg-red-100 transition"
-                  >
-                    <Lock size={14} />
-                    Trial Expired / Subscription Inactive
+                  <div className="mt-2 flex items-center justify-between gap-3 bg-red-50 border border-red-100 p-3 rounded-xl w-full">
+                    <div className="flex items-center gap-2 text-red-700 text-xs font-bold">
+                       <Lock size={14} />
+                       <span>Trial Expired / Subscription Inactive</span>
+                    </div>
+                    <button
+                      onClick={() => router.push('/payment')}
+                      className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition shadow-sm whitespace-nowrap"
+                    >
+                      Subscribe
+                    </button>
                   </div>
                 )}
               </div>
