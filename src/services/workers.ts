@@ -136,9 +136,12 @@ replyWorker.on('completed', (job) =>
   console.log(`✅ Reply sent: ${job.name} -> ${job.data.phoneNumber}`)
 );
 
-replyWorker.on('failed', (job, err) =>
-  console.error(`❌ Reply failed [${job?.name}] [Attempt ${job?.attemptsMade ?? 'N/A'}]: ${err.message}`)
-);
+replyWorker.on('failed', (job, err) => {
+  console.error(`❌ Reply failed [${job?.name}] [Attempt ${job?.attemptsMade ?? 'N/A'}]: ${err.message}`);
+  if (err.message.includes('400') || err.message.includes('131047')) { // Meta error code for 24h window
+     console.warn(`⚠️ TIP: If this was a notification to an agent, ensure they have messaged the bot in the last 24h (Session Window).`);
+  }
+});
 
 // ============================================================
 // WORKER: OUTBOUND BULK (SLOW / summaries / alerts)

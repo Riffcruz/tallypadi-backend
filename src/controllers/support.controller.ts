@@ -140,7 +140,7 @@ export const supportController = {
       const adminName = (req as any).user?.name || 'Admin';
       
       try {
-          const msg = await supportService.adminSendOutboundMessage(ticketId, text, adminName);
+          const msg = await supportService.adminSendOutboundMessage(String(ticketId), text, adminName);
           res.json(msg);
       } catch (e: any) {
           res.status(400).json({ error: e.message });

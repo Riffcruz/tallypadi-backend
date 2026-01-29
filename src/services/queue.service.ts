@@ -176,3 +176,14 @@ export async function queueInvoicePdf(
     { jobId: finalJobId }
   );
 }
+
+// ============================================================
+// ✅ SOCKET EVENT PUBLISHER (For Workers)
+// ============================================================
+export const publishSocketEvent = async (room: string, event: string, data: any) => {
+  try {
+    await connection.publish('socket-events', JSON.stringify({ room, event, data }));
+  } catch (e) {
+    console.error('Failed to publish socket event via Redis', e);
+  }
+};

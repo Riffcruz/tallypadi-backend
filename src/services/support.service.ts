@@ -5,7 +5,7 @@ import { SupportTicket, ISupportTicket } from '../models/supportTicket.model';
 import { SupportMessage } from '../models/supportMessage.model';
 import { sendPushNotification, sendGlobalPushNotification } from './push.service';
 import { sendWhatsAppText } from './whatsapp.service';
-import { queueOutboundMessage, queueOutboundButtons } from './queue.service';
+import { queueOutboundMessage, queueOutboundButtons, publishSocketEvent } from './queue.service';
 import { getIO } from '../socket';
 import { env } from '../config/env';
 
@@ -19,7 +19,10 @@ const safeEmit = (room: string, event: string, data: any) => {
     io.to(room).emit(event, data);
   } catch (e) {
     // Socket might not be init if running scripts/tests
-    console.warn('Socket emit failed (socket not ready?)', e);
+    // Fallback: Publish to Redis for Main Server to pick up
+    publishSocketEvent(room, event, data).catch(err => {
+        console.warn('Socket emit & Redis publish failed', err);
+    });
   }
 };
 
@@ -128,16 +131,22 @@ export const supportService = {
     
     // B. If Queued -> Notify ALL Active WhatsApp Agents
     if (ticket.status === 'QUEUED') {
-        const activeAgents = await SupportAgent.find({ isWhatsAppActive: true, phoneNumber: { $exists: true } });
+        // Relaxed query: ONLINE or isWhatsAppActive
+        const activeAgents = await SupportAgent.find({ 
+            $or: [{ isWhatsAppActive: true }, { status: 'ONLINE' }],
+            phoneNumber: { $exists: true, $ne: null } 
+        });
         
-        console.log(`DEBUG: Found ${activeAgents.length} active agents for broadcast.`);
+        console.log(`DEBUG: Found ${activeAgents.length} agents for broadcast (Online/Active).`);
         
         for (const ag of activeAgents) {
-            if (!ag.phoneNumber) continue;
+            if (!ag.phoneNumber || ag.phoneNumber.length < 5) continue;
             
             console.log(`DEBUG: Queueing broadcast to agent ${ag.phoneNumber}`);
             
             // Use queue for broadcasting to agents
+            // NOTE: This requires the agent to have an open 24h session with the bot, 
+            // OR use a Template Message. For now, we use buttons.
             await queueOutboundButtons(
                 ag.phoneNumber,
                 `🔔 *New Ticket*\nFrom: ${from}\nMsg: "${text.substring(0, 50)}..."`,
