@@ -121,7 +121,7 @@ export const supportService = {
     // A. If assigned to an agent who is active on WhatsApp -> Forward to Agent
     if (ticket.assignedAgentId) {
         const agent = await SupportAgent.findById(ticket.assignedAgentId);
-        if (agent && agent.isWhatsAppActive && agent.phoneNumber) {
+        if (agent && agent.phoneNumber && (agent.isWhatsAppActive || String(agent.currentTicketId) === String(ticket._id))) {
             await queueOutboundMessage(
                 agent.phoneNumber, 
                 `📩 *User:* ${text}\n(Reply to chat)`
@@ -223,6 +223,7 @@ export const supportService = {
           await this.pickupTicket(agentId, ticketId);
           
           agent.currentTicketId = ticketId as any;
+          agent.isWhatsAppActive = true;
           await agent.save();
 
           const ticket = await SupportTicket.findById(ticketId);
