@@ -34,7 +34,7 @@ const adminSettingsSchema = new Schema<IAdminSettings>(
     
     limits: {
       maxMessageHistory: { type: Number, default: 5 }, 
-      maxStaffAccounts: { type: Number, default: 5 }   
+      maxStaffAccounts: { type: Number, default: 10 }   
     },
     
     system: {

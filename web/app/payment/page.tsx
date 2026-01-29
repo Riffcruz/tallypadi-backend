@@ -56,7 +56,8 @@ const PLANS: PlanDetails[] = [
     price: 5000,
     features: [
       'Everything in Oga Boss',
-      'Multi-Staff Login (Up to 5)',
+      'Staff Login (Up to 10)',
+      'Online Shop Link',
       'Branded PDF Invoices',
       'Advanced Web Dashboard',
       'Priority VIP Support'

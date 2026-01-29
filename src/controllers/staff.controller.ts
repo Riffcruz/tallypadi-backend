@@ -51,10 +51,10 @@ export const addStaff = async (req: Request, res: Response) => {
             return res.status(403).json({ error: "Staff accounts are for Tycoon Plan users only." });
         }
 
-        // 3. Check Staff Limit (Max 5)
+        // 3. Check Staff Limit (Max 10)
         const staffCount = await User.countDocuments({ ownerId: owner._id });
-        if (staffCount >= 5) {
-            return res.status(403).json({ error: "Maximum staff limit (5) reached." });
+        if (staffCount >= 10) {
+            return res.status(403).json({ error: "Maximum staff limit (10) reached." });
         }
 
         // 4. Check if user already exists

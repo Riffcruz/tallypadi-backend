@@ -982,7 +982,8 @@ export default function LandingPage() {
 
               <ul className="space-y-4 mb-10 flex-1">
                 <PricingItem text="Everything in Oga Boss" light />
-                <PricingItem text="Multi-Staff Login (Up to 5)" light />
+                <PricingItem text="Staff Login (Up to 10)" light />
+                <PricingItem text="Online Shop Link" light />
                 <PricingItem text="Branded PDF Invoices & Export" light />
                 <PricingItem text="Advanced Analytics Suite" light />
                 <PricingItem text="Priority VIP Support" light />
