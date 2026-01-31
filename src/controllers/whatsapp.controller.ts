@@ -1179,7 +1179,26 @@ Oga Boss Plan: ₦3,000/month (Save significantly with the yearly plan)`;
         }
 
         if (btn.action === 'CREDIT') {
+          // 1. Mark as Credit in Transaction
           const r = await markSaleCredit(actor._id, btn.id);
+          
+          // 2. If it was an invoice (implied by context or if we want to be safe), 
+          // we should also try to ensure a Debtor record exists if the name is known.
+          // markSaleCredit returns a message asking for name if missing.
+          
+          // However, for Invoices, we likely already have the customerName on the transaction.
+          // Let's check if we can auto-link it to a debtor now.
+          const tx = await Transaction.findOne({ _id: btn.id, user: actor._id });
+          if (tx && tx.customerName && (!tx.debtorId)) {
+              // It has a name but no debtorId (common for Invoice -> Credit flow)
+              // Let's create/link the debtor record now.
+              await attachCreditNameToLatest(actor._id, shopId, tx.customerName);
+              
+              // Re-fetch to see if it worked (or trust logic)
+              await queueOutboundMessage(from, `✅ Recorded as CREDIT for *${tx.customerName}*.\nAdded to debtors list.`);
+              return;
+          }
+
           await queueOutboundMessage(from, r.msg);
           return;
         }
