@@ -70,7 +70,9 @@ export const generateInvoicePdf = async (
   });
 
   const filename = `invoice-${invoice.invoiceNumber}.pdf`;
-  const tempFilePath = path.join(process.cwd(), 'public', 'reports', filename);
+  // Use __dirname to reliably locate public/reports relative to this file
+  // src/services/invoice.pdf.service.ts -> ../../public/reports
+  const tempFilePath = path.join(__dirname, '..', '..', 'public', 'reports', filename);
   const dir = path.dirname(tempFilePath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
@@ -79,13 +81,13 @@ export const generateInvoicePdf = async (
 
   // Fonts (try proper bold if available, fallback safely)
   const notoRegular = pickFirstExisting([
-    path.join(process.cwd(), 'assets', 'fonts', 'NotoSans-Regular.ttf'),
+    path.join(__dirname, '..', '..', 'assets', 'fonts', 'NotoSans-Regular.ttf'),
     '/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf',
     '/usr/share/fonts/opentype/noto/NotoSans-Regular.ttf',
   ]);
 
   const notoBold = pickFirstExisting([
-    path.join(process.cwd(), 'assets', 'fonts', 'NotoSans-Bold.ttf'),
+    path.join(__dirname, '..', '..', 'assets', 'fonts', 'NotoSans-Bold.ttf'),
     '/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf',
     '/usr/share/fonts/opentype/noto/NotoSans-Bold.ttf',
   ]);
