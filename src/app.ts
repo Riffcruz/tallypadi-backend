@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express';
 import cors from 'cors';
 import { json } from 'express';
 import whatsappRouter from './routes/whatsapp.routes';
+import expenseRouter from './routes/expense.routes';
 import {
   loginUser,
   registerUser,
@@ -26,6 +27,7 @@ app.post('/api/register', registerUser);
 app.post('/api/auth/staff/otp/request', requestStaffLoginOTP);
 app.post('/api/auth/staff/otp/verify', loginStaffWithOTP);
 
+app.use('/api/expenses', expenseRouter);
 app.use('/webhook', whatsappRouter);
 
 export default app;

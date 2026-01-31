@@ -39,6 +39,7 @@ export type ParsedIntent =
   | 'HQ_STOCK_TRANSFER'
   | 'CREATE_INVOICE'
   | 'UPDATE_BANK_DETAILS'
+  | 'EXPENSE'
   | 'HELP'
   | 'UNKNOWN';
 
@@ -70,6 +71,10 @@ export interface ParsedResult {
 
     // ✅ NEW
     include_undone?: boolean; // default false unless user asks
+  };
+  expense_params?: {
+    category: string | null;
+    description: string | null;
   };
   order_params?: {
   description: string | null;
@@ -269,6 +274,7 @@ function safeParsedResult(p: any): ParsedResult {
   'HQ_STOCK_TRANSFER',
   'CREATE_INVOICE',
   'UPDATE_BANK_DETAILS',
+  'EXPENSE',
 
   'HELP',
   'UNKNOWN',
@@ -348,6 +354,10 @@ function safeParsedResult(p: any): ParsedResult {
       end_date: p?.report_params?.end_date || null,
       category_filter: p?.report_params?.category_filter || null,
       include_undone,
+    },
+    expense_params: {
+      category: typeof p?.expense_params?.category === 'string' ? sanitizeInput(p.expense_params.category) : null,
+      description: typeof p?.expense_params?.description === 'string' ? sanitizeInput(p.expense_params.description) : null,
     },
     order_params: {
       description: p?.order_params?.description || null,
@@ -1125,7 +1135,7 @@ Distinct from "Sales" (which are immediate).
 
 *** 7. OUTPUT SCHEMA ***
 {
-  "intent": "SALE|RESTOCK|SET_STOCK|DELETED_STOCK|DELETE_ALL_INVENTORY|DEFINE_PRICE|PRICE_CHECK|REPORT_SALES|REPORT_STOCK|REPORT_FULL|REPORT_DEBTS|REPORT_RECENT|DEBT_PAYMENT|CLOSE_BOOK|ADD_STAFF|DOWNLOAD_REPORT|UNDO_LAST_SALE|SETTINGS|CHANGE_LANGUAGE|SHOW_SETTINGS|CREATE_ORDER|LIST_ORDERS|UPDATE_ORDER|CANCEL_ORDER|GET_SHOP_LINK|HELP|UNKNOWN"
+  "intent": "SALE|RESTOCK|SET_STOCK|DELETED_STOCK|DELETE_ALL_INVENTORY|DEFINE_PRICE|PRICE_CHECK|REPORT_SALES|REPORT_STOCK|REPORT_FULL|REPORT_DEBTS|REPORT_RECENT|DEBT_PAYMENT|CLOSE_BOOK|ADD_STAFF|DOWNLOAD_REPORT|UNDO_LAST_SALE|SETTINGS|CHANGE_LANGUAGE|SHOW_SETTINGS|CREATE_ORDER|LIST_ORDERS|UPDATE_ORDER|CANCEL_ORDER|GET_SHOP_LINK|HQ_DASHBOARD|HQ_COMPARE_BRANCHES|HQ_STOCK_TRANSFER|CREATE_INVOICE|UPDATE_BANK_DETAILS|EXPENSE|HELP|UNKNOWN"
   "is_credit": boolean,
   "customer_name": string | null,
   "staffPhoneNumber": string | null,
@@ -1154,6 +1164,10 @@ Distinct from "Sales" (which are immediate).
     "end_date": string | null,
     "category_filter": string | null,
     "include_undone": boolean
+  },
+  "expense_params": {
+    "category": string | null,
+    "description": string | null
   },
   "order_params": {
     "description": string | null,
@@ -1226,9 +1240,21 @@ Distinct from "Sales" (which are immediate).
   customer_name = <Client Name>
   items = [{ name: "Branding Service", qty: 1, unit_price: 50000 }]
   needs_clarification = true if client name or items missing.
+
+*** 5I. EXPENSES (SPENDING) ***
+- Triggers: "Spent 5000 on fuel", "Bought fuel 2k for gen", "Transport to market 1500", "Expense 10k for shop rent", "Debit 500 airtime".
+- ACTION: Record an expense.
+- EXTRACTION RULES:
+  - total_money: MUST be extracted (Amount spent).
+  - expense_params.description: What was it for? (e.g. "fuel", "shop rent", "transport").
+  - expense_params.category: Infer a short category (e.g. "Utilities", "Transport", "Rent", "Restock" if vague).
+- Output:
+  intent = EXPENSE
+  total_money = 5000
+  expense_params = { category: "Utilities", description: "fuel for gen" }
+  needs_clarification = true if amount is missing.
+
 `;
-
-
 
 export default getSystemPrompt;
 
@@ -1287,6 +1313,7 @@ INTENT CONTEXT:
 - SET_PRICE: Setting how much an item is sold for.
 - MANAGE_STAFF: Adding a staff member number.
 - CREATE_INVOICE: Generating a PDF invoice.
+- EXPENSE: Recording money spent.
 
 Format:
 - Keep it under 3 lines.
@@ -1308,6 +1335,7 @@ Return ONLY the explanation text.
     // Fallbacks
     if (intent === 'RECORD_SALE') return "To record a sale, simply type what you sold. Example: Sold 2 rice 5000";
     if (intent === 'RECORD_INVENTORY') return "To add stock, just type it. Example: Add 20 sneakers";
+    if (intent === 'EXPENSE') return "To record expense, type it like this: 'Spent 5000 on fuel' or 'Transport 2k'";
     return "Please tell me what you want to do clearly.";
   }
 };

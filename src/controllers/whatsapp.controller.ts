@@ -13,6 +13,7 @@ import { DailyStats } from '../models/dailyStats.model';
 import { SupportTicket } from '../models/supportTicket.model';
 import { SupportAgent } from '../models/supportAgent.model'; // ✅ Import Agent
 import { supportService } from '../services/support.service';
+import { expenseService } from '../services/expense.service';
 
 import { processTransaction, deductStockForItems } from '../services/transaction.service';
 import { checkSubscriptionStatus } from '../services/billing.service';
@@ -1458,6 +1459,35 @@ Oga Boss Plan: ₦3,000/month (Save significantly with the yearly plan)`;
     // 🚦 ROUTING
     // =====================================================
     switch (parsed.intent) {
+      case 'EXPENSE': {
+        if (parsed.needs_clarification) {
+          await queueOutboundMessage(from, parsed.reply_text || 'How much did you spend and what for?');
+          break;
+        }
+
+        const amount = parsed.total_money;
+        const description = parsed.expense_params?.description || 'Expense';
+        const category = parsed.expense_params?.category || 'General';
+
+        if (!amount) {
+            await queueOutboundMessage(from, 'I need to know the amount you spent.');
+            break;
+        }
+
+        await expenseService.createExpense({
+            user: shopId,
+            amount,
+            description,
+            category,
+            date: todayKey,
+            timestamp: new Date(),
+            messageId
+        });
+
+        await queueOutboundMessage(from, `✅ Recorded expense: ${symbol}${amount.toLocaleString(locale)} for *${description}*.`);
+        break;
+      }
+
       case 'SALE': {
         // ✅ STOP: If clarification needed, ask user first (don't process partial sale)
         if (parsed.needs_clarification) {
