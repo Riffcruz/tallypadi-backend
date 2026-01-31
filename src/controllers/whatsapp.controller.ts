@@ -2220,7 +2220,7 @@ Oga Boss Plan: ₦3,000/month (Save significantly with the yearly plan)`;
           }
 
           if (parsed.needs_clarification || !parsed.bank_details?.account_number || !parsed.bank_details?.bank_name) {
-               await queueOutboundMessage(from, "Please provide Bank Name and Account Number. Example:\n'Update bank GTB 0123456789'");
+               await queueOutboundMessage(from, "Please provide Bank Name and Account Number. Example:\n'Update bank GTB 0123456789 Stephen'");
                break;
           }
 
@@ -2241,7 +2241,7 @@ Oga Boss Plan: ₦3,000/month (Save significantly with the yearly plan)`;
           
           // 2. Check Bank Details
           if (!shopOwner.bankDetails?.accountNumber) {
-              await queueOutboundMessage(from, "⚠️ Please save your bank details first.\nReply like: *Update bank GTB 0123456789*");
+              await queueOutboundMessage(from, "⚠️ Please save your bank details first.\nReply like: *Update bank GTB 0123456789 Stephen*");
               break;
           }
 
