@@ -66,9 +66,9 @@ function safeJobId(id: string) {
 }
 
 // ✅ Text replies (interactive/fast)
-export const queueOutboundMessage = async (phoneNumber: string, message: string, jobId?: string, meta?: { dbMessageId?: string }) => {
+export const queueOutboundMessage = async (phoneNumber: string, message: string, jobId?: string, meta?: { dbMessageId?: string }, delay: number = 0) => {
   const finalJobId = safeJobId(jobId || `reply_${phoneNumber}_${Date.now()}`);
-  await replyQueue.add('send-text', { phoneNumber, message, ...meta }, { jobId: finalJobId });
+  await replyQueue.add('send-text', { phoneNumber, message, ...meta }, { jobId: finalJobId, delay });
 };
 
 // ✅ Bulk/summaries/pdf links (slower)
@@ -86,7 +86,8 @@ export const queueOutboundButtons = async (
   phoneNumber: string,
   bodyText: string,
   buttons: OutboundButton[],
-  jobId?: string
+  jobId?: string,
+  delay: number = 0
 ) => {
   const safeButtons = (buttons || [])
     .slice(0, 3)
@@ -101,7 +102,7 @@ export const queueOutboundButtons = async (
   await replyQueue.add(
     'send-buttons',
     { phoneNumber, bodyText: String(bodyText || '').slice(0, 1024), buttons: safeButtons },
-    { jobId: finalJobId }
+    { jobId: finalJobId, delay }
   );
 };
 
@@ -114,7 +115,8 @@ export const queueOutboundList = async (
   bodyText: string,
   buttonText: string,
   sections: { title: string; rows: { id: string; title: string; description?: string }[] }[],
-  jobId?: string
+  jobId?: string,
+  delay: number = 0
 ) => {
   const finalJobId = safeJobId(jobId || `list_${phoneNumber}_${Date.now()}`);
 
@@ -126,7 +128,7 @@ export const queueOutboundList = async (
       buttonText: String(buttonText || '').slice(0, 20),
       sections
     },
-    { jobId: finalJobId }
+    { jobId: finalJobId, delay }
   );
 };
 
