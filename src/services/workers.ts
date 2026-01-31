@@ -119,23 +119,16 @@ export const replyWorker = new Worker(
                 }
             }
 
-            // Generate File
-            const pdfFileName = await generateInvoicePdf(inv, businessName, countryCode);
-            const filePath = path.join(process.cwd(), 'public', 'reports', pdfFileName);
+            // Generate File (Buffer)
+            const pdfBuffer = await generateInvoicePdf(inv, businessName, countryCode);
+            
+            await sendWhatsAppDocumentBuffer({
+                to: phoneNumber,
+                buffer: pdfBuffer,
+                filename: `invoice-${inv.invoiceNumber}.pdf`,
+                caption: `📄 Invoice #${inv.invoiceNumber}`,
+            });
 
-            if (fs.existsSync(filePath)) {
-                const buffer = fs.readFileSync(filePath);
-                
-                await sendWhatsAppDocumentBuffer({
-                    to: phoneNumber,
-                    buffer,
-                    filename: pdfFileName,
-                    caption: `📄 Invoice #${inv.invoiceNumber}`,
-                });
-
-                // Cleanup: Delete file after sending (to avoid storage maxing out)
-                fs.unlinkSync(filePath);
-            }
         } catch (e) {
             console.error('Failed to send invoice PDF:', e);
         }

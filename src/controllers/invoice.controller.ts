@@ -82,14 +82,54 @@ export const createInvoice = async (req: AuthReq, res: Response) => {
             description: description || 'Goods/Services'
         });
 
-        // Generate PDF
-        const pdfFile = await generateInvoicePdf(inv, owner.businessName || 'My Shop', owner.countryCode);
-        const pdfUrl = `/reports/${pdfFile}`; // Relative path for frontend
+        // Generate PDF URL (Dynamic)
+        const pdfUrl = `/api/invoices/${inv._id}/pdf`; 
 
         res.status(201).json({ success: true, invoice: inv, pdfUrl });
 
     } catch (error: any) {
         console.error("Create Invoice Error:", error);
+        res.status(500).json({ error: 'Server Error' });
+    }
+};
+
+export const getInvoicePdf = async (req: AuthReq, res: Response) => {
+    try {
+        const userId = req.user?.id;
+        const { id } = req.params;
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+        const inv = await Invoice.findById(id).lean();
+        if (!inv) return res.status(404).json({ error: 'Invoice not found' });
+
+        // Resolve Owner/Business Name
+        // (Similar logic to workers or createInvoice permission check)
+        const user = await User.findById(inv.user);
+        let businessName = 'My Shop';
+        let countryCode = 'NG';
+
+        if (user) {
+             if (user.role === 'STAFF' && user.ownerId) {
+                  const owner = await User.findById(user.ownerId);
+                  businessName = owner?.businessName || 'My Shop';
+                  countryCode = owner?.countryCode || 'NG';
+             } else {
+                  businessName = user.businessName || 'My Shop';
+                  countryCode = user.countryCode || 'NG';
+             }
+        }
+
+        const pdfBuffer = await generateInvoicePdf(inv as any, businessName, countryCode);
+
+        res.set({
+            'Content-Type': 'application/pdf',
+            'Content-Disposition': `inline; filename="invoice-${inv.invoiceNumber}.pdf"`,
+            'Content-Length': pdfBuffer.length
+        });
+        res.send(pdfBuffer);
+
+    } catch (error: any) {
+        console.error("Get Invoice PDF Error:", error);
         res.status(500).json({ error: 'Server Error' });
     }
 };
