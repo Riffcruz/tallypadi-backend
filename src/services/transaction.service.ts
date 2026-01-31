@@ -520,19 +520,22 @@ export const processTransaction = async (
       let effectiveCostPrice = toNumber(inv.costPrice);
 
       const msgPrice = item.unit_price == null ? null : toNumber(item.unit_price);
+      const msgCostPrice = item.cost_price == null ? null : toNumber(item.cost_price);
 
       // LOGIC:
-      // If RESTOCK + Price Provided -> It is COST PRICE.
-      // If SALE + Price Provided -> It is SELLING PRICE.
-      // If DEFINE_PRICE -> It is SELLING PRICE (handled above separately).
-
+      // If RESTOCK:
+      // - parsed.cost_price -> Updates Cost Price
+      // - parsed.unit_price -> Updates Selling Price (lastUnitPrice)
+      
       if (type === 'RESTOCK') {
-        if (msgPrice !== null && msgPrice > 0) {
-           effectiveCostPrice = msgPrice;
-           inv.costPrice = msgPrice; // Update Cost Price
+        if (msgCostPrice !== null && msgCostPrice > 0) {
+           effectiveCostPrice = msgCostPrice;
+           inv.costPrice = msgCostPrice; // Update Cost Price
         }
-        // For RESTOCK, we don't change lastUnitPrice (Selling) unless explicitly asked?
-        // Let's keep lastUnitPrice as is (Selling Price).
+        if (msgPrice !== null && msgPrice > 0) {
+           effectiveUnitPrice = msgPrice;
+           inv.lastUnitPrice = msgPrice; // Update Selling Price
+        }
       } else if (type === 'SALE') {
         if (msgPrice !== null && msgPrice > 0) {
           effectiveUnitPrice = msgPrice;

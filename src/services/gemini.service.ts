@@ -862,6 +862,9 @@ These intents MUST be detected correctly and MUST NOT be mistaken as SALE:
   User: "15k each" (Context: adding sneakers, CP=10k)
   Output: intent=RESTOCK, items=[{name:"sneakers", qty:20, cost_price:10000, unit_price:15000}], needs_clarification=false, reply_text="STOCK ADDED TO INVENTORY"
 
+  User: "Restocked 20 bags of rice. 50 thousand naira each cost price, selling price 55k"
+  Output: intent=RESTOCK, items=[{name:"rice", qty:20, unit: "bag", cost_price:50000, unit_price:55000}], needs_clarification=false, reply_text="STOCK ADDED TO INVENTORY"
+
 - Output:
   intent = RESTOCK
   items MUST include item name + qty (>0).

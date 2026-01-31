@@ -1250,7 +1250,20 @@ Oga Boss Plan: ₦3,000/month (Save significantly with the yearly plan)`;
                 { upsert: true }
               );
 
-              await queueOutboundMessage(from, `✅ Payment Received!\nRecorded sale of *${symbol}${inv.totalAmount.toLocaleString(locale)}* for *${inv.customerName}*.`);
+              const txId = String(tx._id);
+              const paidMsg = `✅ Payment Received!\nRecorded sale of *${symbol}${inv.totalAmount.toLocaleString(locale)}* for *${inv.customerName}*.`;
+
+              await queueSaleResponse(
+                  from,
+                  paidMsg,
+                  'After sale:\nChoose action 👇',
+                  [
+                      { id: saleBtnId('UNDO', txId), title: '↩️ Delet This Sale' },
+                      { id: saleBtnId('RECEIPT', txId), title: '🧾 Receipt' },
+                      { id: saleBtnId('CREDIT', txId), title: '💳 Sold As Credit' },
+                  ],
+                  `inv_paid_${invId}`
+              );
               return;
           }
       }
