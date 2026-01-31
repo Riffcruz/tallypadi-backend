@@ -410,6 +410,7 @@ app.use('/api/investor', authRequired, investorRouter);
 // 📁 STATIC FILES
 // ==========================================
 app.use('/reports', express.static(path.join(__dirname, '..', 'public', 'reports')));
+app.use('/api/reports', express.static(path.join(__dirname, '..', 'public', 'reports'))); // ✅ Support API-prefixed access
 app.use('/uploads', express.static(path.join(__dirname, '..', 'public', 'uploads')));
 
 app.get('/', (_req: Request, res: Response) => {
