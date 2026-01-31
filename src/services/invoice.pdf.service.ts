@@ -3,6 +3,12 @@ import fs from 'fs';
 import path from 'path';
 import { IInvoice } from '../models/invoice.model';
 
+const COUNTRY_CURRENCY_CODE: Record<string, string> = {
+  NG: 'NGN', GH: 'GHS', US: 'USD', GB: 'GBP', EU: 'EUR',
+  KE: 'KES', ZA: 'ZAR', IN: 'INR', CN: 'CNY', CA: 'CAD',
+  AU: 'AUD', JP: 'JPY', AE: 'AED', RW: 'RWF', TZ: 'TZS', UG: 'UGX',
+};
+
 const THEME = {
   primary: '#0F766E', // Teal
   accent: '#14B8A6',
@@ -23,8 +29,6 @@ const pickFirstExisting = (paths: string[]) => {
   return null;
 };
 
-const money = (n: number) => (typeof n === 'number' ? n.toLocaleString() : '0');
-
 const formatAcctNumber = (acct: string) => {
   const raw = String(acct || '').replace(/\s+/g, '');
   if (!raw) return '';
@@ -42,8 +46,22 @@ const formatDate = (d: any) => {
 export const generateInvoicePdf = async (
   invoice: IInvoice,
   businessName: string,
+  countryCode: string = 'NG',
   logoPath?: string
 ): Promise<string> => {
+  // Determine currency
+  const currencyCode = COUNTRY_CURRENCY_CODE[countryCode.toUpperCase()] || 'NGN';
+  const locale = 'en-' + countryCode.toUpperCase(); // crude locale guess
+
+  // Currency formatter
+  const formatMoney = (n: number) => {
+    return new Intl.NumberFormat(locale, {
+        style: 'currency',
+        currency: currencyCode,
+        maximumFractionDigits: 0
+    }).format(Number(n || 0));
+  };
+
   const doc = new PDFDocument({
     size: 'A4',
     margins: { top: 50, bottom: 50, left: 40, right: 40 },
@@ -204,8 +222,8 @@ export const generateInvoicePdf = async (
   (invoice.items || []).forEach((item, idx) => {
     const desc = String(item?.name || '-');
     const qty = String(item?.qty ?? 0);
-    const unitPrice = money(item?.unitPrice ?? 0);
-    const rowTotal = money(item?.total ?? 0);
+    const unitPrice = formatMoney(item?.unitPrice ?? 0);
+    const rowTotal = formatMoney(item?.total ?? 0);
 
     // Measure description height (auto row height)
     const descH = doc.heightOfString(desc, { width: colW.desc - cellPadX * 2, align: 'left' });
@@ -260,7 +278,7 @@ export const generateInvoicePdf = async (
   doc.rect(totalsBoxX, y, 5, totalsBoxH).fill(THEME.accent);
 
   doc.fillColor(THEME.muted).font('Bold').fontSize(9).text('TOTAL', totalsBoxX + 16, y + 12);
-  doc.fillColor(THEME.dark).font('Bold').fontSize(18).text(money(invoice.totalAmount || 0), totalsBoxX + 16, y + 28, {
+  doc.fillColor(THEME.dark).font('Bold').fontSize(18).text(formatMoney(invoice.totalAmount || 0), totalsBoxX + 16, y + 28, {
     width: totalsBoxW - 32,
     align: 'right',
   });

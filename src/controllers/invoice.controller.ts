@@ -82,7 +82,7 @@ export const createInvoice = async (req: AuthReq, res: Response) => {
         });
 
         // Generate PDF
-        const pdfFile = await generateInvoicePdf(inv, owner.businessName || 'My Shop');
+        const pdfFile = await generateInvoicePdf(inv, owner.businessName || 'My Shop', owner.countryCode);
         const pdfUrl = `/reports/${pdfFile}`; // Relative path for frontend
 
         res.status(201).json({ success: true, invoice: inv, pdfUrl });

@@ -106,18 +106,21 @@ export const replyWorker = new Worker(
             // Need user/business name
             const user = await User.findById(inv.user);
             let businessName = 'My Shop';
+            let countryCode = 'NG';
             
             if (user) {
                 if (user.role === 'STAFF' && user.ownerId) {
                     const owner = await User.findById(user.ownerId);
                     businessName = owner?.businessName || 'My Shop';
+                    countryCode = owner?.countryCode || 'NG';
                 } else {
                     businessName = user.businessName || 'My Shop';
+                    countryCode = user.countryCode || 'NG';
                 }
             }
 
             // Generate File
-            const pdfFileName = await generateInvoicePdf(inv, businessName);
+            const pdfFileName = await generateInvoicePdf(inv, businessName, countryCode);
             const filePath = path.join(process.cwd(), 'public', 'reports', pdfFileName);
 
             if (fs.existsSync(filePath)) {
