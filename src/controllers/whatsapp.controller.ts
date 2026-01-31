@@ -1329,6 +1329,7 @@ Oga Boss Plan: ₦3,000/month (Save significantly with the yearly plan)`;
     let parsed: any;
 
     if (btn && btn.id.startsWith('CMD_')) {
+        // ... (Help, Settings, Support, FAQ handling remains same)
         if (btn.id === 'CMD_HELP') {
             const { parseMessageWithGemini } = await import('../services/gemini.service');
             parsed = await parseMessageWithGemini('help', currentLang);
@@ -1337,45 +1338,58 @@ Oga Boss Plan: ₦3,000/month (Save significantly with the yearly plan)`;
         else if (btn.id === 'CMD_SUPPORT') parsed = { intent: 'SUPPORT' };
         else if (btn.id === 'CMD_FAQ') parsed = { intent: 'FAQ' };
         
-        // Settings Toggles
+        // Settings Toggles (remains same)
         else if (btn.id === 'CMD_SET_PDF_ON') parsed = { intent: 'SETTINGS', settings_update: { key: 'pdfReportsEnabled', value: true }, reply_text: '✅ PDF reports enabled.' };
         else if (btn.id === 'CMD_SET_PDF_OFF') parsed = { intent: 'SETTINGS', settings_update: { key: 'pdfReportsEnabled', value: false }, reply_text: '✅ PDF reports disabled.' };
         else if (btn.id === 'CMD_SET_DAILY_ON') parsed = { intent: 'SETTINGS', settings_update: { key: 'dailySummaryEnabled', value: true }, reply_text: '🔔 Daily summary enabled.' };
         else if (btn.id === 'CMD_SET_DAILY_OFF') parsed = { intent: 'SETTINGS', settings_update: { key: 'dailySummaryEnabled', value: false }, reply_text: '🔕 Daily summary disabled.' };
 
-        // ✅ Main Menu Commands
-        else if (btn.id === 'CMD_RECORD_INVENTORY') {
-            await queueOutboundMessage(from, "To add inventory, Reply like: Add 20 sneakers to inventory or Add 12 cartons of Dano milk to stock");
-            return;
-        }
-        else if (btn.id === 'CMD_TRACK_INVENTORY') parsed = { intent: 'REPORT_STOCK' };
-        else if (btn.id === 'CMD_RECORD_SALE') {
-            await queueOutboundMessage(from, "To record a sale, Reply like: Sold 2 rice 5000");
-            return;
-        }
-        else if (btn.id === 'CMD_RECORD_CREDIT') {
-             await queueOutboundMessage(from, "To record credit sales, Reply like: Sold 2 rice to Emeka on credit");
-             return;
-        }
-        else if (btn.id === 'CMD_VIEW_REPORT') parsed = { intent: 'REPORT_SALES', report_params: { start_date: toISODateForOffset(offsetMinutes), end_date: toISODateForOffset(offsetMinutes) } };
-        else if (btn.id === 'CMD_DELETE_STOCK') {
-            await queueOutboundMessage(from, "To delete an item, Reply like: Delete rice");
-            return;
-        }
-        else if (btn.id === 'CMD_SET_STOCK') {
-             await queueOutboundMessage(from, "To set exact stock, Reply like: Set rice stock to 20");
-             return;
-        }
-        else if (btn.id === 'CMD_SET_PRICE') {
-             await queueOutboundMessage(from, "To set price, Reply like: Set rice price to 5000");
-             return;
-        }
-        else if (btn.id === 'CMD_MANAGE_STAFF') {
-             await queueOutboundMessage(from, "To add staff, Reply like: Add staff 08012345678");
-             return;
-        }
+        // ✅ Main Menu Commands (Gemini Powered)
+        else {
+            const { generateGuidanceMessage } = await import('../services/gemini.service');
 
-        else if (btn.id === 'CMD_CREATE_INVOICE') parsed = { intent: 'CREATE_INVOICE', needs_clarification: true, reply_text: "To create an invoice, I need details. Example: 'Invoice for John, 2 shoes for 50k'." };
+            if (btn.id === 'CMD_RECORD_INVENTORY') {
+                const msg = await generateGuidanceMessage('RECORD_INVENTORY', currentLang);
+                await queueOutboundMessage(from, msg);
+                return;
+            }
+            else if (btn.id === 'CMD_TRACK_INVENTORY') parsed = { intent: 'REPORT_STOCK' };
+            else if (btn.id === 'CMD_RECORD_SALE') {
+                const msg = await generateGuidanceMessage('RECORD_SALE', currentLang);
+                await queueOutboundMessage(from, msg);
+                return;
+            }
+            else if (btn.id === 'CMD_RECORD_CREDIT') {
+                 const msg = await generateGuidanceMessage('RECORD_CREDIT', currentLang);
+                 await queueOutboundMessage(from, msg);
+                 return;
+            }
+            else if (btn.id === 'CMD_VIEW_REPORT') parsed = { intent: 'REPORT_SALES', report_params: { start_date: toISODateForOffset(offsetMinutes), end_date: toISODateForOffset(offsetMinutes) } };
+            else if (btn.id === 'CMD_DELETE_STOCK') {
+                const msg = await generateGuidanceMessage('DELETE_STOCK', currentLang);
+                await queueOutboundMessage(from, msg);
+                return;
+            }
+            else if (btn.id === 'CMD_SET_STOCK') {
+                 const msg = await generateGuidanceMessage('SET_STOCK', currentLang);
+                 await queueOutboundMessage(from, msg);
+                 return;
+            }
+            else if (btn.id === 'CMD_SET_PRICE') {
+                 const msg = await generateGuidanceMessage('SET_PRICE', currentLang);
+                 await queueOutboundMessage(from, msg);
+                 return;
+            }
+            else if (btn.id === 'CMD_MANAGE_STAFF') {
+                 const msg = await generateGuidanceMessage('MANAGE_STAFF', currentLang);
+                 await queueOutboundMessage(from, msg);
+                 return;
+            }
+            else if (btn.id === 'CMD_CREATE_INVOICE') {
+                 const msg = await generateGuidanceMessage('CREATE_INVOICE', currentLang);
+                 parsed = { intent: 'CREATE_INVOICE', needs_clarification: true, reply_text: msg };
+            }
+        }
 
         parsed = allowlistParsed(parsed);
     } else {

@@ -1264,8 +1264,49 @@ async function generateWithRetry(parts: any[], retries = 1) {
 }
 
 // ==========================================
-// 🚀 MAIN EXPORT
+// 💡 GENERATE GUIDANCE MESSAGE (Dynamic Help)
 // ==========================================
+export const generateGuidanceMessage = async (intent: string, userLanguage: string = 'English'): Promise<string> => {
+  const prompt = `
+You are TallyPadi, a helpful business assistant.
+User Language: ${userLanguage.toUpperCase()}
+
+Task: Explain clearly and briefly how to use the "${intent}" feature.
+Give 2 clear examples of what the user should type.
+
+INTENT MAP:
+- RECORD_INVENTORY: Adding new stock items.
+- RECORD_SALE: Recording a sale (cash).
+- RECORD_CREDIT: Recording a sale on credit (debt).
+- DELETE_STOCK: Removing an item from inventory.
+- SET_STOCK: Setting exact stock quantity (correction).
+- SET_PRICE: Setting the selling price of an item.
+- MANAGE_STAFF: Adding a staff member.
+- CREATE_INVOICE: Generating a PDF invoice for a customer.
+
+Format:
+- Keep it under 3 lines if possible.
+- Use emojis.
+- Examples should be realistic.
+
+Output:
+Return ONLY the explanation text.
+`;
+
+  try {
+    const result = await model.generateContent({
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig: { responseMimeType: 'text/plain' },
+    });
+    return result.response.text().replace(/\\n/g, '\n').trim();
+  } catch (error) {
+    console.error('Gemini Guidance Error:', error);
+    // Fallbacks
+    if (intent === 'RECORD_SALE') return "To record a sale, Reply like: Sold 2 rice 5000";
+    if (intent === 'RECORD_INVENTORY') return "To add inventory, Reply like: Add 20 sneakers";
+    return "Please tell me what you want to do clearly.";
+  }
+};
 export const generateWelcomeMessage = async (userLanguage: string = 'English'): Promise<string> => {
   const prompt = `
 You are TallyPadi, a professional business assistant.

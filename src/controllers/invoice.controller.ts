@@ -7,6 +7,7 @@ import { deductStockForItems } from '../services/transaction.service';
 import { generateInvoicePdf } from '../services/invoice.pdf.service';
 import { toUserLocalDate } from '../utils/dates';
 import { isSubActive, isTycoon } from '../utils/permissions';
+import { undoSaleById } from '../services/undo.service';
 
 type AuthReq = Request & { user?: { id?: string } };
 
@@ -93,29 +94,46 @@ export const createInvoice = async (req: AuthReq, res: Response) => {
     }
 };
 
+// Helper to determine Shop ID (Owner's ID)
+const getShopId = (user: any): string => {
+    if (!user) return '';
+    if (user.role === 'STAFF' && user.ownerId) return String(user.ownerId);
+    return String(user._id);
+};
+
 export const getInvoicePdf = async (req: AuthReq, res: Response) => {
     try {
         const userId = req.user?.id;
         const { id } = req.params;
         if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-        const inv = await Invoice.findById(id).lean();
+        const inv = await Invoice.findById(id).populate('user');
         if (!inv) return res.status(404).json({ error: 'Invoice not found' });
 
+        const viewer = await User.findById(userId);
+        if (!viewer) return res.status(401).json({ error: 'User not found' });
+
+        // Security Check
+        const creator = inv.user as any;
+        const creatorShopId = getShopId(creator);
+        const viewerShopId = getShopId(viewer);
+
+        if (creatorShopId !== viewerShopId) {
+            return res.status(403).json({ error: 'Access denied' });
+        }
+
         // Resolve Owner/Business Name
-        // (Similar logic to workers or createInvoice permission check)
-        const user = await User.findById(inv.user);
         let businessName = 'My Shop';
         let countryCode = 'NG';
 
-        if (user) {
-             if (user.role === 'STAFF' && user.ownerId) {
-                  const owner = await User.findById(user.ownerId);
+        if (creator) {
+             if (creator.role === 'STAFF' && creator.ownerId) {
+                  const owner = await User.findById(creator.ownerId);
                   businessName = owner?.businessName || 'My Shop';
                   countryCode = owner?.countryCode || 'NG';
              } else {
-                  businessName = user.businessName || 'My Shop';
-                  countryCode = user.countryCode || 'NG';
+                  businessName = creator.businessName || 'My Shop';
+                  countryCode = creator.countryCode || 'NG';
              }
         }
 
@@ -185,8 +203,19 @@ export const getInvoice = async (req: AuthReq, res: Response) => {
         const { id } = req.params;
         if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-        const inv = await Invoice.findById(id).lean();
+        const inv = await Invoice.findById(id).populate('user');
         if (!inv) return res.status(404).json({ error: 'Invoice not found' });
+
+        const viewer = await User.findById(userId);
+        if (!viewer) return res.status(401).json({ error: 'User not found' });
+
+        // Security Check
+        const creatorShopId = getShopId(inv.user as any);
+        const viewerShopId = getShopId(viewer);
+
+        if (creatorShopId !== viewerShopId) {
+            return res.status(403).json({ error: 'Access denied' });
+        }
 
         res.json({ success: true, invoice: inv });
 
@@ -203,10 +232,19 @@ export const updateInvoiceStatus = async (req: AuthReq, res: Response) => {
 
         if (!userId) return res.status(401).json({ error: 'Unauthorized' });
         
-        const inv = await Invoice.findById(id);
+        const inv = await Invoice.findById(id).populate('user');
         if (!inv) return res.status(404).json({ error: 'Invoice not found' });
 
         const user = await User.findById(userId);
+        if (!user) return res.status(404).json({ error: 'User not found' });
+
+        // Security Check
+        const creatorShopId = getShopId(inv.user as any);
+        const viewerShopId = getShopId(user);
+
+        if (creatorShopId !== viewerShopId) {
+             return res.status(403).json({ error: 'Access denied' });
+        }
 
         if (status === 'CANCELLED') {
              inv.status = 'CANCELLED';
@@ -271,11 +309,31 @@ export const deleteInvoice = async (req: AuthReq, res: Response) => {
         const userId = req.user?.id;
         const { id } = req.params;
         
-        const inv = await Invoice.findById(id);
+        const inv = await Invoice.findById(id).populate('user');
         if (!inv) return res.status(404).json({ error: 'Invoice not found' });
 
+        // Security Check
+        const user = await User.findById(userId);
+        if (!user) return res.status(404).json({ error: 'User not found' });
+        
+        const creatorShopId = getShopId(inv.user as any);
+        const viewerShopId = getShopId(user);
+
+        if (creatorShopId !== viewerShopId) {
+             return res.status(403).json({ error: 'Access denied' });
+        }
+
+        // Handle PAID invoice deletion (Undo Sale)
         if (inv.status === 'PAID') {
-            return res.status(400).json({ error: 'Cannot delete a paid invoice. Undo the sale first (if needed).' });
+            const tx = await Transaction.findOne({
+                user: userId,
+                messageId: `web_inv_${inv._id}_paid`
+            });
+
+            if (tx) {
+                // Undo the sale (restores stock, reverses stats)
+                await undoSaleById(user._id as any, String(tx._id), 'web_invoice_deletion');
+            }
         }
 
         await Invoice.deleteOne({ _id: id });
