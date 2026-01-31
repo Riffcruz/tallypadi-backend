@@ -3,7 +3,7 @@ import { expenseService } from '../services/expense.service';
 import { IUser } from '../models/user.model';
 
 // Helper to get user from request (assuming auth middleware populates req.user)
-const getUser = (req: Request) => req.user as IUser;
+const getUser = (req: Request) => (req as any).user as IUser;
 
 export const createExpense = async (req: Request, res: Response) => {
   try {
@@ -36,8 +36,8 @@ export const getExpenses = async (req: Request, res: Response) => {
 
     const result = await expenseService.getExpenses(
       String(user._id),
-      startDate as string,
-      endDate as string,
+      String(startDate || ''),
+      String(endDate || ''),
       Number(limit) || 50,
       Number(page) || 1
     );
@@ -54,7 +54,7 @@ export const deleteExpense = async (req: Request, res: Response) => {
     const user = getUser(req);
     const { id } = req.params;
 
-    const result = await expenseService.deleteExpense(String(user._id), id);
+    const result = await expenseService.deleteExpense(String(user._id), String(id));
     if (!result) {
       return res.status(404).json({ message: 'Expense not found' });
     }
