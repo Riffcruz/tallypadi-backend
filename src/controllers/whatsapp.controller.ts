@@ -1250,17 +1250,27 @@ Oga Boss Plan: ₦3,000/month (Save significantly with the yearly plan)`;
                 { upsert: true }
               );
 
-              const txId = String(tx._id);
+              const txId = `inv_${String(inv._id)}`; // Use invoice ID as proxy or create a reliable ID
               const paidMsg = `✅ Payment Received!\nRecorded sale of *${symbol}${inv.totalAmount.toLocaleString(locale)}* for *${inv.customerName}*.`;
+
+              // Note: We don't have the 'tx' object here easily unless we fetch it.
+              // But wait, we just created a transaction above.
+              // Let's fetch the transaction we just created to be safe and use its real ID.
+              const recentTx = await Transaction.findOne({
+                  user: actor._id,
+                  messageId: `inv_${invId}_paid`
+              });
+              
+              const realTxId = recentTx ? String(recentTx._id) : `inv_${invId}`;
 
               await queueSaleResponse(
                   from,
                   paidMsg,
                   'After sale:\nChoose action 👇',
                   [
-                      { id: saleBtnId('UNDO', txId), title: '↩️ Delet This Sale' },
-                      { id: saleBtnId('RECEIPT', txId), title: '🧾 Receipt' },
-                      { id: saleBtnId('CREDIT', txId), title: '💳 Sold As Credit' },
+                      { id: saleBtnId('UNDO', realTxId), title: '↩️ Delet This Sale' },
+                      { id: saleBtnId('RECEIPT', realTxId), title: '🧾 Receipt' },
+                      { id: saleBtnId('CREDIT', realTxId), title: '💳 Sold As Credit' },
                   ],
                   `inv_paid_${invId}`
               );
