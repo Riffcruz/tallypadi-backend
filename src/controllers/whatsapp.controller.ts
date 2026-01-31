@@ -1097,7 +1097,7 @@ Oga Boss Plan: ₦3,000/month (Save significantly with the yearly plan)`;
             // 3rd Response: Menu Batches
             const menuBatches = [
                 {
-                    bodyText: "What would you like to do next? (1/4)",
+                    bodyText: "1",
                     buttons: [
                         { id: 'CMD_RECORD_INVENTORY', title: '1. Record stock' },
                         { id: 'CMD_TRACK_INVENTORY', title: '2. Track inventory' },
@@ -1105,7 +1105,7 @@ Oga Boss Plan: ₦3,000/month (Save significantly with the yearly plan)`;
                     ]
                 },
                 {
-                    bodyText: "More options... (2/4)",
+                    bodyText: "2",
                     buttons: [
                         { id: 'CMD_RECORD_CREDIT', title: '4. Credit sales' },
                         { id: 'CMD_VIEW_REPORT', title: '5. View sales report' },
@@ -1113,7 +1113,7 @@ Oga Boss Plan: ₦3,000/month (Save significantly with the yearly plan)`;
                     ]
                 },
                 {
-                    bodyText: "More options... (3/4)",
+                    bodyText: "3",
                     buttons: [
                         { id: 'CMD_SET_STOCK', title: '7. Set stock' },
                         { id: 'CMD_SET_PRICE', title: '8. Set stock price' },
@@ -1121,7 +1121,7 @@ Oga Boss Plan: ₦3,000/month (Save significantly with the yearly plan)`;
                     ]
                 },
                 {
-                    bodyText: "Final option... (4/4)",
+                    bodyText: "4",
                     buttons: [
                         { id: 'CMD_MANAGE_STAFF', title: '10. Add/Remove Staff' }
                     ]
