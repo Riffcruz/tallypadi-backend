@@ -14,7 +14,7 @@ import { SupportTicket } from '../models/supportTicket.model';
 import { SupportAgent } from '../models/supportAgent.model'; // ✅ Import Agent
 import { supportService } from '../services/support.service';
 
-import { processTransaction } from '../services/transaction.service';
+import { processTransaction, deductStockForItems } from '../services/transaction.service';
 import { checkSubscriptionStatus } from '../services/billing.service';
 import { orderService } from '../services/order.service';
 import {
@@ -1268,6 +1268,9 @@ Oga Boss Plan: ₦3,000/month (Save significantly with the yearly plan)`;
                 { $inc: { totalRevenue: inv.totalAmount, totalTransactions: 1 } },
                 { upsert: true }
               );
+
+              // Deduct stock
+              await deductStockForItems(shopId as any, inv.items.map(i => ({ name: i.name, qty: i.qty })));
 
               const txId = `inv_${String(inv._id)}`; // Use invoice ID as proxy or create a reliable ID
               const paidMsg = `✅ Payment Received!\nRecorded sale of *${symbol}${inv.totalAmount.toLocaleString(locale)}* for *${inv.customerName}*.`;

@@ -693,3 +693,44 @@ export const processTransaction = async (
     throw err;
   }
 };
+
+// =========================================================
+// ✅ STOCK DEDUCTION HELPER (Exported)
+// =========================================================
+export const deductStockForItems = async (userId: Types.ObjectId, items: {name: string, qty: number}[]) => {
+  for (const item of items) {
+    const qty = Number(item.qty);
+    if (qty <= 0) continue;
+
+    const inputName = String(item.name || '').trim();
+    const cleanName = normalizeItemName(inputName);
+    if (!cleanName) continue;
+
+    // Use existing logic to find/resolve item
+    const resolved = await findExistingItem(userId, cleanName);
+
+    // If ambiguous, we skip to avoid deducting wrong item.
+    if (resolved.status === 'ambiguous') {
+         console.log(`[deductStock] Ambiguous match for ${cleanName}, skipping deduction.`);
+         continue; 
+    }
+
+    let inv = resolved.status === 'found' ? (resolved as any).inv : null;
+
+    // If not found, create new (tracking negative stock)
+    if (!inv) {
+        const rootName = (resolved as any).rootName || rootItemName(cleanName) || cleanName;
+        if (!rootName) continue;
+
+        inv = new Inventory({
+          user: userId,
+          name: rootName,
+          quantity: 0,
+          lastUnitPrice: 0,
+        });
+    }
+
+    inv.quantity = Number(inv.quantity || 0) - qty;
+    await inv.save();
+  }
+};

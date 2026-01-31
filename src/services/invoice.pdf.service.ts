@@ -128,7 +128,7 @@ export const generateInvoicePdf = async (
       doc.image(logoPath, logoBox.x, logoBox.y, { width: logoBox.w, height: logoBox.h });
     } else {
       doc.roundedRect(logoBox.x, logoBox.y, logoBox.w, logoBox.h, 10).fill(THEME.primary);
-      doc.fillColor(THEME.white).font('Bold').fontSize(16).text('IN', logoBox.x, logoBox.y + 20, {
+      doc.fillColor(THEME.white).font('Bold').fontSize(16).text('TP', logoBox.x, logoBox.y + 20, {
         width: logoBox.w,
         align: 'center',
       });

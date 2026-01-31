@@ -3,6 +3,7 @@ import { User, IUser } from '../models/user.model';
 import { Invoice } from '../models/invoice.model';
 import { Transaction } from '../models/transaction.model';
 import { DailyStats } from '../models/dailyStats.model';
+import { deductStockForItems } from '../services/transaction.service';
 import { generateInvoicePdf } from '../services/invoice.pdf.service';
 import { toUserLocalDate } from '../utils/dates';
 import { isSubActive, isTycoon } from '../utils/permissions';
@@ -209,6 +210,10 @@ export const updateInvoiceStatus = async (req: AuthReq, res: Response) => {
                  { $inc: { totalRevenue: inv.totalAmount, totalTransactions: 1 } },
                  { upsert: true }
              );
+
+             // Deduct stock
+             const shopId = (user?.role === 'STAFF' && user.ownerId) ? user.ownerId : userId;
+             await deductStockForItems(shopId as any, inv.items.map(i => ({ name: i.name, qty: i.qty })));
 
              return res.json({ success: true, invoice: inv });
         }
