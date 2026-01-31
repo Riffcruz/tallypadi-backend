@@ -1,7 +1,7 @@
 // src/services/queue.worker.ts
 import { Worker } from 'bullmq';
 import { connection } from './queue.service';
-import { sendWhatsAppText, sendWhatsAppButtons, sendWhatsAppDocumentBuffer } from './whatsapp.service';
+import { sendWhatsAppText, sendWhatsAppButtons, sendWhatsAppList, sendWhatsAppDocumentBuffer } from './whatsapp.service';
 import { generateSaleReceiptPdfBuffer } from '../controllers/receipt.controller';
 import { Invoice } from '../models/invoice.model';
 import { generateInvoicePdf } from './invoice.pdf.service';
@@ -26,6 +26,12 @@ export const replyWorker = new Worker(
           console.error('Failed to update SupportMessage with waId', e);
         }
       }
+      return;
+    }
+
+    if (job.name === 'send-list') {
+      const { phoneNumber, bodyText, buttonText, sections } = job.data;
+      await sendWhatsAppList(phoneNumber, bodyText, buttonText, sections);
       return;
     }
 

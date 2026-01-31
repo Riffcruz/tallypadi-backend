@@ -106,6 +106,31 @@ export const queueOutboundButtons = async (
 };
 
 // ============================================================
+// ✅ List Message (QUEUED)
+// Worker must handle job.name === 'send-list'
+// ============================================================
+export const queueOutboundList = async (
+  phoneNumber: string,
+  bodyText: string,
+  buttonText: string,
+  sections: { title: string; rows: { id: string; title: string; description?: string }[] }[],
+  jobId?: string
+) => {
+  const finalJobId = safeJobId(jobId || `list_${phoneNumber}_${Date.now()}`);
+
+  await replyQueue.add(
+    'send-list',
+    {
+      phoneNumber,
+      bodyText: String(bodyText || '').slice(0, 1024),
+      buttonText: String(buttonText || '').slice(0, 20),
+      sections
+    },
+    { jobId: finalJobId }
+  );
+};
+
+// ============================================================
 // ✅ Sale response (text + buttons)
 // Worker must handle job.name === 'send-sale-response'
 // ============================================================

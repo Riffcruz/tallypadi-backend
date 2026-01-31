@@ -24,7 +24,8 @@ import {
   queueSaleResponse,
   queueWelcomeResponse,
   queueSaleReceipt,
-  queueInvoicePdf
+  queueInvoicePdf,
+  queueOutboundList
 } from '../services/queue.service';
 import { sendWhatsAppDocumentBuffer } from '../services/whatsapp.service';
 
@@ -1001,11 +1002,10 @@ export const handleMessageLogic = async (
 
       await queueOutboundButtons(
         from,
-        `Welcome to *Tallypadi*, ${profileName || 'Friend'}! 👋\n\nTo start, please choose an option:`,
+        `Hello, I am Tallypadi, your intelligent business assistant. I can help you manage your shop sales activity. From recording and tracking stock inventory to documenting sales, generating reports, receipts, and invoices.\n\nWould you like to register your shop with me?`,
         [
-          { id: 'CMD_REGISTER', title: 'Register' },
-          { id: 'CMD_HELP', title: 'Help' },
-          { id: 'CMD_SHOW_SETTINGS', title: 'Show My Settings' },
+          { id: 'CMD_REGISTER_YES', title: 'Yes' },
+          { id: 'CMD_REGISTER_NO', title: 'No' },
         ]
       );
       return;
@@ -1023,9 +1023,16 @@ export const handleMessageLogic = async (
     // ✅ owner registration
     if (actor.role === 'OWNER' && actor.registrationStage !== 'COMPLETED') {
       
-      // 1. Handle "Register" button
-      if (btn?.id === 'CMD_REGISTER') {
-          await queueOutboundMessage(from, "To start, reply with your *EMAIL ADDRESS*.");
+      // 1. Handle "Yes" or "Register"
+      const isRegisterYes = btn?.id === 'CMD_REGISTER_YES' || rawText.toLowerCase() === 'yes';
+      
+      if (isRegisterYes) {
+          await queueOutboundMessage(from, "Enter your email address");
+          return;
+      }
+      
+      if (btn?.id === 'CMD_REGISTER_NO') {
+          await queueOutboundMessage(from, "No problem! You can type 'Hi padi' anytime to start.");
           return;
       }
 
@@ -1041,7 +1048,10 @@ export const handleMessageLogic = async (
             const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
             
             if (!emailRegex.test(emailInput)) {
-              await queueOutboundMessage(from, '❌ Invalid email format.');
+              // Only complain if it looks like they tried to send an email (contains @)
+              if (rawText.includes('@')) {
+                  await queueOutboundMessage(from, '❌ Invalid email format.');
+              }
               return;
             }
 
@@ -1056,14 +1066,13 @@ export const handleMessageLogic = async (
             actor.registrationStage = 'PASSWORD';
             await actor.save();
 
-            await queueOutboundMessage(from, `✅ Email Saved! Now reply with a *SECRET PASSWORD (min 8 chars)*.`);
+            await queueOutboundMessage(from, `Email saved. set up your secret password`);
             return;
           }
 
           if (actor.registrationStage === 'PASSWORD') {
-            if (rawText.length < 8) {
-              await queueOutboundMessage(from, '❌ Password too short (min 8 chars).');
-              return;
+            if (rawText.length < 1) { // Accept any non-empty for now, user requested flow is simple
+               return; 
             }
             const salt = await bcrypt.genSalt(10);
             actor.password = await bcrypt.hash(rawText, salt);
@@ -1071,13 +1080,41 @@ export const handleMessageLogic = async (
             await actor.save();
 
             const { generateWelcomeMessage } = await import('../services/gemini.service');
-            const welcomeMsg = await generateWelcomeMessage(actor.settings?.language || 'English');
             
-            await queueWelcomeResponse(
-              from,
-              welcomeMsg,
-              'https://tallypadi.com/login'
-            );
+            // 1st Response: Registration Complete
+            const welcomeMsg = await generateWelcomeMessage(actor.settings?.language || 'English');
+            await queueOutboundMessage(from, welcomeMsg);
+
+            // 2nd Response: Trial Started
+            const trialMsg = 
+`🎉 7-Day Free Trial Started
+You now have full access to the Tycoon Plan (our complete package) for the next seven days. Explore all our features without limitation.
+
+Current Pricing Options:
+Tycoon Plan: ₦5,000/month (Save significantly with the yearly plan)
+Oga Boss Plan: ₦3,000/month (Save significantly with the yearly plan)`;
+            await queueOutboundMessage(from, trialMsg);
+
+            // 3rd Response: Menu (List Message)
+            const menuSections = [
+              {
+                title: 'Main Menu',
+                rows: [
+                  { id: 'CMD_RECORD_INVENTORY', title: '1. Record stock', description: 'Add items/restock' },
+                  { id: 'CMD_TRACK_INVENTORY', title: '2. Track inventory', description: 'Check stock levels' },
+                  { id: 'CMD_RECORD_SALE', title: '3. Log transaction', description: 'Record a new sale' },
+                  { id: 'CMD_RECORD_CREDIT', title: '4. Credit sales', description: 'Record paid credit' },
+                  { id: 'CMD_VIEW_REPORT', title: '5. View sales report', description: 'See today\'s sales' },
+                  { id: 'CMD_DELETE_STOCK', title: '6. Delete stock item', description: 'Remove item' },
+                  { id: 'CMD_SET_STOCK', title: '7. Set stock', description: 'Set exact quantity' },
+                  { id: 'CMD_SET_PRICE', title: '8. Set stock price', description: 'Set selling price' },
+                  { id: 'CMD_CREATE_INVOICE', title: '9. Generate invoice', description: 'Create PDF invoice' },
+                  { id: 'CMD_MANAGE_STAFF', title: '10. Add/Remove Staff', description: 'Manage staff' },
+                ]
+              }
+            ];
+            await queueOutboundList(from, "What would you like to do next?", "Main Menu", menuSections);
+            
             return;
           }
       }
@@ -1245,6 +1282,38 @@ export const handleMessageLogic = async (
         else if (btn.id === 'CMD_SET_PDF_OFF') parsed = { intent: 'SETTINGS', settings_update: { key: 'pdfReportsEnabled', value: false }, reply_text: '✅ PDF reports disabled.' };
         else if (btn.id === 'CMD_SET_DAILY_ON') parsed = { intent: 'SETTINGS', settings_update: { key: 'dailySummaryEnabled', value: true }, reply_text: '🔔 Daily summary enabled.' };
         else if (btn.id === 'CMD_SET_DAILY_OFF') parsed = { intent: 'SETTINGS', settings_update: { key: 'dailySummaryEnabled', value: false }, reply_text: '🔕 Daily summary disabled.' };
+
+        // ✅ Main Menu Commands
+        else if (btn.id === 'CMD_RECORD_INVENTORY') {
+            await queueOutboundMessage(from, "To add inventory, Reply like: Add 20 sneakers to inventory or Add 12 cartons of Dano milk to stock");
+            return;
+        }
+        else if (btn.id === 'CMD_TRACK_INVENTORY') parsed = { intent: 'REPORT_STOCK' };
+        else if (btn.id === 'CMD_RECORD_SALE') {
+            await queueOutboundMessage(from, "To record a sale, Reply like: Sold 2 rice 5000");
+            return;
+        }
+        else if (btn.id === 'CMD_RECORD_CREDIT') {
+             await queueOutboundMessage(from, "To record credit sales, Reply like: Sold 2 rice to Emeka on credit");
+             return;
+        }
+        else if (btn.id === 'CMD_VIEW_REPORT') parsed = { intent: 'REPORT_SALES', report_params: { start_date: toISODateForOffset(offsetMinutes), end_date: toISODateForOffset(offsetMinutes) } };
+        else if (btn.id === 'CMD_DELETE_STOCK') {
+            await queueOutboundMessage(from, "To delete an item, Reply like: Delete rice");
+            return;
+        }
+        else if (btn.id === 'CMD_SET_STOCK') {
+             await queueOutboundMessage(from, "To set exact stock, Reply like: Set rice stock to 20");
+             return;
+        }
+        else if (btn.id === 'CMD_SET_PRICE') {
+             await queueOutboundMessage(from, "To set price, Reply like: Set rice price to 5000");
+             return;
+        }
+        else if (btn.id === 'CMD_MANAGE_STAFF') {
+             await queueOutboundMessage(from, "To add staff, Reply like: Add staff 08012345678");
+             return;
+        }
 
         else if (btn.id === 'CMD_CREATE_INVOICE') parsed = { intent: 'CREATE_INVOICE', needs_clarification: true, reply_text: "To create an invoice, I need details. Example: 'Invoice for John, 2 shoes for 50k'." };
 

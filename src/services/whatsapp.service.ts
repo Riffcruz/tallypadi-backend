@@ -101,6 +101,46 @@ export async function sendWhatsAppButtons(
 }
 
 // ============================================================
+// ✅ SEND: LIST MESSAGE (max 10 rows)
+// ============================================================
+export async function sendWhatsAppList(
+  to: string,
+  bodyText: string,
+  buttonText: string,
+  sections: { title: string; rows: { id: string; title: string; description?: string }[] }[]
+) {
+  const safeSections = sections.map((s) => ({
+    title: safeText(s.title, 24),
+    rows: s.rows.map((r) => ({
+      id: safeText(r.id, 200),
+      title: safeText(r.title, 24),
+      description: r.description ? safeText(r.description, 72) : undefined,
+    })),
+  }));
+
+  const payload = {
+    messaging_product: 'whatsapp',
+    to,
+    type: 'interactive',
+    interactive: {
+      type: 'list',
+      body: { text: safeText(bodyText, 1024) },
+      action: {
+        button: safeText(buttonText, 20),
+        sections: safeSections,
+      },
+    },
+  };
+
+  const res = await axios.post(messagesUrl(), payload, {
+    headers: authHeaders(),
+    timeout: 20_000,
+  });
+
+  return res.data?.messages?.[0]?.id;
+}
+
+// ============================================================
 // ✅ SEND: MEDIA (image/audio/document/video) by MEDIA ID
 // ============================================================
 export async function sendWhatsAppMediaById(opts: {

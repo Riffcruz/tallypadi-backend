@@ -842,15 +842,31 @@ These intents MUST be detected correctly and MUST NOT be mistaken as SALE:
 
 4) RESTOCK
 - User is adding stock (increase inventory).
-- If price is mentioned (e.g. "bought at 500"), treat it as COST PRICE.
+- Triggers: "Add [qty] [item] to stock", "Restock [qty] [item]", "Record inventory", "I bought [qty] [item]".
+- ACTION: Add stock + update Cost Price + update Selling Price.
+- STRICT SLOT FILLING RULES:
+  1. Extract item name and qty.
+  2. Extract 'cost_price' (Buying Price).
+     - If missing, set needs_clarification=true.
+     - Question: "How much did you buy each or all?"
+  3. Extract 'unit_price' (Selling Price).
+     - If missing, set needs_clarification=true.
+     - Question: "How much is the selling price per [item]?"
 - Examples:
-  "restocked 5 bags of rice", "I bought 10 indomie at 200 each"
+  User: "Add 20 sneakers to stock"
+  Output: intent=RESTOCK, items=[{name:"sneakers", qty:20}], needs_clarification=true, reply_text="How much did you buy each or all?"
+
+  User: "10k each" (Context: adding sneakers)
+  Output: intent=RESTOCK, items=[{name:"sneakers", qty:20, cost_price:10000}], needs_clarification=true, reply_text="How much is the selling price per sneaker?"
+
+  User: "15k each" (Context: adding sneakers, CP=10k)
+  Output: intent=RESTOCK, items=[{name:"sneakers", qty:20, cost_price:10000, unit_price:15000}], needs_clarification=false, reply_text="STOCK ADDED TO INVENTORY"
+
 - Output:
   intent = RESTOCK
   items MUST include item name + qty (>0).
-  cost_price should be set if user provides a buying price.
-  unit_price should be null (unless user explicitly says "selling price is X").
-  total_money = null unless user explicitly provided a total purchase cost (optional).
+  cost_price (Buying Price) and unit_price (Selling Price) should be set.
+  total_money = null (unless user explicitly provided a total purchase cost).
 
 5) DELETED_STOCK
 - User wants item removed from inventory list or cleared.
@@ -1250,31 +1266,24 @@ async function generateWithRetry(parts: any[], retries = 1) {
 export const generateWelcomeMessage = async (userLanguage: string = 'English'): Promise<string> => {
   const prompt = `
 You are TallyPadi, a professional business assistant.
-The user just registered.
+The user just registered successfully.
 
 User Language: ${userLanguage.toUpperCase()}
 
-Task: Write a **spacious, clean, and professional** welcome message.
-**CRITICAL: Use actual empty lines (double spacing) between every section.**
+Task: Write a **concise** confirmation message for "Registration Complete".
+**Do NOT** include trial info or pricing here. Just the confirmation and web access link.
 
-Required Format:
-1. Header: "✅ Registration Complete" (Bold if possible)
+Required Content:
+1. Header: "✅ Registration Complete"
 2. (Gap)
-3. Announcement: "🎉 7-Day Free Trial Started"
-   - Explain they are on the **Tycoon Plan** (Full Package).
-4. (Gap)
-5. Pricing (Clean List):
-   - Tycoon Plan: ₦5,000/month (Save more on yearly plan)
-   - Oga Boss Plan: ₦3,000/month (Save more on yearly plan)
-6. (Gap)
-7. "How to Start:"
-   - List 3 examples using "👉" bullet points.
-     (e.g., Sold 2 rice 5000, Restock 10 milk, Report)
+3. "🌐 Web Access"
+4. "Login here to manage your shop on the web:"
+5. Link: https://tallypadi.com/login
 
-Tone: Professional, spacious, encouraging.
+Tone: Professional, spacious.
 
 Output:
-Return ONLY the message text. Do not output literal "\\n" characters; use real line breaks.
+Return ONLY the message text.
 `;
 
   try {
@@ -1286,7 +1295,7 @@ Return ONLY the message text. Do not output literal "\\n" characters; use real l
     return result.response.text().replace(/\\n/g, '\n');
   } catch (error) {
     console.error('Gemini Welcome Message Error:', error);
-    return `✅ *Registration Complete*\n\n🎉 *7-Day Free Trial Started*\nYou are now on the **Tycoon Plan** (Full Package).\n\n*Subscription Plans (After Trial):*\n• Tycoon Plan: ₦5,000 / month\n• Oga Boss Plan: ₦3,000 / month\n\n*How to Start:*\n👉 Sold 2 rice 5000\n👉 Restock 10 milk\n👉 Report`;
+    return `✅ Registration Complete\n\n🌐 Web Access\nLogin here to manage your shop on the web:\nhttps://tallypadi.com/login`;
   }
 };
 
