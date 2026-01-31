@@ -240,7 +240,7 @@ function drawTableRow(
   return rowHeight;
 }
 
-// ✅ Shared render function
+// ✅ Shared render function (Invoice Style UI)
 function renderReceiptPdf(doc: PdfDoc, payload: {
   saleId: string;
   receiptNo: string;
@@ -266,7 +266,6 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
     tx,
   } = payload;
 
-  // ✅ Currency formatter
   const currencyDisplay = hasSymbolFont ? 'symbol' : 'code';
   const formatMoney = (n: any) =>
     new Intl.NumberFormat(locale, {
@@ -276,248 +275,165 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
       maximumFractionDigits: 0,
     }).format(Number(n || 0));
 
-  // -------------------------------------------------
-  // ✅ Page Setup
-  // -------------------------------------------------
+  // --- Theme ---
+  const THEME_INVOICE = {
+    primary: '#0F766E', // Teal
+    accent: '#14B8A6',
+    dark: '#1E293B',
+    text: '#334155',
+    muted: '#64748B',
+    border: '#E2E8F0',
+    bgLight: '#F8FAFC',
+    bgHeader: '#F1F5F9',
+    white: '#FFFFFF',
+  };
+
+  // --- Page Setup ---
   doc.addPage();
   const pageW = doc.page.width;
+  const pageH = doc.page.height;
   const margin = 40;
   const contentW = pageW - margin * 2;
 
-  let y = margin;
-
-  // -------------------------------------------------
-  // ✅ HEADER (WhatsApp-style)
-  // -------------------------------------------------
+  // --- HEADER ---
+  const headerTop = 40;
+  
+  // Soft header background strip
   doc.save();
-  
-  // Header background with WhatsApp green gradient
-  const headerGradient = doc.linearGradient(margin, y, margin + contentW, y + 80);
-  headerGradient.stop(0, THEME.primary);      // Bright WhatsApp green
-  headerGradient.stop(1, THEME.primaryDark);  // Darker green
-  
-  doc.roundedRect(margin, y, contentW, 80, 12)
-    .fill(headerGradient);
-  
-  // Logo/Title
-  doc.font(boldFont).fillColor('#FFFFFF').fontSize(20);
-  doc.text('TallyPadi', margin + 24, y + 20);
-  
-  doc.font(regFont).fillColor('#E8FFF3').fontSize(11);
-  doc.text('POS RECEIPT', margin + 24, y + 48);
-  
-  // Payment status badge
-  const paymentStatus = String(tx.paymentStatus || 'PAID').toUpperCase();
-  const badgeW = Math.max(70, doc.widthOfString(paymentStatus) + 20);
-  const badgeH = 26;
-  
-  doc.save();
-  doc.roundedRect(margin + contentW - badgeW - 24, y + 20, badgeW, badgeH, 6)
-    .fill('#FFFFFF');
-  doc.fillColor(THEME.primary).fontSize(9).font(boldFont);
-  doc.text(paymentStatus, margin + contentW - badgeW - 24, y + 28, {
-    width: badgeW,
-    align: 'center'
-  });
+  doc.rect(0, 0, pageW, 140).fill(THEME_INVOICE.bgHeader);
   doc.restore();
-  
-  y += 80 + 20;
 
-  // -------------------------------------------------
-  // ✅ BUSINESS INFO CARD (Fixed Padding)
-  // -------------------------------------------------
-  const infoCardH = 72;
-  
-  doc.save();
-  doc.roundedRect(margin, y, contentW, infoCardH, 12)
-    .fill(THEME.bgHeader);
-  doc.strokeColor(THEME.border).lineWidth(1);
-  doc.roundedRect(margin, y, contentW, infoCardH, 12)
-    .stroke();
-  doc.restore();
-  
-  // Business name
-  doc.font(boldFont).fillColor(THEME.text).fontSize(14);
-  const businessNameSize = fitTextWidth(doc, businessName, contentW - 48, 14, 10);
-  doc.fontSize(businessNameSize);
-  doc.text(businessName, margin + 20, y + 16, {
-    width: contentW - 40,
-    ellipsis: true
-  });
-  
-  // Date and Receipt info
-  doc.font(regFont).fontSize(10).fillColor(THEME.textLight);
-  
-  // Left side: Date (20px padding)
-  doc.text('Date Issued:', margin + 20, y + 44);
-  doc.fillColor(THEME.text).text(receiptDate, margin + 85, y + 44);
-  
-  // Right side: Receipt No (Fixed: Added 20px padding from right)
-  const rightPadding = 20; 
-  const receiptLabelWidth = 70;
-  const receiptValueWidth = 100; // Increased width for long numbers
-  const rightAnchor = margin + contentW - rightPadding;
+  // Business name + title
+  doc.fillColor(THEME_INVOICE.dark).font(boldFont).fontSize(22).text(businessName.toUpperCase(), margin, headerTop);
+  doc.fillColor(THEME_INVOICE.text).font(regFont).fontSize(11).text('RECEIPT', margin, headerTop + 28);
+  doc.fillColor(THEME_INVOICE.muted).font(regFont).fontSize(9).text('Payment Confirmation', margin, headerTop + 44);
 
-  // Draw Label
-  doc.fillColor(THEME.textLight).text('Receipt No:', rightAnchor - receiptValueWidth - receiptLabelWidth, y + 44, {
-    width: receiptLabelWidth,
-    align: 'right'
+  // Logo / badge (right)
+  const logoBox = { w: 62, h: 62, x: pageW - margin - 62, y: headerTop - 2 };
+  doc.roundedRect(logoBox.x, logoBox.y, logoBox.w, logoBox.h, 10).fill(THEME_INVOICE.primary);
+  doc.fillColor(THEME_INVOICE.white).font(boldFont).fontSize(16).text('TP', logoBox.x, logoBox.y + 20, {
+    width: logoBox.w,
+    align: 'center',
   });
 
-  // Draw Value
-  doc.fillColor(THEME.text).text(receiptNo, rightAnchor - receiptValueWidth, y + 44, {
-    width: receiptValueWidth,
-    align: 'right'
-  });
-  
-  y += infoCardH + 24;
+  // Meta card
+  const cardY = 120;
+  const cardH = 74;
+  doc.roundedRect(margin, cardY, contentW, cardH, 12).lineWidth(1).strokeColor(THEME_INVOICE.border).fill(THEME_INVOICE.white);
 
-  // -------------------------------------------------
-  // ✅ TRANSACTION ID SECTION
-  // -------------------------------------------------
-  const fullId = String(saleId || tx?._id || '');
-  const wrappedId = wrapIdLines(fullId, 32);
-  
-  doc.font(regFont).fontSize(9).fillColor(THEME.textLight);
-  doc.text('TRANSACTION ID', margin, y);
-  
-  y += 14;
-  
-  // ID box with WhatsApp message bubble style
-  doc.font('Courier').fontSize(9);
-  const idBoxH = Math.max(32, doc.heightOfString(wrappedId, {
-    width: contentW - 32,
-    lineGap: 4
-  }) + 16);
-  
-  doc.save();
-  doc.roundedRect(margin, y, contentW, idBoxH, 8)
-    .fill(THEME.primaryLight); // WhatsApp message bubble color
-  doc.restore();
-  
-  doc.fillColor(THEME.text);
-  doc.text(wrappedId, margin + 16, y + 10, {
-    width: contentW - 32,
-    lineGap: 4
+  // Left: Customer Name
+  const leftX = margin + 14;
+  doc.fillColor(THEME_INVOICE.muted).font(boldFont).fontSize(9).text('CUSTOMER', leftX, cardY + 12);
+  const custName = tx.customerName || 'Walk-in Customer';
+  doc.fillColor(THEME_INVOICE.dark).font(boldFont).fontSize(12).text(custName, leftX, cardY + 28, {
+    width: contentW * 0.55,
   });
-  
-  y += idBoxH + 24;
 
-  // -------------------------------------------------
-  // ✅ ITEMS TABLE
-  // -------------------------------------------------
+  // Right: Date & Receipt #
+  const rightX = margin + contentW * 0.62;
+  doc.fillColor(THEME_INVOICE.muted).font(boldFont).fontSize(9).text('DATE PAID', rightX, cardY + 12);
+  doc.fillColor(THEME_INVOICE.dark).font(regFont).fontSize(11).text(receiptDate, rightX, cardY + 28);
+
+  doc.fillColor(THEME_INVOICE.muted).font(boldFont).fontSize(9).text('RECEIPT NO', rightX, cardY + 48);
+  doc.fontSize(11);
+  const pillW = Math.min(200, Math.max(120, doc.widthOfString(receiptNo) + 22));
+  const pillX = pageW - margin - pillW;
+  const pillY = cardY + 44;
+
+  doc.roundedRect(pillX, pillY, pillW, 26, 13).fill(THEME_INVOICE.primary);
+  doc.fillColor(THEME_INVOICE.white).font(boldFont).fontSize(11).text(receiptNo, pillX, pillY + 7, { width: pillW, align: 'center' });
+
+  // --- TABLE ---
+  let y = 230;
+  const tableHeaderHeight = 32;
+  const cellPadX = 8;
+  const cellPadY = 7;
+
+  // Columns
+  const colW = {
+    desc: Math.floor(contentW * 0.52),
+    qty: Math.floor(contentW * 0.12),
+    unit: Math.floor(contentW * 0.18),
+    total: contentW - (Math.floor(contentW * 0.52) + Math.floor(contentW * 0.12) + Math.floor(contentW * 0.18)),
+  };
+  const colX = {
+    desc: margin,
+    qty: margin + colW.desc,
+    unit: margin + colW.desc + colW.qty,
+    total: margin + colW.desc + colW.qty + colW.unit,
+  };
+
+  // Header Row
+  doc.roundedRect(margin, y, contentW, tableHeaderHeight, 10).fill(THEME_INVOICE.primary);
+  doc.fillColor(THEME_INVOICE.white).font(boldFont).fontSize(10);
+  doc.text('Description', colX.desc + cellPadX, y + 10, { width: colW.desc - cellPadX * 2, align: 'left' });
+  doc.text('Qty', colX.qty + cellPadX, y + 10, { width: colW.qty - cellPadX * 2, align: 'center' });
+  doc.text('Price', colX.unit + cellPadX, y + 10, { width: colW.unit - cellPadX * 2, align: 'right' });
+  doc.text('Total', colX.total + cellPadX, y + 10, { width: colW.total - cellPadX * 2, align: 'right' });
+
+  y += tableHeaderHeight + 2;
+
+  // Items
   const items = Array.isArray(tx.items) ? tx.items : [];
-  const colWidths = calculateColumnWidths(contentW);
-  const tableX = margin;
-  
-  // Table header
-  y = drawTableHeader(doc, tableX, y, colWidths, regFont);
-  
-  // Table rows
   let computedTotal = 0;
-  
-  for (let i = 0; i < items.length; i++) {
-    const item = items[i];
+
+  items.forEach((item: any, idx: number) => {
     const qty = Number(item.qty ?? item.quantity ?? 0);
     const unitPrice = Number(item.unitPrice ?? item.price ?? 0);
     const lineTotal = Number(item.total ?? qty * unitPrice);
     computedTotal += lineTotal;
+
+    const desc = String(item.name || '-');
     
-    const rowHeight = drawTableRow(doc, tableX, y, colWidths, item, formatMoney, regFont, boldFont);
-    y += rowHeight;
-  }
-  
-  // Add some spacing after the table
-  y += 20;
+    // Auto height
+    const descH = doc.heightOfString(desc, { width: colW.desc - cellPadX * 2 });
+    const rowH = Math.max(28, Math.ceil(descH + cellPadY * 2));
 
-  // -------------------------------------------------
-  // ✅ TOTAL SECTION (Vertically Centered Fix)
-  // -------------------------------------------------
+    // Pagination check
+    if (y + rowH > pageH - 100) {
+        doc.addPage();
+        y = margin;
+    }
+
+    // Zebra
+    if (idx % 2 === 1) doc.rect(margin, y, contentW, rowH).fill(THEME_INVOICE.bgLight);
+    else doc.rect(margin, y, contentW, rowH).fill(THEME_INVOICE.white);
+
+    doc.lineWidth(0.7).strokeColor(THEME_INVOICE.border).rect(margin, y, contentW, rowH).stroke();
+
+    // Cell Text
+    doc.fillColor(THEME_INVOICE.dark).font(regFont).fontSize(10);
+    doc.text(desc, colX.desc + cellPadX, y + cellPadY, { width: colW.desc - cellPadX * 2 });
+    doc.text(String(qty), colX.qty + cellPadX, y + cellPadY, { width: colW.qty - cellPadX * 2, align: 'center' });
+    doc.text(formatMoney(unitPrice), colX.unit + cellPadX, y + cellPadY, { width: colW.unit - cellPadX * 2, align: 'right' });
+    doc.text(formatMoney(lineTotal), colX.total + cellPadX, y + cellPadY, { width: colW.total - cellPadX * 2, align: 'right' });
+
+    y += rowH;
+  });
+
+  // --- TOTALS ---
+  y += 16;
+  if (y + 90 > pageH - margin) { doc.addPage(); y = margin; }
+
+  const totalsBoxH = 62;
+  const totalsBoxW = Math.min(260, contentW);
+  const totalsBoxX = pageW - margin - totalsBoxW;
+
+  doc.roundedRect(totalsBoxX, y, totalsBoxW, totalsBoxH, 12).fill(THEME_INVOICE.bgHeader);
+  doc.rect(totalsBoxX, y, 5, totalsBoxH).fill(THEME_INVOICE.accent);
+
   const totalMoney = Number(tx.totalMoney ?? computedTotal ?? 0);
-  const totalBoxH = 68;
-  const innerBoxMargin = 12;
-  const innerBoxH = totalBoxH - (innerBoxMargin * 2); // 44px height
 
-  // Ensure we have enough space at the bottom
-  const minBottomSpace = 60;
-  if (y + totalBoxH + minBottomSpace > doc.page.height - margin) {
-    doc.addPage();
-    y = margin;
-  }
-  
-  // 1. Draw Green Background
-  doc.save();
-  doc.roundedRect(margin, y, contentW, totalBoxH, 12).fill(THEME.primary);
-  
-  // 2. Draw White Inner Box
-  const innerBoxY = y + innerBoxMargin;
-  const innerBoxW = contentW - 24;
-  doc.roundedRect(margin + 12, innerBoxY, innerBoxW, innerBoxH, 8).fill('#FFFFFF');
-  doc.restore();
-  
-  // 3. Draw "TOTAL AMOUNT" Label (Vertically Centered)
-  doc.font(boldFont).fontSize(12).fillColor(THEME.primaryDark);
-  const labelText = 'TOTAL AMOUNT';
-  const labelHeight = doc.heightOfString(labelText, { width: innerBoxW / 2 });
-  const labelY = innerBoxY + (innerBoxH - labelHeight) / 2; // Mathematical Center
-
-  doc.text(labelText, margin + 24, labelY);
-  
-  // 4. Draw Total Value (Vertically Centered & Auto-Sized)
-  const totalValue = formatMoney(totalMoney);
-  doc.font(boldFont).fillColor(THEME.text);
-  
-  // Calculate available width (Right half of the white box minus padding)
-  const totalValueAvailableWidth = (innerBoxW / 2) + 40; 
-  
-  // Fit text size
-  const totalSize = fitTextWidth(doc, totalValue, totalValueAvailableWidth, 22, 14);
-  doc.fontSize(totalSize);
-  
-  // Calculate Text Height & Centered Y Position
-  const valHeight = doc.heightOfString(totalValue, { width: totalValueAvailableWidth });
-  const valY = innerBoxY + (innerBoxH - valHeight) / 2; 
-  
-  // Draw Text
-  doc.text(totalValue, margin + 24, valY - 1, { // -1 optical adjustment
-    width: innerBoxW - 24, 
-    align: 'right'
-  });
-  
-  y += totalBoxH + 28;
-
-  // -------------------------------------------------
-  // ✅ FOOTER (WhatsApp-style)
-  // -------------------------------------------------
-  const footerY = doc.page.height - margin - 50;
-  
-  // WhatsApp-style divider line
-  doc.save();
-  doc.strokeColor(THEME.border).lineWidth(1);
-  doc.moveTo(margin + 60, footerY).lineTo(margin + contentW - 60, footerY).stroke();
-  doc.restore();
-  
-  doc.font(regFont).fontSize(10).fillColor(THEME.textLight);
-  doc.text('Thank you for your purchase!', margin, footerY + 12, {
-    width: contentW,
-    align: 'center'
-  });
-  
-  doc.fontSize(8).fillColor(THEME.muted);
-  doc.text('Generated by TallyPadi POS • This is an official receipt', margin, footerY + 28, {
-    width: contentW,
-    align: 'center'
+  doc.fillColor(THEME_INVOICE.muted).font(boldFont).fontSize(9).text('TOTAL PAID', totalsBoxX + 16, y + 12);
+  doc.fillColor(THEME_INVOICE.dark).font(boldFont).fontSize(18).text(formatMoney(totalMoney), totalsBoxX + 16, y + 28, {
+    width: totalsBoxW - 32,
+    align: 'right',
   });
 
-  // Add page number if multiple pages
-  const pageNumber = doc.bufferedPageRange().count;
-  if (pageNumber > 1) {
-    doc.font(regFont).fontSize(8).fillColor(THEME.muted);
-    doc.text(`Page 1 of ${pageNumber}`, margin, doc.page.height - margin + 20, {
-      width: contentW,
-      align: 'center'
-    });
-  }
+  // --- FOOTER ---
+  const footerY = pageH - 60;
+  doc.fontSize(9).fillColor(THEME_INVOICE.muted).text('Thank you for your business.', 0, footerY, { align: 'center' });
+  doc.fontSize(8).text('Generated by TallyPadi.com', 0, footerY + 15, { align: 'center' });
 }
 
 // ... (Exports remain the same)
