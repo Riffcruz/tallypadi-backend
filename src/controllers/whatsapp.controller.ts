@@ -25,7 +25,8 @@ import {
   queueWelcomeResponse,
   queueSaleReceipt,
   queueInvoicePdf,
-  queueOutboundList
+  queueOutboundList,
+  queueRegistrationComplete
 } from '../services/queue.service';
 import { sendWhatsAppDocumentBuffer } from '../services/whatsapp.service';
 
@@ -1083,7 +1084,6 @@ export const handleMessageLogic = async (
             
             // 1st Response: Registration Complete
             const welcomeMsg = await generateWelcomeMessage(actor.settings?.language || 'English');
-            await queueOutboundMessage(from, welcomeMsg);
 
             // 2nd Response: Trial Started
             const trialMsg = 
@@ -1093,36 +1093,42 @@ You now have full access to the Tycoon Plan (our complete package) for the next 
 Current Pricing Options:
 Tycoon Plan: ₦5,000/month (Save significantly with the yearly plan)
 Oga Boss Plan: ₦3,000/month (Save significantly with the yearly plan)`;
-            await queueOutboundMessage(from, trialMsg, undefined, undefined, 1000); // 1s delay
 
-            // 3rd Response: Menu (Batched Buttons - 3 per message)
-            
-            // Batch 1 (Options 1-3)
-            await queueOutboundButtons(from, "What would you like to do next? (1/4)", [
-                { id: 'CMD_RECORD_INVENTORY', title: '1. Record stock' },
-                { id: 'CMD_TRACK_INVENTORY', title: '2. Track inventory' },
-                { id: 'CMD_RECORD_SALE', title: '3. Log transaction' }
-            ], undefined, 2000);
+            // 3rd Response: Menu Batches
+            const menuBatches = [
+                {
+                    bodyText: "What would you like to do next? (1/4)",
+                    buttons: [
+                        { id: 'CMD_RECORD_INVENTORY', title: '1. Record stock' },
+                        { id: 'CMD_TRACK_INVENTORY', title: '2. Track inventory' },
+                        { id: 'CMD_RECORD_SALE', title: '3. Log transaction' }
+                    ]
+                },
+                {
+                    bodyText: "More options... (2/4)",
+                    buttons: [
+                        { id: 'CMD_RECORD_CREDIT', title: '4. Credit sales' },
+                        { id: 'CMD_VIEW_REPORT', title: '5. View sales report' },
+                        { id: 'CMD_DELETE_STOCK', title: '6. Delete stock item' }
+                    ]
+                },
+                {
+                    bodyText: "More options... (3/4)",
+                    buttons: [
+                        { id: 'CMD_SET_STOCK', title: '7. Set stock' },
+                        { id: 'CMD_SET_PRICE', title: '8. Set stock price' },
+                        { id: 'CMD_CREATE_INVOICE', title: '9. Generate invoice' }
+                    ]
+                },
+                {
+                    bodyText: "Final option... (4/4)",
+                    buttons: [
+                        { id: 'CMD_MANAGE_STAFF', title: '10. Add/Remove Staff' }
+                    ]
+                }
+            ];
 
-            // Batch 2 (Options 4-6)
-            await queueOutboundButtons(from, "More options... (2/4)", [
-                { id: 'CMD_RECORD_CREDIT', title: '4. Credit sales' },
-                { id: 'CMD_VIEW_REPORT', title: '5. View sales report' },
-                { id: 'CMD_DELETE_STOCK', title: '6. Delete stock item' }
-            ], undefined, 3000);
-
-            // Batch 3 (Options 7-9)
-            await queueOutboundButtons(from, "More options... (3/4)", [
-                { id: 'CMD_SET_STOCK', title: '7. Set stock' },
-                { id: 'CMD_SET_PRICE', title: '8. Set stock price' },
-                { id: 'CMD_CREATE_INVOICE', title: '9. Generate invoice' }
-            ], undefined, 4000);
-
-            // Batch 4 (Option 10)
-            await queueOutboundButtons(from, "Final option... (4/4)", [
-                { id: 'CMD_MANAGE_STAFF', title: '10. Add/Remove Staff' }
-            ], undefined, 5000);
-            
+            await queueRegistrationComplete(from, welcomeMsg, trialMsg, menuBatches);
             return;
           }
       }

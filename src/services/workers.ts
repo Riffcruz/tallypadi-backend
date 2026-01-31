@@ -56,6 +56,24 @@ export const replyWorker = new Worker(
       return;
     }
 
+    if (job.name === 'send-registration-complete') {
+        const { phoneNumber, welcomeMsg, trialMsg, menuBatches } = job.data;
+        
+        // 1. Send Welcome Text
+        await sendWhatsAppText(phoneNumber, welcomeMsg);
+        
+        // 2. Send Trial Text
+        await sendWhatsAppText(phoneNumber, trialMsg);
+
+        // 3. Send Button Batches Sequentially
+        if (Array.isArray(menuBatches)) {
+            for (const batch of menuBatches) {
+                await sendWhatsAppButtons(phoneNumber, batch.bodyText, batch.buttons);
+            }
+        }
+        return;
+    }
+
     // ✅ NEW: Send receipt PDF to WhatsApp
     if (job.name === 'send-sale-receipt') {
   const { phoneNumber, userId, saleId } = job.data as {

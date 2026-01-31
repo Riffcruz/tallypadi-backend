@@ -168,6 +168,26 @@ export const queueWelcomeResponse = async (
 };
 
 // ============================================================
+// ✅ Registration Complete (Text + Text + Multiple Button Batches)
+// Worker must handle job.name === 'send-registration-complete'
+// ============================================================
+export const queueRegistrationComplete = async (
+  phoneNumber: string,
+  welcomeMsg: string,
+  trialMsg: string,
+  menuBatches: { bodyText: string; buttons: OutboundButton[] }[],
+  jobId?: string
+) => {
+  const finalJobId = safeJobId(jobId || `reg_complete_${phoneNumber}_${Date.now()}`);
+
+  await replyQueue.add(
+    'send-registration-complete',
+    { phoneNumber, welcomeMsg, trialMsg, menuBatches },
+    { jobId: finalJobId }
+  );
+};
+
+// ============================================================
 // ✅ Receipt PDF (GENERATE + SEND DOCUMENT)
 // Worker must handle job.name === 'send-sale-receipt'
 // ============================================================
