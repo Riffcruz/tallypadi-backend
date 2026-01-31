@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
+import Swal from 'sweetalert2';
 import Sidebar from '../../../components/Sidebar';
 import {
   Banknote,
@@ -38,6 +39,7 @@ export default function ExpensesPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [showModal, setShowModal] = useState(false);
@@ -50,6 +52,19 @@ export default function ExpensesPage() {
     category: '',
     date: new Date().toISOString().split('T')[0]
   });
+
+  const fetchCategories = async () => {
+    const token = getCookie('tallyToken');
+    if (!token) return;
+    try {
+      const res = await axios.get(`${API_URL}/expenses/categories`, {
+         headers: { Authorization: `Bearer ${token}` }
+      });
+      setCategories(res.data);
+    } catch (error) {
+      console.error('Failed to fetch categories', error);
+    }
+  };
 
   const fetchExpenses = async () => {
     const token = getCookie('tallyToken');
@@ -74,6 +89,7 @@ export default function ExpensesPage() {
 
   useEffect(() => {
     fetchExpenses();
+    fetchCategories();
   }, [page]);
 
   const handleAddExpense = async (e: React.FormEvent) => {
@@ -103,17 +119,41 @@ export default function ExpensesPage() {
         category: '',
         date: new Date().toISOString().split('T')[0]
       });
+      
+      Swal.fire({
+        title: 'Success!',
+        text: 'Expense added successfully',
+        icon: 'success',
+        timer: 1500,
+        showConfirmButton: false
+      });
+
       fetchExpenses(); // Refresh list
+      fetchCategories(); // Refresh categories in case a new one was added
     } catch (error) {
       console.error('Failed to add expense', error);
-      alert('Failed to add expense. Please try again.');
+      Swal.fire({
+        title: 'Error!',
+        text: 'Failed to add expense. Please try again.',
+        icon: 'error',
+      });
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this expense?')) return;
+    const result = await Swal.fire({
+      title: 'Are you sure?',
+      text: "You won't be able to revert this!",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#10b981',
+      cancelButtonColor: '#d33',
+      confirmButtonText: 'Yes, delete it!'
+    });
+
+    if (!result.isConfirmed) return;
     
     const token = getCookie('tallyToken');
     if (!token) return;
@@ -122,10 +162,21 @@ export default function ExpensesPage() {
       await axios.delete(`${API_URL}/expenses/${id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
+      
+      Swal.fire(
+        'Deleted!',
+        'Your expense has been deleted.',
+        'success'
+      );
+      
       fetchExpenses();
     } catch (error) {
       console.error('Failed to delete expense', error);
-      alert('Failed to delete expense.');
+      Swal.fire({
+        title: 'Error!',
+        text: 'Failed to delete expense.',
+        icon: 'error',
+      });
     }
   };
 
@@ -288,11 +339,17 @@ export default function ExpensesPage() {
                   <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Category</label>
                   <input
                     type="text"
+                    list="category-list"
                     value={newExpense.category}
                     onChange={e => setNewExpense({...newExpense, category: e.target.value})}
                     className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 font-medium text-slate-900 transition-all"
-                    placeholder="e.g. Utilities"
+                    placeholder="Select or type new..."
                   />
+                  <datalist id="category-list">
+                    {categories.map((cat) => (
+                      <option key={cat} value={cat} />
+                    ))}
+                  </datalist>
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Date</label>

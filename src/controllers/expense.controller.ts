@@ -1,13 +1,20 @@
 import { Request, Response } from 'express';
 import { expenseService } from '../services/expense.service';
-import { IUser } from '../models/user.model';
+import { IUser, User } from '../models/user.model';
 
 // Helper to get user from request (assuming auth middleware populates req.user)
 const getUser = (req: Request) => (req as any).user as IUser;
 
 export const createExpense = async (req: Request, res: Response) => {
   try {
-    const user = getUser(req);
+    const reqUser = (req as any).user; // Direct access, avoid misleading IUser cast
+    const userId = reqUser.id || reqUser._id;
+    const user = await User.findById(userId);
+    
+    if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+    }
+
     const { amount, description, category, date } = req.body;
 
     if (!amount || !description) {
@@ -22,7 +29,7 @@ export const createExpense = async (req: Request, res: Response) => {
     }
 
     const expense = await expenseService.createExpense({
-      user: user._id,
+      user: user._id as any,
       amount,
       description,
       category,
