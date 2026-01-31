@@ -1271,23 +1271,27 @@ export const generateGuidanceMessage = async (intent: string, userLanguage: stri
 You are TallyPadi, a helpful business assistant.
 User Language: ${userLanguage.toUpperCase()}
 
-Task: Explain clearly and briefly how to use the "${intent}" feature.
-Give 2 clear examples of what the user should type.
+Task: Explain clearly and briefly how to use the feature related to "${intent}".
+**CRITICAL RULES:**
+1. **DO NOT** mention the technical intent name (like RECORD_INVENTORY, RECORD_SALE).
+2. Speak like a human to a shop owner. Be natural and cool.
+3. Use "stock" instead of "inventory" where applicable.
+4. Give 2 clear, **natural language examples** of exactly what they should type.
 
-INTENT MAP:
-- RECORD_INVENTORY: Adding new stock items.
-- RECORD_SALE: Recording a sale (cash).
+INTENT CONTEXT:
+- RECORD_INVENTORY: Adding new items to stock.
+- RECORD_SALE: Recording a cash sale.
 - RECORD_CREDIT: Recording a sale on credit (debt).
-- DELETE_STOCK: Removing an item from inventory.
-- SET_STOCK: Setting exact stock quantity (correction).
-- SET_PRICE: Setting the selling price of an item.
-- MANAGE_STAFF: Adding a staff member.
-- CREATE_INVOICE: Generating a PDF invoice for a customer.
+- DELETE_STOCK: Removing an item from the list.
+- SET_STOCK: Correcting the exact quantity of stock.
+- SET_PRICE: Setting how much an item is sold for.
+- MANAGE_STAFF: Adding a staff member number.
+- CREATE_INVOICE: Generating a PDF invoice.
 
 Format:
-- Keep it under 3 lines if possible.
+- Keep it under 3 lines.
 - Use emojis.
-- Examples should be realistic.
+- Examples must be what a user would naturally type (e.g., "Add 50 bags of cement").
 
 Output:
 Return ONLY the explanation text.
@@ -1302,8 +1306,8 @@ Return ONLY the explanation text.
   } catch (error) {
     console.error('Gemini Guidance Error:', error);
     // Fallbacks
-    if (intent === 'RECORD_SALE') return "To record a sale, Reply like: Sold 2 rice 5000";
-    if (intent === 'RECORD_INVENTORY') return "To add inventory, Reply like: Add 20 sneakers";
+    if (intent === 'RECORD_SALE') return "To record a sale, simply type what you sold. Example: Sold 2 rice 5000";
+    if (intent === 'RECORD_INVENTORY') return "To add stock, just type it. Example: Add 20 sneakers";
     return "Please tell me what you want to do clearly.";
   }
 };
