@@ -14,6 +14,13 @@ export const createExpense = async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'Amount and description are required' });
     }
 
+    // ✅ Auto-add new category to user's list
+    if (category && !user.expenseCategories?.includes(category)) {
+      if (!user.expenseCategories) user.expenseCategories = [];
+      user.expenseCategories.push(category);
+      await user.save();
+    }
+
     const expense = await expenseService.createExpense({
       user: user._id,
       amount,
@@ -63,5 +70,20 @@ export const deleteExpense = async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Delete expense error:', error);
     res.status(500).json({ message: 'Failed to delete expense' });
+  }
+};
+
+export const getExpenseCategories = async (req: Request, res: Response) => {
+  try {
+    const user = getUser(req);
+    // Return user's categories or default if empty (though model default should handle this)
+    const categories = user.expenseCategories && user.expenseCategories.length > 0 
+      ? user.expenseCategories 
+      : ['General', 'Rent', 'Utilities', 'Salaries', 'Restocking', 'Miscellaneous'];
+      
+    res.json(categories);
+  } catch (error) {
+    console.error('Get expense categories error:', error);
+    res.status(500).json({ message: 'Failed to fetch categories' });
   }
 };

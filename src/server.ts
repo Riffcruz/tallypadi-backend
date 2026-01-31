@@ -26,6 +26,7 @@ import hqRouter from './routes/hq.routes';
 import invoiceRouter from './routes/invoice.routes';
 import supportRouter from './routes/support.routes';
 import supportWebhookRouter from './routes/support.webhook.routes';
+import expenseRouter from './routes/expense.routes';
 
 // --- SERVICES & CONFIG ---
 import {
@@ -385,6 +386,7 @@ app.use('/api/orders', authRequired, orderRouter);
 app.use('/api/shop', shopRouter);
 app.use('/api/hq', hqRouter);
 app.use('/api/invoices', authRequired, invoiceRouter);
+app.use('/api/expenses', authRequired, expenseRouter);
 
 // --- LIVE SUPPORT ---
 app.use('/api/support', supportRouter);

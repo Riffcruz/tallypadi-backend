@@ -60,6 +60,8 @@ export interface IUser extends Document {
     accountName?: string;
   };
 
+  expenseCategories?: string[];
+
   // ✅ Security / Suspension
   suspendedAt?: Date;
   suspensionReason?: string;
@@ -168,6 +170,12 @@ const userSchema = new Schema<IUser>(
       bankName: { type: String },
       accountNumber: { type: String },
       accountName: { type: String },
+    },
+
+    // ✅ Expense Categories
+    expenseCategories: { 
+      type: [String], 
+      default: ['General', 'Rent', 'Utilities', 'Salaries', 'Restocking', 'Miscellaneous'] 
     },
 
     // ✅ Security / Suspension
