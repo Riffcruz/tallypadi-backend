@@ -1092,12 +1092,13 @@ You now have full access to the Tycoon Plan (our complete package) for the next 
 
 Current Pricing Options:
 Tycoon Plan: ₦5,000/month (Save significantly with the yearly plan)
+
 Oga Boss Plan: ₦3,000/month (Save significantly with the yearly plan)`;
 
             // 3rd Response: Menu Batches
             const menuBatches = [
                 {
-                    bodyText: "1",
+                    bodyText: "SOME THINGS YOU CAN DO:",
                     buttons: [
                         { id: 'CMD_RECORD_INVENTORY', title: '1. Record stock' },
                         { id: 'CMD_TRACK_INVENTORY', title: '2. Track inventory' },
