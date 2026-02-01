@@ -48,8 +48,14 @@ export const expenseService = {
     return expense;
   },
 
-  async getExpenses(userId: string, startDate?: string, endDate?: string, limit = 50, page = 1) {
-    const query: any = { user: userId };
+  async getExpenses(userId: string | string[] | Types.ObjectId[], startDate?: string, endDate?: string, limit = 50, page = 1) {
+    const query: any = {};
+    
+    if (Array.isArray(userId)) {
+        query.user = { $in: userId };
+    } else {
+        query.user = userId;
+    }
     
     if (startDate && endDate) {
       query.date = { $gte: startDate, $lte: endDate };
