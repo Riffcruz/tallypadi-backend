@@ -70,6 +70,11 @@ export interface IUser extends Document {
     lastInjectionAt?: Date | null;
   };
 
+  interactionState?: {
+    type: string | null;
+    data?: any;
+  };
+
   lastLogin?: Date;
   lastSeen?: Date;
 
@@ -186,6 +191,12 @@ const userSchema = new Schema<IUser>(
       lastInjectionAt: { type: Date, default: null },
     },
     
+    // ✅ Interaction State (for multi-step flows like "Ask Name")
+    interactionState: {
+      type: { type: String, default: null },
+      data: { type: Schema.Types.Mixed, default: null }
+    },
+
     lastLogin: { type: Date },
     lastSeen: { type: Date },
 

@@ -1136,6 +1136,53 @@ Oga Boss Plan: ₦3,000/month (Save significantly with the yearly plan)`;
       }
     }
 
+    // ✅ Interaction State (e.g. Asking for Receipt Name)
+    if (actor.interactionState && actor.interactionState.type === 'WAITING_FOR_RECEIPT_NAME') {
+        // Only process if it's a text message (not a button click, unless it's a cancel button?)
+        // If user clicks another button, we probably should treat it as a new command.
+        // But if they type a name, `btn` is null.
+        if (!btn) {
+            const txId = actor.interactionState.data?.txId;
+            
+            // Clear state immediately
+            actor.interactionState = null;
+            await actor.save();
+
+            if (!txId) {
+                await queueOutboundMessage(from, '⚠️ Error: Missing transaction ID. Please try again.');
+                return;
+            }
+
+            const name = rawText.trim();
+            if (!name) {
+                await queueOutboundMessage(from, '⚠️ Name cannot be empty. Receipt cancelled.');
+                return;
+            }
+
+            // Update Transaction
+            await Transaction.findByIdAndUpdate(txId, { customerName: name });
+
+            // Queue Receipt
+            await queueOutboundMessage(from, `🧾 Generating receipt for *${name}*…`);
+            await queueSaleReceipt(
+                from,
+                String(actor._id),
+                String(txId),
+                `receipt_${txId}_${messageId}`
+            );
+            return;
+        }
+        // If btn is present, we assume they want to switch context, so we let it fall through 
+        // (maybe clear state? safe to just overwrite state if next action sets it, or let it linger? 
+        // Better to clear it if we can, but simpler to just let it be overridden if new state is set.
+        // If they click "Help", state might persist? 
+        // Let's clear state if button is clicked to be safe.)
+        if (btn) {
+           actor.interactionState = null;
+           await actor.save();
+        }
+    }
+
     // ✅ suspension check
     const shopUser = owner || actor;
     if (shopUser.subscriptionStatus === 'suspended') {
@@ -1169,13 +1216,14 @@ Oga Boss Plan: ₦3,000/month (Save significantly with the yearly plan)`;
       // ✅ SALE ACTIONS
       if (btn.type === 'SALEACT') {
         if (btn.action === 'RECEIPT') {
-          await queueOutboundMessage(from, '🧾 Generating receipt PDF…');
-          await queueSaleReceipt(
-            from,
-            String(actor._id),
-            String(btn.id),
-            `receipt_${btn.id}_${messageId}`
-          );
+          // Ask for name
+          actor.interactionState = {
+              type: 'WAITING_FOR_RECEIPT_NAME',
+              data: { txId: btn.id }
+          };
+          await actor.save();
+          
+          await queueOutboundMessage(from, 'Please reply with the *customer\'s name* for the receipt.');
           return;
         }
 

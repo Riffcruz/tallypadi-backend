@@ -497,7 +497,11 @@ export const generateSaleReceiptPdfBuffer = async (userId: string, saleId: strin
   doc.end();
 
   const buffer = await done;
-  const filename = `Receipt_${String(saleId).slice(-6)}.pdf`;
+  
+  // Create descriptive filename
+  const safeShop = (businessName || 'Shop').replace(/[^a-zA-Z0-9]/g, '_').slice(0, 20);
+  const safeCust = (tx.customerName || 'Customer').replace(/[^a-zA-Z0-9]/g, '_').slice(0, 20);
+  const filename = `Receipt_${safeShop}_${safeCust}_${String(saleId).slice(-6)}.pdf`;
 
   return { buffer, filename, mimeType: 'application/pdf' };
 };
