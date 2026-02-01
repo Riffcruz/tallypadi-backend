@@ -1756,6 +1756,58 @@ Oga Boss Plan: ₦3,000/month (Save significantly with the yearly plan)`;
         break;
       }
 
+      case 'REPORT_EXPENSE': {
+        await queueOutboundMessage(from, `💸 Fetching expenses for *${dateLabel}*...`);
+
+        // Use same date resolution (startUtc/endUtc)
+        // Convert dates to YYYY-MM-DD string for expenseService (if it expects strings)
+        // BUT expenseService.getExpenses takes strings or nothing.
+        // Let's check expenseService again. It takes (userId, startDate, endDate).
+        // It compares with 'date' field which is YYYY-MM-DD string in DB.
+        
+        // So we need to convert startUtc/endUtc back to user's local YYYY-MM-DD range.
+        // Actually, startUtc/endUtc are UTC boundaries of the user's day.
+        // If we want to query by the 'date' string field in Expense model (which is YYYY-MM-DD),
+        // we should just use the raw YYYY-MM-DD strings if they match the day.
+        
+        // However, getUtcRangeForUser logic tries to encompass the day.
+        // A simpler way for Expense (which is stored by Date String usually) is to generate the date strings between start and end.
+        // Or if Expense has a timestamp, query by timestamp.
+        // Looking at expenseService, it queries 'date' (string) OR 'timestamp' if we change it.
+        // The service has: query.date = { $gte: startDate, $lte: endDate };
+        // So we need YYYY-MM-DD strings.
+        
+        const sLocal = toUserLocalDate(startUtc, offsetMinutes);
+        const eLocal = toUserLocalDate(endUtc, offsetMinutes);
+        
+        const sStr = sLocal.toISOString().split('T')[0];
+        const eStr = eLocal.toISOString().split('T')[0];
+
+        const { expenses, total } = await expenseService.getExpenses(actor._id as any, sStr, eStr, 20);
+
+        if (!expenses || expenses.length === 0) {
+          await queueOutboundMessage(from, `No expenses recorded for *${dateLabel}*.`);
+          break;
+        }
+
+        // Calculate total amount
+        const totalAmt = expenses.reduce((sum, e) => sum + e.amount, 0);
+
+        let msg = `💸 *Expense Report (${dateLabel})*\n\n`;
+        expenses.forEach((e) => {
+            const amt = `${symbol}${e.amount.toLocaleString(locale)}`;
+            const desc = e.description || 'Expense';
+            const cat = e.category ? `(${e.category})` : '';
+            // If report spans multiple days, show date
+            const dateShow = sStr !== eStr ? ` [${e.date}]` : '';
+            msg += `• ${desc} ${cat}: ${amt}${dateShow}\n`;
+        });
+
+        msg += `\n💰 *Total Spent:* ${symbol}${totalAmt.toLocaleString(locale)}`;
+        await queueOutboundMessage(from, msg);
+        break;
+      }
+
       case 'REPORT_SALES': {
   await queueOutboundMessage(from, `Calculating ${String(dateLabel || "Today's").toLowerCase()} report... ⏳`);
 

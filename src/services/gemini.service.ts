@@ -40,6 +40,7 @@ export type ParsedIntent =
   | 'CREATE_INVOICE'
   | 'UPDATE_BANK_DETAILS'
   | 'EXPENSE'
+  | 'REPORT_EXPENSE'
   | 'BEST_SELLING'
   | 'COMPARE_SALES'
   | 'HELP'
@@ -279,6 +280,7 @@ function safeParsedResult(p: any): ParsedResult {
   'CREATE_INVOICE',
   'UPDATE_BANK_DETAILS',
   'EXPENSE',
+  'REPORT_EXPENSE',
   'BEST_SELLING',
   'COMPARE_SALES',
 
@@ -803,6 +805,8 @@ B. WHICH REPORT INTENT TO USE
   "recent", "latest", "last 5", "last 10", "recent transactions", "recent sales"
 - Use REPORT_DEBTS when user asks for:
   "who owes me", "debtors", "creditors", "unpaid", "outstanding debt", "people owing", "credit sales list"
+- Use REPORT_EXPENSE when user asks for:
+  "expenses report", "spending history", "list expenses", "show expenses", "how much did I spend", "my expenses"
 
 C. DATE RANGE RESOLUTION (RETURN ISO DATES)
 Fill report_params.start_date and report_params.end_date (YYYY-MM-DD) whenever possible.
@@ -1305,6 +1309,16 @@ Distinct from "Sales" (which are immediate).
   expense_params = { category: "Utilities", description: "fuel for gen" }
   needs_clarification = true if amount is missing.
 
+*** 5I-2. REPORT_EXPENSE (VIEW SPENDING) ***
+- Triggers: "Show expenses", "List expenses", "How much did I spend?", "Expense report", "Spending history".
+- ACTION: List recorded expenses.
+- EXTRACTION RULES:
+  - Extract date range like other reports (today, yesterday, etc.).
+  - report_params.start_date / end_date should be filled.
+- Output:
+  intent = REPORT_EXPENSE
+  report_params = { start_date: "...", end_date: "..." }
+
 *** 5J. BEST SELLING & COMPARISON ***
 
 1) BEST_SELLING
@@ -1475,7 +1489,14 @@ export const parseMessageWithGemini = async (
   const recentHistory = history.slice(-5);
   const prompt = getSystemPrompt(userLanguage, new Date().toISOString(), recentHistory);
 
-  const parts: any[] = [`${prompt}\n\nUSER MESSAGE: "${safeMessage}"\n\nReturn JSON only.`];
+  let userPrompt = `${prompt}\n\nUSER MESSAGE: "${safeMessage}"\n\nReturn JSON only.`;
+  
+  // ✅ ENHANCED AUDIO PROMPT
+  if (imageMimeType && imageMimeType.startsWith('audio/')) {
+    userPrompt += "\n\n🔊 AUDIO INSTRUCTION: The user has sent a voice note. Listen to the audio carefully and extract the intent/data as if it were written text. Ignore the text 'Analyze this audio'.";
+  }
+
+  const parts: any[] = [userPrompt];
 
   if (imageBuffer && imageMimeType) {
     parts.push({ inlineData: { data: imageBuffer, mimeType: imageMimeType } });
