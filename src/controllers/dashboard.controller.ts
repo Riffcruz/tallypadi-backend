@@ -180,7 +180,13 @@ export const getDashboardData = async (req: Request | any, res: Response) => {
       // 10. Total Expenses
       Expense.aggregate([
         { $match: { user: { $in: relevantIds } } },
-        { $group: { _id: null, total: { $sum: '$amount' } } },
+        {
+          $group: {
+            _id: null,
+            count: { $sum: 1 },
+            totalAmount: { $sum: '$amount' }
+          }
+        }
       ]),
 
       // 11. Recent Expenses
@@ -189,7 +195,8 @@ export const getDashboardData = async (req: Request | any, res: Response) => {
 
     const totalRevenue = totalRevenueRaw[0]?.total || 0;
     const itemsSold = itemsSoldRaw[0]?.total || 0;
-    const totalExpenses = totalExpensesRaw[0]?.total || 0;
+    const totalExpenses = totalExpensesRaw[0]?.totalAmount || 0;
+    const expensesCount = totalExpensesRaw[0]?.count || 0;
 
     // Process Visit Stats
     const visitData = (visitStatsRaw[0]?.all || []) as { date: string; count: number }[];
@@ -295,6 +302,7 @@ export const getDashboardData = async (req: Request | any, res: Response) => {
         revenue: totalRevenue,
         itemsSold: itemsSold,
         totalExpenses: totalExpenses,
+        expensesCount: expensesCount,
         stockValue: 0,
         debtorsCount: totalDebtors[0]?.count || 0,
         debtorsAmount: totalDebtors[0]?.totalAmount || 0,
