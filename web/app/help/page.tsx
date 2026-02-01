@@ -12,7 +12,10 @@ import {
   Settings,
   Shield,
   CreditCard,
-  MessageCircle
+  MessageCircle,
+  FileText,
+  TrendingUp,
+  Globe
 } from 'lucide-react';
 
 export default function HelpPage() {
@@ -48,10 +51,10 @@ export default function HelpPage() {
         {/* --- CONTENT SECTIONS --- */}
         <div className="space-y-12">
 
-          {/* Section 1: Sales & Transactions */}
+          {/* Section 1: Sales, Expenses & Finance */}
           <Section 
-            title="Sales & Transactions" 
-            description="Record every sale instantly. Tallypadi handles the math and profit calculations for you."
+            title="Sales, Expenses & Finance" 
+            description="Record every transaction instantly. Tallypadi handles sales, expenses, invoices, and profit calculations."
           >
             <GuideCard 
               icon={<ShoppingCart size={24} />}
@@ -65,6 +68,26 @@ export default function HelpPage() {
             />
             <GuideCard 
               icon={<CreditCard size={24} />}
+              title="Expenses"
+              color="red"
+              commands={[
+                { cmd: "Spent 5000 on fuel", desc: "Record a business expense" },
+                { cmd: "Transport 2000", desc: "Quick expense log" },
+                { cmd: "Paid 10k for shop rent", desc: "Categorized expense" }
+              ]}
+            />
+            <GuideCard 
+              icon={<FileText size={24} />}
+              title="Invoicing & Banking"
+              color="indigo"
+              commands={[
+                { cmd: "Create invoice", desc: "Start an invoice generation flow" },
+                { cmd: "Invoice for John", desc: "Generate invoice for a specific customer" },
+                { cmd: "Update bank details", desc: "Save your bank info for invoices" }
+              ]}
+            />
+            <GuideCard 
+              icon={<Users size={24} />}
               title="Credit Sales & Debts"
               color="orange"
               commands={[
@@ -76,7 +99,7 @@ export default function HelpPage() {
              <GuideCard 
               icon={<Shield size={24} />}
               title="Corrections"
-              color="red"
+              color="slate"
               commands={[
                 { cmd: "Undo last sale", desc: "Immediately cancels the last recorded transaction" },
                 { cmd: "Delete sales for today", desc: "Resets today's sales (Owner only - careful!)" }
@@ -128,6 +151,17 @@ export default function HelpPage() {
                 { cmd: "Who owes me?", desc: "List of all debtors and amounts owed" }
               ]}
             />
+            <GuideCard 
+              icon={<TrendingUp size={24} />}
+              title="Advanced Analytics"
+              color="purple"
+              commands={[
+                { cmd: "Best selling product today", desc: "See top performing items" },
+                { cmd: "Top selling items this week", desc: "Identify fast-moving products" },
+                { cmd: "Compare sales this week and last week", desc: "Compare revenue across periods" },
+                { cmd: "Compare today and yesterday", desc: "Daily performance check" }
+              ]}
+            />
           </Section>
 
           {/* Section 4: Settings & Administration */}
@@ -135,6 +169,14 @@ export default function HelpPage() {
             title="Settings & Admin" 
             description="Configure your shop preferences and manage access."
           >
+            <GuideCard 
+              icon={<Globe size={24} />}
+              title="Online Shop"
+              color="blue"
+              commands={[
+                { cmd: "Get my shop link", desc: "Get your public storefront URL to share with customers" }
+              ]}
+            />
             <GuideCard 
               icon={<Users size={24} />}
               title="Staff Management (Tycoon Plan)"

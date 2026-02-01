@@ -40,6 +40,8 @@ export type ParsedIntent =
   | 'CREATE_INVOICE'
   | 'UPDATE_BANK_DETAILS'
   | 'EXPENSE'
+  | 'BEST_SELLING'
+  | 'COMPARE_SALES'
   | 'HELP'
   | 'UNKNOWN';
 
@@ -71,6 +73,8 @@ export interface ParsedResult {
 
     // ✅ NEW
     include_undone?: boolean; // default false unless user asks
+    compare_start_date?: string | null;
+    compare_end_date?: string | null;
   };
   expense_params?: {
     category: string | null;
@@ -275,6 +279,8 @@ function safeParsedResult(p: any): ParsedResult {
   'CREATE_INVOICE',
   'UPDATE_BANK_DETAILS',
   'EXPENSE',
+  'BEST_SELLING',
+  'COMPARE_SALES',
 
   'HELP',
   'UNKNOWN',
@@ -354,6 +360,8 @@ function safeParsedResult(p: any): ParsedResult {
       end_date: p?.report_params?.end_date || null,
       category_filter: p?.report_params?.category_filter || null,
       include_undone,
+      compare_start_date: p?.report_params?.compare_start_date || null,
+      compare_end_date: p?.report_params?.compare_end_date || null,
     },
     expense_params: {
       category: typeof p?.expense_params?.category === 'string' ? sanitizeInput(p.expense_params.category) : null,
@@ -566,6 +574,49 @@ if (wantsDownload && !isToggle) {
     if (!/\b(new|create|make|add)\b/i.test(m)) {
       return safeParsedResult({ intent: 'LIST_ORDERS', reply_text: '🔍 Checking orders...' });
     }
+  }
+
+  // ✅ EXPENSE FALLBACK
+  // "Spent 5000 on fuel", "Expense 2k for transport", "Bought fuel 2000"
+  const expenseRegex = /\b(spent|spend|expense|expenses|cost|bought|buy|paid|pay)\b/i;
+  
+  if (expenseRegex.test(m) && !/\b(sold|sell|sale)\b/i.test(m)) {
+      // Try to extract money
+      const moneyMatch = raw.match(/([₦$€£₵]?\s*[\d,]+(?:\s*(?:k|m|thousand|million))?)/i);
+      if (moneyMatch) {
+          const total_money = parseMoney(moneyMatch[1]);
+          // Ensure it's not just a small number like "20" (unless currency symbol present)
+          const hasCurrencyOrSuffix = /[₦$€£₵km]/i.test(moneyMatch[0]) || /thousand|million/i.test(moneyMatch[0]);
+          
+          if (total_money && total_money > 0 && (hasCurrencyOrSuffix || total_money > 100)) {
+              // Guess description: Remove money and intent keywords
+              let desc = raw.replace(moneyMatch[0], '').replace(expenseRegex, '').replace(/\b(on|for|naira|dollars?|cedis?)\b/gi, '').trim();
+              desc = sanitizeInput(desc);
+              if (!desc) desc = 'Expense';
+
+              // Simple category guess
+              let cat = 'General';
+              const d = desc.toLowerCase();
+              if (/\b(fuel|diesel|petrol|gas|power|light|bill|nepa)\b/.test(d)) cat = 'Utilities';
+              else if (/\b(transport|bus|taxi|uber|bolt|trip|travel)\b/.test(d)) cat = 'Transport';
+              else if (/\b(food|eat|lunch|dinner|snack)\b/.test(d)) cat = 'Feeding';
+              else if (/\b(rent|shop|space)\b/.test(d)) cat = 'Rent';
+              else if (/\b(airtime|data|card|recharge)\b/.test(d)) cat = 'Communication';
+              else if (/\b(salary|wages|staff|pay)\b/.test(d)) cat = 'Salaries';
+
+              const sym = detectMoneySymbol(raw) || '₦';
+
+              return safeParsedResult({
+                  intent: 'EXPENSE',
+                  total_money,
+                  expense_params: {
+                      description: desc,
+                      category: cat
+                  },
+                  reply_text: `✅ Recorded expense: ${sym}${total_money.toLocaleString()} for ${desc} (${cat}).`
+              });
+          }
+      }
   }
 
   // Handles:
@@ -1253,6 +1304,31 @@ Distinct from "Sales" (which are immediate).
   total_money = 5000
   expense_params = { category: "Utilities", description: "fuel for gen" }
   needs_clarification = true if amount is missing.
+
+*** 5J. BEST SELLING & COMPARISON ***
+
+1) BEST_SELLING
+- Triggers: "best selling", "top selling", "most sold", "fastest moving", "highest sales", "best performers".
+- ACTION: Identify top products by quantity/revenue.
+- EXTRACTION RULES:
+  - Date ranges apply as per REPORT logic (today, this week, yesterday, etc.).
+  - report_params.start_date / end_date should be filled.
+- Output: intent = BEST_SELLING
+
+2) COMPARE_SALES
+- Triggers: "Compare sales", "difference between last week and this week", "sales vs yesterday", "performance today vs yesterday", "compare this month and last month".
+- ACTION: Compare total sales between two periods.
+- EXTRACTION RULES:
+  - Must extract TWO date ranges.
+  - report_params.start_date/end_date (Current Period).
+  - report_params.compare_start_date/compare_end_date (Previous Period).
+    - If user says "compare today and yesterday":
+      start/end = today, compare_start/end = yesterday.
+    - If user says "compare this week and last week":
+      start/end = this week, compare_start/end = last week.
+- Output:
+  intent = COMPARE_SALES
+  report_params = { start_date: "...", end_date: "...", compare_start_date: "...", compare_end_date: "..." }
 
 `;
 

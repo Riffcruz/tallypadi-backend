@@ -367,3 +367,89 @@ export const getSmartSuggestions = async (userId: Types.ObjectId): Promise<strin
 
   return suggestions.map((s: any) => s._id);
 };
+
+// 6) BEST SELLING PRODUCTS
+export const getBestSellingProducts = async (
+  userId: Types.ObjectId,
+  start: Date,
+  end: Date,
+  limit: number = 5
+): Promise<DailyItem[]> => {
+  const user = await User.findById(userId);
+  if (!user) throw new Error('User not found');
+
+  const scope: 'OWN' | 'SHOP' = user.role === 'OWNER' ? 'SHOP' : 'OWN';
+  const relevantUserIds = await getRelevantUserIds(user, scope);
+
+  const result = await Transaction.aggregate<DailyAggResult>([
+    {
+      $match: {
+        user: { $in: relevantUserIds },
+        type: 'SALE',
+        isUndone: { $ne: true }, // ✅ ignore undone
+        paymentStatus: { $ne: 'CREDIT' }, // ✅ ignore credit (consistent with revenue reports)
+        createdAt: { $gte: start, $lte: end },
+      },
+    },
+    { $unwind: '$items' },
+    {
+      $group: {
+        _id: '$items.name',
+        totalQty: { $sum: '$items.qty' },
+        unit: { $first: '$items.unit' },
+        totalAmount: { $sum: itemTotalExpr },
+      },
+    },
+    { $sort: { totalQty: -1, totalAmount: -1 } }, // Sort by Qty desc, then Amount desc
+    { $limit: limit },
+  ]);
+
+  return result.map((r) => ({
+    name: r._id,
+    qty: r.totalQty,
+    unit: r.unit || '',
+    totalAmount: r.totalAmount || 0,
+  }));
+};
+
+// 7) SALES COMPARISON
+export const getSalesComparison = async (
+  userId: Types.ObjectId,
+  start1: Date,
+  end1: Date,
+  start2: Date,
+  end2: Date
+) => {
+  const user = await User.findById(userId);
+  if (!user) throw new Error('User not found');
+
+  const scope: 'OWN' | 'SHOP' = user.role === 'OWNER' ? 'SHOP' : 'OWN';
+  const relevantUserIds = await getRelevantUserIds(user, scope);
+
+  const getStats = async (s: Date, e: Date) => {
+    const result = await Transaction.aggregate([
+      {
+        $match: {
+          user: { $in: relevantUserIds },
+          type: 'SALE',
+          isUndone: { $ne: true },
+          paymentStatus: { $ne: 'CREDIT' },
+          createdAt: { $gte: s, $lte: e },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalRevenue: { $sum: '$totalMoney' },
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+    return result[0] || { totalRevenue: 0, count: 0 };
+  };
+
+  const period1 = await getStats(start1, end1);
+  const period2 = await getStats(start2, end2);
+
+  return { period1, period2 };
+};

@@ -26,6 +26,7 @@ import {
   Eye,
   Copy,
   ExternalLink,
+  TrendingDown,
 } from 'lucide-react';
 import {
   BarChart,
@@ -75,6 +76,7 @@ interface DashboardResponse {
   };
   stats?: {
     revenue?: number; // in user's currency
+    totalExpenses?: number; // ✅ Added totalExpenses
     itemsSold?: number;
     debtorsCount?: number;
     debtorsAmount?: number;
@@ -145,13 +147,14 @@ function StatCard({
   value: string;
   sub?: string;
   icon: any;
-  accent?: 'emerald' | 'blue' | 'orange' | 'purple';
+  accent?: 'emerald' | 'blue' | 'orange' | 'purple' | 'red';
 }) {
   const accentMap: Record<string, string> = {
     emerald: 'from-emerald-500/10 to-emerald-500/0 text-emerald-700 border-emerald-100',
     blue: 'from-blue-500/10 to-blue-500/0 text-blue-700 border-blue-100',
     orange: 'from-orange-500/10 to-orange-500/0 text-orange-700 border-orange-100',
     purple: 'from-purple-500/10 to-purple-500/0 text-purple-700 border-purple-100',
+    red: 'from-red-500/10 to-red-500/0 text-red-700 border-red-100',
   };
 
   return (
@@ -467,6 +470,13 @@ const topTransactions = filteredTransactions.slice(0, 6);
             sub={formattedRevenueConverted ? `≈ ${formattedRevenueConverted} (${baseCurrency})` : undefined}
             icon={Wallet}
             accent="emerald"
+          />
+          <StatCard
+            title="Total Expenses"
+            value={formatCurrency(data?.stats?.totalExpenses || 0, currencyCode, userLocale)}
+            sub="All time spent"
+            icon={TrendingDown}
+            accent="red"
           />
           <StatCard
             title="Items Sold Today"

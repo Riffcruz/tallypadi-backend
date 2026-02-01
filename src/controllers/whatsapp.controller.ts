@@ -46,6 +46,8 @@ import {
   getFullSummary,
   getTodayTransactions,
   getRelevantUserIds,
+  getBestSellingProducts,
+  getSalesComparison,
 } from '../services/report.service';
 import { generatePdfReport } from '../services/pdf.service';
 import { toUserLocalDate } from '../utils/dates';
@@ -1532,7 +1534,7 @@ Oga Boss Plan: ₦3,000/month (Save significantly with the yearly plan)`;
             messageId
         });
 
-        await queueOutboundMessage(from, `✅ Recorded expense: ${symbol}${amount.toLocaleString(locale)} for *${description}*.`);
+        await queueOutboundMessage(from, `✅ Recorded expense: ${symbol}${amount.toLocaleString(locale)} for *${description}* (${category}).`);
         break;
       }
 
@@ -1680,6 +1682,77 @@ Oga Boss Plan: ₦3,000/month (Save significantly with the yearly plan)`;
           endUtc,
         });
 
+        break;
+      }
+
+      case 'BEST_SELLING': {
+        await queueOutboundMessage(from, `🏆 Finding top products for *${dateLabel}*...`);
+
+        // Use same date resolution as other reports (already computed in startUtc/endUtc)
+        const products = await getBestSellingProducts(actor._id as any, startUtc, endUtc, 10);
+
+        if (!products.length) {
+          await queueOutboundMessage(from, `No sales found for *${dateLabel}*.`);
+          break;
+        }
+
+        let msg = `🏆 *Best Selling Products (${dateLabel})*\n\n`;
+        products.forEach((p, i) => {
+          const rank = i + 1;
+          const amt = `${symbol}${Number(p.totalAmount || 0).toLocaleString(locale)}`;
+          msg += `${rank}. *${p.name}* \n   📦 Sold: ${p.qty} ${p.unit}\n   💰 Revenue: ${amt}\n\n`;
+        });
+
+        await queueOutboundMessage(from, msg);
+        break;
+      }
+
+      case 'COMPARE_SALES': {
+        // 1. Resolve Comparison Dates
+        const pStart = parsed.report_params?.compare_start_date;
+        const pEnd = parsed.report_params?.compare_end_date;
+
+        if (!pStart || !pEnd) {
+          await queueOutboundMessage(from, '⚠️ Please specify two periods to compare. Example: "Compare sales this week and last week".');
+          break;
+        }
+
+        const compStartUtc = parseReportDateToUtc(pStart, offsetMinutes, false);
+        const compEndUtc = parseReportDateToUtc(pEnd, offsetMinutes, true);
+
+        if (!compStartUtc || !compEndUtc) {
+          await queueOutboundMessage(from, '⚠️ Could not understand the comparison dates.');
+          break;
+        }
+
+        // 2. Fetch Data
+        await queueOutboundMessage(from, `📊 Comparing sales...`);
+        const result = await getSalesComparison(actor._id as any, startUtc, endUtc, compStartUtc, compEndUtc);
+
+        // 3. Calculate Stats
+        const rev1 = result.period1.totalRevenue || 0;
+        const rev2 = result.period2.totalRevenue || 0;
+        const diff = rev1 - rev2;
+        const pct = rev2 > 0 ? ((diff / rev2) * 100).toFixed(1) : '0';
+        const trend = diff >= 0 ? '📈' : '📉';
+
+        // 4. Format Message
+        const date1Label = buildDateLabelOldStyle(startUtc, endUtc, offsetMinutes);
+        const date2Label = buildDateLabelOldStyle(compStartUtc, compEndUtc, offsetMinutes);
+
+        let cMsg = `📊 *Sales Comparison*\n\n`;
+        cMsg += `🗓️ *Period 1 (${date1Label})*\n`;
+        cMsg += `   💰 Revenue: ${symbol}${rev1.toLocaleString(locale)}\n`;
+        cMsg += `   🧾 Count: ${result.period1.count}\n\n`;
+
+        cMsg += `🗓️ *Period 2 (${date2Label})*\n`;
+        cMsg += `   💰 Revenue: ${symbol}${rev2.toLocaleString(locale)}\n`;
+        cMsg += `   🧾 Count: ${result.period2.count}\n\n`;
+
+        cMsg += `-----------------------------\n`;
+        cMsg += `⚖️ *Difference:* ${trend} ${symbol}${Math.abs(diff).toLocaleString(locale)} (${diff >= 0 ? '+' : ''}${pct}%)\n`;
+
+        await queueOutboundMessage(from, cMsg);
         break;
       }
 
