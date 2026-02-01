@@ -74,10 +74,16 @@ export const getExpenses = async (req: Request, res: Response) => {
   }
 };
 
+import { Types } from 'mongoose';
+
 export const deleteExpense = async (req: Request, res: Response) => {
   try {
     const user = getUser(req);
     const { id } = req.params;
+
+    if (!Types.ObjectId.isValid(id as string)) {
+      return res.status(400).json({ message: 'Invalid expense ID' });
+    }
 
     const result = await expenseService.deleteExpense(String(user._id), String(id));
     if (!result) {
