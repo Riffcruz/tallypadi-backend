@@ -78,14 +78,15 @@ import { Types } from 'mongoose';
 
 export const deleteExpense = async (req: Request, res: Response) => {
   try {
-    const user = getUser(req);
+    const reqUser = (req as any).user;
+    const userId = reqUser.id || reqUser._id;
     const { id } = req.params;
 
     if (!Types.ObjectId.isValid(id as string)) {
       return res.status(400).json({ message: 'Invalid expense ID' });
     }
 
-    const result = await expenseService.deleteExpense(String(user._id), String(id));
+    const result = await expenseService.deleteExpense(String(userId), String(id));
     if (!result) {
       return res.status(404).json({ message: 'Expense not found' });
     }
@@ -99,11 +100,16 @@ export const deleteExpense = async (req: Request, res: Response) => {
 
 export const getExpenseCategories = async (req: Request, res: Response) => {
   try {
-    const user = getUser(req);
-    // Return user's categories or default if empty (though model default should handle this)
-    const categories = user.expenseCategories && user.expenseCategories.length > 0 
+    const reqUser = (req as any).user;
+    const userId = reqUser.id || reqUser._id;
+    
+    const user = await User.findById(userId);
+    const defaultCategories = ['General', 'Rent', 'Utilities', 'Salaries', 'Restocking', 'Miscellaneous'];
+
+    // Return user's categories or default if empty
+    const categories = user && user.expenseCategories && user.expenseCategories.length > 0 
       ? user.expenseCategories 
-      : ['General', 'Rent', 'Utilities', 'Salaries', 'Restocking', 'Miscellaneous'];
+      : defaultCategories;
       
     res.json(categories);
   } catch (error) {

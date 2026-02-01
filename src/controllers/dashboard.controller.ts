@@ -302,7 +302,6 @@ export const getDashboardData = async (req: Request | any, res: Response) => {
         revenue: totalRevenue,
         itemsSold: itemsSold,
         totalExpenses: totalExpenses,
-        expensesCount: expensesCount,
         stockValue: 0,
         debtorsCount: totalDebtors[0]?.count || 0,
         debtorsAmount: totalDebtors[0]?.totalAmount || 0,
