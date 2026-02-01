@@ -4,6 +4,7 @@ import { Transaction } from '../models/transaction.model';
 import { Inventory } from '../models/inventory.model';
 import { Debtor } from '../models/debtor.model';
 import { Order } from '../models/order.model';
+import { Expense } from '../models/expense.model';
 import { DailyStats } from '../models/dailyStats.model';
 import { getRelevantUserIds } from '../services/report.service';
 const UNKNOWN_ITEM_NAMES = ['unknown_item', 'unknown', 'item', 'null', 'undefined'];
@@ -85,7 +86,9 @@ export const getDashboardData = async (req: Request | any, res: Response) => {
       totalDebtors,
       pendingOrders,
       inventoryDocs,
-      visitStatsRaw
+      visitStatsRaw,
+      totalExpensesRaw,
+      recentExpenses
     ] = await Promise.all([
       // 1. Total Revenue
       Transaction.aggregate([
@@ -172,12 +175,22 @@ export const getDashboardData = async (req: Request | any, res: Response) => {
             all: { $push: { date: '$date', count: '$totalVisits' } }
           }
         }
-      ])
+      ]),
+
+      // 10. Total Expenses
+      Expense.aggregate([
+        { $match: { user: { $in: relevantIds } } },
+        { $group: { _id: null, total: { $sum: '$amount' } } },
+      ]),
+
+      // 11. Recent Expenses
+      Expense.find({ user: { $in: relevantIds } }).sort({ timestamp: -1 }).limit(10).lean(),
     ]);
 
     const totalRevenue = totalRevenueRaw[0]?.total || 0;
     const itemsSold = itemsSoldRaw[0]?.total || 0;
-    
+    const totalExpenses = totalExpensesRaw[0]?.total || 0;
+
     // Process Visit Stats
     const visitData = (visitStatsRaw[0]?.all || []) as { date: string; count: number }[];
     const now = new Date();
@@ -249,6 +262,14 @@ export const getDashboardData = async (req: Request | any, res: Response) => {
       lastUnitPrice: doc.lastUnitPrice || 0,
     }));
 
+    const expenses = recentExpenses.map((e: any) => ({
+      id: e._id,
+      description: e.description,
+      category: e.category,
+      amount: e.amount,
+      date: e.timestamp.toISOString(),
+    }));
+
     return res.json({
       user: {
         name: user.name || 'Shop Owner',
@@ -273,6 +294,7 @@ export const getDashboardData = async (req: Request | any, res: Response) => {
       stats: {
         revenue: totalRevenue,
         itemsSold: itemsSold,
+        totalExpenses: totalExpenses,
         stockValue: 0,
         debtorsCount: totalDebtors[0]?.count || 0,
         debtorsAmount: totalDebtors[0]?.totalAmount || 0,
@@ -286,6 +308,7 @@ export const getDashboardData = async (req: Request | any, res: Response) => {
       },
       inventory,
       transactions,
+      expenses,
       salesChart,
       topItems: topItems.map((i: any) => ({
         name: i._id,
