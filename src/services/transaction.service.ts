@@ -522,6 +522,12 @@ export const processTransaction = async (
       const msgPrice = item.unit_price == null ? null : toNumber(item.unit_price);
       const msgCostPrice = item.cost_price == null ? null : toNumber(item.cost_price);
 
+      // ✅ NEW: Back-calculate unit price if only Total Money is given for a single item
+      let derivedUnitPrice: number | null = null;
+      if (parsed.items.length === 1 && parsed.total_money != null && parsed.total_money > 0 && msgPrice == null && qty > 0) {
+          derivedUnitPrice = parsed.total_money / qty;
+      }
+
       // LOGIC:
       // If RESTOCK:
       // - parsed.cost_price -> Updates Cost Price
@@ -540,6 +546,9 @@ export const processTransaction = async (
         if (msgPrice !== null && msgPrice > 0) {
           effectiveUnitPrice = msgPrice;
           inv.lastUnitPrice = msgPrice; // Update Last Selling Price
+        } else if (derivedUnitPrice !== null && derivedUnitPrice > 0) {
+          effectiveUnitPrice = derivedUnitPrice;
+          inv.lastUnitPrice = derivedUnitPrice; // ✅ Update Last Selling Price from derived
         } else {
           effectiveUnitPrice = toNumber(inv.lastUnitPrice);
         }
