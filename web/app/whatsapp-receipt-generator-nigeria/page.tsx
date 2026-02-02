@@ -1,7 +1,7 @@
 import React from 'react';
 import type { Metadata } from 'next';
 import Script from 'next/script';
-import { CheckCircle, FileText, Send, Smartphone, ShieldCheck, Zap } from 'lucide-react';
+import { CheckCircle, FileText, Send, Smartphone, ShieldCheck, Zap, ArrowRight } from 'lucide-react';
 import MarketingNavbar from '../../components/MarketingNavbar';
 import MarketingFooter from '../../components/MarketingFooter';
 
