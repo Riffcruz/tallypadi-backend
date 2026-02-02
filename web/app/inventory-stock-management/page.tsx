@@ -34,6 +34,7 @@ export default function InventoryPage() {
     },
   };
 
+  
   return (
     <div className="bg-slate-50 text-slate-600 font-sans selection:bg-emerald-500 selection:text-white">
       <Script
