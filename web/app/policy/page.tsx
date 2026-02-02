@@ -1,8 +1,20 @@
-'use client';
-
 import React from 'react';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  title: 'Privacy Policy & Terms of Service | TallyPadi',
+  description: 'Read our Privacy Policy and Terms of Service. We are committed to protecting your data and ensuring secure business operations.',
+  alternates: {
+    canonical: 'https://tallypadi.com/policy',
+  },
+  openGraph: {
+    title: 'Privacy Policy & Terms of Service',
+    description: 'Data protection, privacy rights, and terms of use for TallyPadi.',
+    url: 'https://tallypadi.com/policy',
+  },
+};
 
 export default function PolicyPage() {
   return (
