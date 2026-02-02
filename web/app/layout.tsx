@@ -30,12 +30,12 @@ export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://tallypadi.com"),
   title: {
     default:
-      "TallyPadi — WhatsApp Sales & Inventory Tracker for Businesses and People Trying to Keep Track of Sales",
+      "TallyPadi — WhatsApp Receipts, Invoicing & Inventory for Business",
     template: "%s — TallyPadi",
   },
-  description: "Track sales, stock, and profit directly on WhatsApp. Built for Businesses and vendors.",
+  description: "Generate WhatsApp receipts & invoices, track sales, and manage inventory automatically. The #1 business tool for retail, wholesale, and teams.",
   applicationName: "TallyPadi",
-  keywords: ["WhatsApp inventory", "sales tracker", "inventory management", "SME", "POS"],
+  keywords: ["WhatsApp receipts", "WhatsApp invoice generator", "sales tracking software", "inventory management", "business ledger", "SME", "enterprise", "POS"],
 
   // ✅ REQUIRED for installability
   manifest: "/manifest.json",

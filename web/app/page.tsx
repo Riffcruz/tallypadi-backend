@@ -3,18 +3,18 @@ import Script from 'next/script';
 import LandingPageClient from './LandingPageClient';
 
 export const metadata: Metadata = {
-  title: 'Tallypadi — Track Sales, Stock & Profit on WhatsApp',
+  title: 'Tallypadi — WhatsApp Receipts, Invoices & Inventory Management',
   description:
-    "Stop writing in notebooks. Manage inventory, staff, and sales directly inside WhatsApp. Built for Nigerian SMEs and vendors.",
+    "The best WhatsApp receipt generator and inventory tool for businesses of any size. Track sales, debtors, and stock easily. Start for free.",
   alternates: {
     canonical: 'https://tallypadi.com/',
   },
   openGraph: {
     type: 'website',
     url: 'https://tallypadi.com/',
-    title: 'Tallypadi — Track Sales, Stock & Profit on WhatsApp',
+    title: 'Tallypadi — WhatsApp Receipts, Invoices & Inventory Management',
     description:
-      'Manage your shop inside WhatsApp. Record sales, track stock, and see profit reports.',
+      'Send professional receipts on WhatsApp, track sales, and manage inventory automatically. Built for growing businesses.',
     siteName: 'Tallypadi',
     images: [
       {
@@ -27,9 +27,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Tallypadi — Track Sales, Stock & Profit on WhatsApp',
+    title: 'Tallypadi — WhatsApp Receipts, Invoices & Inventory Management',
     description:
-      'Record sales, manage inventory, and track profit directly in WhatsApp.',
+      'Send professional receipts on WhatsApp, track sales, and manage inventory automatically.',
     images: ['https://tallypadi.com/og.png'],
   },
 };
@@ -42,7 +42,7 @@ export default function Page() {
     applicationCategory: 'BusinessApplication',
     operatingSystem: 'Web',
     description:
-      'Track sales, stock, and profit directly on WhatsApp. Built for SMEs and vendors.',
+      'Track sales, stock, and profit directly on WhatsApp. Generate receipts and invoices instantly. Built for businesses of all sizes.',
     offers: {
       '@type': 'Offer',
       price: '0',

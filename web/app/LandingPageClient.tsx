@@ -10,8 +10,6 @@ import {
   BarChart3,
   PackageOpen,
   Lock,
-  Menu,
-  X,
   CheckCircle2,
   Star,
   Zap,
@@ -28,7 +26,9 @@ import {
   HelpCircle,
 } from 'lucide-react';
 import Image from 'next/image';
-import  StepShotWhatsAppLight  from "../components/StepShot";
+import StepShotWhatsAppLight from "../components/StepShot";
+import MarketingNavbar from '../components/MarketingNavbar';
+import MarketingFooter from '../components/MarketingFooter';
 
 
 // --- TYPES & INTERFACES ---
@@ -67,12 +67,12 @@ type Faq = {
 };
 
 // --- CONFIGURATION ---
-const DEFAULT_WHATSAPP_LINK = 'https://wa.me/234XXXXXXXXXX?text=Hello%20Tallypadi';
+const DEFAULT_WHATSAPP_LINK = 'https://wa.me/2349035664420?text=Hello%20Tallypadi';
 
 // --- Hero Background Images ---
 const HERO_IMAGES = [
   'https://images.unsplash.com/photo-1578575437130-527eed3abbec?q=80&w=2070&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1556742049-0cfed4f7a07d?q=80&w=2070&auto=format&fit=crop',
+  'https://images.unsplash.com/photo-1556740738-b6a63e27c4df?q=80&w=2070&auto=format&fit=crop',
   'https://static.dw.com/image/69290180_803.webp',
 ];
 
@@ -101,12 +101,12 @@ const TESTIMONIALS: Testimonial[] = [
 
 const FAQS: Faq[] = [
   {
-  q: 'Do I need to download any app?',
-  a: 'No. You can use TallyPadi directly inside WhatsApp—no app required. If you want an app-like experience, you can also install TallyPadi as a PWA (Add to Home Screen) and use it like a normal mobile app.',
-},
-{
-    q: 'What is a PWA and how do I install it?',
-    a: 'A PWA is a “website that behaves like an app.” Open TallyPadi in your browser, then tap “Add to Home Screen” (Android/Chrome) or “Share” → “Add to Home Screen” (iPhone/Safari). It will appear on your phone like a normal app.',
+    q: 'Do I need to download any app?',
+    a: 'No. You can use TallyPadi directly inside WhatsApp—no app required. It works on any device that has WhatsApp installed.',
+  },
+  {
+    q: 'Does it generate receipts and invoices?',
+    a: 'Yes. TallyPadi is a powerful WhatsApp receipt generator. You can generate professional receipts and invoices instantly and share them with your customers via WhatsApp.',
   },
   {
     q: 'Can I use TallyPadi on Android and iPhone?',
@@ -117,8 +117,8 @@ const FAQS: Faq[] = [
     a: 'You simply chat with TallyPadi like a person. Send messages like “Sold 2 bags of rice for 100k” or “Stock remaining” and it records your sales, stock, and profit automatically.',
   },
   {
-    q: 'Can I record sales in Nigerian formats like 50k, 120k, 1.5m?',
-    a: 'Yes. TallyPadi understands common formats like “50k”, “120k”, “1.5m”, and normal figures too.',
+    q: 'Can I record sales in different currencies?',
+    a: 'Yes. You can set your currency (NGN, USD, GBP, etc.) in settings and all reports/receipts will follow it.',
   },
   {
     q: 'Does it track stock automatically?',
@@ -129,12 +129,8 @@ const FAQS: Faq[] = [
     a: 'Yes. You can request daily/weekly/monthly reports inside WhatsApp or view your dashboard for a full breakdown.',
   },
   {
-    q: 'Can I download receipts and PDFs?',
-    a: 'Yes. You can download receipts for single transactions, and you can also download PDF reports when you need them.',
-  },
-  {
     q: 'Can multiple staff use the same shop account?',
-    a: 'Yes. You can add staff and control what they can do, while everything still records into the same business account.',
+    a: 'Yes. You can add staff and control what they can do, while everything still records into the same business account. Perfect for multi-branch businesses.',
   },
   {
     q: 'Is my data safe?',
@@ -146,31 +142,19 @@ const FAQS: Faq[] = [
   },
   {
     q: 'Can I use it for any kind of business?',
-    a: 'Yes. It works for mini marts, provision shops, cosmetics, phone accessories, POS agents, pharmacies, fashion stores, and more.',
+    a: 'Yes. It works for retail shops, wholesalers, service businesses, restaurants, pharmacies, and enterprise teams.',
   },
   {
     q: 'How long does setup take?',
     a: 'Usually 2–5 minutes. Once you register, you can start recording immediately.',
   },
   {
-    q: 'Can I change my currency?',
-    a: 'Yes. You can set your currency (NGN, USD, GBP, etc.) in settings and all reports/receipts will follow it.',
-  },
-  {
     q: 'What if I make a mistake in a sale entry?',
     a: 'You can correct it by editing the transaction (or marking it undone if enabled). Your reports will stay accurate.',
   },
   {
-    q: 'Can I record sales in Pidgin?',
-    a: 'Yes. You can chat naturally (English / Pidgin or any Language) and the bot understands common sales and restock phrasing.',
-  },
-  {
     q: 'What happens after my 7-day trial?',
     a: 'You can choose a plan (Oga Boss or Tycoon). Your data remains safe and you continue from where you stopped.',
-  },
-  {
-    q: 'Is my business data safe?',
-    a: 'Your records are stored securely and only accessible to your account. You control who has access (especially on Tycoon).',
   },
 ];
 
@@ -300,8 +284,6 @@ const FaqItem = ({
   onToggle: () => void;
 }) => {
   return (
-
-    
     <div className="overflow-hidden rounded-2xl border border-slate-700/60 bg-slate-900/35 backdrop-blur-md">
       <button
         type="button"
@@ -322,9 +304,7 @@ const FaqItem = ({
       </button>
 
       <div
-        className={`grid transition-all duration-400 ease-out ${
-          isOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
-        }`}
+        className={`grid transition-all duration-400 ease-out ${isOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}
       >
         <div className="overflow-hidden">
           <div className="px-5 pb-5 text-slate-300/90 leading-relaxed">{item.a}</div>
@@ -333,9 +313,6 @@ const FaqItem = ({
     </div>
   );
 };
-
-
-
 
 
 const TestimonialSlider = ({ testimonials }: { testimonials: Testimonial[] }) => {
@@ -397,11 +374,10 @@ const TestimonialSlider = ({ testimonials }: { testimonials: Testimonial[] }) =>
           <button
             key={idx}
             onClick={() => setCurrent(idx)}
-            className={`transition-all duration-300 rounded-full ${
-              current === idx 
+            className={`transition-all duration-300 rounded-full ${current === idx 
                 ? 'w-8 h-2 bg-emerald-500' 
-                : 'w-2 h-2 bg-slate-700 hover:bg-slate-600'
-            }`}
+                : 'w-2 h-2 bg-slate-700 hover:bg-slate-600'}
+            `}
             aria-label={`Go to slide ${idx + 1}`}
           />
         ))}
@@ -413,7 +389,6 @@ const TestimonialSlider = ({ testimonials }: { testimonials: Testimonial[] }) =>
 export default function LandingPage() {
   const [currentBg, setCurrentBg] = useState(0);
   const [isHeroPaused, setIsHeroPaused] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [whatsappLink, setWhatsappLink] = useState(DEFAULT_WHATSAPP_LINK);
   const [openFaq, setOpenFaq] = useState<number>(0);
 
@@ -455,133 +430,9 @@ export default function LandingPage() {
   }, []);
 
   return (
-     
     <div className="bg-slate-50 text-slate-600 overflow-x-hidden font-sans selection:bg-emerald-500 selection:text-white">
       {/* --- Navbar --- */}
-      <nav className="fixed w-full z-50 transition-all duration-300 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 shadow-lg">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-20 items-center">
-            {/* Logo */}
-
-
-<div className="cursor-pointer group">
-  <div className="relative w-[180px] h-[44px] sm:w-[220px] sm:h-[54px] lg:w-[250px] lg:h-[60px] group-hover:scale-[1.02] transition-transform duration-300">
-    <Image
-      src="/tallypadi-logo.png"
-      alt="TallyPadi logo"
-      fill
-      className="object-contain"
-      priority
-    />
-  </div>
-</div>
-
-
-            {/* Desktop Links */}
-            <div className="hidden md:flex space-x-8 items-center">
-              <a
-                href="/"
-                className="text-sm font-medium text-slate-300 hover:text-emerald-400 transition"
-              >
-                Home
-              </a>
-              <a
-                href="#faq"
-                className="text-sm font-medium text-slate-300 hover:text-emerald-400 transition"
-              >
-                FAQ
-              </a>
-              <a
-                href="/help"
-                className="text-sm font-medium text-slate-300 hover:text-emerald-400 transition"
-              >
-                Docs
-              </a>
-            </div>
-
-            {/* Auth Buttons */}
-            <div className="hidden md:flex items-center gap-4">
-              <a href="/login" className="text-sm font-semibold text-white hover:text-emerald-400 transition">
-                Login
-              </a>
-              <a
-                href="/register"
-                className="bg-emerald-500 hover:bg-emerald-400 text-white px-6 py-2.5 rounded-full font-bold transition-all shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:shadow-[0_0_30px_rgba(16,185,129,0.5)] text-sm flex items-center gap-2 group hover:-translate-y-0.5"
-              >
-                Signup <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
-              </a>
-            </div>
-
-            {/* Mobile Toggle */}
-            <div className="md:hidden">
-              <button
-                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                className="p-2 text-white hover:bg-slate-800 rounded-lg transition"
-              >
-                {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Mobile Menu */}
-        {mobileMenuOpen && (
-          <div className="md:hidden bg-slate-900 border-t border-slate-800 p-4 flex flex-col gap-4 shadow-2xl absolute w-full animate-fade-in">
-            <a
-              href="#how-it-works"
-              onClick={() => setMobileMenuOpen(false)}
-              className="block text-slate-300 hover:text-white font-medium p-2 hover:bg-slate-800 rounded"
-            >
-              How it Works
-            </a>
-            <a
-              href="#features"
-              onClick={() => setMobileMenuOpen(false)}
-              className="block text-slate-300 hover:text-white font-medium p-2 hover:bg-slate-800 rounded"
-            >
-              Features
-            </a>
-            <a
-              href="/help"
-              className="block text-slate-300 hover:text-white font-medium p-2 hover:bg-slate-800 rounded"
-            >
-              Docs
-            </a>
-            <a
-              href="#pricing"
-              onClick={() => setMobileMenuOpen(false)}
-              className="block text-slate-300 hover:text-white font-medium p-2 hover:bg-slate-800 rounded"
-            >
-              Pricing
-            </a>
-            <a
-              href="#gallery"
-              onClick={() => setMobileMenuOpen(false)}
-              className="block text-slate-300 hover:text-white font-medium p-2 hover:bg-slate-800 rounded"
-            >
-              Showcase
-            </a>
-            <a
-              href="#faq"
-              onClick={() => setMobileMenuOpen(false)}
-              className="block text-slate-300 hover:text-white font-medium p-2 hover:bg-slate-800 rounded"
-            >
-              FAQ
-            </a>
-            <a href="/login" className="block text-slate-300 hover:text-white font-medium p-2 hover:bg-slate-800 rounded">
-              Login
-            </a>
-            <a
-              href={whatsappLink}
-              target="_blank"
-              rel="noreferrer"
-              className="block text-center bg-emerald-500 text-white py-3 rounded-lg font-bold shadow-lg"
-            >
-              Register on WhatsApp
-            </a>
-          </div>
-        )}
-      </nav>
+      <MarketingNavbar whatsappLink={whatsappLink} />
 
       {/* --- Hero Section (Full Screen) --- */}
       <section 
@@ -593,9 +444,7 @@ export default function LandingPage() {
         {HERO_IMAGES.map((img, index) => (
           <div
             key={index}
-            className={`absolute inset-0 bg-cover bg-center transition-all duration-[1500ms] ease-in-out ${
-              index === currentBg ? 'opacity-60 scale-105' : 'opacity-0 scale-100'
-            }`}
+            className={`absolute inset-0 bg-cover bg-center transition-all duration-[1500ms] ease-in-out ${index === currentBg ? 'opacity-60 scale-105' : 'opacity-0 scale-100'}`}
             style={{ backgroundImage: `url(${img})` }}
           />
         ))}
@@ -609,7 +458,7 @@ export default function LandingPage() {
           <div className="text-white pt-10 lg:pt-0">
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-sm font-bold mb-8 backdrop-blur-md animate-pulse">
               <span className="w-2 h-2 bg-emerald-400 rounded-full shadow-[0_0_10px_rgba(52,211,153,0.8)]"></span>
-              The #1 AI Accountant in Nigeria
+              The #1 WhatsApp AI Accountant for Business
             </div>
 
             <h1 className="text-5xl lg:text-7xl font-extrabold leading-[1.1] mb-6 tracking-tight drop-shadow-2xl">
@@ -620,8 +469,10 @@ export default function LandingPage() {
             </h1>
 
             <p className="text-lg text-slate-200 mb-10 leading-relaxed max-w-lg font-light drop-shadow-lg shadow-black">
-              Stop writing in notebooks. Manage your entire inventory, staff, and sales directly inside WhatsApp. It&apos;s as easy as chatting
-              with a friend.
+              Stop writing in notebooks. Manage your entire inventory, staff, and sales directly inside WhatsApp. 
+              <span className="block mt-2 font-medium text-emerald-100">
+                 Send receipts, track debtors, and see profit instantly.
+              </span>
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4">
@@ -640,8 +491,6 @@ export default function LandingPage() {
                 How it Works
               </a>
             </div>
-
-            
           </div>
 
           {/* Dynamic Phone Mockup with 3D Float */}
@@ -743,11 +592,10 @@ export default function LandingPage() {
                   <button
                     key={idx}
                     onClick={() => setCurrentBg(idx)}
-                    className={`h-2 rounded-full transition-all duration-500 ${
-                      idx === currentBg 
+                    className={`h-2 rounded-full transition-all duration-500 ${idx === currentBg 
                         ? 'w-8 bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.5)]' 
-                        : 'w-2 bg-white/30 hover:bg-white/60'
-                    }`}
+                        : 'w-2 bg-white/30 hover:bg-white/60'}
+                    `}
                     aria-label={`Go to slide ${idx + 1}`}
                   />
                 ))}
@@ -791,8 +639,6 @@ export default function LandingPage() {
         ]}
       />
 
-
-
           <div className="w-16 h-16 bg-slate-950 text-emerald-400 border border-slate-700 rounded-2xl flex items-center justify-center text-2xl font-bold mb-6 shadow-lg group-hover:scale-110 transition-transform group-hover:rotate-3">
             1
           </div>
@@ -823,8 +669,6 @@ export default function LandingPage() {
         ]}
         />
 
-
-
           <div className="w-16 h-16 bg-emerald-600 text-white rounded-2xl flex items-center justify-center text-2xl font-bold mb-6 shadow-lg shadow-emerald-600/20 group-hover:scale-110 transition-transform group-hover:-rotate-3">
             2
           </div>
@@ -853,7 +697,6 @@ export default function LandingPage() {
   ]}
 />
 
-
           <div className="w-16 h-16 bg-blue-600 text-white rounded-2xl flex items-center justify-center text-2xl font-bold mb-6 shadow-lg shadow-blue-600/20 group-hover:scale-110 transition-transform group-hover:rotate-6">
             3
           </div>
@@ -876,7 +719,6 @@ export default function LandingPage() {
   </div>
 </section>
 
-
       {/* --- Pricing Section (Moved Up) --- */}
       <section id="pricing" className="py-24 bg-slate-50 relative">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -884,7 +726,8 @@ export default function LandingPage() {
             <span className="text-emerald-600 font-bold tracking-wider uppercase text-xs">Pricing Plans</span>
             <h2 className="text-3xl md:text-5xl font-bold text-slate-900 mt-2">Scale your business, your way.</h2>
             <p className="text-slate-500 mt-4 max-w-2xl mx-auto">
-              Start with a free trial, then choose the perfect plan for your level of operation.
+              Start with a free trial, then choose the perfect plan for your level of operation. 
+              Supports businesses of any size.
             </p>
           </AnimatedSection>
 
@@ -902,7 +745,7 @@ export default function LandingPage() {
               </div>
 
               <div className="mb-8">
-                <span className="text-5xl font-extrabold text-green-600">₦0</span>
+                <span className="text-5xl font-extrabold text-green-600">Free</span>
                 <span className="text-slate-500 text-sm"> / 7 Days</span>
                 <p className="text-slate-500 mt-2 text-sm">Experience the full power of Tallypadi with zero commitment.</p>
               </div>
@@ -1119,7 +962,6 @@ export default function LandingPage() {
       </section>
 
 
-
       {/* --- Trust / Social Proof (Light-Dark, Lively) --- */}
       <section id="trust" className="py-24 relative overflow-hidden bg-slate-800 text-white">
         {/* Glow blobs */}
@@ -1287,95 +1129,7 @@ export default function LandingPage() {
       </section>
 
       {/* --- Footer --- */}
-      <footer className="relative bg-slate-950 text-slate-300 py-16 overflow-hidden">
-        {/* Background Image & Overlay */}
-        <div className="absolute inset-0 z-0">
-          <Image
-            src="/photo-1451187580459-43490279c0fa.avif"
-            alt="Footer Background"
-            fill
-            className="object-cover opacity-20"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/80 to-slate-900/90" />
-        </div>
-
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 mb-12">
-            {/* Brand Column */}
-            <div className="space-y-4">
-              <div className="cursor-pointer group inline-block">
-                <div className="relative w-[160px] h-[40px] transition-transform duration-300 group-hover:scale-105">
-                  <Image
-                    src="/tallypadi-logo.png"
-                    alt="TallyPadi logo"
-                    fill
-                    className="object-contain"
-                  />
-                </div>
-              </div>
-              <p className="text-slate-400 text-sm leading-relaxed max-w-xs">
-                Empowering African businesses with AI-driven inventory and sales management tools. Built for growth, designed for simplicity.
-              </p>
-              <div className="flex gap-4 pt-2">
-                {/* Social Placeholders */}
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="w-8 h-8 rounded-full bg-slate-800/50 flex items-center justify-center hover:bg-emerald-500 hover:text-white transition-all cursor-pointer border border-white/5">
-                     <span className="w-2 h-2 bg-current rounded-full" />
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Quick Links */}
-            <div>
-              <h4 className="text-white font-bold mb-6 text-lg">Platform</h4>
-              <ul className="space-y-3 text-sm">
-                <li><a href="#features" className="hover:text-emerald-400 transition-colors flex items-center gap-2"><ArrowRight size={12} className="opacity-0 hover:opacity-100 transition-opacity" />Features</a></li>
-                <li><a href="#pricing" className="hover:text-emerald-400 transition-colors flex items-center gap-2"><ArrowRight size={12} className="opacity-0 hover:opacity-100 transition-opacity" />Pricing</a></li>
-                <li><a href="#gallery" className="hover:text-emerald-400 transition-colors flex items-center gap-2"><ArrowRight size={12} className="opacity-0 hover:opacity-100 transition-opacity" />Showcase</a></li>
-                <li><a href="/login" className="hover:text-emerald-400 transition-colors flex items-center gap-2"><ArrowRight size={12} className="opacity-0 hover:opacity-100 transition-opacity" />Login</a></li>
-              </ul>
-            </div>
-
-            {/* Support */}
-            <div>
-              <h4 className="text-white font-bold mb-6 text-lg">Support</h4>
-              <ul className="space-y-3 text-sm">
-                <li><a href="/help" className="hover:text-emerald-400 transition-colors">Help Center</a></li>
-                <li><a href="https://wa.me/2349035664420?text=Hello%2C%20Connect%20me%20to%20live%20support%20agent" className="hover:text-emerald-400 transition-colors">Chat on WhatsApp</a></li>
-                <li><a href="#faq" className="hover:text-emerald-400 transition-colors">FAQs</a></li>
-                <li><a href="/policy" className="hover:text-emerald-400 transition-colors">Privacy Policy</a></li>
-                <li><a href="/policy#terms" className="hover:text-emerald-400 transition-colors">Terms of Service</a></li>
-              </ul>
-            </div>
-
-            {/* Newsletter / CTA */}
-            <div className="bg-slate-800/30 backdrop-blur-sm p-6 rounded-2xl border border-white/5">
-              <h4 className="text-white font-bold mb-2 text-lg">Stay Updated</h4>
-              <p className="text-xs text-slate-400 mb-4">Get the latest business tips and feature updates.</p>
-              <div className="flex gap-2">
-                <input 
-                  type="email" 
-                  placeholder="Enter email" 
-                  className="bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:border-emerald-500 transition-colors"
-                />
-                <button className="bg-emerald-500 hover:bg-emerald-400 text-white rounded-lg px-3 py-2 transition-colors">
-                  <ArrowRight size={16} />
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="border-t border-slate-800/50 pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-slate-500">
-            <p>&copy; {new Date().getFullYear()} Tallypadi. All rights reserved.</p>
-            <div className="flex gap-6">
-              <span>Built For SMEs</span>
-              <span className="w-px h-4 bg-slate-800" />
-              <span>Lagos, Nigeria</span>
-            </div>
-          </div>
-        </div>
-      </footer>
+      <MarketingFooter />
 
       {/* Global Animation Styles */}
       <style jsx global>{`
@@ -1472,8 +1226,7 @@ const FeatureCard: React.FC<FeatureCardProps> = ({ icon, color, title, desc, bad
 const PricingItem: React.FC<PricingItemProps> = ({ text, light = false, unavailable = false }) => (
   <li className={`flex items-start gap-3 transition-opacity ${unavailable ? 'opacity-50' : ''}`}>
     <div
-      className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
-        unavailable
+      className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${unavailable
           ? light
             ? 'bg-slate-700 text-slate-500'
             : 'bg-gray-200 text-gray-400'
