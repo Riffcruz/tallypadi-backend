@@ -1,6 +1,6 @@
 import React from 'react';
 import Image from 'next/image';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, TrendingUp } from 'lucide-react';
 
 export default function MarketingFooter() {
   return (
@@ -55,10 +55,15 @@ export default function MarketingFooter() {
             </ul>
           </div>
 
-          {/* Quick Links */}
+          {/* Growth & Platform */}
           <div>
-            <h4 className="text-white font-bold mb-6 text-lg">Platform</h4>
+            <h4 className="text-white font-bold mb-6 text-lg">Growth</h4>
             <ul className="space-y-3 text-sm">
+               <li>
+                   <a href="/best-way-to-grow-business" className="text-emerald-400 hover:text-emerald-300 font-bold transition-colors flex items-center gap-2">
+                       <TrendingUp size={14} /> Scale in 2026
+                   </a>
+               </li>
                <li><a href="/#pricing" className="hover:text-emerald-400 transition-colors flex items-center gap-2"><ArrowRight size={12} className="opacity-0 hover:opacity-100 transition-opacity" />Pricing</a></li>
                <li><a href="/login" className="hover:text-emerald-400 transition-colors flex items-center gap-2"><ArrowRight size={12} className="opacity-0 hover:opacity-100 transition-opacity" />Login</a></li>
                <li><a href="/help" className="hover:text-emerald-400 transition-colors flex items-center gap-2"><ArrowRight size={12} className="opacity-0 hover:opacity-100 transition-opacity" />Help Center</a></li>

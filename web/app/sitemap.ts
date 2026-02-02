@@ -59,5 +59,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: 'weekly',
       priority: 0.9,
     },
+    // Growth / "Manipulative" SEO Page
+    {
+      url: `${baseUrl}/best-way-to-grow-business`,
+      lastModified: new Date(),
+      changeFrequency: 'weekly',
+      priority: 1.0, 
+    },
   ];
 }
