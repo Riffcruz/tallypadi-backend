@@ -1342,7 +1342,7 @@ export default function LandingPage() {
               <h4 className="text-white font-bold mb-6 text-lg">Support</h4>
               <ul className="space-y-3 text-sm">
                 <li><a href="/help" className="hover:text-emerald-400 transition-colors">Help Center</a></li>
-                <li><a href={whatsappLink} className="hover:text-emerald-400 transition-colors">Chat on WhatsApp</a></li>
+                <li><a href="https://wa.me/2349035664420?text=Hello%2C%20Connect%20me%20to%20live%20support%20agent" className="hover:text-emerald-400 transition-colors">Chat on WhatsApp</a></li>
                 <li><a href="#faq" className="hover:text-emerald-400 transition-colors">FAQs</a></li>
                 <li><a href="/policy" className="hover:text-emerald-400 transition-colors">Privacy Policy</a></li>
                 <li><a href="/policy#terms" className="hover:text-emerald-400 transition-colors">Terms of Service</a></li>

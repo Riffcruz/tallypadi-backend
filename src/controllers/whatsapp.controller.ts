@@ -908,6 +908,15 @@ export const handleMessageLogic = async (
 
 
     // =====================================================
+    // 🔗 AUTO-CONNECT SUPPORT VIA LINK
+    // =====================================================
+    if (rawText.toLowerCase().startsWith('hello, connect me to live support agent')) {
+         await supportService.handleInboundMessage(from, rawText, messageId, profileName);
+         return;
+    }
+
+
+    // =====================================================
     // 🚨 SUPPORT USER INTERCEPT (User seeking help)
     // =====================================================
     const activeTicket = await SupportTicket.findOne({
