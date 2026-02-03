@@ -19,4 +19,5 @@ export const env = {
   r2Bucket: process.env.R2_BUCKET as string,
   r2PublicBaseUrl: process.env.R2_PUBLIC_BASE_URL as string,
   whatsappRegistrationFlowId: process.env.WHATSAPP_REGISTRATION_FLOW_ID as string,
+  whatsappAddStaffFlowId: process.env.WHATSAPP_ADD_STAFF_FLOW_ID as string,
 };

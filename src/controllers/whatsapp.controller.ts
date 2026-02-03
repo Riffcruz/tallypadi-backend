@@ -1256,6 +1256,25 @@ Oga Boss Plan: ₦3,000/month (Save significantly with the yearly plan)`;
       }
     }
 
+    // ✅ Handle Staff Add Flow Response
+    if (rawText.startsWith('__FLOW__:')) {
+        try {
+            const flowJson = JSON.parse(rawText.replace('__FLOW__:', ''));
+            
+            // Check if this is a Staff Add flow
+            if (flowJson.staff_name && flowJson.staff_phone) {
+                const { staff_name, staff_phone } = flowJson;
+                
+                // Call the existing helper
+                const res = await addStaffUnderOwner(actor, staff_phone, staff_name);
+                await queueOutboundMessage(from, res.msg);
+                return;
+            }
+        } catch (e) {
+            console.error('Flow parsing error (Staff Add)', e);
+        }
+    }
+
     // ✅ Interaction State (e.g. Asking for Receipt Name)
     if (actor.interactionState && actor.interactionState.type === 'WAITING_FOR_RECEIPT_NAME') {
         // Only process if it's a text message (not a button click, unless it's a cancel button?)
@@ -1550,6 +1569,18 @@ Oga Boss Plan: ₦3,000/month (Save significantly with the yearly plan)`;
                  return;
             }
             else if (btn.id === 'CMD_MANAGE_STAFF') {
+                 if (env.whatsappAddStaffFlowId) {
+                    await queueOutboundFlow(
+                         from,
+                         "Add Staff",
+                         "Fill the form to give a staff member access.",
+                         "TallyPadi",
+                         env.whatsappAddStaffFlowId,
+                         "Add Staff",
+                         "ADD_STAFF"
+                    );
+                    return;
+                 }
                  const msg = await generateGuidanceMessage('MANAGE_STAFF', currentLang);
                  await queueOutboundMessage(from, msg);
                  return;
