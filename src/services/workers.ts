@@ -1,7 +1,7 @@
 // src/services/queue.worker.ts
 import { Worker } from 'bullmq';
 import { connection } from './queue.service';
-import { sendWhatsAppText, sendWhatsAppButtons, sendWhatsAppList, sendWhatsAppDocumentBuffer } from './whatsapp.service';
+import { sendWhatsAppText, sendWhatsAppButtons, sendWhatsAppList, sendWhatsAppDocumentBuffer, sendWhatsAppFlow } from './whatsapp.service';
 import { generateSaleReceiptPdfBuffer } from '../controllers/receipt.controller';
 import { Invoice } from '../models/invoice.model';
 import { generateInvoicePdf } from './invoice.pdf.service';
@@ -139,6 +139,12 @@ export const replyWorker = new Worker(
     if (job.name === 'send-buttons') {
       const { phoneNumber, bodyText, buttons } = job.data;
       await sendWhatsAppButtons(phoneNumber, bodyText, buttons);
+      return;
+    }
+
+    if (job.name === 'send-flow') {
+      const { phoneNumber, headerText, bodyText, footerText, flowId, flowCta, screenId } = job.data;
+      await sendWhatsAppFlow(phoneNumber, headerText, bodyText, footerText, flowId, flowCta, screenId);
       return;
     }
 

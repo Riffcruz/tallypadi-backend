@@ -18,4 +18,5 @@ export const env = {
   r2SecretAccessKey: process.env.R2_SECRET_ACCESS_KEY as string,
   r2Bucket: process.env.R2_BUCKET as string,
   r2PublicBaseUrl: process.env.R2_PUBLIC_BASE_URL as string,
+  whatsappRegistrationFlowId: process.env.WHATSAPP_REGISTRATION_FLOW_ID as string,
 };

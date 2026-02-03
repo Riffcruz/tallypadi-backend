@@ -141,6 +141,52 @@ export async function sendWhatsAppList(
 }
 
 // ============================================================
+// ✅ SEND: FLOW (NATIVE FORM)
+// ============================================================
+export async function sendWhatsAppFlow(
+  to: string,
+  headerText: string,
+  bodyText: string,
+  footerText: string,
+  flowId: string,
+  flowCta: string,
+  screenId: string,
+  flowToken: string = 'unused_token'
+) {
+  const payload = {
+    messaging_product: 'whatsapp',
+    to,
+    type: 'interactive',
+    interactive: {
+      type: 'flow',
+      header: { type: 'text', text: safeText(headerText, 60) },
+      body: { text: safeText(bodyText, 1024) },
+      footer: { text: safeText(footerText, 60) },
+      action: {
+        name: 'flow',
+        parameters: {
+          flow_message_version: '3',
+          flow_token: flowToken,
+          flow_id: flowId,
+          flow_cta: flowCta,
+          flow_action: 'navigate',
+          flow_action_payload: {
+            screen: screenId,
+          },
+        },
+      },
+    },
+  };
+
+  const res = await axios.post(messagesUrl(), payload, {
+    headers: authHeaders(),
+    timeout: 20_000,
+  });
+
+  return res.data?.messages?.[0]?.id;
+}
+
+// ============================================================
 // ✅ SEND: MEDIA (image/audio/document/video) by MEDIA ID
 // ============================================================
 export async function sendWhatsAppMediaById(opts: {

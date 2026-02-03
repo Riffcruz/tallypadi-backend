@@ -133,6 +133,37 @@ export const queueOutboundList = async (
 };
 
 // ============================================================
+// ✅ Flow (QUEUED)
+// Worker must handle job.name === 'send-flow'
+// ============================================================
+export const queueOutboundFlow = async (
+  phoneNumber: string,
+  headerText: string,
+  bodyText: string,
+  footerText: string,
+  flowId: string,
+  flowCta: string,
+  screenId: string,
+  jobId?: string
+) => {
+  const finalJobId = safeJobId(jobId || `flow_${phoneNumber}_${Date.now()}`);
+
+  await replyQueue.add(
+    'send-flow',
+    {
+      phoneNumber,
+      headerText,
+      bodyText,
+      footerText,
+      flowId,
+      flowCta,
+      screenId
+    },
+    { jobId: finalJobId }
+  );
+};
+
+// ============================================================
 // ✅ Sale response (text + buttons)
 // Worker must handle job.name === 'send-sale-response'
 // ============================================================

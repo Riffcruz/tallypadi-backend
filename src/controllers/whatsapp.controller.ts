@@ -27,6 +27,7 @@ import {
   queueSaleReceipt,
   queueInvoicePdf,
   queueOutboundList,
+  queueOutboundFlow, // ✅ NEW: queued flow helper
   queueRegistrationComplete
 } from '../services/queue.service';
 import { sendWhatsAppDocumentBuffer } from '../services/whatsapp.service';
@@ -697,10 +698,18 @@ export const handleWebhook = async (req: Request, res: Response) => {
         break;
 
       case 'interactive': {
-        const btnId = msg?.interactive?.button_reply?.id;
-        const btnTitle = msg?.interactive?.button_reply?.title;
-        if (!btnId) return res.sendStatus(200);
-        text = `__BTN__:${btnId}:${btnTitle || ''}`;
+        const i = msg.interactive;
+        if (i.type === 'button_reply') {
+          const btnId = i.button_reply.id;
+          const btnTitle = i.button_reply.title;
+          if (!btnId) return res.sendStatus(200);
+          text = `__BTN__:${btnId}:${btnTitle || ''}`;
+        } else if (i.type === 'nfm_reply') {
+          const responseJson = i.nfm_reply.response_json;
+          // The text passed to handleMessageLogic will be a special prefix so we can detect it.
+          // e.g. __FLOW__:json_string
+          text = `__FLOW__:${responseJson}`;
+        }
         break;
       }
 
@@ -1040,13 +1049,113 @@ export const handleMessageLogic = async (
       const isRegisterYes = btn?.id === 'CMD_REGISTER_YES' || rawText.toLowerCase() === 'yes';
       
       if (isRegisterYes) {
-          await queueOutboundMessage(from, "Enter your email address");
+          if (env.whatsappRegistrationFlowId) {
+             await queueOutboundFlow(
+                 from,
+                 "Register Shop",
+                 "Please fill the form to create your account.",
+                 "TallyPadi",
+                 env.whatsappRegistrationFlowId,
+                 "Sign Up",
+                 "SIGN_IN"
+             );
+          } else {
+             await queueOutboundMessage(from, "Enter your email address");
+          }
           return;
       }
       
       if (btn?.id === 'CMD_REGISTER_NO') {
           await queueOutboundMessage(from, "No problem! You can type 'Hi padi' anytime to start.");
           return;
+      }
+
+      // 1.5 Handle Flow Response (Email + Password)
+      if (rawText.startsWith('__FLOW__:')) {
+          try {
+              const flowJson = JSON.parse(rawText.replace('__FLOW__:', ''));
+              const { email, password } = flowJson;
+
+              if (!email || !password) {
+                  await queueOutboundMessage(from, "⚠️ Please provide both email and password.");
+                  return;
+              }
+
+              const emailInput = String(email).trim().toLowerCase();
+              const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            
+              if (!emailRegex.test(emailInput)) {
+                  await queueOutboundMessage(from, '❌ Invalid email format.');
+                  return;
+              }
+
+              const existingUser = await User.findOne({ email: { $regex: new RegExp(`^${emailInput}$`, 'i') } });
+              if (existingUser) {
+                  await queueOutboundMessage(from, '❌ This email is already registered. Please provide a different email address.');
+                  return;
+              }
+
+              // Save Email & Password
+              actor.email = emailInput;
+              const salt = await bcrypt.genSalt(10);
+              actor.password = await bcrypt.hash(password, salt);
+              actor.registrationStage = 'COMPLETED';
+              await actor.save();
+
+              // Trigger Completion Sequence
+              const { generateWelcomeMessage } = await import('../services/gemini.service');
+              const welcomeMsg = await generateWelcomeMessage(actor.settings?.language || 'English');
+
+              const trialMsg = 
+`🎉 7-Day Free Trial Started
+You now have full access to the Tycoon Plan (our complete package) for the next seven days. Explore all our features without limitation.
+
+Current Pricing Options:
+Tycoon Plan: ₦5,000/month (Save significantly with the yearly plan)
+
+Oga Boss Plan: ₦3,000/month (Save significantly with the yearly plan)`;
+
+              const menuBatches = [
+                {
+                    bodyText: "SOME THINGS YOU CAN DO:",
+                    buttons: [
+                        { id: 'CMD_RECORD_INVENTORY', title: '1. Record stock' },
+                        { id: 'CMD_TRACK_INVENTORY', title: '2. Track inventory' },
+                        { id: 'CMD_RECORD_SALE', title: '3. Log transaction' }
+                    ]
+                },
+                {
+                    bodyText: "2",
+                    buttons: [
+                        { id: 'CMD_RECORD_CREDIT', title: '4. Credit sales' },
+                        { id: 'CMD_VIEW_REPORT', title: '5. View sales report' },
+                        { id: 'CMD_DELETE_STOCK', title: '6. Delete stock item' }
+                    ]
+                },
+                {
+                    bodyText: "3",
+                    buttons: [
+                        { id: 'CMD_SET_STOCK', title: '7. Set stock' },
+                        { id: 'CMD_SET_PRICE', title: '8. Set stock price' },
+                        { id: 'CMD_CREATE_INVOICE', title: '9. Generate invoice' }
+                    ]
+                },
+                {
+                    bodyText: "4",
+                    buttons: [
+                        { id: 'CMD_MANAGE_STAFF', title: '10. Add/Remove Staff' }
+                    ]
+                }
+              ];
+
+              await queueRegistrationComplete(from, welcomeMsg, trialMsg, menuBatches);
+              return;
+
+          } catch (e) {
+              console.error('Flow parsing error', e);
+              await queueOutboundMessage(from, "⚠️ Error processing registration. Please try again.");
+              return;
+          }
       }
 
       // 2. Allow bypass for Help/Settings/Support
