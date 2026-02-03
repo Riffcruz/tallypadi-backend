@@ -2234,7 +2234,23 @@ Oga Boss Plan: ₦3,000/month (Save significantly with the yearly plan)`;
           break;
         }
 
-        const r = await addStaffUnderOwner(actor, (parsed as any).staffPhoneNumber || null, (parsed as any).staffName || null);
+        const pPhone = (parsed as any).staffPhoneNumber;
+        
+        // ✅ If Flow configured & no phone provided -> Show Form
+        if (env.whatsappAddStaffFlowId && !pPhone) {
+             await queueOutboundFlow(
+                 from,
+                 "Add Staff",
+                 "Fill the form to give a staff member access.",
+                 "TallyPadi",
+                 env.whatsappAddStaffFlowId,
+                 "Add Staff",
+                 "ADD_STAFF"
+            );
+            break;
+        }
+
+        const r = await addStaffUnderOwner(actor, pPhone || null, (parsed as any).staffName || null);
         await queueOutboundMessage(from, r.msg);
         break;
       }
