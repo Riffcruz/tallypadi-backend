@@ -24,6 +24,7 @@ export default function InvoiceGeneratorClient() {
     customerPhone: '',
     customerAddress: '',
     notes: '',
+    paymentDetails: '',
   });
 
   const [items, setItems] = useState([
@@ -110,7 +111,8 @@ export default function InvoiceGeneratorClient() {
             tax: calculateTax(),
             total: calculateTotal(),
             taxRate,
-            themeColor: invoiceData.themeColor
+            themeColor: invoiceData.themeColor,
+            paymentDetails: invoiceData.paymentDetails
         });
     } catch (e) {
         console.error("Error generating PDF", e);
@@ -402,11 +404,26 @@ export default function InvoiceGeneratorClient() {
                 name="notes"
                 value={invoiceData.notes}
                 onChange={handleInputChange}
-                className="w-full p-3 border border-slate-200 rounded-lg text-sm resize-none text-black text-slate-900"
+                className="w-full p-3 border border-slate-200 rounded-lg text-sm resize-none text-black placeholder-slate-400"
                 rows={3}
                 placeholder="e.g. Thanks for your business!"
             />
           </div>
+
+          {/* Payment Details (Invoice Only) */}
+          {invoiceData.documentTitle === 'INVOICE' && (
+            <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Payment Details</label>
+                <textarea
+                    name="paymentDetails"
+                    value={invoiceData.paymentDetails}
+                    onChange={handleInputChange}
+                    className="w-full p-3 border border-slate-200 rounded-lg text-sm resize-none text-slate-900 placeholder-slate-400"
+                    rows={3}
+                    placeholder="Bank Name: &#10;Account Name: &#10;Account No: "
+                />
+            </div>
+          )}
 
         </div>
       </div>
@@ -466,6 +483,13 @@ export default function InvoiceGeneratorClient() {
                          <div className="flex justify-between w-40 font-bold text-lg mt-2" style={{ color: invoiceData.themeColor }}><span>Total:</span> <span>{invoiceData.currency} {calculateTotal().toLocaleString()}</span></div>
                      </div>
                  </div>
+
+                 {invoiceData.paymentDetails && (
+                    <div className="mt-8 border-t border-slate-100 pt-4">
+                        <div className="text-xs font-bold text-slate-400 uppercase mb-1">Payment Details</div>
+                        <div className="text-sm whitespace-pre-line text-slate-700">{invoiceData.paymentDetails}</div>
+                    </div>
+                 )}
             </div>
 
             <button 

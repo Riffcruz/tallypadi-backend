@@ -6,6 +6,7 @@ interface InvoiceData {
   invoiceNumber: string;
   themeColor?: string;
   date: string;
+  paymentDetails?: string;
   dueDate: string;
   currency: string;
   businessName: string;
@@ -171,6 +172,19 @@ export const generatePdf = async (data: InvoiceData) => {
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(textColor);
       doc.text(data.notes, margin, finalY + 36, { maxWidth: 120 });
+  }
+
+  // Payment Details
+  if (data.paymentDetails) {
+      const paymentY = data.notes ? finalY + 30 + (doc.getTextDimensions(data.notes).h || 10) + 10 : finalY + 30;
+      doc.setFontSize(10);
+      doc.setTextColor(darkColor);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Payment Details:', margin, paymentY);
+      
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(textColor);
+      doc.text(data.paymentDetails, margin, paymentY + 6, { maxWidth: 120 });
   }
 
   // Footer
