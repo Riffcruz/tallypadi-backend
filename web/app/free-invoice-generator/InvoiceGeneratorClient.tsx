@@ -226,7 +226,7 @@ export default function InvoiceGeneratorClient() {
                             name="date"
                             value={invoiceData.date}
                             onChange={handleInputChange}
-                            className="w-full p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-slate-900"
+                            className="w-full p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-slate-900 placeholder-slate-400"
                         />
                     </div>
                     <div>
@@ -236,7 +236,7 @@ export default function InvoiceGeneratorClient() {
                             name="dueDate"
                             value={invoiceData.dueDate}
                             onChange={handleInputChange}
-                            className="w-full p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-slate-900"
+                            className="w-full p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-slate-900 placeholder-slate-400"
                         />
                     </div>
                  </div>
@@ -255,7 +255,7 @@ export default function InvoiceGeneratorClient() {
                     placeholder="Business Name"
                     value={invoiceData.businessName}
                     onChange={handleInputChange}
-                    className="w-full p-2 border border-slate-200 rounded-lg text-sm"
+                    className="w-full p-2 border border-slate-200 rounded-lg text-sm placeholder-slate-400"
                 />
                  <input
                     type="email"
@@ -263,7 +263,7 @@ export default function InvoiceGeneratorClient() {
                     placeholder="Email Address"
                     value={invoiceData.businessEmail}
                     onChange={handleInputChange}
-                    className="w-full p-2 border border-slate-200 rounded-lg text-sm"
+                    className="w-full p-2 border border-slate-200 rounded-lg text-sm placeholder-slate-400"
                 />
                  <input
                     type="text"
@@ -271,7 +271,7 @@ export default function InvoiceGeneratorClient() {
                     placeholder="Phone Number"
                     value={invoiceData.businessPhone}
                     onChange={handleInputChange}
-                    className="w-full p-2 border border-slate-200 rounded-lg text-sm"
+                    className="w-full p-2 border border-slate-200 rounded-lg text-sm placeholder-slate-400"
                 />
                  <textarea
                     name="businessAddress"
@@ -279,7 +279,7 @@ export default function InvoiceGeneratorClient() {
                     value={invoiceData.businessAddress}
                     onChange={handleInputChange}
                     rows={2}
-                    className="w-full p-2 border border-slate-200 rounded-lg text-sm resize-none"
+                    className="w-full p-2 border border-slate-200 rounded-lg text-sm resize-none placeholder-slate-400"
                 />
             </div>
             <div className="space-y-3">
@@ -290,7 +290,7 @@ export default function InvoiceGeneratorClient() {
                     placeholder="Client Name"
                     value={invoiceData.customerName}
                     onChange={handleInputChange}
-                    className="w-full p-2 border border-slate-200 rounded-lg text-sm"
+                    className="w-full p-2 border border-slate-200 rounded-lg text-sm placeholder-slate-400"
                 />
                  <input
                     type="email"
@@ -298,7 +298,7 @@ export default function InvoiceGeneratorClient() {
                     placeholder="Email Address"
                     value={invoiceData.customerEmail}
                     onChange={handleInputChange}
-                    className="w-full p-2 border border-slate-200 rounded-lg text-sm"
+                    className="w-full p-2 border border-slate-200 rounded-lg text-sm placeholder-slate-400"
                 />
                  <input
                     type="text"
@@ -306,7 +306,7 @@ export default function InvoiceGeneratorClient() {
                     placeholder="Phone Number"
                     value={invoiceData.customerPhone}
                     onChange={handleInputChange}
-                    className="w-full p-2 border border-slate-200 rounded-lg text-sm"
+                    className="w-full p-2 border border-slate-200 rounded-lg text-sm placeholder-slate-400"
                 />
                  <textarea
                     name="customerAddress"
@@ -314,7 +314,7 @@ export default function InvoiceGeneratorClient() {
                     value={invoiceData.customerAddress}
                     onChange={handleInputChange}
                     rows={2}
-                    className="w-full p-2 border border-slate-200 rounded-lg text-sm resize-none"
+                    className="w-full p-2 border border-slate-200 rounded-lg text-sm resize-none placeholder-slate-400"
                 />
             </div>
           </div>
@@ -331,7 +331,7 @@ export default function InvoiceGeneratorClient() {
                                 placeholder="Description"
                                 value={item.description}
                                 onChange={(e) => handleItemChange(item.id, 'description', e.target.value)}
-                                className="w-full p-2 border border-slate-200 rounded-lg text-sm"
+                                className="w-full p-2 border border-slate-200 rounded-lg text-sm placeholder-slate-400"
                             />
                         </div>
                         <div className="w-20">
@@ -340,7 +340,7 @@ export default function InvoiceGeneratorClient() {
                                 placeholder="Qty"
                                 value={item.quantity}
                                 onChange={(e) => handleItemChange(item.id, 'quantity', Number(e.target.value))}
-                                className="w-full p-2 border border-slate-200 rounded-lg text-sm text-center"
+                                className="w-full p-2 border border-slate-200 rounded-lg text-sm text-center placeholder-slate-400"
                                 min="1"
                             />
                         </div>
@@ -350,7 +350,7 @@ export default function InvoiceGeneratorClient() {
                                 placeholder="Price"
                                 value={item.price}
                                 onChange={(e) => handleItemChange(item.id, 'price', Number(e.target.value))}
-                                className="w-full p-2 border border-slate-200 rounded-lg text-sm text-right"
+                                className="w-full p-2 border border-slate-200 rounded-lg text-sm text-right placeholder-slate-400"
                                 min="0"
                             />
                         </div>
@@ -402,7 +402,7 @@ export default function InvoiceGeneratorClient() {
                 name="notes"
                 value={invoiceData.notes}
                 onChange={handleInputChange}
-                className="w-full p-3 border border-slate-200 rounded-lg text-sm resize-none"
+                className="w-full p-3 border border-slate-200 rounded-lg text-sm resize-none placeholder-slate-400"
                 rows={3}
                 placeholder="e.g. Thanks for your business!"
             />
