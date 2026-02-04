@@ -183,7 +183,7 @@ export default function InvoiceGeneratorClient() {
                             name="documentTitle"
                             value={invoiceData.documentTitle}
                             onChange={handleInputChange}
-                            className="w-full p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-slate-900 font-bold"
+                            className="w-full p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-black font-bold"
                         >
                             <option value="INVOICE">INVOICE</option>
                             <option value="RECEIPT">RECEIPT</option>
@@ -197,7 +197,7 @@ export default function InvoiceGeneratorClient() {
                             name="invoiceNumber"
                             value={invoiceData.invoiceNumber}
                             onChange={handleInputChange}
-                            className="w-full p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-slate-900 font-medium"
+                            className="w-full p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-black font-medium placeholder-slate-400"
                         />
                     </div>
                     <div>
@@ -206,7 +206,7 @@ export default function InvoiceGeneratorClient() {
                             name="currency"
                             value={invoiceData.currency}
                             onChange={handleInputChange}
-                            className="w-full p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-slate-900"
+                            className="w-full p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-black"
                         >
                             <option value="NGN">NGN (₦)</option>
                             <option value="USD">USD ($)</option>
@@ -226,7 +226,7 @@ export default function InvoiceGeneratorClient() {
                             name="date"
                             value={invoiceData.date}
                             onChange={handleInputChange}
-                            className="w-full p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-slate-900 placeholder-slate-400"
+                            className="w-full p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-black placeholder-slate-400"
                         />
                     </div>
                     <div>
@@ -236,7 +236,7 @@ export default function InvoiceGeneratorClient() {
                             name="dueDate"
                             value={invoiceData.dueDate}
                             onChange={handleInputChange}
-                            className="w-full p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-slate-900 placeholder-slate-400"
+                            className="w-full p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-black placeholder-slate-400"
                         />
                     </div>
                  </div>
@@ -255,7 +255,7 @@ export default function InvoiceGeneratorClient() {
                     placeholder="Business Name"
                     value={invoiceData.businessName}
                     onChange={handleInputChange}
-                    className="w-full p-2 border border-slate-200 rounded-lg text-sm placeholder-slate-400"
+                    className="w-full p-2 border border-slate-200 rounded-lg text-sm text-black placeholder-slate-400"
                 />
                  <input
                     type="email"
@@ -263,7 +263,7 @@ export default function InvoiceGeneratorClient() {
                     placeholder="Email Address"
                     value={invoiceData.businessEmail}
                     onChange={handleInputChange}
-                    className="w-full p-2 border border-slate-200 rounded-lg text-sm placeholder-slate-400"
+                    className="w-full p-2 border border-slate-200 rounded-lg text-sm text-black placeholder-slate-400"
                 />
                  <input
                     type="text"
@@ -271,7 +271,7 @@ export default function InvoiceGeneratorClient() {
                     placeholder="Phone Number"
                     value={invoiceData.businessPhone}
                     onChange={handleInputChange}
-                    className="w-full p-2 border border-slate-200 rounded-lg text-sm placeholder-slate-400"
+                    className="w-full p-2 border border-slate-200 rounded-lg text-sm text-black placeholder-slate-400"
                 />
                  <textarea
                     name="businessAddress"
@@ -279,7 +279,7 @@ export default function InvoiceGeneratorClient() {
                     value={invoiceData.businessAddress}
                     onChange={handleInputChange}
                     rows={2}
-                    className="w-full p-2 border border-slate-200 rounded-lg text-sm resize-none placeholder-slate-400"
+                    className="w-full p-2 border border-slate-200 rounded-lg text-sm resize-none text-black placeholder-slate-400"
                 />
             </div>
             <div className="space-y-3">
@@ -402,7 +402,7 @@ export default function InvoiceGeneratorClient() {
                 name="notes"
                 value={invoiceData.notes}
                 onChange={handleInputChange}
-                className="w-full p-3 border border-slate-200 rounded-lg text-sm resize-none placeholder-slate-400"
+                className="w-full p-3 border border-slate-200 rounded-lg text-sm resize-none text-black placeholder-slate-400"
                 rows={3}
                 placeholder="e.g. Thanks for your business!"
             />
