@@ -43,6 +43,12 @@ export default function MarketingNavbar({ whatsappLink = 'https://wa.me/23490356
               Features
             </a>
             <a
+              href="/free-invoice-generator"
+              className="text-sm font-medium text-emerald-400 hover:text-emerald-300 transition"
+            >
+              Free Invoice
+            </a>
+            <a
               href="/#pricing"
               className="text-sm font-medium text-slate-300 hover:text-emerald-400 transition"
             >
@@ -103,6 +109,13 @@ export default function MarketingNavbar({ whatsappLink = 'https://wa.me/23490356
             className="block text-slate-300 hover:text-white font-medium p-2 hover:bg-slate-800 rounded"
           >
             Features
+          </a>
+          <a
+            href="/free-invoice-generator"
+            onClick={() => setMobileMenuOpen(false)}
+            className="block text-slate-300 hover:text-white font-medium p-2 hover:bg-slate-800 rounded"
+          >
+            Free Invoice Generator
           </a>
           <a
             href="/help"
