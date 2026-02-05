@@ -161,7 +161,14 @@ export const verifyPayment = async (req: Request, res: Response) => {
           // ✅ Use duration from metadata (default 1 month)
           const monthsToAdd = Number(metadata.durationMonths || 1);
           const daysToAdd = monthsToAdd * 30; // approx
-          user.nextBillingDate = new Date(Date.now() + daysToAdd * 24 * 60 * 60 * 1000);
+          const msToAdd = daysToAdd * 24 * 60 * 60 * 1000;
+
+          // ✅ Calculate new expiry: if already valid in future, add to it. Else start now.
+          const now = new Date();
+          const currentExpiry = user.nextBillingDate ? new Date(user.nextBillingDate) : null;
+          const baseDate = (currentExpiry && currentExpiry > now) ? currentExpiry : now;
+
+          user.nextBillingDate = new Date(baseDate.getTime() + msToAdd);
     
           await user.save();
     if (user.phoneNumber) {
@@ -223,7 +230,14 @@ export const handlePaystackWebhook = async (req: any, res: Response) => {
       // ✅ Use duration from metadata (default 1 month)
       const monthsToAdd = Number(metadata.durationMonths || 1);
       const daysToAdd = monthsToAdd * 30; // approx
-      user.nextBillingDate = new Date(Date.now() + daysToAdd * 24 * 60 * 60 * 1000);
+      const msToAdd = daysToAdd * 24 * 60 * 60 * 1000;
+
+      // ✅ Calculate new expiry: if already valid in future, add to it. Else start now.
+      const now = new Date();
+      const currentExpiry = user.nextBillingDate ? new Date(user.nextBillingDate) : null;
+      const baseDate = (currentExpiry && currentExpiry > now) ? currentExpiry : now;
+
+      user.nextBillingDate = new Date(baseDate.getTime() + msToAdd);
 
       await user.save();
 

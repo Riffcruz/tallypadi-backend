@@ -114,11 +114,18 @@ export default function UserDeepDiveModal({
   }, [details?.profile?.countryCode]);
 
   const expiryDisplay = useMemo(() => {
-    const d = details?.profile?.trialEndsAt;
+    // For trial, use trialEndsAt. For everything else (active, past_due, cancelled), try nextBillingDate first.
+    const profile = details?.profile;
+    const isTrial = profile?.subscriptionStatus === 'trial';
+    
+    const d = isTrial 
+      ? profile?.trialEndsAt 
+      : (profile?.nextBillingDate || profile?.trialEndsAt);
+
     if (!d) return '—';
     const dt = new Date(d);
     return Number.isFinite(dt.getTime()) ? dt.toLocaleDateString() : '—';
-  }, [details?.profile?.trialEndsAt]);
+  }, [details?.profile?.trialEndsAt, details?.profile?.nextBillingDate, details?.profile?.subscriptionStatus]);
 
   const handlePlanChange = async () => {
     const { value: plan } = await Swal.fire({

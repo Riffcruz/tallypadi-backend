@@ -675,7 +675,14 @@ export default function SettingsPage() {
                         ) : null}
                       </>
                     ) : (
-                      <>Subscription Active</>
+                      <>
+                        Subscription Active
+                        {user?.nextBillingDate && (
+                          <span className="text-green-700/80 font-semibold ml-1">
+                             • Renews {new Date(user.nextBillingDate).toLocaleDateString()}
+                          </span>
+                        )}
+                      </>
                     )}
                   </div>
                 ) : (
