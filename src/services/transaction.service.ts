@@ -743,3 +743,64 @@ export const deductStockForItems = async (userId: Types.ObjectId, items: {name: 
     await inv.save();
   }
 };
+
+/**
+ * ✅ Get historical prices for an item
+ */
+export async function getHistoricalPrices(userId: Types.ObjectId, itemName: string) {
+  const clean = normalizeItemName(itemName);
+  // Find candidates (using root name logic or broad search)
+  // Actually, we can just search transactions with regex on item name.
+  // But transactions store the *snapshot* name.
+  // Best to resolve to Inventory ID first if possible?
+  // Transaction items store `itemId`.
+  
+  const resolved = await findExistingItem(userId, clean);
+  let query: any = { user: userId, 'items.name': { $regex: new RegExp(escapeRegex(clean), 'i') } };
+
+  if (resolved.status === 'found') {
+      query = { user: userId, 'items.itemId': (resolved as any).inv._id };
+  }
+
+  // 1. Cost Prices (from RESTOCK)
+  const restocks = await Transaction.find({ ...query, type: 'RESTOCK' })
+      .sort({ timestamp: -1 })
+      .limit(20)
+      .select('items');
+  
+  const costSet = new Set<number>();
+  restocks.forEach(tx => {
+      tx.items.forEach(i => {
+          // Check if item matches (if query was regex)
+          if (resolved.status !== 'found' && !normalizeItemName(i.name).includes(clean)) return;
+          if (i.costPrice && i.costPrice > 0) costSet.add(i.costPrice);
+      });
+  });
+
+  // 2. Selling Prices (from SALE or RESTOCK updates)
+  // We can look at 'unitPrice' in SALES
+  const sales = await Transaction.find({ ...query, type: 'SALE' })
+      .sort({ timestamp: -1 })
+      .limit(20)
+      .select('items');
+
+  const sellSet = new Set<number>();
+  
+  // Also add current inventory price
+  if (resolved.status === 'found') {
+      const inv = (resolved as any).inv;
+      if (inv.lastUnitPrice > 0) sellSet.add(inv.lastUnitPrice);
+  }
+
+  sales.forEach(tx => {
+      tx.items.forEach(i => {
+          if (resolved.status !== 'found' && !normalizeItemName(i.name).includes(clean)) return;
+          if (i.unitPrice && i.unitPrice > 0) sellSet.add(i.unitPrice);
+      });
+  });
+
+  return {
+      costPrices: Array.from(costSet).sort((a, b) => b - a).slice(0, 3), // Top 3 unique prices
+      sellingPrices: Array.from(sellSet).sort((a, b) => b - a).slice(0, 3)
+  };
+}

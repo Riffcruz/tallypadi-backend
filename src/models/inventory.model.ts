@@ -8,6 +8,7 @@ export interface IInventoryItem extends Document {
     costPrice: number;     // <--- NEW: Cost Price
     image?: string;        // <--- Product Image URL
     category?: string;     // <--- Optional Category
+    barcode?: string;      // <--- Barcode (UPC/EAN)
   }
   
   const inventorySchema = new Schema<IInventoryItem>(
@@ -19,7 +20,8 @@ export interface IInventoryItem extends Document {
       lastUnitPrice: { type: Number, default: 0 },
       costPrice: { type: Number, default: 0 },
       image: { type: String },
-      category: { type: String, trim: true, lowercase: true }
+      category: { type: String, trim: true, lowercase: true },
+      barcode: { type: String, trim: true }
     },  { timestamps: true }
 );
 

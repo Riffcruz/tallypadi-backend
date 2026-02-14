@@ -5,7 +5,7 @@ export interface IUser extends Document {
   email?: string;
   password?: string;
 
-  registrationStage?: 'EMAIL' | 'PASSWORD' | 'COMPLETED';
+  registrationStage?: 'EMAIL' | 'PASSWORD' | 'SHOP_NAME_SELECTION' | 'SHOP_NAME_INPUT' | 'COMPLETED';
   businessName?: string;
   name?: string;
 
@@ -95,7 +95,7 @@ const userSchema = new Schema<IUser>(
 
     registrationStage: {
       type: String,
-      enum: ['EMAIL', 'PASSWORD', 'COMPLETED'],
+      enum: ['EMAIL', 'PASSWORD', 'SHOP_NAME_SELECTION', 'SHOP_NAME_INPUT', 'COMPLETED'],
       default: 'EMAIL',
     },
 

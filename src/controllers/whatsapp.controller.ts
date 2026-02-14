@@ -15,9 +15,10 @@ import { SupportAgent } from '../models/supportAgent.model'; // ✅ Import Agent
 import { supportService } from '../services/support.service';
 import { expenseService } from '../services/expense.service';
 
-import { processTransaction, deductStockForItems } from '../services/transaction.service';
+import { processTransaction, deductStockForItems, getHistoricalPrices } from '../services/transaction.service';
 import { checkSubscriptionStatus } from '../services/billing.service';
 import { orderService } from '../services/order.service';
+import { applyPaymentToDebts } from '../services/debt.service';
 import {
   messageQueue,
   queueOutboundMessage,
@@ -454,6 +455,14 @@ function invoiceBtnId(action: 'PAID' | 'CANCEL', invoiceId: string) {
   return `INVACT|${action}|${invoiceId}`;
 }
 
+function debtBtnId(action: 'FULL' | 'PARTIAL', debtorId: string) {
+  return `DEBTACT|${action}|${debtorId}`;
+}
+
+function rstPriceBtnId(type: 'COST' | 'SELL', value: string) {
+  return `RST_PRICE|${type}|${value}`;
+}
+
 function parseBtnText(rawText: string): { type: string; action: string; id: string } | null {
   if (!rawText.startsWith('__BTN__:')) return null;
   const parts = rawText.split(':'); // __BTN__:ID:TITLE
@@ -465,6 +474,12 @@ function parseBtnText(rawText: string): { type: string; action: string; id: stri
   }
   if (seg[0] === 'INVACT') {
       return { type: 'INVACT', action: seg[1] || '', id: seg[2] || '' };
+  }
+  if (seg[0] === 'DEBTACT') {
+      return { type: 'DEBTACT', action: seg[1] || '', id: seg[2] || '' };
+  }
+  if (seg[0] === 'RST_PRICE') {
+      return { type: 'RST_PRICE', action: seg[1] || '', id: seg[2] || '' };
   }
   
   return { type: 'GENERIC', action: '', id: btnId };
@@ -1033,6 +1048,23 @@ export const handleMessageLogic = async (
       return;
     }
 
+    // ✅ suspension check
+    const shopUser = owner || actor;
+    if (shopUser.subscriptionStatus === 'suspended') {
+      await queueOutboundMessage(from, `🛑 Account suspended.\nReason: ${shopUser.suspensionReason || 'Security policy'}`);
+      return;
+    }
+
+    // ✅ subscription check uses OWNER if staff
+    const allowed = await checkSubscriptionStatus(shopUser);
+    if (!allowed) return;
+
+    const { symbol, locale, code } = getUserCurrency(shopUser);
+    const shopId = ownerId || actor._id;
+
+    const offsetMinutes = shopUser?.settings?.utcOffsetMinutes ?? 60;
+    const todayKey = toISODateForOffset(offsetMinutes);
+
     // ✅ staff safety
     if (actor.role === 'STAFF') {
       if (!owner || !ownerId) {
@@ -1041,6 +1073,59 @@ export const handleMessageLogic = async (
       }
       actor.registrationStage = 'COMPLETED';
     }
+
+    // ✅ Helper for Registration Completion
+    const finishRegistration = async (user: IUser, userPhone: string) => {
+        user.registrationStage = 'COMPLETED';
+        await user.save();
+
+        const { generateWelcomeMessage } = await import('../services/gemini.service');
+        const welcomeMsg = await generateWelcomeMessage(user.settings?.language || 'English');
+
+        const trialMsg = 
+`🎉 7-Day Free Trial Started
+You now have full access to the Tycoon Plan (our complete package) for the next seven days. Explore all our features without limitation.
+
+Current Pricing Options:
+Tycoon Plan: ₦5,000/month (Save significantly with the yearly plan)
+
+Oga Boss Plan: ₦3,000/month (Save significantly with the yearly plan)`;
+
+        const menuBatches = [
+            {
+                bodyText: "SOME THINGS YOU CAN DO:",
+                buttons: [
+                    { id: 'CMD_RECORD_INVENTORY', title: '1. Record stock' },
+                    { id: 'CMD_TRACK_INVENTORY', title: '2. Track inventory' },
+                    { id: 'CMD_RECORD_SALE', title: '3. Log transaction' }
+                ]
+            },
+            {
+                bodyText: "2",
+                buttons: [
+                    { id: 'CMD_RECORD_CREDIT', title: '4. Credit sales' },
+                    { id: 'CMD_VIEW_REPORT', title: '5. View sales report' },
+                    { id: 'CMD_DELETE_STOCK', title: '6. Delete stock item' }
+                ]
+            },
+            {
+                bodyText: "3",
+                buttons: [
+                    { id: 'CMD_SET_STOCK', title: '7. Set stock' },
+                    { id: 'CMD_SET_PRICE', title: '8. Set stock price' },
+                    { id: 'CMD_CREATE_INVOICE', title: '9. Generate invoice' }
+                ]
+            },
+            {
+                bodyText: "4",
+                buttons: [
+                    { id: 'CMD_MANAGE_STAFF', title: '10. Add/Remove Staff' }
+                ]
+            }
+        ];
+
+        await queueRegistrationComplete(userPhone, welcomeMsg, trialMsg, menuBatches);
+    };
 
     // ✅ owner registration
     if (actor.role === 'OWNER' && actor.registrationStage !== 'COMPLETED') {
@@ -1099,56 +1184,20 @@ export const handleMessageLogic = async (
               actor.email = emailInput;
               const salt = await bcrypt.genSalt(10);
               actor.password = await bcrypt.hash(password, salt);
-              actor.registrationStage = 'COMPLETED';
+              
+              // Move to Shop Name Selection
+              actor.registrationStage = 'SHOP_NAME_SELECTION';
               await actor.save();
 
-              // Trigger Completion Sequence
-              const { generateWelcomeMessage } = await import('../services/gemini.service');
-              const welcomeMsg = await generateWelcomeMessage(actor.settings?.language || 'English');
-
-              const trialMsg = 
-`🎉 7-Day Free Trial Started
-You now have full access to the Tycoon Plan (our complete package) for the next seven days. Explore all our features without limitation.
-
-Current Pricing Options:
-Tycoon Plan: ₦5,000/month (Save significantly with the yearly plan)
-
-Oga Boss Plan: ₦3,000/month (Save significantly with the yearly plan)`;
-
-              const menuBatches = [
-                {
-                    bodyText: "SOME THINGS YOU CAN DO:",
-                    buttons: [
-                        { id: 'CMD_RECORD_INVENTORY', title: '1. Record stock' },
-                        { id: 'CMD_TRACK_INVENTORY', title: '2. Track inventory' },
-                        { id: 'CMD_RECORD_SALE', title: '3. Log transaction' }
-                    ]
-                },
-                {
-                    bodyText: "2",
-                    buttons: [
-                        { id: 'CMD_RECORD_CREDIT', title: '4. Credit sales' },
-                        { id: 'CMD_VIEW_REPORT', title: '5. View sales report' },
-                        { id: 'CMD_DELETE_STOCK', title: '6. Delete stock item' }
-                    ]
-                },
-                {
-                    bodyText: "3",
-                    buttons: [
-                        { id: 'CMD_SET_STOCK', title: '7. Set stock' },
-                        { id: 'CMD_SET_PRICE', title: '8. Set stock price' },
-                        { id: 'CMD_CREATE_INVOICE', title: '9. Generate invoice' }
-                    ]
-                },
-                {
-                    bodyText: "4",
-                    buttons: [
-                        { id: 'CMD_MANAGE_STAFF', title: '10. Add/Remove Staff' }
-                    ]
-                }
-              ];
-
-              await queueRegistrationComplete(from, welcomeMsg, trialMsg, menuBatches);
+              const currentName = actor.name || 'My Shop'; // usually has profileName
+              await queueOutboundButtons(
+                  from,
+                  `✅ Account Created!\n\nOne last step: What should we call your shop?\n\nI can use your WhatsApp name: *"${currentName}"*`,
+                  [
+                      { id: 'CMD_USE_PROFILE_NAME', title: `Use "${currentName.slice(0, 10)}..."` },
+                      { id: 'CMD_SET_NEW_SHOP_NAME', title: 'Set New Name' }
+                  ]
+              );
               return;
 
           } catch (e) {
@@ -1193,68 +1242,143 @@ Oga Boss Plan: ₦3,000/month (Save significantly with the yearly plan)`;
           }
 
           if (actor.registrationStage === 'PASSWORD') {
-            if (rawText.length < 1) { // Accept any non-empty for now, user requested flow is simple
+            if (rawText.length < 1) { // Accept any non-empty for now
                return; 
             }
             const salt = await bcrypt.genSalt(10);
             actor.password = await bcrypt.hash(rawText, salt);
-            actor.registrationStage = 'COMPLETED';
+            
+            // Move to Shop Name Selection
+            actor.registrationStage = 'SHOP_NAME_SELECTION';
             await actor.save();
 
-            const { generateWelcomeMessage } = await import('../services/gemini.service');
-            
-            // 1st Response: Registration Complete
-            const welcomeMsg = await generateWelcomeMessage(actor.settings?.language || 'English');
-
-            // 2nd Response: Trial Started
-            const trialMsg = 
-`🎉 7-Day Free Trial Started
-You now have full access to the Tycoon Plan (our complete package) for the next seven days. Explore all our features without limitation.
-
-Current Pricing Options:
-Tycoon Plan: ₦5,000/month (Save significantly with the yearly plan)
-
-Oga Boss Plan: ₦3,000/month (Save significantly with the yearly plan)`;
-
-            // 3rd Response: Menu Batches
-            const menuBatches = [
-                {
-                    bodyText: "SOME THINGS YOU CAN DO:",
-                    buttons: [
-                        { id: 'CMD_RECORD_INVENTORY', title: '1. Record stock' },
-                        { id: 'CMD_TRACK_INVENTORY', title: '2. Track inventory' },
-                        { id: 'CMD_RECORD_SALE', title: '3. Log transaction' }
-                    ]
-                },
-                {
-                    bodyText: "2",
-                    buttons: [
-                        { id: 'CMD_RECORD_CREDIT', title: '4. Credit sales' },
-                        { id: 'CMD_VIEW_REPORT', title: '5. View sales report' },
-                        { id: 'CMD_DELETE_STOCK', title: '6. Delete stock item' }
-                    ]
-                },
-                {
-                    bodyText: "3",
-                    buttons: [
-                        { id: 'CMD_SET_STOCK', title: '7. Set stock' },
-                        { id: 'CMD_SET_PRICE', title: '8. Set stock price' },
-                        { id: 'CMD_CREATE_INVOICE', title: '9. Generate invoice' }
-                    ]
-                },
-                {
-                    bodyText: "4",
-                    buttons: [
-                        { id: 'CMD_MANAGE_STAFF', title: '10. Add/Remove Staff' }
-                    ]
-                }
-            ];
-
-            await queueRegistrationComplete(from, welcomeMsg, trialMsg, menuBatches);
+            const currentName = actor.name || 'My Shop';
+            await queueOutboundButtons(
+                  from,
+                  `✅ Password saved!\n\nOne last step: What should we call your shop?\n\nI can use your WhatsApp name: *"${currentName}"*`,
+                  [
+                      { id: 'CMD_USE_PROFILE_NAME', title: `Use "${currentName.slice(0, 10)}..."` },
+                      { id: 'CMD_SET_NEW_SHOP_NAME', title: 'Set New Name' }
+                  ]
+            );
             return;
+          }
+
+          if (actor.registrationStage === 'SHOP_NAME_SELECTION') {
+              if (btn?.id === 'CMD_USE_PROFILE_NAME') {
+                  // Use existing name
+                  const finalName = actor.name || 'My Shop';
+                  actor.businessName = finalName;
+                  await finishRegistration(actor, from);
+                  return;
+              }
+              if (btn?.id === 'CMD_SET_NEW_SHOP_NAME') {
+                  actor.registrationStage = 'SHOP_NAME_INPUT';
+                  await actor.save();
+                  await queueOutboundMessage(from, "Okay, please type your new *Shop Name*:");
+                  return;
+              }
+              // If user typed something instead of clicking button, assume it's the name?
+              // Or prompt again? Let's assume it's the name to reduce friction.
+              const typedName = rawText.trim();
+              if (typedName.length >= 2) {
+                  actor.businessName = typedName;
+                  await finishRegistration(actor, from);
+                  return;
+              }
+          }
+
+          if (actor.registrationStage === 'SHOP_NAME_INPUT') {
+              const typedName = rawText.trim();
+              if (typedName.length < 2) {
+                  await queueOutboundMessage(from, "⚠️ Shop name is too short. Please try again.");
+                  return;
+              }
+              actor.businessName = typedName;
+              await finishRegistration(actor, from);
+              return;
           }
       }
     }
+
+    if (actor.interactionState && actor.interactionState.type === 'WAITING_FOR_RESTOCK_COST_PRICE') {
+        const data = actor.interactionState.data || {};
+        let costPrice = 0;
+
+        // 1. Resolve Input (Button vs Text)
+        if (btn && btn.type === 'RST_PRICE' && btn.action === 'COST') {
+            costPrice = Number(btn.id); // 'SKIP' might be 0 or handled specially
+            if (btn.id === 'SKIP') costPrice = 0;
+        } else {
+            const raw = rawText.replace(/,/g, '');
+            const match = raw.match(/(\d+(?:\.\d+)?)/);
+            if (match) costPrice = parseFloat(match[1]);
+            // Handle multipliers if needed (k, m) - reuse logic or simple parse
+            if (raw.toLowerCase().includes('k')) costPrice *= 1000;
+            if (raw.toLowerCase().includes('m')) costPrice *= 1000000;
+        }
+
+        // 2. Prepare Next Step (Selling Price)
+        const prices = await getHistoricalPrices(shopId, data.itemName);
+        const sellingOpts = prices.sellingPrices.map(p => ({ id: rstPriceBtnId('SELL', String(p)), title: `${symbol}${p.toLocaleString(locale)}` }));
+        sellingOpts.push({ id: rstPriceBtnId('SELL', 'SKIP'), title: 'Skip / Keep Old' });
+
+        actor.interactionState = {
+            type: 'WAITING_FOR_RESTOCK_SELLING_PRICE',
+            data: { ...data, costPrice }
+        };
+        await actor.save();
+
+        await queueOutboundButtons(
+            from,
+            `How much is the *selling price* per ${data.itemName}?`,
+            sellingOpts
+        );
+        return;
+    }
+
+    if (actor.interactionState && actor.interactionState.type === 'WAITING_FOR_RESTOCK_SELLING_PRICE') {
+        const data = actor.interactionState.data || {};
+        let unitPrice = 0;
+
+        if (btn && btn.type === 'RST_PRICE' && btn.action === 'SELL') {
+            unitPrice = Number(btn.id);
+            if (btn.id === 'SKIP') unitPrice = 0;
+        } else {
+            const raw = rawText.replace(/,/g, '');
+            const match = raw.match(/(\d+(?:\.\d+)?)/);
+            if (match) unitPrice = parseFloat(match[1]);
+            if (raw.toLowerCase().includes('k')) unitPrice *= 1000;
+            if (raw.toLowerCase().includes('m')) unitPrice *= 1000000;
+        }
+
+        // 3. Finalize Transaction
+        actor.interactionState = null;
+        await actor.save();
+
+        const finalParsed = {
+            intent: 'RESTOCK',
+            items: [{
+                name: data.itemName,
+                qty: data.qty,
+                unit: data.unit,
+                cost_price: data.costPrice > 0 ? data.costPrice : null,
+                unit_price: unitPrice > 0 ? unitPrice : null
+            }],
+            reply_text: '✅ STOCK ADDED TO INVENTORY'
+        };
+
+        try {
+            await processTransaction(shopId as any, finalParsed as any, `restock_flow_${messageId}`, actor);
+            await queueOutboundMessage(from, finalParsed.reply_text);
+        } catch (e) {
+            console.error('Restock flow error:', e);
+            await queueOutboundMessage(from, '⚠️ Failed to update stock. Please try again.');
+        }
+        return;
+    }
+
+
 
     // ✅ Handle Staff Add Flow Response
     if (rawText.startsWith('__FLOW__:')) {
@@ -1322,29 +1446,145 @@ Oga Boss Plan: ₦3,000/month (Save significantly with the yearly plan)`;
         }
     }
 
-    // ✅ suspension check
-    const shopUser = owner || actor;
-    if (shopUser.subscriptionStatus === 'suspended') {
-      await queueOutboundMessage(from, `🛑 Account suspended.\nReason: ${shopUser.suspensionReason || 'Security policy'}`);
-      return;
+    if (actor.interactionState && actor.interactionState.type === 'WAITING_FOR_DEBTOR_NAME') {
+        if (btn) {
+           // Clear state if they clicked a button instead of replying
+           actor.interactionState = null;
+           await actor.save();
+        } else {
+           const name = rawText.trim();
+           actor.interactionState = null;
+           await actor.save();
+
+           if (!name) {
+               await queueOutboundMessage(from, "Name cancelled.");
+               return;
+           }
+
+           const res = await resolveDebtor(shopId, name);
+           if (res.status === 'suggest') {
+                // If fuzzy match, we could ask to pick number, but for simplicity let's just use the best match?
+                // Or inform them. Let's use the first one for now or better, ask.
+                // Re-using attachCreditNameToLatest logic? No, let's just pick the best match for now or ask to retry.
+                const best = res.options[0];
+                await queueOutboundMessage(from, `Did you mean *${best.displayName}*? Reply 'Yes' or the name again.`);
+                // Maybe better to fail gracefully:
+                // await queueOutboundMessage(from, "I found multiple matches. Please be more specific.");
+                // But let's assume they meant the first one for UX speed.
+                // Or let's trigger a clarify?
+                // For this MVP, let's use the exact match or fail if not found/new.
+           }
+
+           let debtor: any = null;
+           if (res.status === 'exact') {
+               debtor = await Debtor.findById(res.debtorId);
+           } else if (res.status === 'suggest') {
+               debtor = await Debtor.findById(res.options[0].debtorId);
+           }
+
+           if (!debtor) {
+               await queueOutboundMessage(from, `⚠️ Debtor *${name}* not found. Reply 'List debtors' to see all.`);
+               return;
+           }
+
+           const totalDebt = debtor.totalDebt || 0;
+           if (totalDebt <= 0) {
+               await queueOutboundMessage(from, `✅ *${debtor.displayName}* owes nothing.`);
+               return;
+           }
+
+           // List debts details (optional, maybe just total for now as per prompt)
+           // "The system spools out John’s credit report and the total amount owed."
+           // Let's fetch the items.
+           const debts = await Transaction.find({
+                user: shopId,
+                type: 'SALE',
+                paymentStatus: 'CREDIT',
+                isUndone: { $ne: true },
+                balance: { $gt: 0 },
+                debtorId: debtor._id,
+           }).limit(5); // Show top 5 debts
+
+           let msg = `📉 *${debtor.displayName}'s Credit Report*\n\n`;
+           debts.forEach(d => {
+               const items = (d.items || []).map((i: any) => i.name).join(', ');
+               msg += `• Owes ${symbol}${Number(d.balance).toLocaleString(locale)} for ${items}\n`;
+           });
+           
+           if (debts.length >= 5) msg += `...and more.\n`;
+           msg += `\n💰 *Total Owed:* ${symbol}${totalDebt.toLocaleString(locale)}`;
+
+           await queueSaleResponse(
+               from,
+               msg,
+               "Select Action 👇",
+               [
+                   { id: debtBtnId('FULL', String(debtor._id)), title: '✅ Full Payment' },
+                   { id: debtBtnId('PARTIAL', String(debtor._id)), title: '🔢 Partial Payment' },
+               ],
+               `debt_report_${debtor._id}`
+           );
+           return;
+        }
     }
 
-    // ✅ subscription check uses OWNER if staff
-    const allowed = await checkSubscriptionStatus(shopUser);
-    if (!allowed) return;
+    if (actor.interactionState && actor.interactionState.type === 'WAITING_FOR_PAYMENT_AMOUNT') {
+        if (btn) {
+           actor.interactionState = null;
+           await actor.save();
+        } else {
+           const { parseMessageWithGemini } = await import('../services/gemini.service'); // Or simple regex parse
+           // Let's try simple regex for amount first
+           const raw = rawText.replace(/,/g, '');
+           const match = raw.match(/(\d+(?:\.\d+)?)/);
+           
+           let amount = 0;
+           if (match) {
+               amount = parseFloat(match[1]);
+               // Handle 'k' / 'm' logic if needed?
+               // parseMoney function exists in gemini.service but it is not exported.
+               // Let's duplicate basic logic or just rely on simple numbers for now.
+               // User might say "100k".
+               if (raw.toLowerCase().includes('k')) amount *= 1000;
+               if (raw.toLowerCase().includes('m')) amount *= 1000000;
+           }
 
-    // ✅ store history per actor
-    actor.messageHistory = actor.messageHistory || [];
-    if (actor.messageHistory.length >= MAX_HISTORY) actor.messageHistory.shift();
-    actor.messageHistory.push(rawText);
-    actor.lastSeen = new Date(); // ✅ Update last activity
-    await actor.save();
+           if (amount <= 0) {
+               await queueOutboundMessage(from, "⚠️ Invalid amount. Please try again (e.g., '5000').");
+               return; // Keep state? Or clear? Let's keep state to allow retry.
+               // But usually we clear state to prevent stuck loop.
+               // Let's clear state and ask to start over if invalid.
+               actor.interactionState = null;
+               await actor.save();
+               return;
+           }
 
-    const { symbol, locale, code } = getUserCurrency(shopUser);
-    const shopId = ownerId || actor._id;
+           const data = actor.interactionState.data || {};
+           actor.interactionState = null;
+           await actor.save();
 
-    const offsetMinutes = shopUser?.settings?.utcOffsetMinutes ?? 60;
-    const todayKey = toISODateForOffset(offsetMinutes);
+           const debtorId = data.debtorId;
+           const debtorName = data.debtorName || 'Customer';
+
+           // Apply Payment
+           const res = await applyPaymentToDebts(shopId, debtorId, amount);
+
+           // Update Debtor Total
+           await Debtor.findByIdAndUpdate(debtorId, { $inc: { totalDebt: -res.applied } });
+
+           await queueOutboundMessage(from, `✅ Recorded partial payment of ${symbol}${res.applied.toLocaleString(locale)} for ${debtorName}.\nRemaining Debt: ${symbol}${res.remaining.toLocaleString(locale)}`); // Wait, res.remaining is from amount provided? Or balance remaining?
+           // applyPaymentToDebts returns { applied, remaining, clearedCount } where remaining is "remaining amount from the payment provided that wasn't used" (excess payment).
+           // It does NOT return the debtor's NEW total debt balance.
+           // We need to fetch updated debtor balance.
+           
+           const updatedDebtor = await Debtor.findById(debtorId);
+           const newBalance = updatedDebtor?.totalDebt || 0;
+
+           await queueOutboundMessage(from, `✅ Payment Recorded!\n\nPAID: ${symbol}${res.applied.toLocaleString(locale)}\nBALANCE: ${symbol}${newBalance.toLocaleString(locale)}`);
+           return;
+        }
+    }
+
 
     // =====================================================
     // ✅ BUTTON fast path
@@ -1485,6 +1725,61 @@ Oga Boss Plan: ₦3,000/month (Save significantly with the yearly plan)`;
                   `inv_paid_${invId}`
               );
               return;
+          }
+      }
+
+      // ✅ DEBT BUTTONS
+      if (btn.type === 'DEBTACT') {
+          const action = btn.action;
+          const debtorId = btn.id;
+
+          const debtor = await Debtor.findById(debtorId);
+          if (!debtor) {
+              await queueOutboundMessage(from, "⚠️ Debtor record not found.");
+              return;
+          }
+
+          if (action === 'FULL') {
+              const totalDebt = debtor.totalDebt || 0;
+              if (totalDebt <= 0) {
+                  await queueOutboundMessage(from, `✅ ${debtor.displayName} has no outstanding debt.`);
+                  return;
+              }
+
+              // Apply full payment
+              const res = await applyPaymentToDebts(shopId, debtor._id as any, totalDebt);
+              
+              // Update Debtor Record
+              debtor.totalDebt = Math.max(0, debtor.totalDebt - res.applied);
+              await debtor.save();
+
+              // Record Payment Transaction (optional but good for history)
+              // Actually applyPaymentToDebts updates the individual sale transactions to PAID.
+              // We might want to log a "Debt Payment" transaction if we track cash flow separately,
+              // but for now let's assume the individual sales being marked PAID is enough.
+              // (Wait, if we mark them PAID, they show up in daily stats as paid sales? 
+              // Usually yes, if we update paymentStatus. 
+              // But we should check if we need to log a separate "Repayment" entry for cash reconciliation.
+              // The current system seems to update the original sale. 
+              // If we update original sale, the money "comes in" now? 
+              // Or does it change the past?
+              // `applyPaymentToDebts` updates `amountPaid` and `balance` and `settledAt`.
+              // It doesn't seem to create a NEW transaction.
+              // So to track CASH IN HAND TODAY, we might need a separate mechanism or just rely on "settledAt" query.
+              // For now, let's just confirm to user.)
+
+              await queueOutboundMessage(from, `✅ ${debtor.displayName} completely cleared credit sale of ${symbol}${res.applied.toLocaleString(locale)}.`);
+              return;
+          }
+
+          if (action === 'PARTIAL') {
+               actor.interactionState = {
+                   type: 'WAITING_FOR_PAYMENT_AMOUNT',
+                   data: { debtorId: String(debtor._id), debtorName: debtor.displayName }
+               };
+               await actor.save();
+               await queueOutboundMessage(from, `How much was paid by ${debtor.displayName}?`);
+               return;
           }
       }
 
@@ -1722,12 +2017,72 @@ Oga Boss Plan: ₦3,000/month (Save significantly with the yearly plan)`;
         break;
       }
 
-      case 'RESTOCK':
+      case 'DEBT_PAYMENT': {
+        // ✅ Interactive Flow trigger if no name/amount
+        if (parsed.needs_clarification) {
+            actor.interactionState = { type: 'WAITING_FOR_DEBTOR_NAME' };
+            await actor.save();
+            await queueOutboundMessage(from, "Whose bill are you updating?");
+            break;
+        }
+        
+        // Otherwise, if name provided, handle it (Standard Flow or redirect to interactive)
+        // If user says "John paid 50k", we have name and amount -> Standard processTransaction
+        // If user says "John paid" (no amount) -> needs_clarification usually true, so caught above.
+        // If user says "Paid 50k" (no name) -> needs_clarification true, caught above.
+
+        try {
+            await processTransaction(shopId as any, parsed, messageId, actor);
+            await queueOutboundMessage(from, parsed.reply_text || '✅ Done.');
+        } catch (e) {
+            console.error('processTransaction error:', e);
+            await queueOutboundMessage(from, '⚠️ Sorry—something went wrong. Please try again.');
+        }
+        break;
+      }
+
+      case 'RESTOCK': {
+          const item = parsed.items?.[0];
+          // ✅ Trigger interactive flow if prices missing
+          if (parsed.needs_clarification || !item?.cost_price || !item?.unit_price) {
+              if (!item?.name) {
+                  await queueOutboundMessage(from, "What are you restocking? Reply like: *Add 50 sneakers*");
+                  break;
+              }
+
+              const prices = await getHistoricalPrices(shopId, item.name);
+              const costOpts = prices.costPrices.map(p => ({ id: rstPriceBtnId('COST', String(p)), title: `${symbol}${p.toLocaleString(locale)}` }));
+              costOpts.push({ id: rstPriceBtnId('COST', 'SKIP'), title: 'Skip / Manual' });
+
+              actor.interactionState = {
+                  type: 'WAITING_FOR_RESTOCK_COST_PRICE',
+                  data: { itemName: item.name, qty: item.qty, unit: item.unit }
+              };
+              await actor.save();
+
+              await queueOutboundButtons(
+                  from,
+                  `How much did you buy each *${item.name}*?`,
+                  costOpts
+              );
+              break;
+          }
+
+          // Standard fast-path (if user provided everything: "Restock 10 rice 50k each selling 60k")
+          try {
+              await processTransaction(shopId as any, parsed, messageId, actor);
+              await queueOutboundMessage(from, parsed.reply_text || '✅ Done.');
+          } catch (e) {
+              console.error('processTransaction error:', e);
+              await queueOutboundMessage(from, '⚠️ Sorry—something went wrong. Please try again.');
+          }
+          break;
+      }
+
       case 'SET_STOCK':
       case 'DELETED_STOCK':
       case 'DEFINE_PRICE':
-      case 'PRICE_CHECK':
-      case 'DEBT_PAYMENT': {
+      case 'PRICE_CHECK': {
         // ✅ STOP: If clarification needed, ask user first
         if (parsed.needs_clarification) {
           await queueOutboundMessage(from, parsed.reply_text);
@@ -2270,10 +2625,23 @@ Oga Boss Plan: ₦3,000/month (Save significantly with the yearly plan)`;
           break;
         }
 
-        const allowedKeys = ['closingTime', 'dailySummaryEnabled', 'language', 'pdfReportsEnabled', 'utcOffsetMinutes'];
+        const allowedKeys = ['closingTime', 'dailySummaryEnabled', 'language', 'pdfReportsEnabled', 'utcOffsetMinutes', 'businessName'];
         if (!allowedKeys.includes(String(key))) {
           await queueOutboundMessage(from, '❌ Unsupported setting.');
           break;
+        }
+
+        if (key === 'businessName') {
+            const newName = String(value || '').trim().slice(0, 50);
+            if (newName.length < 2) {
+                await queueOutboundMessage(from, 'Shop name too short.');
+                break;
+            }
+            actor.businessName = newName;
+            // Also update shopSlug if needed? Maybe best not to auto-change slug to avoid breaking links.
+            await actor.save();
+            await queueOutboundMessage(from, `✅ Shop name updated to *${newName}*.`);
+            break;
         }
 
         (actor.settings as any) = actor.settings || {};

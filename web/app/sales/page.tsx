@@ -36,6 +36,7 @@ export interface InventoryItem {
   stock: number;
   price: number;
   costPrice?: number;
+  barcode?: string;
 }
 export interface CartItem extends InventoryItem {
   sellQty: number;

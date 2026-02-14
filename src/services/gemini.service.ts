@@ -507,7 +507,7 @@ function fallbackParse(message: string): ParsedResult | null {
   // ✅ GET_SHOP_LINK fallback
   if (
     /\b(shop link|store link|website|my shop|share shop)\b/i.test(m) &&
-    !/\b(report|sales)\b/i.test(m)
+    !/\b(report|sales|change|update|set|name)\b/i.test(m)
   ) {
     return safeParsedResult({
       intent: 'GET_SHOP_LINK',
@@ -579,8 +579,8 @@ if (wantsDownload && !isToggle) {
   }
 
   // ✅ EXPENSE FALLBACK
-  // "Spent 5000 on fuel", "Expense 2k for transport", "Bought fuel 2000"
-  const expenseRegex = /\b(spent|spend|expense|expenses|cost|bought|buy|paid|pay)\b/i;
+  // "Spent 5000 on fuel", "Expense 2k for transport"
+  const expenseRegex = /\b(spent|spend|expense|expenses|cost)\b/i;
   
   if (expenseRegex.test(m) && !/\b(sold|sell|sale)\b/i.test(m)) {
       // Try to extract money
@@ -974,6 +974,7 @@ These commands MUST map to intent SETTINGS (or CHANGE_LANGUAGE) and MUST output 
 - "pdfReportsEnabled" (value: boolean true/false)
 - "utcOffsetMinutes" (value: number minutes, e.g. +1 hour -> 60, -2 -> -120)
 - "language" (value: string like "English", "Pidgin", "French", "Spanish")
+- "businessName" (value: string "New Name")
 -
 
 A) closingTime
@@ -1298,6 +1299,7 @@ Distinct from "Sales" (which are immediate).
 
 *** 5I. EXPENSES (SPENDING) ***
 - Triggers: "Spent 5000 on fuel", "Bought fuel 2k for gen", "Transport to market 1500", "Expense 10k for shop rent", "Debit 500 airtime".
+- Also: "Paid 5000 for fuel" (If "Paid" is followed by "for" and an item, it is EXPENSE, not DEBT_PAYMENT).
 - ACTION: Record an expense.
 - EXTRACTION RULES:
   - total_money: MUST be extracted (Amount spent).

@@ -10,16 +10,18 @@ import {
   AlertTriangle,
   X,
   Sparkles,
+  ScanBarcode, // Import ScanBarcode icon
 } from 'lucide-react';
 import { InventoryItem, UserProfile } from './page';
 import { getCookie } from '../../utils/cookies';
+import dynamic from 'next/dynamic'; // Dynamic import for BarcodeScanner
+
+// Dynamically import BarcodeScanner to avoid SSR issues with camera
+const BarcodeScanner = dynamic(() => import('../../components/BarcodeScanner'), { ssr: false });
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 
 interface ProductGridProps {
-
-
-  
   user: UserProfile | null;
   onAddToCart: (item: InventoryItem) => void;
   currencyCode: string;
@@ -29,6 +31,7 @@ export default function ProductGrid({ user, onAddToCart, currencyCode }: Product
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [showScanner, setShowScanner] = useState(false); // State for scanner visibility
 
   useEffect(() => {
     const token = getCookie('tallyToken');
@@ -47,6 +50,7 @@ export default function ProductGrid({ user, onAddToCart, currencyCode }: Product
           stock: Number(item.quantity ?? item.stock ?? 0),
           price: Number(item.lastUnitPrice ?? item.price ?? 0),
           costPrice: Number(item.costPrice ?? 0),
+          barcode: item.barcode, // Ensure barcode is included
         }));
         setInventory(clean);
         setLoading(false);
@@ -57,10 +61,29 @@ export default function ProductGrid({ user, onAddToCart, currencyCode }: Product
       });
   }, []);
 
+  const handleScan = (code: string) => {
+    setShowScanner(false);
+    
+    // 1. Try to find exact match by barcode
+    const exactMatch = inventory.find(i => i.barcode === code);
+    
+    if (exactMatch) {
+      onAddToCart(exactMatch);
+      // Optional: clear search if it was set
+      setSearch('');
+    } else {
+      // 2. If no exact match, set search to barcode
+      setSearch(code);
+    }
+  };
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return inventory;
-    return inventory.filter((i) => String(i.name || '').toLowerCase().includes(q));
+    return inventory.filter((i) => 
+      String(i.name || '').toLowerCase().includes(q) || 
+      String(i.barcode || '').toLowerCase().includes(q)
+    );
   }, [inventory, search]);
 
   const formatPrice = (amount: number) => {
@@ -111,37 +134,67 @@ export default function ProductGrid({ user, onAddToCart, currencyCode }: Product
             )}
           </div>
 
-          <div className="relative group">
-            {/* Icon */}
-            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-              <Search className="h-5 w-5 text-slate-400 group-focus-within:text-emerald-600 transition-colors" />
+          <div className="relative group flex items-center gap-2">
+            <div className="flex-1 relative">
+              {/* Icon */}
+              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                <Search className="h-5 w-5 text-slate-400 group-focus-within:text-emerald-600 transition-colors" />
+              </div>
+
+              {/* Input */}
+              <input
+                type="text"
+                placeholder="Search items by name or scan barcode…"
+                className="
+                  block w-full pl-11 pr-12 py-3.5
+                  bg-white/90 border border-slate-200
+                  rounded-2xl text-sm font-medium text-slate-900 placeholder-slate-400
+                  shadow-sm shadow-slate-900/5
+                  focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500
+                  outline-none transition-all
+                "
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+
+              {/* Right “kbd” hint */}
+              <div className="absolute inset-y-0 right-3 flex items-center">
+                <span className="hidden sm:inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-200 bg-slate-50 text-[11px] font-semibold text-slate-500">
+                  ⌘ K
+                </span>
+              </div>
             </div>
 
-            {/* Input */}
-            <input
-              type="text"
-              placeholder="Search items by name…"
-              className="
-                block w-full pl-11 pr-12 py-3.5
-                bg-white/90 border border-slate-200
-                rounded-2xl text-sm font-medium text-slate-900 placeholder-slate-400
-                shadow-sm shadow-slate-900/5
-                focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500
-                outline-none transition-all
-              "
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-
-            {/* Right “kbd” hint */}
-            <div className="absolute inset-y-0 right-3 flex items-center">
-              <span className="hidden sm:inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-200 bg-slate-50 text-[11px] font-semibold text-slate-500">
-                ⌘ K
-              </span>
-            </div>
+            {/* Barcode Scanner Button */}
+            <button
+              onClick={() => setShowScanner(true)}
+              className="p-3.5 bg-white border border-slate-200 rounded-2xl text-slate-600 hover:text-emerald-600 hover:border-emerald-300 transition-colors shadow-sm"
+              title="Scan Barcode"
+            >
+              <ScanBarcode className="w-5 h-5" />
+            </button>
           </div>
         </div>
       </div>
+
+      {/* Barcode Scanner Overlay */}
+      {showScanner && (
+        <BarcodeScanner
+          onScan={(code) => {
+            console.log('Scanned:', code);
+            const item = inventory.find((i) => i.barcode === code);
+            if (item) {
+              onAddToCart(item);
+              setShowScanner(false);
+              setSearch(''); // Clear search if match found
+            } else {
+               setSearch(code); // Set search if no match found
+               setShowScanner(false);
+            }
+          }}
+          onClose={() => setShowScanner(false)}
+        />
+      )}
 
       {/* --- Content --- */}
       <div className="flex-1 pt-5">
