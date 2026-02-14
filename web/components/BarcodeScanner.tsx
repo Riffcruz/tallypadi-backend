@@ -40,7 +40,7 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
         Html5QrcodeSupportedFormats.CODE_39,
       ];
 
-      const html5QrCode = new Html5Qrcode(elementId);
+      const html5QrCode = new Html5Qrcode(elementId, { formatsToSupport });
       scannerRef.current = html5QrCode;
 
       await html5QrCode.start(
@@ -49,7 +49,6 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
           fps: 10,
           qrbox: { width: 250, height: 250 },
           aspectRatio: 1.0,
-          formatsToSupport: formatsToSupport
         },
         (decodedText) => {
           // Success callback
