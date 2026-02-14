@@ -382,10 +382,17 @@ export const processTransaction = async (
       );
 
       // ✅ SYNC FRONTEND: Update Debtor balance immediately
-      await Debtor.findByIdAndUpdate(debtorId, { $inc: { totalDebt: -amt } });
+      const oldDebtor = await Debtor.findByIdAndUpdate(debtorId, { $inc: { totalDebt: -amt } });
+      const oldBalance = oldDebtor ? toNumber(oldDebtor.totalDebt) : 0;
 
       if (r.applied <= 0) {
-        parsed.reply_text = `I no see any outstanding debt for *${displayName}*.`;
+        if (oldBalance > 0) {
+           const newBalance = oldBalance - amt;
+           const status = newBalance <= 0 ? "✨ Fully settled!" : `📉 Remaining: ${newBalance.toLocaleString()}`;
+           parsed.reply_text = `✅ Payment recorded for *${displayName}*.\n${status}`;
+        } else {
+           parsed.reply_text = `I did not see any outstanding debt for *${displayName}*.\nRecorded as credit (overpayment).`;
+        }
       } else if (r.remaining > 0) {
         parsed.reply_text =
           `✅ Payment recorded for *${displayName}*.\n` +
