@@ -24,6 +24,9 @@ import {
   ChevronLeft,
   ChevronRight,
   HelpCircle,
+  Store,
+  Smartphone,
+  LayoutDashboard
 } from 'lucide-react';
 import Image from 'next/image';
 import StepShotWhatsAppLight from "../components/StepShot";
@@ -80,22 +83,22 @@ const HERO_IMAGES = [
 // --- NEW: Testimonials + FAQ Data ---
 const TESTIMONIALS: Testimonial[] = [
   {
-    name: 'Chioma',
-    role: 'Mini-mart Owner (Lagos)',
-    text: "Before Tallypadi, I was always guessing profit. Now I just chat 'Sold 2 rice' and it updates everything. My stress reduced.",
-    highlight: 'Less stress, clearer profit',
+    name: 'Mrs. Chioma Okeke',
+    role: 'Owner, Chioma’s Provisions (Lagos)',
+    text: "My brother, this thing has saved me. I used to write everything in a notebook and lose it. Now I just type 'Sold 2 rice' on WhatsApp and I see my profit immediately. No more headache.",
+    highlight: 'No more notebooks',
   },
   {
-    name: 'Tunde',
-    role: 'Phone Accessories Vendor',
-    text: 'The low stock alerts saved me multiple times. I used to run out of fast-moving items without knowing.',
-    highlight: 'Low stock alerts',
+    name: 'Mr. Tunde',
+    role: 'Gadget World, Ikeja',
+    text: 'I run my shop from home sometimes. I can see when my boy sells a phone charger instantly. The low stock alert is the best feature—it tells me before I run out.',
+    highlight: 'Remote monitoring',
   },
   {
-    name: 'Aisha',
-    role: 'Fashion & Beauty Store',
-    text: 'I like that my staff can record sales and I can still see everything on the dashboard. It feels like proper business.',
-    highlight: 'Staff + dashboard control',
+    name: 'Alhaji Musa',
+    role: 'Musa & Sons Wholesalers',
+    text: 'We have 3 branches. Before, balancing the books was a headache. Now TallyPadi combines everything. The POS feature helps my staff sell faster too.',
+    highlight: 'Multi-branch control',
   },
 ];
 
@@ -221,15 +224,15 @@ const GlowStat = ({
   icon: React.ReactNode;
 }) => {
   return (
-    <div className="group relative overflow-hidden rounded-3xl border border-slate-700/60 bg-slate-900/40 backdrop-blur-md p-6 shadow-xl transition-all duration-500 hover:-translate-y-1 hover:border-emerald-500/40">
+    <div className="group relative overflow-hidden rounded-3xl border border-stone-700/60 bg-stone-900/40 backdrop-blur-md p-6 shadow-xl transition-all duration-500 hover:-translate-y-1 hover:border-emerald-500/40">
       <div className="absolute -top-24 -right-24 h-48 w-48 rounded-full bg-emerald-400/10 blur-3xl opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-bold tracking-wider text-slate-300/90 uppercase">{label}</p>
+          <p className="text-xs font-bold tracking-wider text-stone-300/90 uppercase">{label}</p>
           <p className="mt-2 text-4xl font-extrabold text-white tracking-tight">{value}</p>
-          {sub ? <p className="mt-2 text-sm text-slate-300/80">{sub}</p> : null}
+          {sub ? <p className="mt-2 text-sm text-stone-300/80">{sub}</p> : null}
         </div>
-        <div className="rounded-2xl border border-slate-700/60 bg-slate-950/40 p-3 text-emerald-300 shadow-[0_0_30px_rgba(52,211,153,0.12)]">
+        <div className="rounded-2xl border border-stone-700/60 bg-stone-950/40 p-3 text-emerald-300 shadow-[0_0_30px_rgba(52,211,153,0.12)]">
           {icon}
         </div>
       </div>
@@ -239,11 +242,10 @@ const GlowStat = ({
 
 const TestimonialCard = ({ t }: { t: Testimonial }) => {
   return (
-    <div className="group relative overflow-hidden rounded-3xl border border-slate-700/60 bg-slate-900/35 backdrop-blur-md p-7 shadow-xl transition-all duration-500 hover:-translate-y-1 hover:border-blue-400/40">
-      <div className="absolute -bottom-24 -left-24 h-48 w-48 rounded-full bg-blue-400/10 blur-3xl opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
+    <div className="group relative overflow-hidden rounded-3xl border border-stone-700/60 bg-stone-900/50 backdrop-blur-md p-8 shadow-xl transition-all duration-500 hover:-translate-y-1 hover:border-emerald-500/30">
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1">
-          <div className="flex items-center gap-2 text-yellow-300">
+          <div className="flex items-center gap-1 text-yellow-400">
             <Star size={16} fill="currentColor" />
             <Star size={16} fill="currentColor" />
             <Star size={16} fill="currentColor" />
@@ -251,23 +253,17 @@ const TestimonialCard = ({ t }: { t: Testimonial }) => {
             <Star size={16} fill="currentColor" />
           </div>
 
-          <p className="mt-4 text-slate-200 leading-relaxed">“{t.text}”</p>
+          <p className="mt-6 text-stone-200 text-lg font-light leading-relaxed italic">“{t.text}”</p>
 
-          {t.highlight ? (
-            <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1 text-xs font-bold text-emerald-200">
-              <Zap size={14} />
-              {t.highlight}
-            </div>
-          ) : null}
-
-          <div className="mt-6">
-            <p className="font-bold text-white">{t.name}</p>
-            <p className="text-sm text-slate-300/80">{t.role}</p>
+          <div className="mt-6 flex items-center gap-3">
+             <div className="h-10 w-10 rounded-full bg-emerald-700/20 text-emerald-400 flex items-center justify-center font-bold text-sm border border-emerald-500/20">
+               {t.name.charAt(0)}
+             </div>
+             <div>
+                <p className="font-bold text-white">{t.name}</p>
+                <p className="text-sm text-emerald-400/90">{t.role}</p>
+             </div>
           </div>
-        </div>
-
-        <div className="rounded-2xl border border-slate-700/60 bg-slate-950/40 p-3 text-slate-200/80">
-          <Quote size={20} />
         </div>
       </div>
     </div>
@@ -284,14 +280,14 @@ const FaqItem = ({
   onToggle: () => void;
 }) => {
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-700/60 bg-slate-900/35 backdrop-blur-md">
+    <div className="overflow-hidden rounded-2xl border border-stone-700/60 bg-stone-900/35 backdrop-blur-md">
       <button
         type="button"
         onClick={onToggle}
         className="w-full px-5 py-4 flex items-center justify-between gap-4 text-left hover:bg-white/5 transition"
       >
         <div className="flex items-center gap-3">
-          <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-700/60 bg-slate-950/40 text-emerald-300">
+          <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-stone-700/60 bg-stone-950/40 text-emerald-300">
             <HelpCircle size={18} />
           </span>
           <span className="font-bold text-white">{item.q}</span>
@@ -299,7 +295,7 @@ const FaqItem = ({
 
         <ChevronDown
           size={18}
-          className={`text-slate-300 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}
+          className={`text-stone-300 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}
         />
       </button>
 
@@ -307,7 +303,7 @@ const FaqItem = ({
         className={`grid transition-all duration-400 ease-out ${isOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}
       >
         <div className="overflow-hidden">
-          <div className="px-5 pb-5 text-slate-300/90 leading-relaxed">{item.a}</div>
+          <div className="px-5 pb-5 text-stone-300/90 leading-relaxed">{item.a}</div>
         </div>
       </div>
     </div>
@@ -330,7 +326,7 @@ const TestimonialSlider = ({ testimonials }: { testimonials: Testimonial[] }) =>
 
   useEffect(() => {
     if (isPaused) return;
-    const interval = setInterval(nextSlide, 5000);
+    const interval = setInterval(nextSlide, 6000);
     return () => clearInterval(interval);
   }, [current, isPaused, length]);
 
@@ -355,7 +351,7 @@ const TestimonialSlider = ({ testimonials }: { testimonials: Testimonial[] }) =>
 
       <button 
         onClick={prevSlide}
-        className="absolute left-0 top-1/2 -translate-y-1/2 p-2 rounded-full bg-slate-800/80 text-white hover:bg-emerald-500 transition-all border border-slate-700 hover:scale-110 z-10"
+        className="absolute left-0 top-1/2 -translate-y-1/2 p-2 rounded-full bg-stone-800/80 text-white hover:bg-emerald-500 transition-all border border-stone-700 hover:scale-110 z-10"
         aria-label="Previous testimonial"
       >
         <ChevronLeft size={24} />
@@ -363,7 +359,7 @@ const TestimonialSlider = ({ testimonials }: { testimonials: Testimonial[] }) =>
 
       <button 
         onClick={nextSlide}
-        className="absolute right-0 top-1/2 -translate-y-1/2 p-2 rounded-full bg-slate-800/80 text-white hover:bg-emerald-500 transition-all border border-slate-700 hover:scale-110 z-10"
+        className="absolute right-0 top-1/2 -translate-y-1/2 p-2 rounded-full bg-stone-800/80 text-white hover:bg-emerald-500 transition-all border border-stone-700 hover:scale-110 z-10"
         aria-label="Next testimonial"
       >
         <ChevronRight size={24} />
@@ -376,7 +372,7 @@ const TestimonialSlider = ({ testimonials }: { testimonials: Testimonial[] }) =>
             onClick={() => setCurrent(idx)}
             className={`transition-all duration-300 rounded-full ${current === idx 
                 ? 'w-8 h-2 bg-emerald-500' 
-                : 'w-2 h-2 bg-slate-700 hover:bg-slate-600'}
+                : 'w-2 h-2 bg-stone-700 hover:bg-stone-600'}
             `}
             aria-label={`Go to slide ${idx + 1}`}
           />
@@ -430,13 +426,13 @@ export default function LandingPage() {
   }, []);
 
   return (
-    <div className="bg-slate-50 text-slate-600 overflow-x-hidden font-sans selection:bg-emerald-500 selection:text-white">
+    <div className="bg-stone-50 text-stone-700 overflow-x-hidden font-sans selection:bg-emerald-500 selection:text-white">
       {/* --- Navbar --- */}
       <MarketingNavbar whatsappLink={whatsappLink} />
 
       {/* --- Hero Section (Full Screen) --- */}
       <section 
-        className="relative min-h-screen flex items-center justify-center pt-20 overflow-hidden bg-slate-950"
+        className="relative min-h-screen flex items-center justify-center pt-20 overflow-hidden bg-stone-950"
         onMouseEnter={() => setIsHeroPaused(true)}
         onMouseLeave={() => setIsHeroPaused(false)}
       >
@@ -444,43 +440,55 @@ export default function LandingPage() {
         {HERO_IMAGES.map((img, index) => (
           <div
             key={index}
-            className={`absolute inset-0 bg-cover bg-center transition-all duration-[1500ms] ease-in-out ${index === currentBg ? 'opacity-60 scale-105' : 'opacity-0 scale-100'}`}
+            className={`absolute inset-0 bg-cover bg-center transition-all duration-[1500ms] ease-in-out ${index === currentBg ? 'opacity-40 scale-105' : 'opacity-0 scale-100'}`}
             style={{ backgroundImage: `url(${img})` }}
           />
         ))}
 
-        {/* Cinematic Gradient Overlay - Lighter for clarity */}
-        <div className="absolute inset-0 bg-gradient-to-b from-slate-950/80 via-slate-950/60 to-slate-950 z-10" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-emerald-900/10 via-slate-950/30 to-slate-950 z-10" />
+        {/* Cinematic Gradient Overlay - Warm & Deep */}
+        <div className="absolute inset-0 bg-gradient-to-b from-stone-950/90 via-stone-950/70 to-stone-950 z-10" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-emerald-900/10 via-stone-950/40 to-stone-950 z-10" />
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-20 w-full grid lg:grid-cols-2 gap-12 lg:gap-20 items-center">
           {/* Text Content */}
           <div className="text-white pt-10 lg:pt-0">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-sm font-bold mb-8 backdrop-blur-md animate-pulse">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-900/30 border border-emerald-500/20 text-emerald-200 text-sm font-semibold mb-8 backdrop-blur-md">
               <span className="w-2 h-2 bg-emerald-400 rounded-full shadow-[0_0_10px_rgba(52,211,153,0.8)]"></span>
-              The #1 WhatsApp AI Accountant for Business
+              The All-in-One WhatsApp + Dashboard Business Manager
             </div>
 
             <h1 className="text-5xl lg:text-7xl font-extrabold leading-[1.1] mb-6 tracking-tight drop-shadow-2xl">
-              More Profit. <br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-green-300 to-teal-200 animate-gradient-x">
-                Less Stress.
+              Chat for Speed. <br />
+              <span className="text-emerald-400">
+                POS for Control.
               </span>
             </h1>
 
-            <p className="text-lg text-slate-200 mb-10 leading-relaxed max-w-lg font-light drop-shadow-lg shadow-black">
-              Stop writing in notebooks. Manage your entire inventory, staff, and sales directly inside WhatsApp. 
-              <span className="block mt-2 font-medium text-emerald-100">
-                 Send receipts, track debtors, and see profit instantly.
-              </span>
+            <p className="text-lg text-stone-300 mb-10 leading-relaxed max-w-xl font-light drop-shadow-lg shadow-black">
+              The only tool that combines <strong>WhatsApp simplicity</strong> with a powerful <strong>Point of Sale (POS) Terminal</strong>. From solo shops to multi-branch retail chains — record sales via chat or scan barcodes at the counter.
             </p>
+
+            <ul className="mb-10 space-y-3 text-stone-300">
+              <li className="flex items-center gap-2">
+                <CheckCircle2 size={18} className="text-emerald-500" />
+                <span><strong className="text-white">Solo Vendors:</strong> Simple chat tracking in WhatsApp.</span>
+              </li>
+              <li className="flex items-center gap-2">
+                <CheckCircle2 size={18} className="text-emerald-500" />
+                <span><strong className="text-white">Retail Chains:</strong> Full POS Terminal with barcode scanning.</span>
+              </li>
+              <li className="flex items-center gap-2">
+                <CheckCircle2 size={18} className="text-emerald-500" />
+                <span><strong className="text-white">Everyone:</strong> No extra hardware lock-in. Works on any device.</span>
+              </li>
+            </ul>
 
             <div className="flex flex-col sm:flex-row gap-4">
               <a
                 href={whatsappLink}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center justify-center px-8 py-4 text-lg font-bold rounded-full text-slate-900 bg-emerald-400 hover:bg-emerald-300 transition-all duration-300 shadow-[0_0_30px_-5px_rgba(52,211,153,0.6)] hover:-translate-y-1 hover:scale-105"
+                className="inline-flex items-center justify-center px-8 py-4 text-lg font-bold rounded-full text-white bg-emerald-600 hover:bg-emerald-500 transition-all duration-300 shadow-[0_4px_20px_rgba(16,185,129,0.3)] hover:-translate-y-1 hover:scale-105"
               >
                 <Phone className="mr-2" size={20} fill="currentColor" /> Chat on WhatsApp
               </a>
@@ -495,11 +503,11 @@ export default function LandingPage() {
 
           {/* Dynamic Phone Mockup with 3D Float */}
           <div className="hidden lg:block relative" style={{ perspective: 1000 }}>
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-emerald-500/20 rounded-full blur-[100px] animate-pulse"></div>
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-emerald-500/10 rounded-full blur-[100px] animate-pulse"></div>
 
             {/* Phone Body */}
-            <div className="relative mx-auto border-gray-900 bg-gray-900 border-[10px] rounded-[3rem] h-[680px] w-[340px] shadow-2xl animate-[float_6s_ease-in-out_infinite] z-10 overflow-hidden ring-1 ring-white/20">
-              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-6 bg-gray-900 rounded-b-xl z-20"></div>
+            <div className="relative mx-auto border-stone-900 bg-stone-900 border-[10px] rounded-[3rem] h-[680px] w-[340px] shadow-2xl animate-[float_6s_ease-in-out_infinite] z-10 overflow-hidden ring-1 ring-white/10">
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-6 bg-stone-900 rounded-b-xl z-20"></div>
 
               {/* Screen Content */}
               <div className="w-full h-full bg-[#efeae2] relative flex flex-col font-sans">
@@ -577,17 +585,17 @@ export default function LandingPage() {
           {/* /phone */}
         </div>
 
-        {/* --- Hero Slider Controls (New) --- */}
+        {/* --- Hero Slider Controls --- */}
         <div className="absolute bottom-6 left-0 right-0 z-30 flex justify-center items-center gap-6">
             <button 
               onClick={prevHeroSlide} 
-              className="p-3 rounded-full bg-slate-900/40 hover:bg-emerald-500/80 text-white backdrop-blur-md transition-all border border-white/10 hover:border-emerald-500 group"
+              className="p-3 rounded-full bg-stone-900/40 hover:bg-emerald-500/80 text-white backdrop-blur-md transition-all border border-white/10 hover:border-emerald-500 group"
               aria-label="Previous slide"
             >
                 <ChevronLeft size={20} className="group-hover:-translate-x-0.5 transition-transform" />
             </button>
             
-            <div className="flex gap-3 bg-slate-900/40 backdrop-blur-md px-4 py-2 rounded-full border border-white/10">
+            <div className="flex gap-3 bg-stone-900/40 backdrop-blur-md px-4 py-2 rounded-full border border-white/10">
                 {HERO_IMAGES.map((_, idx) => (
                   <button
                     key={idx}
@@ -603,7 +611,7 @@ export default function LandingPage() {
 
             <button 
               onClick={nextHeroSlide} 
-              className="p-3 rounded-full bg-slate-900/40 hover:bg-emerald-500/80 text-white backdrop-blur-md transition-all border border-white/10 hover:border-emerald-500 group"
+              className="p-3 rounded-full bg-stone-900/40 hover:bg-emerald-500/80 text-white backdrop-blur-md transition-all border border-white/10 hover:border-emerald-500 group"
               aria-label="Next slide"
             >
                 <ChevronRight size={20} className="group-hover:translate-x-0.5 transition-transform" />
@@ -612,106 +620,86 @@ export default function LandingPage() {
       </section>
 
       {/* --- How It Works (Dark Theme for Contrast) --- */}
-    <section id="how-it-works" className="py-24 bg-slate-900 relative overflow-hidden text-white">
+    <section id="how-it-works" className="py-24 bg-stone-900 relative overflow-hidden text-white">
   <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-600/10 rounded-full blur-[100px]"></div>
   <div className="absolute bottom-0 left-0 w-96 h-96 bg-blue-600/10 rounded-full blur-[100px]"></div>
 
   <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
     <AnimatedSection className="text-center mb-16">
       <span className="text-emerald-400 font-bold tracking-wider uppercase text-xs bg-emerald-950/50 px-3 py-1 rounded-full border border-emerald-900">
-        Simple Process
+        Simple Setup
       </span>
       <h2 className="text-3xl md:text-5xl font-bold mt-4">
-        Automate your shop in <span className="text-emerald-400">3 minutes</span>.
+        Get your shop running in <span className="text-emerald-400">3 minutes</span>.
       </h2>
     </AnimatedSection>
 
     <div className="grid md:grid-cols-3 gap-8">
       {/* Step 1 */}
       <AnimatedSection animation="slide-right" className="relative group delay-100">
-        <div className="bg-slate-800/50 p-8 rounded-3xl border border-slate-700 hover:border-emerald-500/50 transition-all duration-500 hover:bg-slate-800 relative z-10 h-full hover:-translate-y-2 hover:shadow-2xl hover:shadow-emerald-500/10">
+        <div className="bg-stone-800/50 p-8 rounded-3xl border border-stone-700 hover:border-emerald-500/30 transition-all duration-500 hover:bg-stone-800 relative z-10 h-full hover:-translate-y-2 hover:shadow-2xl hover:shadow-emerald-500/5">
               <StepShotWhatsAppLight
         badge="STEP 1"
         bubbles={[
-          { side: "bot", cardTitle: "Tallypadi", text: "👋 Welcome! Create your account.\nSend your email + password.", time: "9:58 AM" },
-          { side: "user", text: "Email: snow@email.com\nPassword: ********", time: "10:00 AM" },
-          { side: "bot", cardTitle: "Tallypadi", text: "✅ Account created!\nNext: what’s your shop name?", time: "10:00 AM" },
+          { side: "bot", cardTitle: "Tallypadi", text: "👋 Welcome! I'm TallyPadi. Let's create your account.\nWhat is your email?", time: "09:58 AM" },
+          { side: "user", text: "snow@email.com", time: "09:59 AM" },
+          { side: "bot", cardTitle: "Tallypadi", text: "✅ Account created!\nWhat is your shop name?", time: "09:59 AM" },
         ]}
       />
 
-          <div className="w-16 h-16 bg-slate-950 text-emerald-400 border border-slate-700 rounded-2xl flex items-center justify-center text-2xl font-bold mb-6 shadow-lg group-hover:scale-110 transition-transform group-hover:rotate-3">
+          <div className="w-16 h-16 bg-stone-950 text-emerald-400 border border-stone-700 rounded-2xl flex items-center justify-center text-2xl font-bold mb-6 shadow-lg group-hover:scale-110 transition-transform group-hover:rotate-3">
             1
           </div>
 
-          <h3 className="text-xl font-bold text-white mb-3 group-hover:text-emerald-300 transition-colors">Chat & Create Account</h3>
-          <p className="text-slate-400 leading-relaxed group-hover:text-slate-300 transition-colors">
-            Message the bot on WhatsApp and sign up by sending your{' '}
-            <span className="bg-slate-900 px-1.5 py-0.5 rounded text-emerald-300 font-mono text-xs">
-              email
-            </span>{' '}
-            and{' '}
-            <span className="bg-slate-900 px-1.5 py-0.5 rounded text-emerald-300 font-mono text-xs">
-              password
-            </span>
-            .
+          <h3 className="text-xl font-bold text-white mb-3 group-hover:text-emerald-300 transition-colors">Start Chatting</h3>
+          <p className="text-stone-400 leading-relaxed group-hover:text-stone-300 transition-colors">
+            Just say "Hello" on WhatsApp. Our AI will guide you through a quick signup. No forms to fill.
           </p>
         </div>
       </AnimatedSection>
 
       {/* Step 2 */}
       <AnimatedSection animation="pop-in" className="relative group delay-200">
-        <div className="bg-slate-800/50 p-8 rounded-3xl border border-slate-700 hover:border-emerald-500/50 transition-all duration-500 hover:bg-slate-800 relative z-10 h-full hover:-translate-y-2 hover:shadow-2xl hover:shadow-emerald-500/10">
+        <div className="bg-stone-800/50 p-8 rounded-3xl border border-stone-700 hover:border-emerald-500/30 transition-all duration-500 hover:bg-stone-800 relative z-10 h-full hover:-translate-y-2 hover:shadow-2xl hover:shadow-emerald-500/5">
               <StepShotWhatsAppLight
         badge="STEP 2"
         bubbles={[
-          { side: "user", text: "show my settings", time: "10:05 AM" },
-          { side: "bot", cardTitle: "Tallypadi", text: "⚙️ Settings\nShop: Wilson Furniture\nCurrency: NGN\nLow-stock: ON\nStaff: 2", time: "10:05 AM" },
+          { side: "user", text: "My shop name is Wilson Furniture", time: "10:05 AM" },
+          { side: "bot", cardTitle: "Tallypadi", text: "🏠 Shop Saved: Wilson Furniture\nCurrency: NGN\n\nYou are ready to sell! 🚀", time: "10:05 AM" },
         ]}
         />
 
-          <div className="w-16 h-16 bg-emerald-600 text-white rounded-2xl flex items-center justify-center text-2xl font-bold mb-6 shadow-lg shadow-emerald-600/20 group-hover:scale-110 transition-transform group-hover:-rotate-3">
+          <div className="w-16 h-16 bg-emerald-700 text-white rounded-2xl flex items-center justify-center text-2xl font-bold mb-6 shadow-lg shadow-emerald-600/20 group-hover:scale-110 transition-transform group-hover:-rotate-3">
             2
           </div>
 
-          <h3 className="text-xl font-bold text-white mb-3 group-hover:text-emerald-300 transition-colors">Set Shop Name & Settings</h3>
-          <p className="text-slate-400 leading-relaxed group-hover:text-slate-300 transition-colors">
-            Ask the bot{' '}
-            <span className="bg-slate-900 px-1.5 py-0.5 rounded text-emerald-300 font-mono text-xs">
-              &quot;show my settings&quot;
-            </span>{' '}
-            to see your settings list, then update your shop name and preferences in seconds.
+          <h3 className="text-xl font-bold text-white mb-3 group-hover:text-emerald-300 transition-colors">Set Shop Details</h3>
+          <p className="text-stone-400 leading-relaxed group-hover:text-stone-300 transition-colors">
+            Tell the bot your shop name and preferences. It configures your currency and settings instantly.
           </p>
         </div>
       </AnimatedSection>
 
       {/* Step 3 */}
       <AnimatedSection animation="slide-left" className="relative group delay-300">
-        <div className="bg-slate-800/50 p-8 rounded-3xl border border-slate-700 hover:border-emerald-500/50 transition-all duration-500 hover:bg-slate-800 relative z-10 h-full hover:-translate-y-2 hover:shadow-2xl hover:shadow-emerald-500/10">
+        <div className="bg-stone-800/50 p-8 rounded-3xl border border-stone-700 hover:border-emerald-500/30 transition-all duration-500 hover:bg-stone-800 relative z-10 h-full hover:-translate-y-2 hover:shadow-2xl hover:shadow-emerald-500/5">
          <StepShotWhatsAppLight
   badge="STEP 3"
   bubbles={[
-    { side: "user", text: "Add 50 bags of Rice at 40k", time: "10:00 AM" },
-    { side: "bot", cardTitle: "Tallypadi", text: "✅ Stock Added!\nItem: Rice\nQty: 50 Bags\nPrice: ₦40,000/bag", time: "10:00 AM" },
-    { side: "user", text: "Sold 2 Rice", time: "12:30 PM" },
-    { side: "bot", cardTitle: "Tallypadi", text: "💰 Sale Recorded!\nYou made: ₦80,000\nWarning: Stock is low!", time: "12:30 PM" },
+    { side: "user", text: "Add 20 cartons of Malt at 2500", time: "10:10 AM" },
+    { side: "bot", cardTitle: "Tallypadi", text: "✅ Stock Added: Malt (20 ctns)", time: "10:10 AM" },
+    { side: "user", text: "Sold 3 Malt", time: "10:15 AM" },
+    { side: "bot", cardTitle: "Tallypadi", text: "💰 Sale Recorded!", time: "10:15 AM" },
   ]}
 />
 
-          <div className="w-16 h-16 bg-blue-600 text-white rounded-2xl flex items-center justify-center text-2xl font-bold mb-6 shadow-lg shadow-blue-600/20 group-hover:scale-110 transition-transform group-hover:rotate-6">
+          <div className="w-16 h-16 bg-blue-700 text-white rounded-2xl flex items-center justify-center text-2xl font-bold mb-6 shadow-lg shadow-blue-600/20 group-hover:scale-110 transition-transform group-hover:rotate-6">
             3
           </div>
 
-          <h3 className="text-xl font-bold text-white mb-3 group-hover:text-blue-300 transition-colors">Update Stock & Record Sales</h3>
-          <p className="text-slate-400 leading-relaxed group-hover:text-slate-300 transition-colors">
-            Add stock and record sales naturally. Example:{' '}
-            <span className="bg-slate-900 px-1.5 py-0.5 rounded text-blue-300 font-mono text-xs">
-              &quot;Add 20 cartons of Malt at 2,500&quot;
-            </span>{' '}
-            or{' '}
-            <span className="bg-slate-900 px-1.5 py-0.5 rounded text-blue-300 font-mono text-xs">
-              &quot;Sold 3 Malt&quot;
-            </span>
-            . Tallypadi tracks inventory and totals automatically.
+          <h3 className="text-xl font-bold text-white mb-3 group-hover:text-blue-300 transition-colors">Sell & Track</h3>
+          <p className="text-stone-400 leading-relaxed group-hover:text-stone-300 transition-colors">
+            Start recording sales in plain English or Pidgin. TallyPadi tracks your inventory and calculates profit automatically.
           </p>
         </div>
       </AnimatedSection>
@@ -720,34 +708,32 @@ export default function LandingPage() {
 </section>
 
       {/* --- Pricing Section (Moved Up) --- */}
-      <section id="pricing" className="py-24 bg-slate-50 relative">
+      <section id="pricing" className="py-24 bg-stone-100 relative">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <AnimatedSection className="text-center mb-16">
             <span className="text-emerald-600 font-bold tracking-wider uppercase text-xs">Pricing Plans</span>
-            <h2 className="text-3xl md:text-5xl font-bold text-slate-900 mt-2">Scale your business, your way.</h2>
-            <p className="text-slate-500 mt-4 max-w-2xl mx-auto">
-              Start with a free trial, then choose the perfect plan for your level of operation. 
-              Supports businesses of any size.
-            </p>
-          </AnimatedSection>
+            <h2 className="text-3xl md:text-5xl font-bold text-stone-900 mt-2">Scale your business, your way.</h2>
+                      <p className="text-stone-500 mt-4 max-w-2xl mx-auto">
+                        Start with a free trial, then choose the perfect plan. From solo vendors to multi-branch empires, we have you covered.
+                      </p>          </AnimatedSection>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {/* 1. Free Trial */}
             <AnimatedSection
               animation="fade-up"
-              className="bg-white p-6 rounded-3xl border-4 border-dashed border-green-200 flex flex-col shadow-lg transition-all hover:shadow-xl hover:scale-[1.02]"
+              className="bg-white p-6 rounded-3xl border border-stone-200 flex flex-col shadow-lg transition-all hover:shadow-xl hover:scale-[1.02]"
             >
               <div className="flex items-center gap-4 mb-6">
-                <div className="p-3 rounded-xl bg-green-50 text-green-600">
+                <div className="p-3 rounded-xl bg-emerald-50 text-emerald-600">
                   <Gift size={24} />
                 </div>
-                <h3 className="text-2xl font-bold text-slate-900">7-Day Trial</h3>
+                <h3 className="text-2xl font-bold text-stone-900">7-Day Trial</h3>
               </div>
 
               <div className="mb-8">
-                <span className="text-5xl font-extrabold text-green-600">Free</span>
-                <span className="text-slate-500 text-sm"> / 7 Days</span>
-                <p className="text-slate-500 mt-2 text-sm">Experience the full power of Tallypadi with zero commitment.</p>
+                <span className="text-5xl font-extrabold text-emerald-600">Free</span>
+                <span className="text-stone-500 text-sm"> / 7 Days</span>
+                <p className="text-stone-500 mt-2 text-sm">Experience the full power of Tallypadi with zero commitment.</p>
               </div>
 
               <ul className="space-y-4 mb-10 flex-1">
@@ -759,7 +745,7 @@ export default function LandingPage() {
               </ul>
               <a
                 href={whatsappLink}
-                className="w-full block text-center bg-green-600 hover:bg-green-700 text-white font-bold py-3.5 rounded-xl transition shadow-lg shadow-green-600/20 active:scale-95"
+                className="w-full block text-center bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 rounded-xl transition shadow-lg shadow-emerald-600/20 active:scale-95"
               >
                 Start 7-Day Free Trial
               </a>
@@ -768,22 +754,22 @@ export default function LandingPage() {
             {/* 2. Oga Boss - Highlighted */}
             <AnimatedSection
               animation="fade-up"
-              className="relative bg-white p-6 rounded-3xl shadow-2xl flex flex-col border-4 border-blue-400 transform md:-translate-y-6 transition-all hover:scale-[1.05] hover:shadow-blue-500/40"
+              className="relative bg-white p-6 rounded-3xl shadow-2xl flex flex-col border-4 border-blue-500 transform md:-translate-y-6 transition-all hover:scale-[1.05] hover:shadow-blue-500/20"
             >
               <div className="absolute top-0 right-0 bg-blue-500 text-white text-xs font-bold px-4 py-1.5 rounded-bl-xl shadow-md">
                 BEST VALUE
               </div>
               <div className="flex items-center gap-4 mb-6">
-                <div className="p-3 rounded-xl bg-blue-100 text-blue-600 shadow-xl">
+                <div className="p-3 rounded-xl bg-blue-50 text-blue-600 shadow-sm">
                   <Shield size={24} />
                 </div>
-                <h3 className="text-2xl font-bold text-slate-900">Oga Boss</h3>
+                <h3 className="text-2xl font-bold text-stone-900">Oga Boss</h3>
               </div>
 
               <div className="mb-8">
                 <span className="text-5xl font-extrabold text-blue-600">₦3,000</span>
-                <span className="text-slate-500 text-sm"> / month</span>
-                <p className="text-slate-500 mt-2 text-sm">
+                <span className="text-stone-500 text-sm"> / month</span>
+                <p className="text-stone-500 mt-2 text-sm">
                   The essential plan for serious owners focused on maximizing solo profit.
                 </p>
               </div>
@@ -791,7 +777,7 @@ export default function LandingPage() {
               <ul className="space-y-4 mb-10 flex-1">
                 <PricingItem text="Unlimited Sales & Inventory" />
                 <PricingItem text="Detailed Profit Calculation" />
-                <PricingItem text="Advanced Dashboard Access" />
+                <PricingItem text="Web Dashboard Access" />
                 <PricingItem text="1 User Account" />
                 <PricingItem text="Email & WhatsApp Support" />
                 <PricingItem text="Staff Management" unavailable />
@@ -808,10 +794,10 @@ export default function LandingPage() {
             {/* 3. Tycoon */}
             <AnimatedSection
               animation="fade-up"
-              className="bg-slate-900 p-6 rounded-3xl border border-slate-700 flex flex-col shadow-lg transition-all hover:shadow-xl hover:scale-[1.02]"
+              className="bg-stone-900 p-6 rounded-3xl border border-stone-700 flex flex-col shadow-lg transition-all hover:shadow-xl hover:scale-[1.02]"
             >
               <div className="flex items-center gap-4 mb-6">
-                <div className="p-3 rounded-xl bg-white text-amber-500 shadow-xl">
+                <div className="p-3 rounded-xl bg-stone-800 text-amber-500 shadow-xl border border-stone-700">
                   <Crown size={24} />
                 </div>
                 <h3 className="text-2xl font-bold text-white">Tycoon</h3>
@@ -819,17 +805,17 @@ export default function LandingPage() {
 
               <div className="mb-8">
                 <span className="text-5xl font-extrabold text-amber-400">₦5,000</span>
-                <span className="text-slate-400 text-sm"> / month</span>
-                <p className="text-slate-400 mt-2 text-sm">Full power plan designed for management teams and scaling operations.</p>
+                <span className="text-stone-400 text-sm"> / month</span>
+                <p className="text-stone-400 mt-2 text-sm">Full power plan designed for management teams and scaling operations.</p>
               </div>
 
               <ul className="space-y-4 mb-10 flex-1">
                 <PricingItem text="Everything in Oga Boss" light />
+                <PricingItem text="Full POS Terminal Mode" light />
                 <PricingItem text="Staff Login (Up to 10)" light />
                 <PricingItem text="Online Shop Link" light />
                 <PricingItem text="Branded PDF Invoices & Export" light />
                 <PricingItem text="Advanced Analytics Suite" light />
-                <PricingItem text="Priority VIP Support" light />
               </ul>
               <a
                 href="/payment?plan=TYCOON"
@@ -843,11 +829,11 @@ export default function LandingPage() {
       </section>
 
       {/* --- Features Grid --- */}
-      <section id="features" className="py-24 bg-slate-50 relative">
+      <section id="features" className="py-24 bg-stone-50 relative">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           <AnimatedSection className="text-center mb-16">
             <span className="text-emerald-600 font-bold tracking-wider uppercase text-xs">Powerful Features</span>
-            <h2 className="text-3xl md:text-5xl font-bold text-slate-900 mt-2">Everything a modern business needs.</h2>
+            <h2 className="text-3xl md:text-5xl font-bold text-stone-900 mt-2">Everything a modern business needs.</h2>
           </AnimatedSection>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -873,8 +859,8 @@ export default function LandingPage() {
             <FeatureCard
               icon={<BarChart3 size={24} />}
               color="blue"
-              title="Advanced Analytics"
-              desc="Login to our website for deep insights. Visual charts, best-selling items, and exportable Excel reports."
+              title="Dashboard & POS Terminal"
+              desc="Login to the web for a full Point of Sale. Scan barcodes, fast checkout, visual analytics, and export to Excel."
             />
             <FeatureCard
               icon={<PackageOpen size={24} />}
@@ -885,27 +871,27 @@ export default function LandingPage() {
             <FeatureCard
               icon={<Lock size={24} />}
               color="teal"
-              title="Secure & Private"
-              desc="Your business data is yours. We use bank-level encryption to ensure your sales records are 100% safe."
+              title="No Hardware Lock-in"
+              desc="Use your existing phone, tablet, or laptop. No need to buy expensive POS machines. Works with standard barcode scanners."
             />
           </div>
         </div>
       </section>
 
       {/* --- Gallery / Photo Edits Section --- */}
-      <section id="gallery" className="py-24 bg-white border-t border-slate-100">
+      <section id="gallery" className="py-24 bg-white border-t border-stone-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <AnimatedSection className="flex flex-col md:flex-row justify-between items-end mb-12 gap-6">
             <div className="max-w-2xl">
               <span className="text-purple-600 font-bold tracking-wider uppercase text-xs bg-purple-50 px-3 py-1 rounded-full">
                 Business Showcase
               </span>
-              <h2 className="text-3xl md:text-4xl font-bold text-slate-900 mt-4">Manage your product photos & receipts.</h2>
-              <p className="text-slate-500 mt-4 text-lg">
+              <h2 className="text-3xl md:text-4xl font-bold text-stone-900 mt-4">Manage your product photos & receipts.</h2>
+              <p className="text-stone-500 mt-4 text-lg">
                 Keep your business organized. Upload product images, save payment receipts, and maintain a visual gallery of your inventory.
               </p>
             </div>
-            <button className="bg-slate-100 text-slate-700 px-6 py-3 rounded-xl font-semibold hover:bg-slate-200 transition flex items-center gap-2">
+            <button className="bg-stone-100 text-stone-700 px-6 py-3 rounded-xl font-semibold hover:bg-stone-200 transition flex items-center gap-2">
               <Camera size={18} /> View Full Gallery
             </button>
           </AnimatedSection>
@@ -919,7 +905,7 @@ export default function LandingPage() {
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent flex flex-col justify-end p-6">
                 <span className="text-white font-bold text-xl">Organized Inventory</span>
-                <span className="text-slate-300 text-sm">Visual tracking</span>
+                <span className="text-stone-300 text-sm">Visual tracking</span>
               </div>
             </AnimatedSection>
 
@@ -946,10 +932,10 @@ export default function LandingPage() {
             </AnimatedSection>
 
             <AnimatedSection animation="zoom-in" className="col-span-2 md:col-span-2 relative rounded-3xl overflow-hidden group shadow-lg">
-              <div className="absolute inset-0 bg-slate-900 flex flex-col items-center justify-center text-center p-6">
-                <Camera className="text-slate-600 mb-4" size={48} />
+              <div className="absolute inset-0 bg-stone-900 flex flex-col items-center justify-center text-center p-6">
+                <Camera className="text-stone-600 mb-4" size={48} />
                 <h3 className="text-white font-bold text-xl mb-2">Upload Your Own</h3>
-                <p className="text-slate-400 text-sm mb-6 max-w-xs">
+                <p className="text-stone-400 text-sm mb-6 max-w-xs">
                   Attach photos to your sales directly in WhatsApp to keep proof of every transaction.
                 </p>
                 <a href={whatsappLink} className="text-emerald-400 hover:text-emerald-300 font-semibold flex items-center gap-1">
@@ -963,13 +949,13 @@ export default function LandingPage() {
 
 
       {/* --- Trust / Social Proof (Light-Dark, Lively) --- */}
-      <section id="trust" className="py-24 relative overflow-hidden bg-slate-800 text-white">
+      <section id="trust" className="py-24 relative overflow-hidden bg-stone-900 text-white">
         {/* Glow blobs */}
-        <div className="absolute -top-24 right-0 w-[520px] h-[520px] bg-emerald-400/15 rounded-full blur-[120px]" />
-        <div className="absolute -bottom-32 left-0 w-[520px] h-[520px] bg-blue-400/15 rounded-full blur-[120px]" />
+        <div className="absolute -top-24 right-0 w-[520px] h-[520px] bg-emerald-400/10 rounded-full blur-[120px]" />
+        <div className="absolute -bottom-32 left-0 w-[520px] h-[520px] bg-blue-400/10 rounded-full blur-[120px]" />
 
         {/* Subtle texture */}
-        <div className="absolute inset-0 opacity-[0.08] bg-[radial-gradient(circle_at_1px_1px,_rgba(255,255,255,0.8)_1px,_transparent_0)] [background-size:22px_22px]" />
+        <div className="absolute inset-0 opacity-[0.05] bg-[radial-gradient(circle_at_1px_1px,_rgba(255,255,255,0.8)_1px,_transparent_0)] [background-size:24px_24px]" />
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           <AnimatedSection className="grid lg:grid-cols-2 gap-10 items-start">
@@ -981,13 +967,13 @@ export default function LandingPage() {
 
               <h2 className="text-3xl md:text-5xl font-extrabold mt-5 leading-tight">
                 Built for speed, clarity, and{' '}
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-300 via-green-200 to-teal-100 animate-gradient-x">
+                <span className="text-emerald-400">
                   daily profit tracking
                 </span>
                 .
               </h2>
 
-              <p className="mt-5 text-slate-200/80 text-lg leading-relaxed max-w-xl">
+              <p className="mt-5 text-stone-300 text-lg leading-relaxed max-w-xl">
                 Tallypadi is designed for busy vendors. No spreadsheets. No stress. Just simple WhatsApp commands that keep your records accurate.
               </p>
 
@@ -995,10 +981,10 @@ export default function LandingPage() {
                 {['Record sales/restock in seconds', 'See your stock balance anytime', 'Get clean reports for smarter decisions', 'Control staff access (Tycoon plan)'].map(
                   (t, i) => (
                     <div key={i} className="flex items-start gap-3">
-                      <span className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-200 border border-emerald-400/20">
+                      <span className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-400/20">
                         <CheckCircle2 size={14} />
                       </span>
-                      <span className="text-slate-200/85">{t}</span>
+                      <span className="text-stone-200">{t}</span>
                     </div>
                   )
                 )}
@@ -1009,7 +995,7 @@ export default function LandingPage() {
                   href={whatsappLink}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex items-center justify-center px-7 py-3.5 rounded-full bg-emerald-400 text-slate-900 font-extrabold hover:bg-emerald-300 transition shadow-[0_0_30px_rgba(52,211,153,0.25)] hover:-translate-y-0.5"
+                  className="inline-flex items-center justify-center px-7 py-3.5 rounded-full bg-emerald-600 text-white font-bold hover:bg-emerald-500 transition shadow-[0_0_30px_rgba(52,211,153,0.25)] hover:-translate-y-0.5"
                 >
                   Start on WhatsApp <ArrowRight size={16} className="ml-2" />
                 </a>
@@ -1050,7 +1036,7 @@ export default function LandingPage() {
                   Vendor Stories
                 </span>
                 <h3 className="text-2xl md:text-4xl font-extrabold mt-4">Real feedback from busy shop owners</h3>
-                <p className="text-slate-200/70 mt-3">
+                <p className="text-stone-300/80 mt-3">
                   The goal is simple: help you track profit clearly and run your shop like a proper business.
                 </p>
               </div>
@@ -1064,9 +1050,9 @@ export default function LandingPage() {
       </section>
 
       {/* --- FAQ (Animated Accordion) --- */}
-      <section id="faq" className="py-24 relative overflow-hidden bg-slate-900 text-white">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[700px] h-[700px] bg-emerald-500/10 rounded-full blur-[140px]" />
-        <div className="absolute bottom-0 right-0 w-[600px] h-[600px] bg-blue-500/10 rounded-full blur-[140px]" />
+      <section id="faq" className="py-24 relative overflow-hidden bg-stone-900 text-white">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[700px] h-[700px] bg-emerald-500/5 rounded-full blur-[140px]" />
+        <div className="absolute bottom-0 right-0 w-[600px] h-[600px] bg-blue-500/5 rounded-full blur-[140px]" />
 
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           <AnimatedSection className="text-center mb-12">
@@ -1074,7 +1060,7 @@ export default function LandingPage() {
               FAQ
             </span>
             <h2 className="text-3xl md:text-5xl font-extrabold mt-4">Questions people ask before they start</h2>
-            <p className="text-slate-300/80 mt-4">If you’re unsure about anything, this will clear it up fast.</p>
+            <p className="text-stone-300/80 mt-4">If you’re unsure about anything, this will clear it up fast.</p>
           </AnimatedSection>
 
           <div className="space-y-4">
@@ -1094,23 +1080,23 @@ export default function LandingPage() {
               href={whatsappLink}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center justify-center px-8 py-4 rounded-full bg-emerald-500 hover:bg-emerald-400 transition font-extrabold shadow-[0_0_35px_rgba(16,185,129,0.25)] hover:-translate-y-0.5"
+              className="inline-flex items-center justify-center px-8 py-4 rounded-full bg-emerald-600 hover:bg-emerald-500 transition font-extrabold shadow-[0_0_35px_rgba(16,185,129,0.25)] hover:-translate-y-0.5"
             >
               Ask on WhatsApp <ArrowRight size={16} className="ml-2" />
             </a>
-            <p className="text-slate-400 text-sm mt-3">Quick replies — we’ll guide you through setup.</p>
+            <p className="text-stone-400 text-sm mt-3">Quick replies — we’ll guide you through setup.</p>
           </div>
         </div>
       </section>
 
       {/* --- CTA --- */}
-      <section className="py-24 bg-slate-950 text-white relative overflow-hidden">
+      <section className="py-24 bg-stone-950 text-white relative overflow-hidden">
         <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-emerald-600/10 rounded-full blur-[120px] animate-pulse"></div>
         <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-blue-500/10 rounded-full blur-[120px]"></div>
 
         <AnimatedSection animation="zoom-in" className="max-w-4xl mx-auto px-4 text-center relative z-10">
-          <h2 className="text-4xl md:text-6xl font-extrabold mb-6 tracking-tight">Stop guessing your profit.</h2>
-          <p className="text-slate-400 mb-10 text-lg md:text-xl font-light max-w-2xl mx-auto">
+          <h2 className="text-4xl md:text-6xl font-extrabold mb-6 tracking-tight">Know your profit down to the last Naira.</h2>
+          <p className="text-stone-400 mb-10 text-lg md:text-xl font-light max-w-2xl mx-auto">
             Join 500+ Oga Bosses and Tycoons taking control of their business today. It takes less than 3 minutes to setup.
           </p>
 
@@ -1124,7 +1110,7 @@ export default function LandingPage() {
               Start Free Trial
             </a>
           </div>
-          <p className="mt-6 text-slate-500 text-sm">No credit card required. Cancel anytime.</p>
+          <p className="mt-6 text-stone-500 text-sm">No credit card required. Cancel anytime.</p>
         </AnimatedSection>
       </section>
 
@@ -1196,18 +1182,18 @@ export default function LandingPage() {
 
 const FeatureCard: React.FC<FeatureCardProps> = ({ icon, color, title, desc, badge = null }) => {
   const colorClasses: Record<string, string> = {
-    emerald: 'bg-emerald-50 text-emerald-600 group-hover:bg-emerald-100',
-    purple: 'bg-purple-50 text-purple-600 group-hover:bg-purple-100',
-    red: 'bg-red-50 text-red-600 group-hover:bg-red-100',
-    blue: 'bg-blue-50 text-blue-600 group-hover:bg-blue-100',
-    orange: 'bg-orange-50 text-orange-600 group-hover:bg-orange-100',
-    teal: 'bg-teal-50 text-teal-600 group-hover:bg-teal-100',
+    emerald: 'bg-emerald-50 text-emerald-700 group-hover:bg-emerald-100',
+    purple: 'bg-purple-50 text-purple-700 group-hover:bg-purple-100',
+    red: 'bg-red-50 text-red-700 group-hover:bg-red-100',
+    blue: 'bg-blue-50 text-blue-700 group-hover:bg-blue-100',
+    orange: 'bg-orange-50 text-orange-700 group-hover:bg-orange-100',
+    teal: 'bg-teal-50 text-teal-700 group-hover:bg-teal-100',
   };
 
   return (
     <AnimatedSection
       animation="fade-up"
-      className="bg-white p-6 rounded-3xl border border-slate-100 hover:border-slate-200 hover:shadow-xl transition-all duration-300 group relative hover:-translate-y-1"
+      className="bg-white p-6 rounded-3xl border border-stone-100 hover:border-stone-200 hover:shadow-xl transition-all duration-300 group relative hover:-translate-y-1"
     >
       {badge && (
         <div className="absolute top-4 right-4 bg-purple-100 text-purple-700 text-[10px] font-bold px-2 py-1 rounded-full">
@@ -1217,8 +1203,8 @@ const FeatureCard: React.FC<FeatureCardProps> = ({ icon, color, title, desc, bad
       <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-6 transition-colors ${colorClasses[color]}`}>
         {icon}
       </div>
-      <h4 className="text-xl font-bold text-slate-900 mb-3">{title}</h4>
-      <p className="text-slate-500 text-sm leading-relaxed">{desc}</p>
+      <h4 className="text-xl font-bold text-stone-900 mb-3">{title}</h4>
+      <p className="text-stone-500 text-sm leading-relaxed">{desc}</p>
     </AnimatedSection>
   );
 };
@@ -1228,16 +1214,16 @@ const PricingItem: React.FC<PricingItemProps> = ({ text, light = false, unavaila
     <div
       className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${unavailable
           ? light
-            ? 'bg-slate-700 text-slate-500'
-            : 'bg-gray-200 text-gray-400'
+            ? 'bg-stone-700 text-stone-500'
+            : 'bg-stone-200 text-stone-400'
           : light
           ? 'bg-emerald-500/20 text-emerald-400'
-          : 'bg-emerald-100 text-emerald-600'
+          : 'bg-emerald-100 text-emerald-700'
       }`}
     >
       <CheckCircle2 size={12} strokeWidth={3} />
     </div>
-    <span className={`text-sm ${unavailable ? 'line-through' : ''} ${light ? 'text-slate-300' : 'text-slate-600'}`}>
+    <span className={`text-sm ${unavailable ? 'line-through' : ''} ${light ? 'text-stone-300' : 'text-stone-600'}`}>
       {text}
     </span>
   </li>
