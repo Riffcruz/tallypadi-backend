@@ -1007,6 +1007,20 @@ export const handleMessageLogic = async (
     // ✅ resolve actor + owner
     let { actor, owner, ownerId } = await resolveActorAndOwner(from);
 
+    // ✅ Save Message History
+    if (actor) {
+        const historyEntry = rawText; 
+        const currentHist = actor.messageHistory || [];
+        currentHist.push(historyEntry);
+        
+        if (currentHist.length > MAX_HISTORY) {
+             actor.messageHistory = currentHist.slice(currentHist.length - MAX_HISTORY);
+        } else {
+             actor.messageHistory = currentHist;
+        }
+        await actor.save();
+    }
+
     // ✅ create first-time OWNER
     if (!actor) {
       const initialShopName = profileName || 'My Shop';
@@ -1024,7 +1038,7 @@ export const handleMessageLogic = async (
         trialEndsAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
 
         planType: 'TYCOON',
-        messageHistory: [],
+        messageHistory: [rawText],
         settings: {
           dailySummaryEnabled: false,
           closingTime: '20:00',
