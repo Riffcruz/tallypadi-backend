@@ -2897,6 +2897,8 @@ Oga Boss Plan: ₦3,000/month (Save significantly with the yearly plan)`;
           break;
       }
 
+
+      
       case 'GET_SHOP_LINK': {
         const userToLink = owner || actor;
         if (!userToLink.shopSlug) {
