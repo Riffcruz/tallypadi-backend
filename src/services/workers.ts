@@ -207,11 +207,17 @@ bulkWorker.on('failed', (job, err) =>
 export const messageWorker = new Worker(
   'incoming-messages',
   async (job) => {
-    const { from, text, messageId, mediaId, isVoiceMessage, profileName } = job.data;
-    console.log(`⚡ Worker processing ${from} (${messageId})...`);
+    const { processRawWebhook, handleMessageLogic } = await import('../controllers/whatsapp.controller');
 
-    const { handleMessageLogic } = await import('../controllers/whatsapp.controller');
-    await handleMessageLogic(from, text, messageId, mediaId, isVoiceMessage, profileName);
+    if (job.data.rawBody) {
+      // ✅ New Path: Raw Webhook
+      await processRawWebhook(job.data.rawBody);
+    } else {
+      // ⚠️ Legacy Path (Drain old jobs)
+      const { from, text, messageId, mediaId, isVoiceMessage, profileName } = job.data;
+      console.log(`⚡ Worker processing ${from} (${messageId})...`);
+      await handleMessageLogic(from, text, messageId, mediaId, isVoiceMessage, profileName);
+    }
   },
   {
     connection: createRedisConnection('worker-inbound'),

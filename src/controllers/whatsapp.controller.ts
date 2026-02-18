@@ -690,97 +690,107 @@ export const verifyWebhook = (req: Request, res: Response) => {
 // =====================================================
 export const handleWebhook = async (req: Request, res: Response) => {
   try {
+    // ✅ 1. ACK IMMEDIATELY (Critical for WhatsApp)
+    res.sendStatus(200);
+
     const body = req.body;
 
     if (!body.object || !body.entry?.[0]?.changes?.[0]?.value?.messages?.[0]) {
-      return res.sendStatus(200);
+      return;
     }
 
     const value = body.entry[0].changes[0].value;
     const msg = value.messages[0];
-
-    const from: string = msg.from;
     const messageId: string = msg.id;
-    const profileName: string | undefined = value.contacts?.[0]?.profile?.name;
-
-    let text = '';
-    let mediaId: string | undefined;
-    let isVoiceMessage = false;
-
-    switch (msg.type) {
-      case 'text':
-        text = msg.text.body;
-        break;
-
-      case 'interactive': {
-        const i = msg.interactive;
-        if (i.type === 'button_reply') {
-          const btnId = i.button_reply.id;
-          const btnTitle = i.button_reply.title;
-          if (!btnId) return res.sendStatus(200);
-          text = `__BTN__:${btnId}:${btnTitle || ''}`;
-        } else if (i.type === 'nfm_reply') {
-          const responseJson = i.nfm_reply.response_json;
-          // The text passed to handleMessageLogic will be a special prefix so we can detect it.
-          // e.g. __FLOW__:json_string
-          text = `__FLOW__:${responseJson}`;
-        }
-        break;
-      }
-
-      case 'button': {
-        const btnId = msg?.button?.payload || msg?.button?.text;
-        if (!btnId) return res.sendStatus(200);
-        text = `__BTN__:${btnId}:${msg?.button?.text || ''}`;
-        break;
-      }
-
-      case 'image':
-        text = msg.image.caption || 'Analyze this image';
-        mediaId = msg.image.id;
-        break;
-
-      case 'audio':
-        text = 'Analyze this audio';
-        mediaId = msg.audio.id;
-        isVoiceMessage = true;
-        break;
-
-      case 'contacts': {
-        const contact = msg.contacts?.[0];
-        if (contact) {
-          const name = contact.name?.formatted_name || contact.name?.first_name || 'Staff';
-          const phone = contact.phones?.[0]?.phone || contact.phones?.[0]?.wa_id;
-          if (phone) {
-             text = `Add staff ${name} ${phone}`;
-          }
-        }
-        break;
-      }
-
-      default:
-        console.log(`Unsupported message type: ${msg.type}`);
-        return res.sendStatus(200);
-    }
-
-    if (!text && !mediaId) return res.sendStatus(200);
-
-    // ✅ ACK FAST
-    res.sendStatus(200);
+    const from = msg.from;
 
     // ✅ Queue inbound processing
-    void messageQueue
+    await messageQueue
       .add(
         'process-message',
-        { from, text, messageId, mediaId, isVoiceMessage, profileName },
-        { jobId: messageId }
-      )
-      .then(() => console.log(`📥 Queued message from ${from}`))
-      .catch((e) => console.error('❌ Failed to queue message:', e));
+        { rawBody: body },
+        { jobId: messageId, removeOnComplete: true }
+      );
+      
+    console.log(`📥 Queued message from ${from}`);
   } catch (err) {
     console.error('❌ Error in webhook receiver:', err);
-    return res.sendStatus(200);
+    // Response already sent
   }
+};
+
+// =====================================================
+// 2.5) WORKER HELPER (Parses raw webhook)
+// =====================================================
+export const processRawWebhook = async (body: any) => {
+  const value = body.entry[0].changes[0].value;
+  const msg = value.messages[0];
+
+  const from: string = msg.from;
+  const messageId: string = msg.id;
+  const profileName: string | undefined = value.contacts?.[0]?.profile?.name;
+
+  let text = '';
+  let mediaId: string | undefined;
+  let isVoiceMessage = false;
+
+  switch (msg.type) {
+    case 'text':
+      text = msg.text.body;
+      break;
+
+    case 'interactive': {
+      const i = msg.interactive;
+      if (i.type === 'button_reply') {
+        const btnId = i.button_reply.id;
+        const btnTitle = i.button_reply.title;
+        if (!btnId) return;
+        text = `__BTN__:${btnId}:${btnTitle || ''}`;
+      } else if (i.type === 'nfm_reply') {
+        const responseJson = i.nfm_reply.response_json;
+        text = `__FLOW__:${responseJson}`;
+      }
+      break;
+    }
+
+    case 'button': {
+      const btnId = msg?.button?.payload || msg?.button?.text;
+      if (!btnId) return;
+      text = `__BTN__:${btnId}:${msg?.button?.text || ''}`;
+      break;
+    }
+
+    case 'image':
+      text = msg.image.caption || 'Analyze this image';
+      mediaId = msg.image.id;
+      break;
+
+    case 'audio':
+      text = 'Analyze this audio';
+      mediaId = msg.audio.id;
+      isVoiceMessage = true;
+      break;
+
+    case 'contacts': {
+      const contact = msg.contacts?.[0];
+      if (contact) {
+        const name = contact.name?.formatted_name || contact.name?.first_name || 'Staff';
+        const phone = contact.phones?.[0]?.phone || contact.phones?.[0]?.wa_id;
+        if (phone) {
+           text = `Add staff ${name} ${phone}`;
+        }
+      }
+      break;
+    }
+
+    default:
+      console.log(`Unsupported message type: ${msg.type}`);
+      return;
+  }
+
+  if (!text && !mediaId) return;
+
+  await handleMessageLogic(from, text, messageId, mediaId, isVoiceMessage, profileName);
 };
 
 // =====================================================
