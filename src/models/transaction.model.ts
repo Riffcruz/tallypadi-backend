@@ -115,6 +115,10 @@ const transactionSchema = new Schema<ITransaction>(
       type: Number, 
       default: 0 
     },
+    discount: { 
+      type: Number, 
+      default: 0 
+    },
     paymentMethod: {
       type: String,
       default: 'CASH'

@@ -447,7 +447,7 @@ async function resolveActorAndOwner(from: string) {
 // =====================================================
 // Button helpers
 // =====================================================
-function saleBtnId(action: 'UNDO' | 'RECEIPT' | 'CREDIT', txId: string) {
+function saleBtnId(action: 'UNDO' | 'RECEIPT' | 'CREDIT' | 'PARTIAL' | 'DISCOUNT', txId: string) {
   return `SALEACT|${action}|${txId}`;
 }
 
@@ -1599,6 +1599,161 @@ Oga Boss Plan: ₦3,000/month (Save significantly with the yearly plan)`;
         }
     }
 
+    // PARTIAL FLOW: Debtor Name
+    if (actor.interactionState && actor.interactionState.type === 'WAITING_FOR_PARTIAL_DEBTOR_NAME') {
+        if (!btn) {
+           const txId = actor.interactionState.data?.txId;
+           const name = rawText.trim();
+           
+           if (!name) {
+               await queueOutboundMessage(from, "Name cancelled.");
+               actor.interactionState = null;
+               await actor.save();
+               return;
+           }
+
+           const res = await resolveDebtor(shopId, name);
+           let debtorId: any = null;
+           let displayName = name;
+           let debtorKey = normName(name);
+
+           if (res.status === 'new') {
+                const created = await Debtor.create({ user: shopId, displayName: res.displayName, debtorKey: res.debtorKey, aliases: [res.debtorKey], totalDebt: 0 });
+                debtorId = created._id;
+                displayName = created.displayName;
+                debtorKey = created.debtorKey;
+           } else {
+                if (res.status === 'exact') {
+                  debtorId = res.debtorId;
+                  displayName = res.displayName;
+                  debtorKey = res.debtorKey;
+                } else {
+                  // suggestion case: options may not include debtorKey, so fetch from DB or fallback
+                  const opt = res.options[0];
+                  debtorId = opt.debtorId;
+                  displayName = opt.displayName;
+
+                  // Try to use debtorKey from option if present, otherwise query Debtor record
+                  debtorKey = (opt as any).debtorKey;
+                  if (!debtorKey) {
+                    const dbDebtor = await Debtor.findById(debtorId).select('debtorKey').lean();
+                    debtorKey = dbDebtor?.debtorKey || normName(displayName);
+                  }
+                }
+           }
+
+           await Transaction.findByIdAndUpdate(txId, { debtorId, customerName: displayName, customerKey: debtorKey });
+           
+           actor.interactionState = { type: 'WAITING_FOR_PARTIAL_PAYMENT_AMOUNT', data: { txId, debtorId, displayName } };
+           await actor.save();
+
+           await queueOutboundMessage(from, `✅ Linked to *${displayName}*.\n\nEnter the amount made as a down payment.`);
+           return;
+        }
+        if (btn) { actor.interactionState = null; await actor.save(); }
+    }
+
+    // PARTIAL FLOW: Payment Amount
+    if (actor.interactionState && actor.interactionState.type === 'WAITING_FOR_PARTIAL_PAYMENT_AMOUNT') {
+        if (!btn) {
+           const { txId, debtorId, displayName } = actor.interactionState.data;
+           const raw = rawText.replace(/,/g, '');
+           const match = raw.match(/(\d+(?:\.\d+)?)/);
+           let amount = match ? parseFloat(match[1]) : 0;
+           if (raw.toLowerCase().includes('k')) amount *= 1000;
+           if (raw.toLowerCase().includes('m')) amount *= 1000000;
+
+           if (amount <= 0) {
+               await queueOutboundMessage(from, "⚠️ Invalid amount. Please try again (e.g., '5000').");
+               return;
+           }
+
+           const tx = await Transaction.findById(txId);
+           if (!tx) { await queueOutboundMessage(from, "⚠️ Transaction not found."); return; }
+
+           if (amount >= tx.totalMoney) {
+               tx.paymentStatus = 'PAID';
+               tx.amountPaid = tx.totalMoney;
+               tx.balance = 0;
+               tx.settledAt = new Date();
+               await tx.save();
+               
+               await queueOutboundMessage(from, `✅ Fully Paid! (${symbol}${tx.totalMoney.toLocaleString(locale)})`);
+           } else {
+               const balance = tx.totalMoney - amount;
+               tx.paymentStatus = 'PARTIAL';
+               tx.amountPaid = amount;
+               tx.balance = balance;
+               await tx.save();
+
+               if (debtorId) {
+                   await Debtor.findByIdAndUpdate(debtorId, { $inc: { totalDebt: balance }, $set: { lastProductStr: (tx.items || []).map((i:any) => `${i.qty} ${i.name}`).join(', ') } });
+               }
+               
+               await queueOutboundMessage(from, `Recorded credit sale to ${displayName}.\nPaid: ${symbol}${amount.toLocaleString(locale)}\nBalance: ${symbol}${balance.toLocaleString(locale)}`);
+           }
+
+           actor.interactionState = null;
+           await actor.save();
+           
+           await queueOutboundList(from, "Choose Action 👇", "Options", [
+             { title: 'Actions', rows: [
+                { id: saleBtnId('RECEIPT', txId), title: '🧾 Receipt' },
+                { id: saleBtnId('UNDO', txId), title: '🗑️ Delete Sale' }
+             ]} 
+           ]);
+           return;
+        }
+        if (btn) { actor.interactionState = null; await actor.save(); }
+    }
+
+    // DISCOUNT FLOW
+    if (actor.interactionState && actor.interactionState.type === 'WAITING_FOR_DISCOUNT_AMOUNT') {
+         if (!btn) {
+            const { txId } = actor.interactionState.data;
+            const raw = rawText.replace(/,/g, '');
+            const match = raw.match(/(\d+(?:\.\d+)?)/);
+            let discount = match ? parseFloat(match[1]) : 0;
+            if (raw.toLowerCase().includes('k')) discount *= 1000;
+            if (raw.toLowerCase().includes('m')) discount *= 1000000;
+
+            const tx = await Transaction.findById(txId);
+            if (!tx) { await queueOutboundMessage(from, "⚠️ Transaction not found."); return; }
+            
+            if (discount >= tx.totalMoney) {
+                 await queueOutboundMessage(from, "⚠️ Discount cannot exceed total price.");
+                 return;
+            }
+
+            const newTotal = tx.totalMoney - discount;
+
+            tx.discount = discount;
+            tx.totalMoney = newTotal;
+
+            if (tx.paymentStatus !== 'CREDIT' && tx.paymentStatus !== 'PARTIAL') {
+                tx.amountPaid = newTotal;
+                tx.balance = 0;
+            } else if (tx.paymentStatus === 'CREDIT') {
+                tx.balance = newTotal;
+            }
+            await tx.save();
+
+            actor.interactionState = null;
+            await actor.save();
+
+            await queueOutboundMessage(from, `Recorded sale.\nPaid: ${symbol}${newTotal.toLocaleString(locale)}\nDiscount: ${symbol}${discount.toLocaleString(locale)}`);
+            
+            await queueOutboundList(from, "Choose Action 👇", "Options", [
+                 { title: 'Actions', rows: [
+                    { id: saleBtnId('RECEIPT', txId), title: '🧾 Receipt' },
+                    { id: saleBtnId('UNDO', txId), title: '🗑️ Delete Sale' }
+                 ]} 
+            ]);
+            return;
+         }
+         if (btn) { actor.interactionState = null; await actor.save(); }
+    }
+
 
     // =====================================================
     // ✅ BUTTON fast path
@@ -1643,6 +1798,35 @@ Oga Boss Plan: ₦3,000/month (Save significantly with the yearly plan)`;
 
           await queueOutboundMessage(from, r.msg);
           return;
+        }
+
+        if (btn.action === 'PARTIAL') {
+             const tx = await Transaction.findOne({ _id: btn.id, user: actor._id });
+             if (!tx) { await queueOutboundMessage(from, "⚠️ Transaction not found."); return; }
+
+             // Mark as CREDIT first
+             tx.paymentStatus = 'CREDIT';
+             tx.balance = tx.totalMoney;
+             tx.amountPaid = 0;
+             await tx.save();
+             
+             if (tx.debtorId) {
+                 actor.interactionState = { type: 'WAITING_FOR_PARTIAL_PAYMENT_AMOUNT', data: { txId: btn.id, debtorId: tx.debtorId, displayName: tx.customerName } };
+                 await actor.save();
+                 await queueOutboundMessage(from, `Enter the amount made as a down payment.`);
+             } else {
+                 actor.interactionState = { type: 'WAITING_FOR_PARTIAL_DEBTOR_NAME', data: { txId: btn.id } };
+                 await actor.save();
+                 await queueOutboundMessage(from, `Marked as CREDIT.\nWho owes you? Reply like: *Credit John*`);
+             }
+             return;
+        }
+
+        if (btn.action === 'DISCOUNT') {
+             actor.interactionState = { type: 'WAITING_FOR_DISCOUNT_AMOUNT', data: { txId: btn.id } };
+             await actor.save();
+             await queueOutboundMessage(from, `How much discount was given?\nReply like: *2000* or *5000*`);
+             return;
         }
 
         if (btn.action === 'UNDO') {
@@ -2009,23 +2193,26 @@ Oga Boss Plan: ₦3,000/month (Save significantly with the yearly plan)`;
         const tx = await Transaction.findOne({ user: actor._id, messageId }).lean();
         if (tx?._id) {
           const txId = String(tx._id);
-          const body = `After sale:\nChoose action 👇`;
-
+          
           try {
-            await queueSaleResponse(
-  from,
-  parsed.reply_text || '✅ Sale recorded.',
-  'After sale:\nChoose action 👇',
-  [
-    { id: saleBtnId('UNDO', txId), title: '↩️ Delet This Sale' },
-    { id: saleBtnId('RECEIPT', txId), title: '🧾 Receipt' },
-    { id: saleBtnId('CREDIT', txId), title: '💳 Sold As Credit' },
-  ],
-  `sale_${messageId}`
-);
-
+             await queueOutboundList(
+                from,
+                parsed.reply_text || '✅ Sale recorded.',
+                'Choose Action 👇',
+                [{
+                    title: 'Sale Actions',
+                    rows: [
+                        { id: saleBtnId('RECEIPT', txId), title: '🧾 Receipt' },
+                        { id: saleBtnId('CREDIT', txId), title: '💳 Sold As Credit' },
+                        { id: saleBtnId('PARTIAL', txId), title: '🔢 Partial Payment' },
+                        { id: saleBtnId('DISCOUNT', txId), title: '🏷️ Add Discount' },
+                        { id: saleBtnId('UNDO', txId), title: '🗑️ Delete Sale' }
+                    ]
+                }],
+                `sale_${messageId}`
+             );
           } catch (e) {
-            console.error('❌ Failed to queue buttons:', e);
+            console.error('❌ Failed to queue sale list:', e);
           }
         }
         break;

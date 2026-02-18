@@ -21,10 +21,11 @@ export interface IInventoryItem extends Document {
       costPrice: { type: Number, default: 0 },
       image: { type: String },
       category: { type: String, trim: true, lowercase: true },
-      barcode: { type: String, trim: true }
+      barcode: { type: String, trim: true },
+      isDeleted: { type: Boolean, default: false }
     },  { timestamps: true }
 );
 
-inventorySchema.index({ user: 1, name: 1 }, { unique: true });
+inventorySchema.index({ user: 1, name: 1, isDeleted: 1 }, { unique: true });
 
 export const Inventory = model<IInventoryItem>('Inventory', inventorySchema);
