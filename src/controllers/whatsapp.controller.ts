@@ -2195,24 +2195,30 @@ Oga Boss Plan: ₦3,000/month (Save significantly with the yearly plan)`;
           const txId = String(tx._id);
           
           try {
-             await queueOutboundList(
+             await queueSaleResponse(
                 from,
                 parsed.reply_text || '✅ Sale recorded.',
                 'Choose Action 👇',
-                [{
-                    title: 'Sale Actions',
-                    rows: [
-                        { id: saleBtnId('RECEIPT', txId), title: '🧾 Receipt' },
-                        { id: saleBtnId('CREDIT', txId), title: '💳 Sold As Credit' },
-                        { id: saleBtnId('PARTIAL', txId), title: '🔢 Partial Payment' },
-                        { id: saleBtnId('DISCOUNT', txId), title: '🏷️ Add Discount' },
-                        { id: saleBtnId('UNDO', txId), title: '🗑️ Delete Sale' }
-                    ]
-                }],
-                `sale_${messageId}`
+                [
+                    { id: saleBtnId('RECEIPT', txId), title: '🧾 Receipt' },
+                    { id: saleBtnId('UNDO', txId), title: '🗑️ Delete Sale' },
+                    { id: saleBtnId('CREDIT', txId), title: '💳 Sold As Credit' }
+                ],
+                `sale_resp_${messageId}`
+             );
+
+             await queueOutboundButtons(
+                from,
+                'More Options 👇',
+                [
+                    { id: saleBtnId('PARTIAL', txId), title: '🔢 Partial Payment' },
+                    { id: saleBtnId('DISCOUNT', txId), title: '🏷️ Add Discount' }
+                ],
+                `sale_more_${messageId}`,
+                1000
              );
           } catch (e) {
-            console.error('❌ Failed to queue sale list:', e);
+            console.error('❌ Failed to queue sale buttons:', e);
           }
         }
         break;

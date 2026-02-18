@@ -5,9 +5,22 @@ import IORedis from 'ioredis';
 // ============================================================
 // ✅ Redis Connection (single shared connection)
 // ============================================================
-export const connection = new IORedis(process.env.REDIS_URL || 'redis://127.0.0.1:6379', {
+export const redisUrl = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
+export const redisOptions = {
   maxRetriesPerRequest: null,
-});
+};
+
+export const createRedisConnection = (name: string) => {
+  const redis = new IORedis(redisUrl, { ...redisOptions, connectionName: name });
+  
+  redis.on('connect', () => console.log(`✅ Redis [${name}] connected`));
+  redis.on('error', (err) => console.error(`❌ Redis [${name}] error:`, err.message));
+  redis.on('close', () => console.warn(`⚠️ Redis [${name}] disconnected`));
+  
+  return redis;
+};
+
+export const connection = createRedisConnection('queue-shared');
 
 // ============================================================
 // ✅ OUTBOUND: FAST (replies + interactive buttons + receipt pdf)

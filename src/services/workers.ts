@@ -1,6 +1,6 @@
 // src/services/queue.worker.ts
 import { Worker } from 'bullmq';
-import { connection } from './queue.service';
+import { createRedisConnection } from './queue.service';
 import { sendWhatsAppText, sendWhatsAppButtons, sendWhatsAppList, sendWhatsAppDocumentBuffer, sendWhatsAppFlow } from './whatsapp.service';
 import { generateSaleReceiptPdfBuffer } from '../controllers/receipt.controller';
 import { Invoice } from '../models/invoice.model';
@@ -16,7 +16,7 @@ export const replyWorker = new Worker(
     console.log('📌 Reply job:', job.name, job.data?.phoneNumber);
 
     if (job.name === 'send-text') {
-      const { phoneNumber, message, dbMessageId } = job.data;
+      const { phoneNumber, message, dbMessageId } = job.data || {};
       const waId = await sendWhatsAppText(phoneNumber, message);
       
       if (dbMessageId && waId) {
@@ -151,7 +151,7 @@ export const replyWorker = new Worker(
     console.log(`⚠️ Unknown reply job name: ${job.name}`);
   },
   {
-    connection,
+    connection: createRedisConnection('worker-reply'),
     limiter: { max: 15, duration: 1000 },
     concurrency: 10,
     lockDuration: 60_000,
@@ -189,7 +189,7 @@ export const bulkWorker = new Worker(
     await sendWhatsAppText(phoneNumber, message);
   },
   {
-    connection,
+    connection: createRedisConnection('worker-bulk'),
     limiter: { max: 5, duration: 1000 },
     concurrency: 3,
     lockDuration: 60_000,
@@ -214,10 +214,10 @@ export const messageWorker = new Worker(
     await handleMessageLogic(from, text, messageId, mediaId, isVoiceMessage, profileName);
   },
   {
-    connection,
-    concurrency: 10,
+    connection: createRedisConnection('worker-inbound'),
+    concurrency: 100,
     stalledInterval: 10_000,
-    lockDuration: 5 * 60 * 1000,
+    lockDuration: 60000,
   }
 );
 
