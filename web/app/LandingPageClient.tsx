@@ -1,4 +1,3 @@
-'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
 import {
@@ -104,6 +103,10 @@ const TESTIMONIALS: Testimonial[] = [
 
 const FAQS: Faq[] = [
   {
+    q: 'What is the best WhatsApp POS software in Nigeria?',
+    a: 'TallyPadi is widely considered the best choice for 2026. It combines three powerful tools in one: 1) A simple WhatsApp Chat interface for fast sales recording, 2) A Full POS Terminal with barcode scanning for counter checkout, and 3) Advanced Multi-branch management for growing retail chains. Unlike other options, it requires no extra hardware lock-in.',
+  },
+  {
     q: 'Do I need to download any app?',
     a: 'No. You can use TallyPadi directly inside WhatsApp—no app required. It works on any device that has WhatsApp installed.',
   },
@@ -160,6 +163,81 @@ const FAQS: Faq[] = [
     a: 'You can choose a plan (Oga Boss or Tycoon). Your data remains safe and you continue from where you stopped.',
   },
 ];
+
+const ComparisonSection = () => {
+  return (
+    <section className="py-24 bg-white">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <AnimatedSection className="text-center mb-16">
+          <span className="text-emerald-600 font-bold tracking-wider uppercase text-xs">Market Comparison</span>
+          <h2 className="text-3xl md:text-5xl font-bold text-stone-900 mt-2">Top POS Software in Nigeria (2026)</h2>
+          <p className="text-stone-500 mt-4 max-w-2xl mx-auto">
+            See how TallyPadi stacks up against Loyverse, VirtualRx, and traditional POS hardware.
+          </p>
+        </AnimatedSection>
+
+        <AnimatedSection animation="fade-up" className="overflow-x-auto">
+          <table className="w-full min-w-[600px] border-collapse text-left">
+            <thead>
+              <tr className="border-b-2 border-stone-100">
+                <th className="py-4 px-6 text-stone-500 font-medium uppercase text-sm tracking-wider">Feature</th>
+                <th className="py-4 px-6 bg-emerald-50 text-emerald-700 font-bold text-lg rounded-t-2xl border-t border-x border-emerald-100">
+                  TallyPadi
+                </th>
+                <th className="py-4 px-6 text-stone-900 font-bold">Loyverse</th>
+                <th className="py-4 px-6 text-stone-900 font-bold">VirtualRx / Traditional POS</th>
+              </tr>
+            </thead>
+            <tbody className="text-stone-600">
+              <tr className="border-b border-stone-100 hover:bg-stone-50/50">
+                <td className="py-4 px-6 font-medium">WhatsApp Integration</td>
+                <td className="py-4 px-6 bg-emerald-50/30 border-x border-emerald-100 text-emerald-700 font-bold">✅ Native Chat Bot</td>
+                <td className="py-4 px-6">❌ App Only</td>
+                <td className="py-4 px-6">❌ Hardware Only</td>
+              </tr>
+              <tr className="border-b border-stone-100 hover:bg-stone-50/50">
+                <td className="py-4 px-6 font-medium">POS Terminal (Scanning)</td>
+                <td className="py-4 px-6 bg-emerald-50/30 border-x border-emerald-100 text-emerald-700 font-bold">✅ Included</td>
+                <td className="py-4 px-6">✅ Included</td>
+                <td className="py-4 px-6">✅ Included</td>
+              </tr>
+              <tr className="border-b border-stone-100 hover:bg-stone-50/50">
+                <td className="py-4 px-6 font-medium">Hardware Cost</td>
+                <td className="py-4 px-6 bg-emerald-50/30 border-x border-emerald-100 text-emerald-700 font-bold">₦0 (Use any device)</td>
+                <td className="py-4 px-6">₦0 (App)</td>
+                <td className="py-4 px-6">₦250k - ₦500k+</td>
+              </tr>
+              <tr className="border-b border-stone-100 hover:bg-stone-50/50">
+                <td className="py-4 px-6 font-medium">Staff Ease of Use</td>
+                <td className="py-4 px-6 bg-emerald-50/30 border-x border-emerald-100 text-emerald-700 font-bold">⭐⭐⭐⭐⭐ (Chat)</td>
+                <td className="py-4 px-6">⭐⭐⭐ (App Training)</td>
+                <td className="py-4 px-6">⭐⭐ (Technical)</td>
+              </tr>
+              <tr className="border-b border-stone-100 hover:bg-stone-50/50">
+                <td className="py-4 px-6 font-medium">Multi-Branch Sync</td>
+                <td className="py-4 px-6 bg-emerald-50/30 border-x border-emerald-100 text-emerald-700 font-bold">✅ Real-time (Tycoon)</td>
+                <td className="py-4 px-6">✅ Paid Add-on</td>
+                <td className="py-4 px-6">⚠️ Often Separate DB</td>
+              </tr>
+              <tr className="border-b border-stone-100 hover:bg-stone-50/50">
+                <td className="py-4 px-6 font-medium">Cloud Backup & Access</td>
+                <td className="py-4 px-6 bg-emerald-50/30 border-x border-emerald-100 text-emerald-700 font-bold">✅ Auto Cloud (24/7)</td>
+                <td className="py-4 px-6">✅ Cloud Based</td>
+                <td className="py-4 px-6">⚠️ Local Only (Risk)</td>
+              </tr>
+              <tr>
+                <td className="py-4 px-6 font-medium">Payment Recovery</td>
+                <td className="py-4 px-6 bg-emerald-50/30 border-x border-b border-emerald-100 text-emerald-700 font-bold rounded-b-2xl">✅ Debtors Tracking</td>
+                <td className="py-4 px-6">❌ Basic</td>
+                <td className="py-4 px-6">❌ Basic</td>
+              </tr>
+            </tbody>
+          </table>
+        </AnimatedSection>
+      </div>
+    </section>
+  );
+};
 
 // --- Custom Hook for Scroll Animations ---
 const useScrollAnimation = () => {
@@ -431,193 +509,136 @@ export default function LandingPage() {
       <MarketingNavbar whatsappLink={whatsappLink} />
 
       {/* --- Hero Section (Full Screen) --- */}
-      <section 
-        className="relative min-h-screen flex items-center justify-center pt-20 overflow-hidden bg-stone-950"
-        onMouseEnter={() => setIsHeroPaused(true)}
-        onMouseLeave={() => setIsHeroPaused(false)}
-      >
-        {/* Background Image Slider */}
-        {HERO_IMAGES.map((img, index) => (
-          <div
-            key={index}
-            className={`absolute inset-0 bg-cover bg-center transition-all duration-[1500ms] ease-in-out ${index === currentBg ? 'opacity-40 scale-105' : 'opacity-0 scale-100'}`}
-            style={{ backgroundImage: `url(${img})` }}
-          />
-        ))}
+  {/* --- Hero Section (Product-led, Cleaner) --- */}
+<section
+  className="relative isolate overflow-hidden bg-stone-950 pt-24 pb-16 sm:pt-28"
+  onPointerEnter={() => setIsHeroPaused(true)}
+  onPointerLeave={() => setIsHeroPaused(false)}
+>
+  {/* Background */}
+  <div className="absolute inset-0 -z-10">
+    {/* Image crossfade */}
+    {HERO_IMAGES.map((src, index) => (
+      <Image
+        key={src}
+        src={src}
+        alt=""
+        fill
+        priority={index === 0}
+        sizes="100vw"
+        className={[
+          "object-cover transition-opacity duration-1000 ease-out",
+          index === currentBg ? "opacity-25" : "opacity-0",
+        ].join(" ")}
+      />
+    ))}
 
-        {/* Cinematic Gradient Overlay - Warm & Deep */}
-        <div className="absolute inset-0 bg-gradient-to-b from-stone-950/90 via-stone-950/70 to-stone-950 z-10" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-emerald-900/10 via-stone-950/40 to-stone-950 z-10" />
+    {/* Overlay layers */}
+    <div className="absolute inset-0 bg-gradient-to-b from-stone-950/70 via-stone-950/80 to-stone-950" />
+    <div className="absolute inset-0 bg-[radial-gradient(60%_60%_at_20%_10%,rgba(16,185,129,0.22),transparent_60%)]" />
+    <div className="absolute inset-0 opacity-[0.06] bg-[radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.8)_1px,transparent_0)] [background-size:22px_22px]" />
+  </div>
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-20 w-full grid lg:grid-cols-2 gap-12 lg:gap-20 items-center">
-          {/* Text Content */}
-          <div className="text-white pt-10 lg:pt-0">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-900/30 border border-emerald-500/20 text-emerald-200 text-sm font-semibold mb-8 backdrop-blur-md">
-              <span className="w-2 h-2 bg-emerald-400 rounded-full shadow-[0_0_10px_rgba(52,211,153,0.8)]"></span>
-              The All-in-One WhatsApp + Dashboard Business Manager
-            </div>
-
-            <h1 className="text-5xl lg:text-7xl font-extrabold leading-[1.1] mb-6 tracking-tight drop-shadow-2xl">
-              Chat for Speed. <br />
-              <span className="text-emerald-400">
-                POS for Control.
-              </span>
-            </h1>
-
-            <p className="text-lg text-stone-300 mb-10 leading-relaxed max-w-xl font-light drop-shadow-lg shadow-black">
-              The only tool that combines <strong>WhatsApp simplicity</strong> with a powerful <strong>Point of Sale (POS) Terminal</strong>. From solo shops to multi-branch retail chains — record sales via chat or scan barcodes at the counter.
-            </p>
-
-            <ul className="mb-10 space-y-3 text-stone-300">
-              <li className="flex items-center gap-2">
-                <CheckCircle2 size={18} className="text-emerald-500" />
-                <span><strong className="text-white">Solo Vendors:</strong> Simple chat tracking in WhatsApp.</span>
-              </li>
-              <li className="flex items-center gap-2">
-                <CheckCircle2 size={18} className="text-emerald-500" />
-                <span><strong className="text-white">Retail Chains:</strong> Full POS Terminal with barcode scanning.</span>
-              </li>
-              <li className="flex items-center gap-2">
-                <CheckCircle2 size={18} className="text-emerald-500" />
-                <span><strong className="text-white">Everyone:</strong> No extra hardware lock-in. Works on any device.</span>
-              </li>
-            </ul>
-
-            <div className="flex flex-col sm:flex-row gap-4">
-              <a
-                href={whatsappLink}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center justify-center px-8 py-4 text-lg font-bold rounded-full text-white bg-emerald-600 hover:bg-emerald-500 transition-all duration-300 shadow-[0_4px_20px_rgba(16,185,129,0.3)] hover:-translate-y-1 hover:scale-105"
-              >
-                <Phone className="mr-2" size={20} fill="currentColor" /> Chat on WhatsApp
-              </a>
-              <a
-                href="#how-it-works"
-                className="inline-flex items-center justify-center px-8 py-4 text-lg font-bold rounded-full text-white bg-white/5 backdrop-blur-md border border-white/10 hover:bg-white/10 transition-all duration-300 hover:-translate-y-1"
-              >
-                How it Works
-              </a>
-            </div>
-          </div>
-
-          {/* Dynamic Phone Mockup with 3D Float */}
-          <div className="hidden lg:block relative" style={{ perspective: 1000 }}>
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-emerald-500/10 rounded-full blur-[100px] animate-pulse"></div>
-
-            {/* Phone Body */}
-            <div className="relative mx-auto border-stone-900 bg-stone-900 border-[10px] rounded-[3rem] h-[680px] w-[340px] shadow-2xl animate-[float_6s_ease-in-out_infinite] z-10 overflow-hidden ring-1 ring-white/10">
-              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-6 bg-stone-900 rounded-b-xl z-20"></div>
-
-              {/* Screen Content */}
-              <div className="w-full h-full bg-[#efeae2] relative flex flex-col font-sans">
-                {/* Header */}
-                <div className="bg-[#075E54] h-24 pt-8 flex items-center px-4 text-white gap-3 shrink-0 shadow-md z-10">
-                  <ArrowRight size={20} className="rotate-180 opacity-80" />
-                  <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center p-1">
-                    <div className="w-full h-full bg-emerald-600 rounded-full flex items-center justify-center text-[10px] font-bold">
-                      TP
-                    </div>
-                  </div>
-                  <div className="flex-1">
-                    <h4 className="font-bold text-base">TallyPadi</h4>
-                    <p className="text-[10px] text-green-100 opacity-90">Online</p>
-                  </div>
-                </div>
-
-                {/* Chat Area */}
-                <div className="flex-1 p-4 flex flex-col gap-4 overflow-hidden bg-[url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png')] bg-opacity-10">
-                  <div className="self-center bg-[#e1f3fb] text-slate-500 text-[10px] px-3 py-1 rounded-lg shadow-sm font-medium uppercase tracking-wide my-2 opacity-80">
-                    Today
-                  </div>
-
-                  {/* Animated Messages */}
-                  <div className="animate-[fade-in-up_0.5s_ease-out_forwards] self-end bg-[#d9fdd3] p-3 rounded-xl rounded-tr-none shadow-sm max-w-[85%] text-sm text-slate-800">
-                    Add 50 bags of Rice at 40k
-                    <span className="block text-[10px] text-slate-400 text-right mt-1 flex justify-end items-center gap-1">
-                      10:00 AM <CheckCircle2 size={12} className="text-blue-500" />
-                    </span>
-                  </div>
-
-                  <div className="animate-[fade-in-up_0.5s_ease-out_0.5s_forwards] opacity-0 self-start bg-white p-3 rounded-xl rounded-tl-none shadow-sm max-w-[90%] text-sm text-slate-800 border border-slate-100">
-                    <p className="font-bold text-emerald-700 mb-1 text-xs">Tallypadi</p>
-                    ✅ <strong>Stock Added!</strong>
-                    <br />
-                    Item: Rice
-                    <br />
-                    Qty: 50 Bags
-                    <br />
-                    Price: ₦40,000/bag
-                    <span className="block text-[10px] text-slate-400 text-right mt-1">10:00 AM</span>
-                  </div>
-
-                  <div className="animate-[fade-in-up_0.5s_ease-out_2.5s_forwards] opacity-0 self-end bg-[#d9fdd3] p-3 rounded-xl rounded-tr-none shadow-sm max-w-[85%] text-sm text-slate-800 mt-2">
-                    Sold 2 Rice
-                    <span className="block text-[10px] text-slate-400 text-right mt-1 flex justify-end items-center gap-1">
-                      12:30 PM <CheckCircle2 size={12} className="text-blue-500" />
-                    </span>
-                  </div>
-
-                  <div className="animate-[fade-in-up_0.5s_ease-out_3.5s_forwards] opacity-0 self-start bg-white p-3 rounded-xl rounded-tl-none shadow-sm max-w-[90%] text-sm text-slate-800 border border-slate-100">
-                    <p className="font-bold text-emerald-700 mb-1 text-xs">Tallypadi</p>
-                    💰 <strong>Sale Recorded!</strong>
-                    <br />
-                    You made: ₦80,000
-                    <br />
-                    Warning: Stock is low!
-                    <span className="block text-[10px] text-slate-400 text-right mt-1">12:30 PM</span>
-                  </div>
-                </div>
-
-                {/* Input Area */}
-                <div className="h-14 bg-white px-2 flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">+</div>
-                  <div className="flex-1 h-9 bg-slate-100 rounded-full px-4 flex items-center text-slate-400 text-sm">
-                    Type a message...
-                  </div>
-                  <div className="w-9 h-9 rounded-full bg-emerald-600 flex items-center justify-center text-white">
-                    <ArrowRight size={18} />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          {/* /phone */}
+  <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div className="grid lg:grid-cols-2 gap-10 lg:gap-14 items-center">
+      {/* Left: Copy */}
+      <div className="text-white">
+        <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold backdrop-blur">
+          <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.85)]" />
+          WhatsApp POS + Web Dashboard
         </div>
 
-        {/* --- Hero Slider Controls --- */}
-        <div className="absolute bottom-6 left-0 right-0 z-30 flex justify-center items-center gap-6">
-            <button 
-              onClick={prevHeroSlide} 
-              className="p-3 rounded-full bg-stone-900/40 hover:bg-emerald-500/80 text-white backdrop-blur-md transition-all border border-white/10 hover:border-emerald-500 group"
-              aria-label="Previous slide"
-            >
-                <ChevronLeft size={20} className="group-hover:-translate-x-0.5 transition-transform" />
-            </button>
-            
-            <div className="flex gap-3 bg-stone-900/40 backdrop-blur-md px-4 py-2 rounded-full border border-white/10">
-                {HERO_IMAGES.map((_, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => setCurrentBg(idx)}
-                    className={`h-2 rounded-full transition-all duration-500 ${idx === currentBg 
-                        ? 'w-8 bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.5)]' 
-                        : 'w-2 bg-white/30 hover:bg-white/60'}
-                    `}
-                    aria-label={`Go to slide ${idx + 1}`}
-                  />
-                ))}
-            </div>
+        <h1 className="mt-6 text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight leading-[1.05]">
+          Run your shop from{" "}
+          <span className="text-emerald-400">WhatsApp</span>.
+          <br className="hidden sm:block" />
+          Know your profit instantly.
+        </h1>
 
-            <button 
-              onClick={nextHeroSlide} 
-              className="p-3 rounded-full bg-stone-900/40 hover:bg-emerald-500/80 text-white backdrop-blur-md transition-all border border-white/10 hover:border-emerald-500 group"
-              aria-label="Next slide"
+        <p className="mt-5 text-base sm:text-lg text-stone-300 max-w-xl leading-relaxed">
+          Record sales in chat, track stock automatically, generate receipts, and manage staff —
+          without buying a POS machine.
+        </p>
+
+        {/* Proof chips */}
+        <div className="mt-6 flex flex-wrap gap-2">
+          {[
+            { icon: <CheckCircle2 size={16} className="text-emerald-400" />, text: "7-day free trial" },
+            { icon: <CheckCircle2 size={16} className="text-emerald-400" />, text: "No app required" },
+            { icon: <CheckCircle2 size={16} className="text-emerald-400" />, text: "Works with barcode scanners" },
+          ].map((p, i) => (
+            <span
+              key={i}
+              className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-stone-200"
             >
-                <ChevronRight size={20} className="group-hover:translate-x-0.5 transition-transform" />
-            </button>
+              {p.icon}
+              {p.text}
+            </span>
+          ))}
         </div>
-      </section>
+
+        {/* CTAs */}
+        <div className="mt-8 flex flex-col sm:flex-row gap-3 sm:items-center">
+          <a
+            href={whatsappLink}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center justify-center px-7 py-4 rounded-full bg-emerald-600 hover:bg-emerald-500 transition font-extrabold shadow-[0_12px_40px_rgba(16,185,129,0.25)] hover:-translate-y-0.5"
+          >
+            <Phone className="mr-2" size={18} fill="currentColor" />
+            Chat on WhatsApp
+          </a>
+
+          <a
+            href="#how-it-works"
+            className="inline-flex items-center justify-center px-7 py-4 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 transition font-bold text-white"
+          >
+            See how it works <ArrowRight size={16} className="ml-2" />
+          </a>
+        </div>
+
+        {/* Slider dots (small, calm) */}
+        <div className="mt-8 flex items-center gap-2">
+          <button
+            onClick={prevHeroSlide}
+            className="p-2 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 transition"
+            aria-label="Previous slide"
+          >
+            <ChevronLeft size={18} />
+          </button>
+
+          <div className="flex gap-2 px-3 py-2 rounded-full bg-white/5 border border-white/10 backdrop-blur">
+            {HERO_IMAGES.map((_, idx) => (
+              <button
+                key={idx}
+                onClick={() => setCurrentBg(idx)}
+                className={[
+                  "h-2 rounded-full transition-all duration-500",
+                  idx === currentBg ? "w-7 bg-emerald-400" : "w-2 bg-white/30 hover:bg-white/60",
+                ].join(" ")}
+                aria-label={`Go to slide ${idx + 1}`}
+              />
+            ))}
+          </div>
+
+          <button
+            onClick={nextHeroSlide}
+            className="p-2 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 transition"
+            aria-label="Next slide"
+          >
+            <ChevronRight size={18} />
+          </button>
+        </div>
+      </div>
+
+      {/* Right: Product preview (shows on mobile too) */}
+      <div className="relative">
+        <HeroPreviewCard />
+      </div>
+    </div>
+  </div>
+</section>
+
 
       {/* --- How It Works (Dark Theme for Contrast) --- */}
     <section id="how-it-works" className="py-24 bg-stone-900 relative overflow-hidden text-white">
@@ -877,6 +898,9 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
+
+      {/* --- Comparison Table (AEO Optimized) --- */}
+      <ComparisonSection />
 
       {/* --- Gallery / Photo Edits Section --- */}
       <section id="gallery" className="py-24 bg-white border-t border-stone-100">
@@ -1175,6 +1199,89 @@ export default function LandingPage() {
     </div>
   );
 }
+
+const HeroPreviewCard = () => {
+  return (
+    <div className="relative mx-auto max-w-[560px]">
+      {/* glow */}
+      <div className="absolute -inset-6 rounded-[2.5rem] bg-emerald-500/10 blur-3xl" />
+
+      {/* Main WhatsApp card */}
+      <div className="relative rounded-[2.25rem] border border-white/10 bg-white/5 backdrop-blur-xl shadow-2xl overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
+          <div className="flex items-center gap-2">
+            <span className="h-2 w-2 rounded-full bg-emerald-400" />
+            <span className="text-sm font-bold text-white">WhatsApp Sales</span>
+          </div>
+          <span className="text-xs text-stone-300">Live preview</span>
+        </div>
+
+        <div className="p-5 bg-stone-950/30">
+          {/* bubbles */}
+          <div className="space-y-3">
+            <div className="ml-auto max-w-[85%] rounded-2xl rounded-tr-sm bg-emerald-500/15 border border-emerald-400/20 p-3 text-sm text-stone-100">
+              Sold 2 Rice for ₦80,000
+              <div className="mt-1 text-[11px] text-stone-300/80 text-right">12:30 PM</div>
+            </div>
+
+            <div className="max-w-[92%] rounded-2xl rounded-tl-sm bg-white/10 border border-white/10 p-3 text-sm text-stone-100">
+              <span className="font-bold text-emerald-300">TallyPadi</span>
+              <div className="mt-1 text-stone-200/90">
+                ✅ Sale recorded <br />
+                💰 Profit updated <br />
+                ⚠️ Low stock alert
+              </div>
+              <div className="mt-1 text-[11px] text-stone-300/80">12:30 PM</div>
+            </div>
+          </div>
+
+          {/* mini input */}
+          <div className="mt-5 flex items-center gap-2 rounded-full border border-white/10 bg-stone-950/30 px-3 py-2">
+            <div className="h-8 w-8 rounded-full bg-white/10 flex items-center justify-center text-stone-200">
+              +
+            </div>
+            <div className="flex-1 text-sm text-stone-300">Type a message…</div>
+            <div className="h-9 w-9 rounded-full bg-emerald-600 flex items-center justify-center text-white">
+              <ArrowRight size={16} />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Dashboard card (behind) */}
+      <div className="hidden sm:block absolute -right-8 -bottom-10 w-[320px] rotate-2">
+        <div className="rounded-3xl border border-white/10 bg-stone-950/55 backdrop-blur-xl shadow-2xl p-4">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-bold text-white">Dashboard</span>
+            <span className="text-xs text-stone-300">Today</span>
+          </div>
+
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            {[
+              { label: "Sales", value: "₦180,000" },
+              { label: "Profit", value: "₦42,000" },
+              { label: "Low stock", value: "3 items" },
+              { label: "Staff", value: "2 active" },
+            ].map((x, i) => (
+              <div
+                key={i}
+                className="rounded-2xl border border-white/10 bg-white/5 p-3"
+              >
+                <div className="text-[11px] text-stone-300">{x.label}</div>
+                <div className="mt-1 font-extrabold text-white">{x.value}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-4 h-2 w-full rounded-full bg-white/10 overflow-hidden">
+            <div className="h-full w-[62%] bg-emerald-500/60 rounded-full" />
+          </div>
+          <div className="mt-2 text-[11px] text-stone-300">Weekly goal: 62%</div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 
 

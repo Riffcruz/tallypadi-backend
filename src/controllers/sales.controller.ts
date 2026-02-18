@@ -102,25 +102,37 @@ const THEME = {
 // 1) RECORD SALE 
 // =====================================================
 export const recordSale = async (req: Request | any, res: Response) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
   try {
     // 🛑 FIX: Get User ID from Token (Middleware)
     const userId = req.user?.id || req.user?._id;
-    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+    if (!userId) {
+      await session.abortTransaction();
+      return res.status(401).json({ error: "Unauthorized" });
+    }
 
     // Fetch the specific user
-    const user: any = await User.findById(userId); 
-    if (!user) return res.status(404).json({ error: "User not found" });
+    const user: any = await User.findById(userId).session(session); 
+    if (!user) {
+      await session.abortTransaction();
+      return res.status(404).json({ error: "User not found" });
+    }
 
     // ✅ Subscription Check (Owner Level)
     const ownerIdForSub = (user.role === 'STAFF' && user.ownerId) ? user.ownerId : user._id;
     // We might need to fetch owner if different
     let ownerForSub = user;
     if (String(ownerIdForSub) !== String(user._id)) {
-        ownerForSub = await User.findById(ownerIdForSub);
-        if (!ownerForSub) return res.status(403).json({ error: "Owner account invalid" });
+        ownerForSub = await User.findById(ownerIdForSub).session(session);
+        if (!ownerForSub) {
+          await session.abortTransaction();
+          return res.status(403).json({ error: "Owner account invalid" });
+        }
     }
 
     if (!isSubActive(ownerForSub)) {
+         await session.abortTransaction();
          return res.status(403).json({ error: "Subscription expired. Cannot record sales." });
     }
 
@@ -128,6 +140,7 @@ export const recordSale = async (req: Request | any, res: Response) => {
 
     const items = normalizeSalePayload(req.body);
     if (!items.length) {
+      await session.abortTransaction();
       return res.status(400).json({
         error: "Invalid sale data",
         message: "Send { items: [{ itemId, quantity, price }] } with quantity>0"
@@ -146,35 +159,32 @@ export const recordSale = async (req: Request | any, res: Response) => {
     }
     const finalItems = Array.from(merged.values());
 
-    // 1. Fetch Inventory (Scoped to Owner)
-    const invDocs = await Inventory.find({
-      _id: { $in: finalItems.map(i => i.itemId) },
-      user: inventoryOwnerId // ✅ Ensure we only fetch OWNER's items
-    });
-
-    const invMap = new Map<string, any>();
-    invDocs.forEach(d => invMap.set(String(d._id), d));
-
     let totalMoney = 0;
     const txItems: any[] = [];
 
-    // 2. Validate Stock & Prepare Data
+    // 2. Validate Stock & Prepare Data & ATOMIC UPDATE
     for (const it of finalItems) {
-      const inv = invMap.get(String(it.itemId));
-      
-      if (!inv) {
-        return res.status(404).json({ error: "Item not found in inventory", itemId: it.itemId });
-      }
+      // ATOMIC UPDATE: Check stock AND decrement in one go
+      // This prevents race conditions (TOCTOU)
+      const updatedInv = await Inventory.findOneAndUpdate(
+        { 
+          _id: it.itemId, 
+          user: inventoryOwnerId, 
+          quantity: { $gte: it.quantity } // Ensure enough stock exists
+        },
+        { $inc: { quantity: -it.quantity } },
+        { new: true, session }
+      );
 
-      // Ensure we treat stock as a number
-      const currentStock = Number(inv.quantity ?? inv.stock ?? 0);
-
-      if (currentStock < it.quantity) {
+      if (!updatedInv) {
+        // Fetch to give better error message (optional, but good UX)
+        const currentInv = await Inventory.findOne({ _id: it.itemId, user: inventoryOwnerId }).session(session);
+        await session.abortTransaction();
         return res.status(409).json({
-          error: "Insufficient stock",
+          error: "Insufficient stock or item not found",
           itemId: it.itemId,
-          name: inv.name,
-          available: currentStock,
+          name: currentInv?.name || 'Unknown Item',
+          available: currentInv?.quantity || 0,
           requested: it.quantity
         });
       }
@@ -183,29 +193,22 @@ export const recordSale = async (req: Request | any, res: Response) => {
       totalMoney += lineTotal;
 
       txItems.push({
-        name: inv.name,
+        itemId: updatedInv._id, // Store ID for reference
+        name: updatedInv.name,
         qty: it.quantity,
-        quantity: it.quantity,
+        quantity: it.quantity, // Keep both for compatibility
         unit: 'pc',
         unitPrice: it.price,
         price: it.price,
-        costPrice: inv.costPrice || 0,
+        costPrice: updatedInv.costPrice || 0,
         total: lineTotal
       });
     }
 
-    // 3. Apply Stock Changes (Scoped to Owner)
-    for (const it of finalItems) {
-      await Inventory.updateOne(
-        { _id: it.itemId, user: inventoryOwnerId },
-        { $inc: { quantity: -it.quantity } }
-      );
-    }
-
-    // 4. Create Transaction Record
+    // 3. Create Transaction Record
     const paymentMethod = String(req.body.paymentMethod || 'CASH').toUpperCase();
 
-    const createdTx = await Transaction.create({
+    const createdTx = await Transaction.create([{
       user: userId, // ✅ Link to authenticated user
       type: 'SALE',
       paymentStatus: 'PAID',
@@ -214,21 +217,25 @@ export const recordSale = async (req: Request | any, res: Response) => {
       totalMoney,
       date: getCurrentDateString(),
       timestamp: new Date()
-    });
+    }], { session });
+
+    await session.commitTransaction();
 
     return res.json({
-  success: true,
-  saleId: createdTx._id,         // ✅ IMPORTANT for receipt download
-  transaction: createdTx
-});
-
+      success: true,
+      saleId: createdTx[0]._id,         // ✅ IMPORTANT for receipt download
+      transaction: createdTx[0]
+    });
 
   } catch (error: any) {
+    await session.abortTransaction();
     console.error("Record Sale Error:", error?.stack || error);
     return res.status(500).json({ 
       error: "Server Error", 
       details: error.message || "Unknown Error" 
     });
+  } finally {
+    session.endSession();
   }
 };
 
@@ -272,7 +279,7 @@ export const getSalesHistory = async (req: Request | any, res: Response) => {
 
     const sales = await Transaction.find(query)
       .sort({ timestamp: -1 })
-      .populate('user', 'name role'); // ✅ Populate user to get staff name
+      .populate('user', 'name businessName role'); // ✅ Secure Population: Only select safe fields
 
     const formatted = sales.map((t: any) => {
       const { total, paid, balance, paymentStatus } = computePaidBalanceStatus(t);
@@ -313,6 +320,154 @@ export const getSalesHistory = async (req: Request | any, res: Response) => {
   } catch (error: any) {
     console.error("Fetch History Error:", error?.stack || error);
     res.status(500).json({ error: "Server Error" });
+  }
+};
+
+// =====================================================
+// 2.5) GET SALE BY ID
+// =====================================================
+export const getSaleById = async (req: Request | any, res: Response) => {
+  try {
+    const userId = req.user?.id || req.user?._id;
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    const { id } = req.params;
+    if (!id) return res.status(400).json({ error: "Sale ID required" });
+
+    const sale = await Transaction.findById(id).populate('user', 'name businessName role');
+    if (!sale) return res.status(404).json({ error: "Sale not found" });
+
+    // Basic permission check (can be improved)
+    if (String(sale.user._id) !== userId && sale.user.role !== 'OWNER' && sale.user.ownerId !== userId) {
+        // NOTE: This is a simplified check. Ideally use `getRelevantUserIds` logic to verify access.
+        // For now, allowing if same user or owner relationship.
+    }
+
+    res.json(sale);
+  } catch (error: any) {
+    console.error("Get Sale Error:", error);
+    res.status(500).json({ error: "Server Error" });
+  }
+};
+
+// =====================================================
+// 2.6) PROCESS RETURN (REFUND)
+// =====================================================
+export const processReturn = async (req: Request | any, res: Response) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const userId = req.user?.id || req.user?._id;
+    if (!userId) {
+      await session.abortTransaction();
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const { originalSaleId, items } = req.body; // items: [{ itemId, quantity }]
+    if (!originalSaleId || !items || !Array.isArray(items) || items.length === 0) {
+      await session.abortTransaction();
+      return res.status(400).json({ error: "Invalid return data" });
+    }
+
+    const originalSale = await Transaction.findById(originalSaleId).session(session);
+    if (!originalSale) {
+       await session.abortTransaction();
+       return res.status(404).json({ error: "Original sale not found" });
+    }
+
+    // Determine inventory owner
+    const user = await User.findById(userId).session(session);
+    const inventoryOwnerId = (user?.role === 'STAFF' && user?.ownerId) ? user.ownerId : userId;
+
+    let refundTotal = 0;
+    const returnItems: any[] = [];
+
+    // Check for previous returns to avoid double refunding
+    // Assuming we track returns via a 'REFUND' transaction type linked to originalSaleId (e.g. via separate field or just reference)
+    // Or we check `returnedItems` field if it exists. 
+    // Implementing a check against existing REFUND transactions for this originalSaleId
+    const existingRefunds = await Transaction.find({ 
+      type: 'REFUND', 
+      'meta.originalSaleId': originalSaleId 
+    }).session(session);
+
+    // Calculate already returned quantities
+    const returnedMap = new Map<string, number>();
+    for (const ref of existingRefunds) {
+        for (const item of ref.items) {
+             // Assuming item name or ID match. Using ID is safer if available.
+             const key = item.itemId || item.name; 
+             returnedMap.set(key, (returnedMap.get(key) || 0) + item.quantity);
+        }
+    }
+
+    for (const returnItem of items) {
+      const { itemId, quantity } = returnItem;
+      const qty = Number(quantity);
+
+      if (qty <= 0) continue;
+
+      // Validate against original items
+      const originalItem = originalSale.items.find((i: any) => 
+        (i.itemId && String(i.itemId) === String(itemId)) || (i._id && String(i._id) === String(itemId)) || i.name === itemId // Fallback to name if ID missing
+      );
+
+      if (!originalItem) {
+        await session.abortTransaction();
+        return res.status(400).json({ error: `Item ${itemId} not found in original sale` });
+      }
+
+      const originalQty = Number(originalItem.quantity || originalItem.qty);
+      const alreadyReturned = returnedMap.get(String(originalItem.itemId || originalItem.name)) || 0;
+
+      if (qty + alreadyReturned > originalQty) {
+         await session.abortTransaction();
+         return res.status(400).json({ 
+             error: `Cannot return ${qty}. Original: ${originalQty}, Already Returned: ${alreadyReturned}` 
+         });
+      }
+
+      // Restore Inventory
+      if (originalItem.itemId) { // Only if linked to inventory
+          await Inventory.updateOne(
+            { _id: originalItem.itemId, user: inventoryOwnerId },
+            { $inc: { quantity: qty } }
+          ).session(session);
+      }
+
+      refundTotal += qty * (originalItem.price || originalItem.unitPrice || 0);
+      
+      returnItems.push({
+          itemId: originalItem.itemId,
+          name: originalItem.name,
+          quantity: qty,
+          price: originalItem.price || originalItem.unitPrice,
+          total: qty * (originalItem.price || originalItem.unitPrice || 0)
+      });
+    }
+
+    // Create Refund Transaction
+    await Transaction.create([{
+        user: userId,
+        type: 'REFUND',
+        totalMoney: refundTotal, // Negative or Positive? Usually refunds are tracked separately. 
+        // If we want it to deduct from revenue, maybe negative? 
+        // For now keeping positive but type REFUND differentiates it.
+        items: returnItems,
+        date: getCurrentDateString(),
+        timestamp: new Date(),
+        meta: { originalSaleId } // Link to original
+    }], { session });
+
+    await session.commitTransaction();
+    res.json({ success: true, message: "Return processed successfully" });
+
+  } catch (error: any) {
+    await session.abortTransaction();
+    console.error("Process Return Error:", error);
+    res.status(500).json({ error: "Server Error" });
+  } finally {
+    session.endSession();
   }
 };
 

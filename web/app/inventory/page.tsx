@@ -21,10 +21,14 @@ import {
   FileDown,
   Filter,
   Trash2,
+  ScanBarcode, // Import ScanBarcode
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { getCookie } from '../../utils/cookies';
 import { uploadToR2 } from '../../src/utils/uploadToR2';
+import dynamic from 'next/dynamic';
+
+const BarcodeScanner = dynamic(() => import('../../components/BarcodeScanner'), { ssr: false });
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 
@@ -37,6 +41,7 @@ type InventoryItem = {
   costPrice?: number;
   image?: string;
   category?: string;
+  barcode?: string;
 };
 
 function currencyPrefix(code?: string) {
@@ -69,10 +74,14 @@ export default function InventoryPage() {
   const [newItemPrice, setNewItemPrice] = useState('');
   const [newItemCostPrice, setNewItemCostPrice] = useState('');
   const [newItemCategory, setNewItemCategory] = useState(''); // ✅ New Item Category
+  const [newItemBarcode, setNewItemBarcode] = useState(''); // ✅ New Item Barcode
   const [newItemImage, setNewItemImage] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [showScanner, setShowScanner] = useState(false); // ✅ Scanner visibility
+  const [scannerTarget, setScannerTarget] = useState<'search' | 'add' | 'edit'>('search'); // ✅ Scanner target
+  
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isUploadingImage, setIsLoadingImage] = useState(false); // New state for upload status
 
@@ -88,6 +97,7 @@ export default function InventoryPage() {
   const [editPrice, setEditPrice] = useState<number | string>('');
   const [editCostPrice, setEditCostPrice] = useState<number | string>('');
   const [editCategory, setEditCategory] = useState<string>(''); // ✅ Edit Category
+  const [editBarcode, setEditBarcode] = useState<string>(''); // ✅ Edit Barcode
   const [editImage, setEditImage] = useState<string | null>(null);
 
   // ✅ Bulk Edit State
@@ -162,6 +172,7 @@ export default function InventoryPage() {
         costPrice: Number(x.costPrice ?? 0),
         image: x.image || null,
         category: x.category || '',
+        barcode: x.barcode || '',
       }));
 
       setInventory(normalized.filter((i) => i.id && i.name));
@@ -210,6 +221,17 @@ export default function InventoryPage() {
     return res.filter((item) => String(item.name || '').toLowerCase().includes(q));
   }, [inventory, searchTerm, selectedCategory]);
 
+  const handleScan = (code: string) => {
+    setShowScanner(false);
+    if (scannerTarget === 'search') {
+        setSearchTerm(code);
+    } else if (scannerTarget === 'add') {
+        setNewItemBarcode(code);
+    } else if (scannerTarget === 'edit') {
+        setEditBarcode(code);
+    }
+  };
+
   const showLockedModal = () => {
     const isTrial = user?.subscriptionStatus === 'trial';
     const expiredTrial = isTrial && Date.now() >= trialEndsAtMs;
@@ -248,6 +270,7 @@ export default function InventoryPage() {
       costPrice: parseFloat(newItemCostPrice) || 0,
       image: newItemImage,
       category: newItemCategory,
+      barcode: newItemBarcode,
     };
 
     try {
@@ -269,6 +292,7 @@ export default function InventoryPage() {
         costPrice: Number(x.costPrice ?? 0),
         image: x.image || null,
         category: x.category || '',
+        barcode: x.barcode || '',
       }));
 
       setInventory(normalized.filter((i) => i.id && i.name));
@@ -283,6 +307,7 @@ export default function InventoryPage() {
       setNewItemPrice('');
       setNewItemCostPrice('');
       setNewItemCategory('');
+      setNewItemBarcode('');
       setNewItemImage(null);
       setAddOpen(false);
 
@@ -363,6 +388,7 @@ export default function InventoryPage() {
     setEditCostPrice(item.costPrice || 0);
     setEditImage(item.image || null);
     setEditCategory(item.category || '');
+    setEditBarcode(item.barcode || '');
     setEditOpen(true);
   };
 
@@ -374,6 +400,7 @@ export default function InventoryPage() {
     setEditPrice('');
     setEditCostPrice('');
     setEditCategory('');
+    setEditBarcode('');
     setEditImage(null);
   };
 
@@ -395,6 +422,7 @@ export default function InventoryPage() {
           costPrice: Number(editCostPrice),
           image: editImage,
           category: editCategory,
+          barcode: editBarcode,
         },
         {
           headers: { Authorization: `Bearer ${token}` },
@@ -410,7 +438,8 @@ export default function InventoryPage() {
             price: Number(editPrice), 
             costPrice: Number(editCostPrice), 
             image: editImage || item.image,
-            category: editCategory
+            category: editCategory,
+            barcode: editBarcode,
           } : item
         )
       );
@@ -769,15 +798,27 @@ export default function InventoryPage() {
           {/* Sticky Mobile Search + Buttons */}
           <div className="sticky top-3 z-20">
             <div className="bg-white/85 backdrop-blur-xl border border-slate-200 rounded-3xl p-3 shadow-sm flex items-center gap-2">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-                <input
-                  type="text"
-                  placeholder="Search items…"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-9 pr-3 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-semibold outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500"
-                />
+              <div className="relative flex-1 flex items-center gap-2">
+                 <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+                    <input
+                      type="text"
+                      placeholder="Search items…"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="w-full pl-9 pr-3 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-semibold outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500"
+                    />
+                 </div>
+                 <button
+                    type="button"
+                    onClick={() => {
+                        setScannerTarget('search');
+                        setShowScanner(true);
+                    }}
+                    className="p-3 bg-slate-100 rounded-2xl border border-slate-200 text-slate-600 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+                 >
+                    <ScanBarcode className="w-5 h-5" />
+                 </button>
               </div>
 
               {/* Category Filter */}
@@ -943,6 +984,31 @@ export default function InventoryPage() {
                              <Filter className="w-4 h-4" />
                           </div>
                         </div>
+                      </div>
+                   </div>
+
+                   {/* Barcode Row */}
+                   <div className="space-y-1.5 relative mb-5">
+                      <label className="text-xs font-extrabold text-slate-600 uppercase tracking-wider ml-1">Barcode (Optional)</label>
+                      <div className="relative flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={newItemBarcode}
+                          onChange={(e) => setNewItemBarcode(e.target.value)}
+                          className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 text-base font-bold text-slate-900 placeholder:text-slate-400 transition-all"
+                          placeholder="Scan or type..."
+                          disabled={showLockUI}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                              setScannerTarget('add');
+                              setShowScanner(true);
+                          }}
+                          className="p-4 bg-slate-100 rounded-2xl border border-slate-200 text-slate-600 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+                        >
+                          <ScanBarcode className="w-5 h-5" />
+                        </button>
                       </div>
                    </div>
 
@@ -1553,6 +1619,29 @@ export default function InventoryPage() {
                   </div>
                </div>
 
+               <div className="mb-3 relative">
+                  <label className="block text-xs font-extrabold text-slate-600 mb-1">Barcode (Optional)</label>
+                  <div className="relative flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={editBarcode}
+                      onChange={(e) => setEditBarcode(e.target.value)}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 text-sm font-semibold"
+                      placeholder="e.g. 123456789"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                          setScannerTarget('edit');
+                          setShowScanner(true);
+                      }}
+                      className="p-3 bg-slate-100 rounded-2xl border border-slate-200 text-slate-600 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+                    >
+                      <ScanBarcode className="w-4 h-4" />
+                    </button>
+                  </div>
+               </div>
+
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="block text-xs font-extrabold text-slate-600 mb-1">Stock</label>
@@ -1629,6 +1718,14 @@ export default function InventoryPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Barcode Scanner Overlay */}
+      {showScanner && (
+        <BarcodeScanner
+          onScan={handleScan}
+          onClose={() => setShowScanner(false)}
+        />
       )}
     </div>
   );

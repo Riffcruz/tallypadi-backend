@@ -76,52 +76,60 @@ function openPdfInNewTab(url: string) {
 }
 
 async function presentPdfActions(url: string, fileName: string) {
-  const doDownload = () => {
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = fileName;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-  };
-
-
-
-  const doPreview = () => openPdfInNewTab(url);
-
   const result = await Swal.fire({
     icon: 'success',
-    title: 'Receipt PDF is ready ✅',
-    html: `<p style="margin:0;color:#475569;font-size:13px">What do you want to do?</p>`,
+    title: 'Sale Complete ✅',
+    text: 'Receipt is ready. What would you like to do?',
     showCancelButton: true,
     showDenyButton: true,
-    confirmButtonText: 'Preview',
-    denyButtonText: 'Download',
-    cancelButtonText: 'Both',
+    confirmButtonText: 'Print Now',
+    denyButtonText: 'Preview / Download',
+    cancelButtonText: 'Close (No Receipt)',
     confirmButtonColor: '#0F766E',
-    denyButtonColor: '#111827',
-    cancelButtonColor: '#64748b',
+    denyButtonColor: '#374151',
+    cancelButtonColor: '#94a3b8',
     reverseButtons: true,
-    focusConfirm: false,
+    focusConfirm: true,
   });
 
-  if (result.isConfirmed) doPreview();
-  else if (result.isDenied) doDownload();
-  else {
-    doPreview();
-    doDownload();
+  if (result.isConfirmed) {
+      // Direct Print via hidden iframe
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = '0';
+      iframe.src = url;
+      document.body.appendChild(iframe);
+      
+      iframe.onload = () => {
+          try {
+              iframe.contentWindow?.focus();
+              iframe.contentWindow?.print();
+          } catch (e) {
+              console.error('Print failed', e);
+              openPdfInNewTab(url); // Fallback
+          }
+          // Cleanup
+          setTimeout(() => {
+              try { document.body.removeChild(iframe); } catch {}
+          }, 60000);
+      };
+      
+      Swal.fire({
+        toast: true,
+        icon: 'success',
+        title: 'Printing...',
+        position: 'top-end',
+        showConfirmButton: false,
+        timer: 2000
+      });
+
+  } else if (result.isDenied) {
+      openPdfInNewTab(url);
   }
-
-  Swal.fire({
-    toast: true,
-    icon: 'success',
-    title: 'Done',
-    text: result.isConfirmed ? 'Opened preview.' : result.isDenied ? 'Download started.' : 'Preview + download started.',
-    position: 'top-end',
-    showConfirmButton: false,
-    timer: 2200,
-    timerProgressBar: true,
-  });
 }
 
 

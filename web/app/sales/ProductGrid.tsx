@@ -61,6 +61,39 @@ export default function ProductGrid({ user, onAddToCart, currencyCode }: Product
       });
   }, []);
 
+  useEffect(() => {
+    // USB Scanner Detection
+    let buffer = '';
+    let lastKeyTime = Date.now();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+        // Ignore if user is typing in an input field
+        const target = e.target as HTMLElement;
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
+
+        const currentTime = Date.now();
+        // If time between keys is too long (> 50ms), it's likely manual typing, so reset.
+        if (currentTime - lastKeyTime > 100) {
+            buffer = '';
+        }
+        lastKeyTime = currentTime;
+
+        if (e.key === 'Enter') {
+            if (buffer.length > 2) {
+                e.preventDefault();
+                console.log('USB Scanner Detected:', buffer);
+                handleScan(buffer);
+                buffer = '';
+            }
+        } else if (e.key.length === 1) {
+            buffer += e.key;
+        }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [inventory]); // Re-bind when inventory changes so handleScan has latest data
+
   const handleScan = (code: string) => {
     setShowScanner(false);
     

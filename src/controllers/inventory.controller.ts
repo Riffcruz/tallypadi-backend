@@ -137,12 +137,20 @@ export const addInventoryItem = async (req: Request, res: Response) => {
     const safeCostPrice = validateNumber(body.costPrice);
     let imageUrl: string | undefined | null;
 
-    if (typeof body.image === 'string' && (body.image.startsWith('http://') || body.image.startsWith('https://'))) {
-      imageUrl = body.image; // R2 public URL
-    } else if (typeof body.image === 'string' && body.image.startsWith('data:image/')) {
-      imageUrl = saveImageFromBase64(body.image); // Old base64 behavior
+    // SSRF FIX: Only allow trusted R2 URL or Base64
+    const trustedUrl = process.env.R2_PUBLIC_URL || 'https://cdn.tallypadi.com';
+    
+    if (typeof body.image === 'string') {
+        if (body.image.startsWith('data:image/')) {
+            imageUrl = saveImageFromBase64(body.image);
+        } else if (body.image.startsWith(trustedUrl)) {
+             imageUrl = body.image;
+        } else {
+             // Block arbitrary external URLs
+             imageUrl = null; 
+        }
     } else {
-      imageUrl = null; // Store null/undefined if no valid image data
+      imageUrl = null;
     }
     const safeName = sanitizeString(body.name);
     const safeCategory = sanitizeString(body.category); // Sanitize category
@@ -211,12 +219,20 @@ export const updateInventoryItem = async (req: Request, res: Response) => {
     const safeCostPrice = validateNumber(body.costPrice);
     let imageUrl: string | undefined | null;
 
-    if (typeof body.image === 'string' && (body.image.startsWith('http://') || body.image.startsWith('https://'))) {
-      imageUrl = body.image; // R2 public URL
-    } else if (typeof body.image === 'string' && body.image.startsWith('data:image/')) {
-      imageUrl = saveImageFromBase64(body.image); // Old base64 behavior
+    // SSRF FIX: Only allow trusted R2 URL or Base64
+    const trustedUrl = process.env.R2_PUBLIC_URL || 'https://cdn.tallypadi.com';
+    
+    if (typeof body.image === 'string') {
+        if (body.image.startsWith('data:image/')) {
+            imageUrl = saveImageFromBase64(body.image);
+        } else if (body.image.startsWith(trustedUrl)) {
+             imageUrl = body.image;
+        } else {
+             // Block arbitrary external URLs
+             imageUrl = null; 
+        }
     } else {
-      imageUrl = null; // Store null/undefined if no valid image data
+      imageUrl = null;
     }
 
     const safeCategory = sanitizeString(body.category);

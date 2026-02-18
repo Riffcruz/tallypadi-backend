@@ -14,7 +14,8 @@ import {
   Filter,
   ArrowLeft,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  Menu
 } from 'lucide-react';
 import { getCookie } from '../../../utils/cookies';
 
@@ -44,6 +45,7 @@ export default function ExpensesPage() {
   const [page, setPage] = useState(1);
   const [showModal, setShowModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
   // Form State
   const [newExpense, setNewExpense] = useState({
@@ -182,17 +184,25 @@ export default function ExpensesPage() {
 
   return (
     <div className="flex min-h-screen bg-slate-50 text-slate-900 font-sans">
+      {/* Mobile Overlay */}
+      {isMobileMenuOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 z-40 md:hidden backdrop-blur-sm" onClick={() => setIsMobileMenuOpen(false)} />
+      )}
+
       {/* Sidebar */}
-      <div className="hidden md:block fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-slate-200">
+      <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-slate-200 transform transition-transform duration-300 md:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <Sidebar />
       </div>
 
       <main className="flex-1 md:ml-64 p-4 md:p-8 w-full max-w-full overflow-x-hidden">
         {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
-          <div>
-            <h1 className="text-3xl font-black tracking-tight text-slate-900">Expenses</h1>
-            <p className="text-slate-500 font-medium mt-1">Track your spending and costs</p>
+          <div className="flex items-center gap-3">
+            <button onClick={() => setIsMobileMenuOpen(true)} className="p-2 -ml-2 text-slate-700 md:hidden"><Menu /></button>
+            <div>
+               <h1 className="text-3xl font-black tracking-tight text-slate-900">Expenses</h1>
+               <p className="text-slate-500 font-medium mt-1">Track your spending and costs</p>
+            </div>
           </div>
           
           <button
