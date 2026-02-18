@@ -13,7 +13,7 @@ async function boot() {
     serverSelectionTimeoutMS: 30000,
     connectTimeoutMS: 30000,
     socketTimeoutMS: 60000,
-    maxPoolSize: 20,     // ✅ helps on small VPS
+    maxPoolSize: 100,     // ✅ helps on small VPS
     minPoolSize: 1,
   } as any);
 

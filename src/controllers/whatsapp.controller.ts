@@ -1727,7 +1727,7 @@ Oga Boss Plan: ₦3,000/month (Save significantly with the yearly plan)`;
 
             const newTotal = tx.totalMoney - discount;
 
-            tx.discount = discount;
+            tx.set('discount', discount);
             tx.totalMoney = newTotal;
 
             if (tx.paymentStatus !== 'CREDIT' && tx.paymentStatus !== 'PARTIAL') {

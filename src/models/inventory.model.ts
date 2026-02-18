@@ -9,6 +9,7 @@ export interface IInventoryItem extends Document {
     image?: string;        // <--- Product Image URL
     category?: string;     // <--- Optional Category
     barcode?: string;      // <--- Barcode (UPC/EAN)
+    isDeleted?: boolean;
   }
   
   const inventorySchema = new Schema<IInventoryItem>(

@@ -32,6 +32,7 @@ export interface ITransaction extends Document {
 
   // Financial tracking
   amountPaid: number;  // Cash actually received
+  discount: number;
   balance: number;     // Remaining debt for this specific record
   paymentMethod?: string; // CASH, TRANSFER, POS, OPAY, etc.
   settledAt?: Date | null;
@@ -171,7 +172,7 @@ const transactionSchema = new Schema<ITransaction>(
 // Auto-sync debtor and debtorId so queries never fail
 // ✅ No 'next()' needed if you use async
 transactionSchema.pre('save', async function () {
-  const doc = this as ITransaction;
+  const doc = this as unknown as ITransaction;
   
   if (doc.debtor && !doc.debtorId) {
     doc.debtorId = doc.debtor as Types.ObjectId;
