@@ -217,7 +217,7 @@ export const recordSale = async (req: Request | any, res: Response) => {
       totalMoney,
       date: getCurrentDateString(),
       timestamp: new Date()
-    }], { session });
+    } as any], { session });
 
     await session.commitTransaction();
 
@@ -338,7 +338,14 @@ export const getSaleById = async (req: Request | any, res: Response) => {
     if (!sale) return res.status(404).json({ error: "Sale not found" });
 
     // Basic permission check (can be improved)
-    if (String(sale.user._id) !== userId && sale.user.role !== 'OWNER' && sale.user.ownerId !== userId) {
+    if (
+      typeof sale.user === 'object' &&
+      'role' in sale.user &&
+      'ownerId' in sale.user &&
+      String(sale.user._id) !== userId &&
+      sale.user.role !== 'OWNER' &&
+      sale.user.ownerId !== userId
+    ) {
         // NOTE: This is a simplified check. Ideally use `getRelevantUserIds` logic to verify access.
         // For now, allowing if same user or owner relationship.
     }
@@ -396,8 +403,8 @@ export const processReturn = async (req: Request | any, res: Response) => {
     for (const ref of existingRefunds) {
         for (const item of ref.items) {
              // Assuming item name or ID match. Using ID is safer if available.
-             const key = item.itemId || item.name; 
-             returnedMap.set(key, (returnedMap.get(key) || 0) + item.quantity);
+             const key = item.itemId ? String(item.itemId) : String(item.name); 
+             returnedMap.set(key, (returnedMap.get(key) || 0) + (item.qty ?? 0));
         }
     }
 
@@ -417,7 +424,7 @@ export const processReturn = async (req: Request | any, res: Response) => {
         return res.status(400).json({ error: `Item ${itemId} not found in original sale` });
       }
 
-      const originalQty = Number(originalItem.quantity || originalItem.qty);
+      const originalQty = Number(originalItem.qty);
       const alreadyReturned = returnedMap.get(String(originalItem.itemId || originalItem.name)) || 0;
 
       if (qty + alreadyReturned > originalQty) {
@@ -435,15 +442,18 @@ export const processReturn = async (req: Request | any, res: Response) => {
           ).session(session);
       }
 
-      refundTotal += qty * (originalItem.price || originalItem.unitPrice || 0);
+      refundTotal += qty * (originalItem.unitPrice || 0);
       
       returnItems.push({
           itemId: originalItem.itemId,
           name: originalItem.name,
+          qty: qty,
           quantity: qty,
-          price: originalItem.price || originalItem.unitPrice,
-          total: qty * (originalItem.price || originalItem.unitPrice || 0)
-      });
+          unit: originalItem.unit || 'pc',
+          unitPrice: originalItem.unitPrice,
+          price: originalItem.unitPrice,
+          total: qty * (originalItem.unitPrice || 0)
+      } as any);
     }
 
     // Create Refund Transaction
@@ -457,7 +467,7 @@ export const processReturn = async (req: Request | any, res: Response) => {
         date: getCurrentDateString(),
         timestamp: new Date(),
         meta: { originalSaleId } // Link to original
-    }], { session });
+    } as any], { session });
 
     await session.commitTransaction();
     res.json({ success: true, message: "Return processed successfully" });
