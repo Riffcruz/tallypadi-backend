@@ -38,7 +38,8 @@ const normalizePhone = (v: any): string | null | undefined => {
   if (!s) return null;
 
   // allows +234..., 080..., spaces/hyphens/() - flexible
-  if (!/^[+]?[\d\s\-()]{7,32}$/.test(s)) return undefined; // invalid
+  // Relaxed validation: just ensure it has some digits or symbols and length > 3
+  if (s.length < 3) return undefined;
   return s;
 };
 

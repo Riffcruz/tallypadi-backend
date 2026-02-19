@@ -156,8 +156,9 @@ export default function OrdersPage() {
         showConfirmButton: false,
         timer: 2000
       });
-    } catch (err) {
-      Swal.fire('Error', 'Failed to save order.', 'error');
+    } catch (err: any) {
+      const msg = err.response?.data?.error || err.message || 'Failed to save order.';
+      Swal.fire('Error', msg, 'error');
     } finally {
       setSubmitting(false);
     }
