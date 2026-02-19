@@ -57,7 +57,7 @@ export const bulkQueue = new Queue('outbound-bulk', {
 export const messageQueue = new Queue('incoming-messages', {
   connection,
   defaultJobOptions: {
-    attempts: 1,
+    attempts: 10,
     backoff: { type: 'exponential', delay: 5000 },
     removeOnComplete: true,
     removeOnFail: 500,

@@ -150,7 +150,7 @@ export const replyWorker = new Worker(
   },
   {
     connection, // ✅ Redis connection
-    concurrency: 20,
+    concurrency: 50,
     // lockDuration: 60_000,
   }
 );
@@ -185,7 +185,7 @@ export const bulkWorker = new Worker(
   {
     connection, // ✅ Redis connection
     // limiter: { max: 5, duration: 1000 },
-    concurrency: 5,
+    concurrency:50,
   }
 );
 
@@ -214,7 +214,7 @@ export const messageWorker = new Worker(
   },
   {
     connection, // ✅ Redis connection
-    concurrency: 20, // High concurrency
+    concurrency: 50, // High concurrency
   }
 );
 
@@ -240,7 +240,7 @@ export const notificationWorker = new Worker(
   },
   {
     connection,
-    concurrency: 5, // Lower concurrency for push to avoid rate limits
+    concurrency: 50, // Lower concurrency for push to avoid rate limits
   }
 );
 
