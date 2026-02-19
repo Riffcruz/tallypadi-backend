@@ -279,7 +279,7 @@ export default function InvoicesPage() {
                              {/* Actions */}
                              <div className="flex items-center gap-1">
                                  <a 
-                                    href={`${API_URL}/invoices/${inv._id}/pdf`}
+                                    href={`${API_URL}/invoices/${inv._id}/pdf?token=${getCookie('tallyToken')}`}
                                     target="_blank" 
                                     rel="noreferrer"
                                     className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg hover:text-gray-900 transition-colors"

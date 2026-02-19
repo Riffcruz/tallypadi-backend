@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { authRequired } from '../middleware/authRequired';
 import {
   createInvoice,
   getInvoices,
@@ -9,6 +10,8 @@ import {
 } from '../controllers/invoice.controller';
 
 const router = Router();
+
+router.use(authRequired);
 
 // /api/invoices
 router.get('/', getInvoices);
