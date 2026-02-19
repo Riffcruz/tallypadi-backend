@@ -18,11 +18,7 @@ const COUNTRY_CURRENCY_CODE: Record<string, string> = {
   AU: 'AUD', JP: 'JPY', AE: 'AED', RW: 'RWF', TZ: 'TZS', UG: 'UGX',
 };
 
-// POS Constants
-const POS_WIDTH = 227; // ~80mm
-const POS_MARGIN = 10;
-const CONTENT_WIDTH = POS_WIDTH - (POS_MARGIN * 2);
-
+// WhatsApp-inspired color palette
 const THEME = {
   primary: '#25D366',      // WhatsApp green
   primaryLight: '#DCF8C6', // WhatsApp light green (message bubble)
@@ -70,6 +66,25 @@ function makeReceiptNo(saleId: string, when: Date, offsetMinutes: number) {
   return `TP-${y}${m}${d}-${tail}`;
 }
 
+// ✅ Wrap long IDs into multiple lines
+function wrapIdLines(id: string, lineLen = 30) {
+  const clean = String(id || '').trim();
+  if (!clean) return '';
+  const parts = clean.match(new RegExp(`.{1,${lineLen}}`, 'g'));
+  return parts ? parts.join('\n') : clean;
+}
+
+// ✅ Fit text inside width by reducing font size
+function fitTextWidth(doc: PdfDoc, text: string, maxWidth: number, maxSize: number = 12, minSize: number = 8) {
+  let size = maxSize;
+  doc.fontSize(size);
+  while (size > minSize && doc.widthOfString(text) > maxWidth) {
+    size -= 1;
+    doc.fontSize(size);
+  }
+  return size;
+}
+
 // ✅ Register fonts
 function registerFonts(doc: PdfDoc) {
   const candidates = [
@@ -112,7 +127,121 @@ function registerFonts(doc: PdfDoc) {
   return { regFont, boldFont, hasNoto };
 }
 
-// ✅ Shared render function (POS Style UI)
+// ✅ Calculate optimal column widths for items table
+function calculateColumnWidths(availableWidth: number) {
+  return {
+    qty: 50,          // Fixed width for quantity
+    price: 85,        // Fixed width for price
+    total: 95,        // Fixed width for total
+    item: availableWidth - 50 - 85 - 95 - 15, // Remaining width for item name
+  };
+}
+
+// ✅ Draw modern table header
+function drawTableHeader(doc: PdfDoc, x: number, y: number, colWidths: any, regFont: string) {
+  doc.save();
+  
+  // Header background - WhatsApp light gray
+  doc.rect(x, y, colWidths.qty + colWidths.item + colWidths.price + colWidths.total, 28)
+    .fill(THEME.bgHeader);
+  
+  // Header text
+  doc.font(regFont).fontSize(9).fillColor(THEME.textLight);
+  
+  // QTY
+  doc.text('QTY', x + 10, y + 9, { width: colWidths.qty - 20, align: 'left' });
+  
+  // ITEM
+  doc.text('ITEM', x + colWidths.qty + 10, y + 9, { width: colWidths.item - 20, align: 'left' });
+  
+  // PRICE
+  doc.text('PRICE', x + colWidths.qty + colWidths.item + 10, y + 9, { 
+    width: colWidths.price - 20, 
+    align: 'right' 
+  });
+  
+  // TOTAL
+  doc.text('TOTAL', x + colWidths.qty + colWidths.item + colWidths.price + 10, y + 9, { 
+    width: colWidths.total - 20, 
+    align: 'right' 
+  });
+  
+  // Bottom border
+  doc.strokeColor(THEME.border).lineWidth(1);
+  doc.moveTo(x, y + 28).lineTo(x + colWidths.qty + colWidths.item + colWidths.price + colWidths.total, y + 28).stroke();
+  
+  doc.restore();
+  return y + 28;
+}
+
+// ✅ Draw table row
+function drawTableRow(
+  doc: PdfDoc, 
+  x: number, 
+  y: number, 
+  colWidths: any, 
+  item: any, 
+  formatMoney: (n: any) => string,
+  regFont: string,
+  boldFont: string
+): number {
+  const qty = Number(item.qty ?? item.quantity ?? 0);
+  const name = String(item.name || 'Item');
+  const unitPrice = Number(item.unitPrice ?? item.price ?? 0);
+  const lineTotal = Number(item.total ?? qty * unitPrice);
+  
+  // Calculate row height based on item name wrapping
+  doc.font(regFont).fontSize(10);
+  const nameHeight = doc.heightOfString(name, {
+    width: colWidths.item - 20,
+    ellipsis: true
+  });
+  const rowHeight = Math.max(24, nameHeight + 8);
+  
+  // Draw row background
+  doc.save();
+  doc.fillColor('#FFFFFF');
+  doc.rect(x, y, colWidths.qty + colWidths.item + colWidths.price + colWidths.total, rowHeight).fill();
+  doc.restore();
+  
+  // Draw item name with wrapping
+  doc.font(regFont).fontSize(10).fillColor(THEME.text);
+  doc.text(name, x + colWidths.qty + 10, y + 6, {
+    width: colWidths.item - 20,
+    ellipsis: true,
+    lineGap: 2
+  });
+  
+  // Draw quantity
+  doc.text(qty.toString(), x + 10, y + 6, {
+    width: colWidths.qty - 20,
+    align: 'left'
+  });
+  
+  // Draw price
+  doc.fontSize(9).fillColor(THEME.textLight);
+  doc.text(formatMoney(unitPrice), x + colWidths.qty + colWidths.item + 10, y + 6, {
+    width: colWidths.price - 20,
+    align: 'right'
+  });
+  
+  // Draw total
+  doc.fontSize(10).fillColor(THEME.text);
+  doc.text(formatMoney(lineTotal), x + colWidths.qty + colWidths.item + colWidths.price + 10, y + 6, {
+    width: colWidths.total - 20,
+    align: 'right'
+  });
+  
+  // Bottom border
+  doc.save();
+  doc.strokeColor(THEME.border).lineWidth(0.5);
+  doc.moveTo(x, y + rowHeight).lineTo(x + colWidths.qty + colWidths.item + colWidths.price + colWidths.total, y + rowHeight).stroke();
+  doc.restore();
+  
+  return rowHeight;
+}
+
+// ✅ Shared render function (Invoice Style UI)
 function renderReceiptPdf(doc: PdfDoc, payload: {
   saleId: string;
   receiptNo: string;
@@ -124,8 +253,9 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
   regFont: string;
   boldFont: string;
   tx: any;
-}, isDryRun: boolean = false): number {
+}) {
   const {
+    saleId,
     receiptNo,
     businessName,
     receiptDate,
@@ -146,133 +276,168 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
       maximumFractionDigits: 0,
     }).format(Number(n || 0));
 
-  const margin = POS_MARGIN;
-  let y = margin; // Start at top
+  // --- Theme ---
+  const THEME_INVOICE = {
+    primary: '#0F766E', // Teal
+    accent: '#14B8A6',
+    dark: '#1E293B',
+    text: '#334155',
+    muted: '#64748B',
+    border: '#E2E8F0',
+    bgLight: '#F8FAFC',
+    bgHeader: '#F1F5F9',
+    white: '#FFFFFF',
+  };
+
+  // --- Page Setup ---
+  doc.addPage();
+  const pageW = doc.page.width;
+  const pageH = doc.page.height;
+  const margin = 40;
+  const contentW = pageW - margin * 2;
 
   // --- HEADER ---
-  // Business Name
-  doc.font(boldFont).fontSize(14);
-  if (!isDryRun) doc.text(businessName.toUpperCase(), margin, y, { width: CONTENT_WIDTH, align: 'center' });
-  y += doc.heightOfString(businessName.toUpperCase(), { width: CONTENT_WIDTH }) + 4;
-
-  // Title
-  doc.font(regFont).fontSize(10);
-  if (!isDryRun) doc.text('RECEIPT', margin, y, { width: CONTENT_WIDTH, align: 'center' });
-  y += 14;
-
-  // Meta
-  doc.font(regFont).fontSize(9);
+  const headerTop = 40;
   
-  if (!isDryRun) doc.text('Date:', margin, y);
-  if (!isDryRun) doc.text(receiptDate, margin + 30, y, { align: 'left' });
-  if (!isDryRun) doc.text(receiptNo, margin, y, { width: CONTENT_WIDTH, align: 'right' });
-  y += 14;
+  // Soft header background strip
+  doc.save();
+  doc.rect(0, 0, pageW, 140).fill(THEME_INVOICE.bgHeader);
+  doc.restore();
 
+  // Business name + title
+  doc.fillColor(THEME_INVOICE.dark).font(boldFont).fontSize(22).text(businessName.toUpperCase(), margin, headerTop);
+  doc.fillColor(THEME_INVOICE.text).font(regFont).fontSize(11).text('RECEIPT', margin, headerTop + 28);
+  doc.fillColor(THEME_INVOICE.muted).font(regFont).fontSize(9).text('Payment Confirmation', margin, headerTop + 44);
+
+  // Logo / badge (right)
+  const logoBox = { w: 62, h: 62, x: pageW - margin - 62, y: headerTop - 2 };
+  doc.roundedRect(logoBox.x, logoBox.y, logoBox.w, logoBox.h, 10).fill(THEME_INVOICE.primary);
+  doc.fillColor(THEME_INVOICE.white).font(boldFont).fontSize(16).text('TP', logoBox.x, logoBox.y + 20, {
+    width: logoBox.w,
+    align: 'center',
+  });
+
+  // Meta card
+  const cardY = 120;
+  const cardH = 74;
+  doc.roundedRect(margin, cardY, contentW, cardH, 12).lineWidth(1).strokeColor(THEME_INVOICE.border).fill(THEME_INVOICE.white);
+
+  // Left: Customer Name
+  const leftX = margin + 14;
+  doc.fillColor(THEME_INVOICE.muted).font(boldFont).fontSize(9).text('CUSTOMER', leftX, cardY + 12);
   const custName = tx.customerName || 'Walk-in Customer';
-  if (!isDryRun) doc.text('Customer:', margin, y);
-  if (!isDryRun) doc.font(boldFont).text(custName, margin + 45, y, { width: CONTENT_WIDTH - 45 });
-  
-  // Measure customer name height in case it wraps
-  doc.font(boldFont).fontSize(9);
-  y += doc.heightOfString(custName, { width: CONTENT_WIDTH - 45 }) + 4;
+  doc.fillColor(THEME_INVOICE.dark).font(boldFont).fontSize(12).text(custName, leftX, cardY + 28, {
+    width: contentW * 0.55,
+  });
 
-  // Divider
-  if (!isDryRun) {
-    doc.moveTo(margin, y).lineTo(POS_WIDTH - margin, y).strokeColor(THEME.border).stroke();
-  }
-  y += 8;
+  // Right: Date & Receipt #
+  const rightX = margin + contentW * 0.62;
+  doc.fillColor(THEME_INVOICE.muted).font(boldFont).fontSize(9).text('DATE PAID', rightX, cardY + 12);
+  doc.fillColor(THEME_INVOICE.dark).font(regFont).fontSize(11).text(receiptDate, rightX, cardY + 28);
 
-  // --- TABLE HEADER ---
+  doc.fillColor(THEME_INVOICE.muted).font(boldFont).fontSize(9).text('RECEIPT NO', rightX, cardY + 48);
+  doc.fontSize(11);
+  const pillW = Math.min(200, Math.max(120, doc.widthOfString(receiptNo) + 22));
+  const pillX = pageW - margin - pillW;
+  const pillY = cardY + 44;
+
+  doc.roundedRect(pillX, pillY, pillW, 26, 13).fill(THEME_INVOICE.primary);
+  doc.fillColor(THEME_INVOICE.white).font(boldFont).fontSize(11).text(receiptNo, pillX, pillY + 7, { width: pillW, align: 'center' });
+
+  // --- TABLE ---
+  let y = 230;
+  const tableHeaderHeight = 32;
+  const cellPadX = 8;
+  const cellPadY = 7;
+
+  // Columns
   const colW = {
-    qty: 25,
-    total: 50,
-    desc: CONTENT_WIDTH - 75
+    desc: Math.floor(contentW * 0.52),
+    qty: Math.floor(contentW * 0.12),
+    unit: Math.floor(contentW * 0.18),
+    total: contentW - (Math.floor(contentW * 0.52) + Math.floor(contentW * 0.12) + Math.floor(contentW * 0.18)),
   };
   const colX = {
-    qty: margin,
-    desc: margin + 25,
-    total: margin + 25 + colW.desc
+    desc: margin,
+    qty: margin + colW.desc,
+    unit: margin + colW.desc + colW.qty,
+    total: margin + colW.desc + colW.qty + colW.unit,
   };
 
-  doc.font(boldFont).fontSize(9);
-  if (!isDryRun) {
-    doc.text('Qty', colX.qty, y, { width: colW.qty, align: 'left' });
-    doc.text('Item', colX.desc, y, { width: colW.desc, align: 'left' });
-    doc.text('Total', colX.total, y, { width: colW.total, align: 'right' });
-  }
-  y += 14;
+  // Header Row
+  doc.roundedRect(margin, y, contentW, tableHeaderHeight, 10).fill(THEME_INVOICE.primary);
+  doc.fillColor(THEME_INVOICE.white).font(boldFont).fontSize(10);
+  doc.text('Description', colX.desc + cellPadX, y + 10, { width: colW.desc - cellPadX * 2, align: 'left' });
+  doc.text('Qty', colX.qty + cellPadX, y + 10, { width: colW.qty - cellPadX * 2, align: 'center' });
+  doc.text('Price', colX.unit + cellPadX, y + 10, { width: colW.unit - cellPadX * 2, align: 'right' });
+  doc.text('Total', colX.total + cellPadX, y + 10, { width: colW.total - cellPadX * 2, align: 'right' });
 
-  if (!isDryRun) {
-    doc.moveTo(margin, y).lineTo(POS_WIDTH - margin, y).strokeColor(THEME.border).stroke();
-  }
-  y += 6;
+  y += tableHeaderHeight + 2;
 
-  // --- ITEMS ---
+  // Items
   const items = Array.isArray(tx.items) ? tx.items : [];
   let computedTotal = 0;
 
-  doc.font(regFont).fontSize(9);
-
-  items.forEach((item: any) => {
+  items.forEach((item: any, idx: number) => {
     const qty = Number(item.qty ?? item.quantity ?? 0);
     const unitPrice = Number(item.unitPrice ?? item.price ?? 0);
     const lineTotal = Number(item.total ?? qty * unitPrice);
     computedTotal += lineTotal;
 
     const desc = String(item.name || '-');
-    const descH = doc.heightOfString(desc, { width: colW.desc });
-    const rowH = Math.max(14, descH);
+    
+    // Auto height
+    const descH = doc.heightOfString(desc, { width: colW.desc - cellPadX * 2 });
+    const rowH = Math.max(28, Math.ceil(descH + cellPadY * 2));
 
-    if (!isDryRun) {
-      doc.text(String(qty), colX.qty, y, { width: colW.qty, align: 'center' });
-      doc.text(desc, colX.desc, y, { width: colW.desc, align: 'left' });
-      doc.text(formatMoney(lineTotal), colX.total, y, { width: colW.total, align: 'right' });
+    // Pagination check
+    if (y + rowH > pageH - 100) {
+        doc.addPage();
+        y = margin;
     }
 
-    y += rowH + 6;
+    // Zebra
+    if (idx % 2 === 1) doc.rect(margin, y, contentW, rowH).fill(THEME_INVOICE.bgLight);
+    else doc.rect(margin, y, contentW, rowH).fill(THEME_INVOICE.white);
+
+    doc.lineWidth(0.7).strokeColor(THEME_INVOICE.border).rect(margin, y, contentW, rowH).stroke();
+
+    // Cell Text
+    doc.fillColor(THEME_INVOICE.dark).font(regFont).fontSize(10);
+    doc.text(desc, colX.desc + cellPadX, y + cellPadY, { width: colW.desc - cellPadX * 2 });
+    doc.text(String(qty), colX.qty + cellPadX, y + cellPadY, { width: colW.qty - cellPadX * 2, align: 'center' });
+    doc.text(formatMoney(unitPrice), colX.unit + cellPadX, y + cellPadY, { width: colW.unit - cellPadX * 2, align: 'right' });
+    doc.text(formatMoney(lineTotal), colX.total + cellPadX, y + cellPadY, { width: colW.total - cellPadX * 2, align: 'right' });
+
+    y += rowH;
   });
 
-  if (!isDryRun) {
-    doc.moveTo(margin, y).lineTo(POS_WIDTH - margin, y).strokeColor(THEME.border).stroke();
-  }
-  y += 8;
-
   // --- TOTALS ---
+  y += 16;
+  if (y + 90 > pageH - margin) { doc.addPage(); y = margin; }
+
+  const totalsBoxH = 62;
+  const totalsBoxW = Math.min(260, contentW);
+  const totalsBoxX = pageW - margin - totalsBoxW;
+
+  doc.roundedRect(totalsBoxX, y, totalsBoxW, totalsBoxH, 12).fill(THEME_INVOICE.bgHeader);
+  doc.rect(totalsBoxX, y, 5, totalsBoxH).fill(THEME_INVOICE.accent);
+
   const totalMoney = Number(tx.totalMoney ?? computedTotal ?? 0);
-  
-  doc.font(boldFont).fontSize(12);
-  if (!isDryRun) {
-    doc.text('TOTAL PAID:', margin, y);
-    doc.text(formatMoney(totalMoney), margin, y, { width: CONTENT_WIDTH, align: 'right' });
-  }
-  y += 20;
+
+  doc.fillColor(THEME_INVOICE.muted).font(boldFont).fontSize(9).text('TOTAL PAID', totalsBoxX + 16, y + 12);
+  doc.fillColor(THEME_INVOICE.dark).font(boldFont).fontSize(18).text(formatMoney(totalMoney), totalsBoxX + 16, y + 28, {
+    width: totalsBoxW - 32,
+    align: 'right',
+  });
 
   // --- FOOTER ---
-  y += 15;
-  doc.font(regFont).fontSize(8).fillColor(THEME.muted);
-  if (!isDryRun) doc.text('Thank you for your business.', margin, y, { width: CONTENT_WIDTH, align: 'center' });
-  y += 12;
-  if (!isDryRun) doc.text('Generated by TallyPadi.com', margin, y, { width: CONTENT_WIDTH, align: 'center' });
-  y += 10;
-
-  return y + margin; // Total Height
+  const footerY = pageH - 60;
+  doc.fontSize(9).fillColor(THEME_INVOICE.muted).text('Thank you for your business.', 0, footerY, { align: 'center' });
+  doc.fontSize(8).text('Generated by TallyPadi.com', 0, footerY + 15, { align: 'center' });
 }
 
-// ✅ Helper to Calculate Height
-const calculateReceiptHeight = (payload: any): number => {
-  const doc = new PDFDocument({ size: [POS_WIDTH, 2000], margin: POS_MARGIN });
-  const { regFont, boldFont, hasNoto } = registerFonts(doc as any);
-  
-  payload.hasSymbolFont = hasNoto;
-  payload.regFont = regFont;
-  payload.boldFont = boldFont;
-
-  const height = renderReceiptPdf(doc as any, payload, true);
-  doc.end(); // Discard dummy
-  return height;
-};
-
-// ... (Exports)
+// ... (Exports remain the same)
 export const generateSaleReceiptPdfBuffer = async (userId: string, saleId: string) => {
   const user: any = await User.findById(userId).lean();
   if (!user) throw new Error('User not found');
@@ -297,33 +462,15 @@ export const generateSaleReceiptPdfBuffer = async (userId: string, saleId: strin
   const receiptDate = fmtDDMMYYYY_HHMM(when, offsetMinutes);
   const receiptNo = makeReceiptNo(saleId, when, offsetMinutes);
 
-  const payload = {
-    saleId,
-    receiptNo,
-    businessName,
-    receiptDate,
-    currencyCode,
-    locale,
-    hasSymbolFont: false,
-    regFont: 'Helvetica',
-    boldFont: 'Helvetica-Bold',
-    tx,
-  };
-
-  // 1. Calculate Height
-  const height = calculateReceiptHeight(payload);
-
-  // 2. Generate Real PDF
   const doc = new PDFDocument({
-    size: [POS_WIDTH, height],
-    margins: { top: POS_MARGIN, bottom: POS_MARGIN, left: POS_MARGIN, right: POS_MARGIN },
-    autoFirstPage: true,
+    size: 'A4',
+    margins: { top: 40, bottom: 40, left: 40, right: 40 },
+    autoFirstPage: false,
+    bufferPages: true,
   }) as unknown as PdfDoc;
 
   const { regFont, boldFont, hasNoto } = registerFonts(doc);
-  payload.hasSymbolFont = hasNoto;
-  payload.regFont = regFont;
-  payload.boldFont = boldFont;
+  doc.font(regFont);
 
   const stream = new PassThrough();
   const chunks: Buffer[] = [];
@@ -335,12 +482,24 @@ export const generateSaleReceiptPdfBuffer = async (userId: string, saleId: strin
     stream.on('error', reject);
   });
 
-  renderReceiptPdf(doc, payload, false);
+  renderReceiptPdf(doc, {
+    saleId,
+    receiptNo,
+    businessName,
+    receiptDate,
+    currencyCode,
+    locale,
+    hasSymbolFont: hasNoto,
+    regFont,
+    boldFont,
+    tx,
+  });
 
   doc.end();
 
   const buffer = await done;
   
+  // Create descriptive filename
   const safeShop = (businessName || 'Shop').replace(/[^a-zA-Z0-9]/g, '_').slice(0, 20);
   const safeCust = (tx.customerName || 'Customer').replace(/[^a-zA-Z0-9]/g, '_').slice(0, 20);
   const filename = `Receipt_${safeShop}_${safeCust}_${String(saleId).slice(-6)}.pdf`;
@@ -359,6 +518,7 @@ export const generateSaleReceiptPdf = async (req: Request | any, res: Response) 
     const user: any = await User.findById(userId).lean();
     if (!user) return res.status(404).json({ error: 'User not found' });
 
+    // ✅ Improved Permission Check: Allow Owner to see Staff sales
     const tx: any = await Transaction.findOne({
       _id: saleId,
       type: 'SALE',
@@ -393,40 +553,33 @@ export const generateSaleReceiptPdf = async (req: Request | any, res: Response) 
     const receiptDate = fmtDDMMYYYY_HHMM(when, offsetMinutes);
     const receiptNo = makeReceiptNo(saleId, when, offsetMinutes);
 
-    const payload = {
-        saleId,
-        receiptNo,
-        businessName,
-        receiptDate,
-        currencyCode,
-        locale,
-        hasSymbolFont: false,
-        regFont: 'Helvetica',
-        boldFont: 'Helvetica-Bold',
-        tx,
-    };
-
-    // 1. Calculate Height
-    const height = calculateReceiptHeight(payload);
-
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename=Receipt_${saleId}.pdf`);
 
-    // 2. Generate Real PDF
     const doc = new PDFDocument({
-      size: [POS_WIDTH, height],
-      margins: { top: POS_MARGIN, bottom: POS_MARGIN, left: POS_MARGIN, right: POS_MARGIN },
-      autoFirstPage: true,
+      size: 'A4',
+      margins: { top: 40, bottom: 40, left: 40, right: 40 },
+      autoFirstPage: false,
+      bufferPages: true,
     }) as unknown as PdfDoc;
 
     const { regFont, boldFont, hasNoto } = registerFonts(doc);
-    payload.hasSymbolFont = hasNoto;
-    payload.regFont = regFont;
-    payload.boldFont = boldFont;
+    doc.font(regFont);
 
     doc.pipe(res);
 
-    renderReceiptPdf(doc, payload, false);
+    renderReceiptPdf(doc, {
+      saleId,
+      receiptNo,
+      businessName,
+      receiptDate,
+      currencyCode,
+      locale,
+      hasSymbolFont: hasNoto,
+      regFont,
+      boldFont,
+      tx,
+    });
 
     doc.end();
   } catch (e: any) {
