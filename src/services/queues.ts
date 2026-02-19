@@ -1,30 +1,27 @@
-import { Queue } from 'bullmq';
-import IORedis from 'ioredis';
+import { Queue } from './memory-queue.lib';
 
-// ✅ Export connection so worker/services can reuse same Redis connection
-export const connection = new IORedis(
-  process.env.REDIS_URL || 'redis://127.0.0.1:6379',
-  {
-    maxRetriesPerRequest: null,
-    enableReadyCheck: false,
-  }
-);
+// ✅ MOCK Redis Connection (No-op)
+// We export this just in case other files import 'connection' expecting an object,
+// but in the memory-queue world, we don't use it.
+export const connection = {
+    status: 'ready',
+    on: () => {},
+    quit: async () => {}
+};
 
 // ============================================================
 // QUEUE 1: OUTBOUND (WhatsApp replies / summaries)  ✅ EXPORT
 // ============================================================
 export const notificationQueue = new Queue('daily-summary', {
-  connection,
+  // connection, // No connection needed for memory queue
   defaultJobOptions: {
     attempts: 3,
-    backoff: { type: 'exponential', delay: 5000 },
     removeOnComplete: true,
     removeOnFail: 1000,
   },
 });
 
 // Helper to queue outbound messages
-// keep IDs BullMQ-safe (no ":" etc)
 function safeJobId(id: string) {
   return String(id || '')
     .replace(/[:\s]/g, '_')   // replace colon + spaces
@@ -50,10 +47,9 @@ export const queueOutboundMessage = async (phoneNumber: string, message: string)
 // QUEUE 2: INBOUND (incoming WhatsApp messages) ✅ EXPORT
 // ============================================================
 export const messageQueue = new Queue('incoming-messages', {
-  connection,
+  // connection,
   defaultJobOptions: {
     attempts: 1000,
-    backoff: { type: 'exponential', delay: 5000 },
     removeOnComplete: true,
     removeOnFail: 500,
   },

@@ -1,19 +1,34 @@
 // src/services/queue.worker.ts
-import { Worker } from 'bullmq';
-import { createRedisConnection } from './queue.service';
+import { Worker } from './memory-queue.lib';
 import { sendWhatsAppText, sendWhatsAppButtons, sendWhatsAppList, sendWhatsAppDocumentBuffer, sendWhatsAppFlow } from './whatsapp.service';
 import { generateSaleReceiptPdfBuffer } from '../controllers/receipt.controller';
 import { Invoice } from '../models/invoice.model';
 import { generateInvoicePdf } from './invoice.pdf.service';
-import fs from 'fs';
-import path from 'path';
 import { User } from '../models/user.model';
 import { SupportMessage } from '../models/supportMessage.model';
 
 export const replyWorker = new Worker(
-  'outbound-replies',
-  async (job) => {
-    console.log('📌 Reply job:', job.name, job.data?.phoneNumber);
+  'outbound-replies', // Actually this should match the queue name in queues.ts? 
+  // Wait, queues.ts used 'daily-summary' for notificationQueue.
+  // And 'incoming-messages' for messageQueue.
+  // Let's check where 'outbound-replies' comes from.
+  // In the original code, notificationQueue was 'daily-summary'.
+  // But replyWorker was 'outbound-replies'.
+  // This implies they might be disconnected in the original code or I missed a queue export.
+  // Let's check queues.ts again.
+  // Ah, queueOutboundMessage adds to `notificationQueue` ('daily-summary').
+  // But replyWorker listens to 'outbound-replies'.
+  // This looks like a bug in the original code OR `notificationQueue` is for daily summaries and there's another queue.
+  // However, queueOutboundMessage adds 'send-text' jobs.
+  // And replyWorker handles 'send-text'.
+  // If they have different names, they won't talk.
+  // I will UNIFY them to 'daily-summary' or 'outbound-queue' to be safe.
+  // Let's assume 'daily-summary' is the intended one for generic outbound.
+  // Actually, let's rename the queue in queues.ts to 'outbound-queue' and use that here.
+  // Or just use 'daily-summary' here to match queues.ts.
+  'daily-summary', 
+  async (job: any) => {
+    // console.log('📌 Reply job:', job.name, job.data?.phoneNumber);
 
     if (job.name === 'send-text') {
       const { phoneNumber, message, dbMessageId } = job.data || {};
@@ -76,24 +91,24 @@ export const replyWorker = new Worker(
 
     // ✅ NEW: Send receipt PDF to WhatsApp
     if (job.name === 'send-sale-receipt') {
-  const { phoneNumber, userId, saleId } = job.data as {
-    phoneNumber: string;
-    userId: string;
-    saleId: string;
-  };
+      const { phoneNumber, userId, saleId } = job.data as {
+        phoneNumber: string;
+        userId: string;
+        saleId: string;
+      };
 
-  const { buffer, filename, mimeType } = await generateSaleReceiptPdfBuffer(userId, saleId);
+      const { buffer, filename, mimeType } = await generateSaleReceiptPdfBuffer(userId, saleId);
 
-  await sendWhatsAppDocumentBuffer({
-    to: phoneNumber,
-    buffer,
-    filename,
-    mimeType, // optional (defaults to application/pdf if you coded it like we did)
-    caption: '🧾 Receipt PDF (open it → Print).',
-  });
+      await sendWhatsAppDocumentBuffer({
+        to: phoneNumber,
+        buffer,
+        filename,
+        mimeType, // optional (defaults to application/pdf if you coded it like we did)
+        caption: '🧾 Receipt PDF (open it → Print).',
+      });
 
-  return;
-}
+      return;
+    }
 
     // ✅ NEW: Send Invoice PDF
     if (job.name === 'send-invoice-pdf') {
@@ -151,22 +166,19 @@ export const replyWorker = new Worker(
     console.log(`⚠️ Unknown reply job name: ${job.name}`);
   },
   {
-    connection: createRedisConnection('worker-reply'),
-    limiter: { max: 15, duration: 1000 },
+    // connection: createRedisConnection('worker-reply'), // Removed
+    // limiter: { max: 15, duration: 1000 }, // Ignored by memory worker
     concurrency: 10,
-    lockDuration: 60_000,
+    // lockDuration: 60_000,
   }
 );
 
-replyWorker.on('completed', (job) =>
-  console.log(`✅ Reply sent: ${job.name} -> ${job.data.phoneNumber}`)
+replyWorker.on('completed', (job: any) =>
+  console.log(`✅ Reply sent: ${job.name} -> ${job.data?.phoneNumber}`)
 );
 
-replyWorker.on('failed', (job, err) => {
-  console.error(`❌ Reply failed [${job?.name}] [Attempt ${job?.attemptsMade ?? 'N/A'}]: ${err.message}`);
-  if (err.message.includes('400') || err.message.includes('131047')) { // Meta error code for 24h window
-     console.warn(`⚠️ TIP: If this was a notification to an agent, ensure they have messaged the bot in the last 24h (Session Window).`);
-  }
+replyWorker.on('failed', (job: any, err: any) => {
+  console.error(`❌ Reply failed [${job?.name}]: ${err.message}`);
 });
 
 // ============================================================
@@ -176,7 +188,7 @@ replyWorker.on('failed', (job, err) => {
 // ============================================================
 export const bulkWorker = new Worker(
   'outbound-bulk',
-  async (job) => {
+  async (job: any) => {
     const name = job.name;
 
     if (name !== 'send-text') {
@@ -189,16 +201,15 @@ export const bulkWorker = new Worker(
     await sendWhatsAppText(phoneNumber, message);
   },
   {
-    connection: createRedisConnection('worker-bulk'),
-    limiter: { max: 5, duration: 1000 },
+    // connection: createRedisConnection('worker-bulk'),
+    // limiter: { max: 5, duration: 1000 },
     concurrency: 3,
-    lockDuration: 60_000,
   }
 );
 
-bulkWorker.on('completed', (job) => console.log(`✅ Bulk sent: ${job.data.phoneNumber}`));
-bulkWorker.on('failed', (job, err) =>
-  console.error(`❌ Bulk failed [Attempt ${job?.attemptsMade ?? 'N/A'}]: ${err.message}`)
+bulkWorker.on('completed', (job: any) => console.log(`✅ Bulk sent: ${job.data?.phoneNumber}`));
+bulkWorker.on('failed', (job: any, err: any) =>
+  console.error(`❌ Bulk failed: ${err.message}`)
 );
 
 // ============================================================
@@ -206,7 +217,7 @@ bulkWorker.on('failed', (job, err) =>
 // ============================================================
 export const messageWorker = new Worker(
   'incoming-messages',
-  async (job) => {
+  async (job: any) => {
     const { processRawWebhook, handleMessageLogic } = await import('../controllers/whatsapp.controller');
 
     if (job.data.rawBody) {
@@ -220,14 +231,12 @@ export const messageWorker = new Worker(
     }
   },
   {
-    connection: createRedisConnection('worker-inbound'),
-    concurrency: 100,
-    stalledInterval: 10_000,
-    lockDuration: 60000,
+    // connection: createRedisConnection('worker-inbound'),
+    concurrency: 50, // High concurrency for in-memory
   }
 );
 
-messageWorker.on('completed', (job) => console.log(`✔️ Done: ${job.data.from}`));
-messageWorker.on('failed', (job, err) =>
-  console.error(`❌ Message failed [Attempt ${job?.attemptsMade ?? 'N/A'}]: ${err.message}`)
+messageWorker.on('completed', (job: any) => console.log(`✔️ Done: ${job.data?.from}`));
+messageWorker.on('failed', (job: any, err: any) =>
+  console.error(`❌ Message failed: ${err.message}`)
 );

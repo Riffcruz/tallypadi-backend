@@ -238,6 +238,33 @@ export async function markWhatsAppMessageRead(messageId: string) {
 }
 
 // ============================================================
+// ✅ SEND: TYPING INDICATOR
+// ============================================================
+export async function sendTypingIndicator(messageId: string) {
+  if (!messageId) return;
+
+  // Payload structure based on "mark as read + typing" pattern or similar
+  const payload = {
+    messaging_product: 'whatsapp',
+    status: 'read',
+    message_id: messageId,
+    typing_indicator: {
+      type: 'text' // This signals "typing..."
+    }
+  };
+
+  try {
+      await axios.post(messagesUrl(), payload, {
+        headers: authHeaders(),
+        timeout: 20_000,
+      });
+  } catch (e) {
+      // Ignore typing errors (non-critical)
+      // console.error('Typing indicator failed', e);
+  }
+}
+
+// ============================================================
 // ✅ OPTIONAL: HEALTH CHECK
 // ============================================================
 export async function whatsappHealthCheck() {

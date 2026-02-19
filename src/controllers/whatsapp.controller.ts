@@ -31,7 +31,7 @@ import {
   queueOutboundFlow, // ✅ NEW: queued flow helper
   queueRegistrationComplete
 } from '../services/queue.service';
-import { sendWhatsAppDocumentBuffer } from '../services/whatsapp.service';
+import { sendWhatsAppDocumentBuffer, sendTypingIndicator, markWhatsAppMessageRead } from '../services/whatsapp.service';
 
 
 import { undoLastSale } from '../services/undo.service';
@@ -790,7 +790,20 @@ export const processRawWebhook = async (body: any) => {
 
   if (!text && !mediaId) return;
 
-  await handleMessageLogic(from, text, messageId, mediaId, isVoiceMessage, profileName);
+  // ✅ Mark Read + Typing Indicator
+  // Show typing while worker is processing (refreshes every 20s)
+  await markWhatsAppMessageRead(messageId);
+  await sendTypingIndicator(messageId);
+
+  const typingInterval = setInterval(() => {
+    sendTypingIndicator(messageId).catch(() => {});
+  }, 20000);
+
+  try {
+    await handleMessageLogic(from, text, messageId, mediaId, isVoiceMessage, profileName);
+  } finally {
+    clearInterval(typingInterval);
+  }
 };
 
 // =====================================================
