@@ -27,11 +27,13 @@ async function boot() {
   // ✅ Graceful Shutdown
   const shutdown = async () => {
     console.log('🛑 Shutting down workers...');
-    await Promise.all([
-      workers.replyWorker.close(),
-      workers.bulkWorker.close(),
-      workers.messageWorker.close(),
-    ]);
+    const closePromises = [];
+    if (workers.replyWorker) closePromises.push(workers.replyWorker.close());
+    if (workers.bulkWorker) closePromises.push(workers.bulkWorker.close());
+    if (workers.messageWorker) closePromises.push(workers.messageWorker.close());
+    if (workers.notificationWorker) closePromises.push(workers.notificationWorker.close());
+    
+    await Promise.all(closePromises);
     await mongoose.disconnect();
     console.log('✅ Shutdown complete');
     process.exit(0);

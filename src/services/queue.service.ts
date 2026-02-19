@@ -29,7 +29,7 @@ export const connection = createRedisConnection('queue-shared');
 export const replyQueue = new Queue('outbound-replies', {
   connection,
   defaultJobOptions: {
-    attempts: 3,
+    attempts: 10,
     backoff: { type: 'exponential', delay: 5000 },
     removeOnComplete: true,
     removeOnFail: 1000,
@@ -43,7 +43,7 @@ export const replyQueue = new Queue('outbound-replies', {
 export const bulkQueue = new Queue('outbound-bulk', {
   connection,
   defaultJobOptions: {
-    attempts: 3,
+    attempts: 10,
     backoff: { type: 'exponential', delay: 5000 },
     removeOnComplete: true,
     removeOnFail: 1000,
@@ -57,10 +57,24 @@ export const bulkQueue = new Queue('outbound-bulk', {
 export const messageQueue = new Queue('incoming-messages', {
   connection,
   defaultJobOptions: {
-    attempts: 1000,
+    attempts: 1,
     backoff: { type: 'exponential', delay: 5000 },
     removeOnComplete: true,
     removeOnFail: 500,
+  },
+});
+
+// ============================================================
+// ✅ NOTIFICATIONS: Push Notifications (queued)
+// Queue name: push-notifications
+// ============================================================
+export const notificationQueue = new Queue('push-notifications', {
+  connection,
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 5000 },
+    removeOnComplete: true,
+    removeOnFail: 1000,
   },
 });
 
@@ -77,6 +91,12 @@ function safeJobId(id: string) {
     .replace(/[^\w.-]/g, '_')      // keep only [a-zA-Z0-9_ . -]
     .slice(0, 240);
 }
+
+// ✅ Notification Helper
+export const queuePushNotification = async (payload: { type: 'SINGLE' | 'GLOBAL'; agentId?: string; title: string; body: string; data?: any }) => {
+  const finalJobId = safeJobId(`push_${payload.type}_${Date.now()}_${Math.random()}`);
+  await notificationQueue.add('send-push', payload, { jobId: finalJobId });
+};
 
 // ✅ Text replies (interactive/fast)
 export const queueOutboundMessage = async (phoneNumber: string, message: string, jobId?: string, meta?: { dbMessageId?: string }, delay: number = 0) => {

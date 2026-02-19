@@ -150,7 +150,7 @@ export const replyWorker = new Worker(
   },
   {
     connection, // ✅ Redis connection
-    concurrency: 10,
+    concurrency: 20,
     // lockDuration: 60_000,
   }
 );
@@ -185,7 +185,7 @@ export const bulkWorker = new Worker(
   {
     connection, // ✅ Redis connection
     // limiter: { max: 5, duration: 1000 },
-    concurrency: 3,
+    concurrency: 5,
   }
 );
 
@@ -214,11 +214,37 @@ export const messageWorker = new Worker(
   },
   {
     connection, // ✅ Redis connection
-    concurrency: 50, // High concurrency
+    concurrency: 20, // High concurrency
   }
 );
 
 messageWorker.on('completed', (job: any) => console.log(`✔️ Done: ${job.data?.from}`));
 messageWorker.on('failed', (job: any, err: any) =>
   console.error(`❌ Message failed: ${err.message}`)
+);
+
+// ============================================================
+// WORKER: NOTIFICATIONS (Push)
+// ============================================================
+export const notificationWorker = new Worker(
+  'push-notifications',
+  async (job: any) => {
+    const { executePushNotification, executeGlobalPushNotification } = await import('./push.service');
+    const { type, agentId, title, body, data } = job.data;
+
+    if (type === 'SINGLE') {
+      await executePushNotification(agentId, { title, body, data });
+    } else if (type === 'GLOBAL') {
+      await executeGlobalPushNotification({ title, body, data });
+    }
+  },
+  {
+    connection,
+    concurrency: 5, // Lower concurrency for push to avoid rate limits
+  }
+);
+
+notificationWorker.on('completed', (job: any) => console.log(`🔔 Push sent: ${job.data?.type}`));
+notificationWorker.on('failed', (job: any, err: any) =>
+  console.error(`❌ Push failed: ${err.message}`)
 );
