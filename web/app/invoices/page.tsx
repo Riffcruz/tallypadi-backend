@@ -127,6 +127,37 @@ export default function InvoicesPage() {
       }
   };
 
+  const handleViewPdf = async (id: string) => {
+    const token = getToken();
+    if (!token) return;
+
+    try {
+        Swal.fire({
+            title: 'Opening PDF...',
+            text: 'Please wait',
+            didOpen: () => Swal.showLoading(),
+            allowOutsideClick: false
+        });
+
+        const res = await axios.get(`${API_URL}/invoices/${id}/pdf`, {
+            headers: { Authorization: `Bearer ${token}` },
+            responseType: 'blob'
+        });
+        
+        const file = new Blob([res.data], { type: 'application/pdf' });
+        const fileURL = URL.createObjectURL(file);
+        
+        Swal.close();
+        window.open(fileURL, '_blank');
+        
+        // Clean up
+        setTimeout(() => URL.revokeObjectURL(fileURL), 60000); 
+    } catch (err) {
+        console.error(err);
+        Swal.fire('Error', 'Failed to load PDF', 'error');
+    }
+  };
+
   const handleStatusUpdate = async (id: string, status: 'PAID' | 'CANCELLED') => {
       const token = getToken();
       if (!token) return;
@@ -278,15 +309,13 @@ export default function InvoicesPage() {
 
                              {/* Actions */}
                              <div className="flex items-center gap-1">
-                                 <a 
-                                    href={`${API_URL}/invoices/${inv._id}/pdf?token=${getCookie('tallyToken')}`}
-                                    target="_blank" 
-                                    rel="noreferrer"
+                                 <button 
+                                    onClick={() => handleViewPdf(inv._id)}
                                     className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg hover:text-gray-900 transition-colors"
                                     title="View PDF"
                                  >
                                      <ExternalLink size={18} />
-                                 </a>
+                                 </button>
 
                                  {inv.status === 'GENERATED' && (
                                      <>

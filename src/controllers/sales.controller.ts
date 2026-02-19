@@ -12,20 +12,33 @@ import fs from 'fs';
 // =====================================================
 export const recordSale = async (req: Request | any, res: Response) => {
   const session = await mongoose.startSession();
-  session.startTransaction();
+  let transactionActive = false;
+
+  try {
+    session.startTransaction();
+    transactionActive = true;
+  } catch (err) {
+    // If running on standalone Mongo, transactions fail. Proceed without one.
+    console.warn("⚠️ Transaction start failed (likely standalone Mongo). Proceeding without transaction.");
+    transactionActive = false;
+  }
+
   try {
     const userId = req.user?.id || req.user?._id;
     if (!userId) {
-      await session.abortTransaction();
+      if (transactionActive) await session.abortTransaction();
       return res.status(401).json({ error: "Unauthorized" });
     }
 
     const items = req.body.items || (Array.isArray(req.body) ? req.body : [req.body]);
     const paymentMethod = req.body.paymentMethod || 'CASH';
 
-    const transaction = await SalesService.recordSale(userId, items, paymentMethod, session);
+    // If transaction active, pass session. Else pass undefined so service runs normally.
+    const sessionToUse = transactionActive ? session : undefined;
 
-    await session.commitTransaction();
+    const transaction = await SalesService.recordSale(userId, items, paymentMethod, sessionToUse as any);
+
+    if (transactionActive) await session.commitTransaction();
 
     return res.json({
       success: true,
@@ -34,7 +47,7 @@ export const recordSale = async (req: Request | any, res: Response) => {
     });
 
   } catch (error: any) {
-    await session.abortTransaction();
+    if (transactionActive) await session.abortTransaction();
     console.error("Record Sale Error:", error?.stack || error);
     return res.status(error.message?.includes("Insufficient") ? 409 : 500).json({ 
       error: error.message || "Server Error" 
@@ -96,29 +109,40 @@ export const getSaleById = async (req: Request | any, res: Response) => {
 // =====================================================
 export const processReturn = async (req: Request | any, res: Response) => {
   const session = await mongoose.startSession();
-  session.startTransaction();
+  let transactionActive = false;
+
+  try {
+    session.startTransaction();
+    transactionActive = true;
+  } catch (err) {
+    console.warn("⚠️ Transaction start failed (likely standalone Mongo). Proceeding without transaction.");
+    transactionActive = false;
+  }
+
   try {
     const userId = req.user?.id || req.user?._id;
     if (!userId) {
-      await session.abortTransaction();
+      if (transactionActive) await session.abortTransaction();
       return res.status(401).json({ error: "Unauthorized" });
     }
 
     const { originalSaleId, items } = req.body;
     if (!originalSaleId || !items || !Array.isArray(items)) {
-       await session.abortTransaction();
+       if (transactionActive) await session.abortTransaction();
        return res.status(400).json({ error: "Invalid return data" });
     }
 
-    const result = await SalesService.processReturn(userId, { originalSaleId, items }, session);
+    const sessionToUse = transactionActive ? session : undefined;
+    const result = await SalesService.processReturn(userId, { originalSaleId, items }, sessionToUse as any);
 
-    await session.commitTransaction();
+    if (transactionActive) await session.commitTransaction();
+    
     // exclude any existing 'success' from result to avoid duplicate property
     const { success: _unusedSuccess, ...resultRest } = result || {};
     res.json({ ...resultRest, success: true, message: "Return processed successfully" });
 
   } catch (error: any) {
-    await session.abortTransaction();
+    if (transactionActive) await session.abortTransaction();
     console.error("Process Return Error:", error);
     res.status(500).json({ error: error.message || "Server Error" });
   } finally {
