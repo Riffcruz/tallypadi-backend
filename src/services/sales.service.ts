@@ -256,7 +256,7 @@ export class SalesService {
     for (const ref of existingRefunds) {
       for (const item of ref.items) {
         const key = item.itemId ? String(item.itemId) : String(item.name);
-        returnedMap.set(key, (returnedMap.get(key) || 0) + (item.qty ?? item.quantity ?? 0));
+        returnedMap.set(key, (returnedMap.get(key) || 0) + (item.qty ?? 0));
       }
     }
 
@@ -278,7 +278,7 @@ export class SalesService {
       if (!originalItem) throw new Error(`Item ${returnItem.itemId} not found in original sale`);
 
       const key = originalItem.itemId ? String(originalItem.itemId) : String(originalItem.name);
-      const originalQty = Number(originalItem.qty ?? originalItem.quantity ?? 0);
+      const originalQty = Number(originalItem.qty ?? 0);
       const alreadyReturned = returnedMap.get(key) || 0;
 
       if (qty + alreadyReturned > originalQty) {
@@ -295,7 +295,7 @@ export class SalesService {
         });
       }
 
-      const unitPrice = Number(originalItem.unitPrice || originalItem.price || 0);
+      const unitPrice = Number(originalItem.unitPrice || 0);
       refundTotal += qty * unitPrice;
       
       returnItems.push({

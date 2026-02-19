@@ -1,5 +1,6 @@
 // src/services/queue.worker.ts
-import { Worker } from './memory-queue.lib';
+import { Worker } from 'bullmq'; // ✅ Switched to BullMQ
+import { connection } from './queue.service'; // ✅ Import shared Redis connection
 import { sendWhatsAppText, sendWhatsAppButtons, sendWhatsAppList, sendWhatsAppDocumentBuffer, sendWhatsAppFlow } from './whatsapp.service';
 import { generateSaleReceiptPdfBuffer } from '../controllers/receipt.controller';
 import { Invoice } from '../models/invoice.model';
@@ -8,25 +9,7 @@ import { User } from '../models/user.model';
 import { SupportMessage } from '../models/supportMessage.model';
 
 export const replyWorker = new Worker(
-  'outbound-replies', // Actually this should match the queue name in queues.ts? 
-  // Wait, queues.ts used 'daily-summary' for notificationQueue.
-  // And 'incoming-messages' for messageQueue.
-  // Let's check where 'outbound-replies' comes from.
-  // In the original code, notificationQueue was 'daily-summary'.
-  // But replyWorker was 'outbound-replies'.
-  // This implies they might be disconnected in the original code or I missed a queue export.
-  // Let's check queues.ts again.
-  // Ah, queueOutboundMessage adds to `notificationQueue` ('daily-summary').
-  // But replyWorker listens to 'outbound-replies'.
-  // This looks like a bug in the original code OR `notificationQueue` is for daily summaries and there's another queue.
-  // However, queueOutboundMessage adds 'send-text' jobs.
-  // And replyWorker handles 'send-text'.
-  // If they have different names, they won't talk.
-  // I will UNIFY them to 'daily-summary' or 'outbound-queue' to be safe.
-  // Let's assume 'daily-summary' is the intended one for generic outbound.
-  // Actually, let's rename the queue in queues.ts to 'outbound-queue' and use that here.
-  // Or just use 'daily-summary' here to match queues.ts.
-  'daily-summary', 
+  'outbound-replies', // ✅ Fixed: Matches queue.service.ts
   async (job: any) => {
     // console.log('📌 Reply job:', job.name, job.data?.phoneNumber);
 
@@ -166,8 +149,7 @@ export const replyWorker = new Worker(
     console.log(`⚠️ Unknown reply job name: ${job.name}`);
   },
   {
-    // connection: createRedisConnection('worker-reply'), // Removed
-    // limiter: { max: 15, duration: 1000 }, // Ignored by memory worker
+    connection, // ✅ Redis connection
     concurrency: 10,
     // lockDuration: 60_000,
   }
@@ -201,7 +183,7 @@ export const bulkWorker = new Worker(
     await sendWhatsAppText(phoneNumber, message);
   },
   {
-    // connection: createRedisConnection('worker-bulk'),
+    connection, // ✅ Redis connection
     // limiter: { max: 5, duration: 1000 },
     concurrency: 3,
   }
@@ -231,8 +213,8 @@ export const messageWorker = new Worker(
     }
   },
   {
-    // connection: createRedisConnection('worker-inbound'),
-    concurrency: 50, // High concurrency for in-memory
+    connection, // ✅ Redis connection
+    concurrency: 50, // High concurrency
   }
 );
 
