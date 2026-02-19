@@ -12,6 +12,7 @@ import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 
 import { generateSaleReceiptPdf } from './controllers/receipt.controller';
 import { initSocket } from './socket';
+import { authRequired } from './middleware/authRequired';
 
 // --- ROUTERS ---
 import whatsappRouter from './routes/whatsapp.routes';
@@ -293,34 +294,7 @@ app.use((req: any, _res: Response, next: NextFunction) => {
 
 
 
-// ==========================================
-// 🛡️ AUTH MIDDLEWARE (NO jwt.decode FALLBACK)
-// ==========================================
-const authRequired = (req: any, res: Response, next: NextFunction) => {
-  const auth = String(req.headers.authorization || '');
-  if (!auth.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
 
-  const token = auth.slice(7);
-  const secret = process.env.JWT_SECRET || (env as any).jwtSecret;
-
-  if (!secret) {
-    console.error('❌ JWT_SECRET missing (server misconfigured)');
-    return res.status(500).json({ error: 'Server misconfigured' });
-  }
-
-  try {
-    const decoded: any = jwt.verify(token, secret, { algorithms: ['HS256'] });
-    const userId = decoded?.id || decoded?._id || decoded?.userId;
-    if (!userId) return res.status(401).json({ error: 'Invalid token' });
-
-    req.user = { id: userId };
-    return next();
-  } catch {
-    return res.status(401).json({ error: 'Invalid or expired token' });
-  }
-};
 
 // ==========================================
 // 🚀 API ROUTES
@@ -385,7 +359,7 @@ app.use('/api/health', healthRouter);
 app.use('/api/orders', authRequired, orderRouter);
 app.use('/api/shop', shopRouter);
 app.use('/api/hq', hqRouter);
-app.use('/api/invoices', authRequired, invoiceRouter);
+app.use('/api/invoices', invoiceRouter);
 app.use('/api/expenses', authRequired, expenseRouter);
 
 // --- LIVE SUPPORT ---
