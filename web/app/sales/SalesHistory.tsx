@@ -53,7 +53,10 @@ export default function SalesHistory({ user }: { user: UserProfile | null }) {
     axios
       .get(`${API_URL}/sales`, { headers: { Authorization: `Bearer ${token}` }, params })
       .then((res) => {
-        const rows = Array.isArray(res.data) ? res.data : [];
+        // Handle both array (legacy) and paginated object { data: [...] }
+        const rawData = res.data?.data || res.data;
+        const rows = Array.isArray(rawData) ? rawData : [];
+
         const filtered = rows.filter((sale: any) => !isUndoneSale(sale) && !isUnknownItemSale(sale));
         setHistory(filtered);
       })
@@ -66,16 +69,8 @@ export default function SalesHistory({ user }: { user: UserProfile | null }) {
 
   const isUnknownItemSale = (sale: any) => {
     const items = Array.isArray(sale?.items) ? sale.items : [];
-
-    // no items at all = unknown
-    if (!items.length) return true;
-
-    // any item with empty/null/unknown-ish name = unknown
-    const unknownNames = new Set(['unknown_item', 'unknown', 'item', 'null', 'undefined']);
-    return items.some((i: any) => {
-      const name = String(i?.name ?? '').trim().toLowerCase();
-      return !name || unknownNames.has(name);
-    });
+    // Only hide if there are no items at all
+    return items.length === 0;
   };
 
   const isUndoneSale = (sale: any) => {

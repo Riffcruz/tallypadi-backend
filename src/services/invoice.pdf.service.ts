@@ -138,7 +138,7 @@ export const generateInvoicePdf = async (
       // Meta card (Issued to / Date / Invoice no)
       const cardY = 120;
       const cardH = 74;
-      doc.roundedRect(margin, cardY, contentWidth, cardH, 12).lineWidth(1).strokeColor(THEME.border).fill(THEME.white);
+      doc.roundedRect(margin, cardY, contentWidth, cardH, 12).lineWidth(1).fillAndStroke(THEME.white, THEME.border);
 
       // Left: issued to
       const leftX = margin + 14;
@@ -297,11 +297,11 @@ export const generateInvoicePdf = async (
       doc.fillColor(THEME.muted).font('Bold').fontSize(9).text('PAYMENT INFO', margin + 18, y + 14);
 
       // Bank line
-      doc.fillColor(THEME.dark).font('Bold').fontSize(12).text(invoice.bankDetailsSnapshot.bankName, margin + 18, y + 32);
+      doc.fillColor(THEME.dark).font('Bold').fontSize(12).text(invoice.bankDetailsSnapshot.bankName || '', margin + 18, y + 32);
 
       // Account Name
       doc.fillColor(THEME.text).font('Regular').fontSize(10).text(
-        `Account Name: ${invoice.bankDetailsSnapshot.accountName}`,
+        `Account Name: ${invoice.bankDetailsSnapshot.accountName || ''}`,
         margin + 18,
         y + 52
       );
