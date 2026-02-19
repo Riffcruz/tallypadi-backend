@@ -7,6 +7,8 @@ import { Invoice } from '../models/invoice.model';
 import { generateInvoicePdf } from './invoice.pdf.service';
 import { User } from '../models/user.model';
 import { SupportMessage } from '../models/supportMessage.model';
+import { processRawWebhook, handleMessageLogic } from '../controllers/whatsapp.controller';
+import { executePushNotification, executeGlobalPushNotification } from './push.service';
 
 export const replyWorker = new Worker(
   'outbound-replies', // ✅ Fixed: Matches queue.service.ts
@@ -200,8 +202,6 @@ bulkWorker.on('failed', (job: any, err: any) =>
 export const messageWorker = new Worker(
   'incoming-messages',
   async (job: any) => {
-    const { processRawWebhook, handleMessageLogic } = await import('../controllers/whatsapp.controller');
-
     if (job.data.rawBody) {
       // ✅ New Path: Raw Webhook
       await processRawWebhook(job.data.rawBody);
@@ -229,7 +229,6 @@ messageWorker.on('failed', (job: any, err: any) =>
 export const notificationWorker = new Worker(
   'push-notifications',
   async (job: any) => {
-    const { executePushNotification, executeGlobalPushNotification } = await import('./push.service');
     const { type, agentId, title, body, data } = job.data;
 
     if (type === 'SINGLE') {

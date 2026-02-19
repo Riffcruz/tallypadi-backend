@@ -137,110 +137,6 @@ function calculateColumnWidths(availableWidth: number) {
   };
 }
 
-// ✅ Draw modern table header
-function drawTableHeader(doc: PdfDoc, x: number, y: number, colWidths: any, regFont: string) {
-  doc.save();
-  
-  // Header background - WhatsApp light gray
-  doc.rect(x, y, colWidths.qty + colWidths.item + colWidths.price + colWidths.total, 28)
-    .fill(THEME.bgHeader);
-  
-  // Header text
-  doc.font(regFont).fontSize(9).fillColor(THEME.textLight);
-  
-  // QTY
-  doc.text('QTY', x + 10, y + 9, { width: colWidths.qty - 20, align: 'left' });
-  
-  // ITEM
-  doc.text('ITEM', x + colWidths.qty + 10, y + 9, { width: colWidths.item - 20, align: 'left' });
-  
-  // PRICE
-  doc.text('PRICE', x + colWidths.qty + colWidths.item + 10, y + 9, { 
-    width: colWidths.price - 20, 
-    align: 'right' 
-  });
-  
-  // TOTAL
-  doc.text('TOTAL', x + colWidths.qty + colWidths.item + colWidths.price + 10, y + 9, { 
-    width: colWidths.total - 20, 
-    align: 'right' 
-  });
-  
-  // Bottom border
-  doc.strokeColor(THEME.border).lineWidth(1);
-  doc.moveTo(x, y + 28).lineTo(x + colWidths.qty + colWidths.item + colWidths.price + colWidths.total, y + 28).stroke();
-  
-  doc.restore();
-  return y + 28;
-}
-
-// ✅ Draw table row
-function drawTableRow(
-  doc: PdfDoc, 
-  x: number, 
-  y: number, 
-  colWidths: any, 
-  item: any, 
-  formatMoney: (n: any) => string,
-  regFont: string,
-  boldFont: string
-): number {
-  const qty = Number(item.qty ?? item.quantity ?? 0);
-  const name = String(item.name || 'Item');
-  const unitPrice = Number(item.unitPrice ?? item.price ?? 0);
-  const lineTotal = Number(item.total ?? qty * unitPrice);
-  
-  // Calculate row height based on item name wrapping
-  doc.font(regFont).fontSize(10);
-  const nameHeight = doc.heightOfString(name, {
-    width: colWidths.item - 20,
-    ellipsis: true
-  });
-  const rowHeight = Math.max(24, nameHeight + 8);
-  
-  // Draw row background
-  doc.save();
-  doc.fillColor('#FFFFFF');
-  doc.rect(x, y, colWidths.qty + colWidths.item + colWidths.price + colWidths.total, rowHeight).fill();
-  doc.restore();
-  
-  // Draw item name with wrapping
-  doc.font(regFont).fontSize(10).fillColor(THEME.text);
-  doc.text(name, x + colWidths.qty + 10, y + 6, {
-    width: colWidths.item - 20,
-    ellipsis: true,
-    lineGap: 2
-  });
-  
-  // Draw quantity
-  doc.text(qty.toString(), x + 10, y + 6, {
-    width: colWidths.qty - 20,
-    align: 'left'
-  });
-  
-  // Draw price
-  doc.fontSize(9).fillColor(THEME.textLight);
-  doc.text(formatMoney(unitPrice), x + colWidths.qty + colWidths.item + 10, y + 6, {
-    width: colWidths.price - 20,
-    align: 'right'
-  });
-  
-  // Draw total
-  doc.fontSize(10).fillColor(THEME.text);
-  doc.text(formatMoney(lineTotal), x + colWidths.qty + colWidths.item + colWidths.price + 10, y + 6, {
-    width: colWidths.total - 20,
-    align: 'right'
-  });
-  
-  // Bottom border
-  doc.save();
-  doc.strokeColor(THEME.border).lineWidth(0.5);
-  doc.moveTo(x, y + rowHeight).lineTo(x + colWidths.qty + colWidths.item + colWidths.price + colWidths.total, y + rowHeight).stroke();
-  doc.restore();
-  
-  return rowHeight;
-}
-
 // ✅ Shared render function (Invoice Style UI)
 function renderReceiptPdf(doc: PdfDoc, payload: {
   saleId: string;
@@ -253,6 +149,7 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
   regFont: string;
   boldFont: string;
   tx: any;
+  format: 'A4' | 'thermal';
 }) {
   const {
     saleId,
@@ -265,6 +162,7 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
     regFont,
     boldFont,
     tx,
+    format
   } = payload;
 
   const currencyDisplay = hasSymbolFont ? 'symbol' : 'code';
@@ -289,90 +187,163 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
     white: '#FFFFFF',
   };
 
+  const isThermal = format === 'thermal';
+
   // --- Page Setup ---
-  doc.addPage();
-  const pageW = doc.page.width;
-  const pageH = doc.page.height;
-  const margin = 40;
+  let pageW = 595.28; // A4
+  let pageH = 841.89; // A4
+  let margin = 40;
+
+  if (isThermal) {
+      pageW = 226; // ~80mm
+      margin = 10;
+      // Estimate Height
+      const baseHeight = 200; // Header + Footer + padding
+      const itemHeight = (tx.items?.length || 0) * 40;
+      pageH = baseHeight + itemHeight + 100; // buffer
+  }
+
+  doc.addPage({ size: [pageW, pageH], margins: { top: margin, bottom: margin, left: margin, right: margin } });
+  
+  // Recalculate based on actual if needed, but we set it explicitly
   const contentW = pageW - margin * 2;
 
   // --- HEADER ---
-  const headerTop = 40;
+  let y = isThermal ? 10 : 40;
   
-  // Soft header background strip
-  doc.save();
-  doc.rect(0, 0, pageW, 140).fill(THEME_INVOICE.bgHeader);
-  doc.restore();
+  if (!isThermal) {
+      // Soft header background strip for A4
+      doc.save();
+      doc.rect(0, 0, pageW, 140).fill(THEME_INVOICE.bgHeader);
+      doc.restore();
+  }
 
   // Business name + title
-  doc.fillColor(THEME_INVOICE.dark).font(boldFont).fontSize(22).text(businessName.toUpperCase(), margin, headerTop);
-  doc.fillColor(THEME_INVOICE.text).font(regFont).fontSize(11).text('RECEIPT', margin, headerTop + 28);
-  doc.fillColor(THEME_INVOICE.muted).font(regFont).fontSize(9).text('Payment Confirmation', margin, headerTop + 44);
-
-  // Logo / badge (right)
-  const logoBox = { w: 62, h: 62, x: pageW - margin - 62, y: headerTop - 2 };
-  doc.roundedRect(logoBox.x, logoBox.y, logoBox.w, logoBox.h, 10).fill(THEME_INVOICE.primary);
-  doc.fillColor(THEME_INVOICE.white).font(boldFont).fontSize(16).text('TP', logoBox.x, logoBox.y + 20, {
-    width: logoBox.w,
-    align: 'center',
+  const headerFontSize = isThermal ? 14 : 22;
+  doc.fillColor(THEME_INVOICE.dark).font(boldFont).fontSize(headerFontSize).text(businessName.toUpperCase(), margin, y, {
+      align: isThermal ? 'center' : 'left',
+      width: isThermal ? contentW : undefined
   });
+  
+  y += doc.heightOfString(businessName.toUpperCase(), { width: isThermal ? contentW : undefined }) + 5;
 
-  // Meta card
-  const cardY = 120;
-  const cardH = 74;
-  doc.roundedRect(margin, cardY, contentW, cardH, 12).lineWidth(1).strokeColor(THEME_INVOICE.border).fill(THEME_INVOICE.white);
+  if (isThermal) {
+      doc.fillColor(THEME_INVOICE.text).font(regFont).fontSize(10).text('RECEIPT', margin, y, { align: 'center', width: contentW });
+      y += 15;
+      
+      // Meta
+      doc.fontSize(9).font(regFont);
+      doc.text(receiptDate, margin, y, { align: 'center', width: contentW });
+      y += 12;
+      doc.text(receiptNo, margin, y, { align: 'center', width: contentW });
+      y += 12;
+      doc.text(`Customer: ${tx.customerName || 'Guest'}`, margin, y, { align: 'center', width: contentW });
+      y += 20;
 
-  // Left: Customer Name
-  const leftX = margin + 14;
-  doc.fillColor(THEME_INVOICE.muted).font(boldFont).fontSize(9).text('CUSTOMER', leftX, cardY + 12);
-  const custName = tx.customerName || 'Walk-in Customer';
-  doc.fillColor(THEME_INVOICE.dark).font(boldFont).fontSize(12).text(custName, leftX, cardY + 28, {
-    width: contentW * 0.55,
-  });
+      // Divider
+      doc.moveTo(margin, y).lineTo(pageW - margin, y).strokeColor(THEME_INVOICE.border).stroke();
+      y += 10;
 
-  // Right: Date & Receipt #
-  const rightX = margin + contentW * 0.62;
-  doc.fillColor(THEME_INVOICE.muted).font(boldFont).fontSize(9).text('DATE PAID', rightX, cardY + 12);
-  doc.fillColor(THEME_INVOICE.dark).font(regFont).fontSize(11).text(receiptDate, rightX, cardY + 28);
+  } else {
+      // A4 Header continues
+      doc.fillColor(THEME_INVOICE.text).font(regFont).fontSize(11).text('RECEIPT', margin, y);
+      doc.fillColor(THEME_INVOICE.muted).font(regFont).fontSize(9).text('Payment Confirmation', margin, y + 16);
 
-  doc.fillColor(THEME_INVOICE.muted).font(boldFont).fontSize(9).text('RECEIPT NO', rightX, cardY + 48);
-  doc.fontSize(11);
-  const pillW = Math.min(200, Math.max(120, doc.widthOfString(receiptNo) + 22));
-  const pillX = pageW - margin - pillW;
-  const pillY = cardY + 44;
+      // Logo / badge (right)
+      const logoBox = { w: 62, h: 62, x: pageW - margin - 62, y: 38 }; // simplified y
+      doc.roundedRect(logoBox.x, logoBox.y, logoBox.w, logoBox.h, 10).fill(THEME_INVOICE.primary);
+      doc.fillColor(THEME_INVOICE.white).font(boldFont).fontSize(16).text('TP', logoBox.x, logoBox.y + 20, {
+        width: logoBox.w,
+        align: 'center',
+      });
 
-  doc.roundedRect(pillX, pillY, pillW, 26, 13).fill(THEME_INVOICE.primary);
-  doc.fillColor(THEME_INVOICE.white).font(boldFont).fontSize(11).text(receiptNo, pillX, pillY + 7, { width: pillW, align: 'center' });
+      // Meta card
+      const cardY = 120;
+      const cardH = 74;
+      doc.roundedRect(margin, cardY, contentW, cardH, 12).lineWidth(1).strokeColor(THEME_INVOICE.border).fill(THEME_INVOICE.white);
+
+      // Left: Customer Name
+      const leftX = margin + 14;
+      doc.fillColor(THEME_INVOICE.muted).font(boldFont).fontSize(9).text('CUSTOMER', leftX, cardY + 12);
+      const custName = tx.customerName || 'Walk-in Customer';
+      doc.fillColor(THEME_INVOICE.dark).font(boldFont).fontSize(12).text(custName, leftX, cardY + 28, {
+        width: contentW * 0.55,
+      });
+
+      // Right: Date & Receipt #
+      const rightX = margin + contentW * 0.62;
+      doc.fillColor(THEME_INVOICE.muted).font(boldFont).fontSize(9).text('DATE PAID', rightX, cardY + 12);
+      doc.fillColor(THEME_INVOICE.dark).font(regFont).fontSize(11).text(receiptDate, rightX, cardY + 28);
+
+      doc.fillColor(THEME_INVOICE.muted).font(boldFont).fontSize(9).text('RECEIPT NO', rightX, cardY + 48);
+      doc.fontSize(11);
+      const pillW = Math.min(200, Math.max(120, doc.widthOfString(receiptNo) + 22));
+      const pillX = pageW - margin - pillW;
+      const pillY = cardY + 44;
+
+      doc.roundedRect(pillX, pillY, pillW, 26, 13).fill(THEME_INVOICE.primary);
+      doc.fillColor(THEME_INVOICE.white).font(boldFont).fontSize(11).text(receiptNo, pillX, pillY + 7, { width: pillW, align: 'center' });
+      
+      y = 230; // Start table at 230 for A4
+  }
 
   // --- TABLE ---
-  let y = 230;
-  const tableHeaderHeight = 32;
-  const cellPadX = 8;
-  const cellPadY = 7;
+  const tableHeaderHeight = isThermal ? 20 : 32;
+  const cellPadX = isThermal ? 4 : 8;
+  const cellPadY = isThermal ? 4 : 7;
+  const fontSizeBody = isThermal ? 9 : 10;
 
   // Columns
-  const colW = {
-    desc: Math.floor(contentW * 0.52),
-    qty: Math.floor(contentW * 0.12),
-    unit: Math.floor(contentW * 0.18),
-    total: contentW - (Math.floor(contentW * 0.52) + Math.floor(contentW * 0.12) + Math.floor(contentW * 0.18)),
-  };
-  const colX = {
-    desc: margin,
-    qty: margin + colW.desc,
-    unit: margin + colW.desc + colW.qty,
-    total: margin + colW.desc + colW.qty + colW.unit,
-  };
+  let colW: any;
+  let colX: any;
+
+  if (isThermal) {
+      colW = {
+        desc: contentW * 0.5,
+        qty: contentW * 0.15,
+        unit: 0, // skip unit price column if tight, or keep small
+        total: contentW * 0.35,
+      };
+      colX = {
+        desc: margin,
+        qty: margin + colW.desc,
+        unit: margin + colW.desc + colW.qty, // effectively unused if unit width is 0
+        total: margin + colW.desc + colW.qty,
+      };
+  } else {
+      colW = {
+        desc: Math.floor(contentW * 0.52),
+        qty: Math.floor(contentW * 0.12),
+        unit: Math.floor(contentW * 0.18),
+        total: contentW - (Math.floor(contentW * 0.52) + Math.floor(contentW * 0.12) + Math.floor(contentW * 0.18)),
+      };
+      colX = {
+        desc: margin,
+        qty: margin + colW.desc,
+        unit: margin + colW.desc + colW.qty,
+        total: margin + colW.desc + colW.qty + colW.unit,
+      };
+  }
 
   // Header Row
-  doc.roundedRect(margin, y, contentW, tableHeaderHeight, 10).fill(THEME_INVOICE.primary);
-  doc.fillColor(THEME_INVOICE.white).font(boldFont).fontSize(10);
-  doc.text('Description', colX.desc + cellPadX, y + 10, { width: colW.desc - cellPadX * 2, align: 'left' });
-  doc.text('Qty', colX.qty + cellPadX, y + 10, { width: colW.qty - cellPadX * 2, align: 'center' });
-  doc.text('Price', colX.unit + cellPadX, y + 10, { width: colW.unit - cellPadX * 2, align: 'right' });
-  doc.text('Total', colX.total + cellPadX, y + 10, { width: colW.total - cellPadX * 2, align: 'right' });
-
-  y += tableHeaderHeight + 2;
+  if (!isThermal) {
+      doc.roundedRect(margin, y, contentW, tableHeaderHeight, 10).fill(THEME_INVOICE.primary);
+      doc.fillColor(THEME_INVOICE.white).font(boldFont).fontSize(10);
+      doc.text('Description', colX.desc + cellPadX, y + 10, { width: colW.desc - cellPadX * 2, align: 'left' });
+      doc.text('Qty', colX.qty + cellPadX, y + 10, { width: colW.qty - cellPadX * 2, align: 'center' });
+      doc.text('Price', colX.unit + cellPadX, y + 10, { width: colW.unit - cellPadX * 2, align: 'right' });
+      doc.text('Total', colX.total + cellPadX, y + 10, { width: colW.total - cellPadX * 2, align: 'right' });
+      y += tableHeaderHeight + 2;
+  } else {
+      // Thermal Header
+      doc.font(boldFont).fontSize(9).fillColor(THEME_INVOICE.dark);
+      doc.text('Item', colX.desc, y, { width: colW.desc });
+      doc.text('Qty', colX.qty, y, { width: colW.qty, align: 'center' });
+      doc.text('Total', colX.total, y, { width: colW.total, align: 'right' });
+      y += 12;
+      doc.moveTo(margin, y).lineTo(pageW - margin, y).strokeColor(THEME_INVOICE.border).stroke();
+      y += 8;
+  }
 
   // Items
   const items = Array.isArray(tx.items) ? tx.items : [];
@@ -388,57 +359,88 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
     
     // Auto height
     const descH = doc.heightOfString(desc, { width: colW.desc - cellPadX * 2 });
-    const rowH = Math.max(28, Math.ceil(descH + cellPadY * 2));
+    const rowH = Math.max(isThermal ? 16 : 28, Math.ceil(descH + cellPadY * 2));
 
     // Pagination check
-    if (y + rowH > pageH - 100) {
-        doc.addPage();
-        y = margin;
+    if (y + rowH > pageH - (isThermal ? 20 : 100)) {
+        if (isThermal) {
+            // Thermal shouldn't really paginate if we calculated correctly, but if it does:
+             doc.addPage({ size: [pageW, pageH], margins: { top: margin, bottom: margin, left: margin, right: margin } });
+             y = margin;
+        } else {
+             doc.addPage();
+             y = margin;
+        }
     }
 
     // Zebra
-    if (idx % 2 === 1) doc.rect(margin, y, contentW, rowH).fill(THEME_INVOICE.bgLight);
-    else doc.rect(margin, y, contentW, rowH).fill(THEME_INVOICE.white);
-
-    doc.lineWidth(0.7).strokeColor(THEME_INVOICE.border).rect(margin, y, contentW, rowH).stroke();
+    if (!isThermal) {
+        if (idx % 2 === 1) doc.rect(margin, y, contentW, rowH).fill(THEME_INVOICE.bgLight);
+        else doc.rect(margin, y, contentW, rowH).fill(THEME_INVOICE.white);
+        doc.lineWidth(0.7).strokeColor(THEME_INVOICE.border).rect(margin, y, contentW, rowH).stroke();
+    }
 
     // Cell Text
-    doc.fillColor(THEME_INVOICE.dark).font(regFont).fontSize(10);
-    doc.text(desc, colX.desc + cellPadX, y + cellPadY, { width: colW.desc - cellPadX * 2 });
-    doc.text(String(qty), colX.qty + cellPadX, y + cellPadY, { width: colW.qty - cellPadX * 2, align: 'center' });
-    doc.text(formatMoney(unitPrice), colX.unit + cellPadX, y + cellPadY, { width: colW.unit - cellPadX * 2, align: 'right' });
-    doc.text(formatMoney(lineTotal), colX.total + cellPadX, y + cellPadY, { width: colW.total - cellPadX * 2, align: 'right' });
+    doc.fillColor(THEME_INVOICE.dark).font(regFont).fontSize(fontSizeBody);
+    
+    if (isThermal) {
+        doc.text(desc, colX.desc, y, { width: colW.desc });
+        doc.text(String(qty), colX.qty, y, { width: colW.qty, align: 'center' });
+        doc.text(formatMoney(lineTotal), colX.total, y, { width: colW.total, align: 'right' });
+    } else {
+        doc.text(desc, colX.desc + cellPadX, y + cellPadY, { width: colW.desc - cellPadX * 2 });
+        doc.text(String(qty), colX.qty + cellPadX, y + cellPadY, { width: colW.qty - cellPadX * 2, align: 'center' });
+        doc.text(formatMoney(unitPrice), colX.unit + cellPadX, y + cellPadY, { width: colW.unit - cellPadX * 2, align: 'right' });
+        doc.text(formatMoney(lineTotal), colX.total + cellPadX, y + cellPadY, { width: colW.total - cellPadX * 2, align: 'right' });
+    }
 
     y += rowH;
   });
 
   // --- TOTALS ---
   y += 16;
-  if (y + 90 > pageH - margin) { doc.addPage(); y = margin; }
-
-  const totalsBoxH = 62;
-  const totalsBoxW = Math.min(260, contentW);
-  const totalsBoxX = pageW - margin - totalsBoxW;
-
-  doc.roundedRect(totalsBoxX, y, totalsBoxW, totalsBoxH, 12).fill(THEME_INVOICE.bgHeader);
-  doc.rect(totalsBoxX, y, 5, totalsBoxH).fill(THEME_INVOICE.accent);
+  if (y + 90 > pageH - margin) { 
+      doc.addPage(isThermal ? { size: [pageW, pageH], margins: { top: margin, bottom: margin, left: margin, right: margin } } : undefined); 
+      y = margin; 
+  }
 
   const totalMoney = Number(tx.totalMoney ?? computedTotal ?? 0);
 
-  doc.fillColor(THEME_INVOICE.muted).font(boldFont).fontSize(9).text('TOTAL PAID', totalsBoxX + 16, y + 12);
-  doc.fillColor(THEME_INVOICE.dark).font(boldFont).fontSize(18).text(formatMoney(totalMoney), totalsBoxX + 16, y + 28, {
-    width: totalsBoxW - 32,
-    align: 'right',
-  });
+  if (isThermal) {
+      doc.moveTo(margin, y).lineTo(pageW - margin, y).strokeColor(THEME_INVOICE.border).stroke();
+      y += 10;
+      doc.font(boldFont).fontSize(12).fillColor(THEME_INVOICE.dark);
+      doc.text(`TOTAL: ${formatMoney(totalMoney)}`, margin, y, { align: 'right', width: contentW });
+      y += 20;
+  } else {
+      const totalsBoxH = 62;
+      const totalsBoxW = Math.min(260, contentW);
+      const totalsBoxX = pageW - margin - totalsBoxW;
+
+      doc.roundedRect(totalsBoxX, y, totalsBoxW, totalsBoxH, 12).fill(THEME_INVOICE.bgHeader);
+      doc.rect(totalsBoxX, y, 5, totalsBoxH).fill(THEME_INVOICE.accent);
+
+      doc.fillColor(THEME_INVOICE.muted).font(boldFont).fontSize(9).text('TOTAL PAID', totalsBoxX + 16, y + 12);
+      doc.fillColor(THEME_INVOICE.dark).font(boldFont).fontSize(18).text(formatMoney(totalMoney), totalsBoxX + 16, y + 28, {
+        width: totalsBoxW - 32,
+        align: 'right',
+      });
+  }
 
   // --- FOOTER ---
-  const footerY = pageH - 60;
-  doc.fontSize(9).fillColor(THEME_INVOICE.muted).text('Thank you for your business.', 0, footerY, { align: 'center' });
-  doc.fontSize(8).text('Generated by TallyPadi.com', 0, footerY + 15, { align: 'center' });
+  if (isThermal) {
+      y += 10;
+      doc.font(regFont).fontSize(8).fillColor(THEME_INVOICE.muted);
+      doc.text('Thank you for your business. Powered by TallyPadi', margin, y, { align: 'center', width: contentW });
+  } else {
+      const footerY = pageH - 60;
+      doc.fontSize(9).fillColor(THEME_INVOICE.muted).text('Thank you for your business.', 0, footerY, { align: 'center' });
+      doc.fontSize(8).text('Generated by TallyPadi.com', 0, footerY + 15, { align: 'center' });
+  }
 }
 
 // ... (Exports remain the same)
-export const generateSaleReceiptPdfBuffer = async (userId: string, saleId: string) => {
+export const generateSaleReceiptPdfBuffer = async (userId: string, saleId: string, format: 'A4' | 'thermal' = 'A4') => {
   const user: any = await User.findById(userId).lean();
   if (!user) throw new Error('User not found');
 
@@ -463,7 +465,7 @@ export const generateSaleReceiptPdfBuffer = async (userId: string, saleId: strin
   const receiptNo = makeReceiptNo(saleId, when, offsetMinutes);
 
   const doc = new PDFDocument({
-    size: 'A4',
+    size: 'A4', // Default, will be overridden in render if thermal via addPage
     margins: { top: 40, bottom: 40, left: 40, right: 40 },
     autoFirstPage: false,
     bufferPages: true,
@@ -493,6 +495,7 @@ export const generateSaleReceiptPdfBuffer = async (userId: string, saleId: strin
     regFont,
     boldFont,
     tx,
+    format
   });
 
   doc.end();
@@ -514,6 +517,8 @@ export const generateSaleReceiptPdf = async (req: Request | any, res: Response) 
 
     const saleId = String(req.params.saleId || '').trim();
     if (!saleId) return res.status(400).json({ error: 'Missing saleId' });
+    
+    const { format } = req.query; // 'A4' | 'thermal'
 
     const user: any = await User.findById(userId).lean();
     if (!user) return res.status(404).json({ error: 'User not found' });
@@ -579,6 +584,7 @@ export const generateSaleReceiptPdf = async (req: Request | any, res: Response) 
       regFont,
       boldFont,
       tx,
+      format: format as 'A4' | 'thermal' || 'A4'
     });
 
     doc.end();

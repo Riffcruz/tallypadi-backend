@@ -137,7 +137,9 @@ export const getInvoicePdf = async (req: AuthReq, res: Response) => {
              }
         }
 
-        const pdfBuffer = await generateInvoicePdf(inv as any, businessName, countryCode);
+        const { format } = req.query;
+
+        const pdfBuffer = await generateInvoicePdf(inv as any, businessName, countryCode, undefined, format as 'A4' | 'thermal');
 
         res.set({
             'Content-Type': 'application/pdf',
