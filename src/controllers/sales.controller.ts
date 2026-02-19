@@ -47,7 +47,32 @@ export const recordSale = async (req: Request | any, res: Response) => {
     });
 
   } catch (error: any) {
-    if (transactionActive) await session.abortTransaction();
+    if (transactionActive) {
+      try { await session.abortTransaction(); } catch (e) { /* ignore */ }
+    }
+
+    // RETRY LOGIC for standalone mongo error
+    if (transactionActive && error.message && error.message.includes("Transaction numbers are only allowed on a replica set member")) {
+       console.warn("⚠️ Transaction failed (standalone Mongo detected). Retrying without transaction.");
+       try {
+           const userId = req.user?.id || req.user?._id;
+           const items = req.body.items || (Array.isArray(req.body) ? req.body : [req.body]);
+           const paymentMethod = req.body.paymentMethod || 'CASH';
+           
+           const transaction = await SalesService.recordSale(userId, items, paymentMethod, undefined as any);
+           return res.json({
+             success: true,
+             saleId: transaction._id,
+             transaction
+           });
+       } catch (retryError: any) {
+           console.error("Record Sale Retry Error:", retryError);
+           return res.status(retryError.message?.includes("Insufficient") ? 409 : 500).json({ 
+             error: retryError.message || "Server Error" 
+           });
+       }
+    }
+
     console.error("Record Sale Error:", error?.stack || error);
     return res.status(error.message?.includes("Insufficient") ? 409 : 500).json({ 
       error: error.message || "Server Error" 
@@ -142,7 +167,27 @@ export const processReturn = async (req: Request | any, res: Response) => {
     res.json({ ...resultRest, success: true, message: "Return processed successfully" });
 
   } catch (error: any) {
-    if (transactionActive) await session.abortTransaction();
+    if (transactionActive) {
+      try { await session.abortTransaction(); } catch (e) { /* ignore */ }
+    }
+
+    // RETRY LOGIC for standalone mongo error
+    if (transactionActive && error.message && error.message.includes("Transaction numbers are only allowed on a replica set member")) {
+        console.warn("⚠️ Transaction failed (standalone Mongo detected). Retrying return without transaction.");
+        try {
+            const userId = req.user?.id || req.user?._id;
+            const { originalSaleId, items } = req.body;
+            const result = await SalesService.processReturn(userId, { originalSaleId, items }, undefined as any);
+            
+            // exclude any existing 'success' from result to avoid duplicate property
+            const { success: _unusedSuccess, ...resultRest } = result || {};
+            return res.json({ ...resultRest, success: true, message: "Return processed successfully" });
+        } catch (retryError: any) {
+            console.error("Process Return Retry Error:", retryError);
+            return res.status(500).json({ error: retryError.message || "Server Error" });
+        }
+    }
+
     console.error("Process Return Error:", error);
     res.status(500).json({ error: error.message || "Server Error" });
   } finally {
