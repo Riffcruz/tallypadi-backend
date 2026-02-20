@@ -119,7 +119,11 @@ export const generateInvoicePdf = async (
         const colW = { desc: contentWidth * 0.5 };
         (invoice.items || []).forEach((item) => {
             const desc = String(item?.name || '-');
-            const descH = dummyDoc.heightOfString(desc, { width: colW.desc });
+            // 🚀 OPTIMIZATION: Fast path for thermal
+            let descH = 12;
+            if (desc.length > 25) { // Thermal columns are narrower
+                descH = dummyDoc.heightOfString(desc, { width: colW.desc });
+            }
             y += Math.max(descH, 12) + 8;
         });
 
@@ -165,7 +169,13 @@ export const generateInvoicePdf = async (
 
         (invoice.items || []).forEach((item) => {
             const desc = String(item?.name || '-');
-            const descH = dummyDoc.heightOfString(desc, { width: colW_desc - cellPadX * 2, align: 'left' });
+            // 🚀 OPTIMIZATION: Fast path height calculation instead of PDFKit layout engine
+            // If the text is short enough to fit on one line (usually ~45 chars for ColW at 10pt), 
+            // skip the expensive `dummyDoc.heightOfString` layout calculation.
+            let descH = 12; // Base height for 1 line of 10pt font
+            if (desc.length > 40) {
+               descH = dummyDoc.heightOfString(desc, { width: colW_desc - cellPadX * 2, align: 'left' });
+            }
             const rowH = Math.max(28, Math.ceil(descH + cellPadY * 2));
             y += rowH;
         });
@@ -417,8 +427,11 @@ export const generateInvoicePdf = async (
       const unitPrice = formatMoney(item?.unitPrice ?? 0);
       const rowTotal = formatMoney(item?.total ?? 0);
 
-      // Measure description height (auto row height)
-      const descH = doc.heightOfString(desc, { width: colW.desc - cellPadX * 2, align: 'left' });
+      // 🚀 OPTIMIZATION: Measure description height (auto row height)
+      let descH = 12; // Base height for 1 line of 10pt font
+      if (desc.length > 40) {
+        descH = doc.heightOfString(desc, { width: colW.desc - cellPadX * 2, align: 'left' });
+      }
       const rowH = Math.max(28, Math.ceil(descH + cellPadY * 2));
 
       y = ensureSpace(rowH + 2, y);
