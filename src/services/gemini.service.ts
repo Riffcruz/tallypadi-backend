@@ -1370,14 +1370,21 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   });
 }
 
-async function generateWithRetry(parts: any[], retries = 1) {
+async function generateWithRetry(parts: any[], retries = 3) {
   for (let i = 0; i <= retries; i++) {
     try {
       const result = await withTimeout(model.generateContent(parts), 15000);
       return result;
     } catch (err: any) {
       if (i === retries) throw err;
-      await new Promise((r) => setTimeout(r, 1000));
+      
+      // ✅ Exponential backoff with jitter (prevent Thundering Herd on rate limits)
+      const baseDelay = 1000 * Math.pow(2, i); // 1s, 2s, 4s...
+      const jitter = Math.floor(Math.random() * 500); // 0-500ms random offset
+      const waitTime = baseDelay + jitter;
+      
+      console.warn(`[Gemini] Request failed (attempt ${i + 1}/${retries}). Retrying in ${waitTime}ms...`);
+      await new Promise((r) => setTimeout(r, waitTime));
     }
   }
   throw new Error('Gemini retries failed');

@@ -1,13 +1,22 @@
-// src/services/whatsapp.service.ts
 import axios from 'axios';
 import FormData from 'form-data';
+import https from 'https';
 import { env } from '../config/env';
 
 /**
  * WhatsApp Cloud API helpers
+ * - Optimized with persistent HTTP connections (Keep-Alive)
  * - All sending should happen from workers (queued)
  * - These functions ONLY talk to Meta API
  */
+
+// ✅ Shared HTTPS Agent to prevent TCP port exhaustion at high scale
+const httpsAgent = new https.Agent({
+  keepAlive: true,
+  maxSockets: 100, // Handle up to 100 concurrent outgoing connections
+  maxFreeSockets: 20,
+  timeout: 60000,
+});
 
 const WHATSAPP_API_VERSION = process.env.WHATSAPP_API_VERSION || 'v21.0';
 
@@ -55,6 +64,7 @@ export async function sendWhatsAppText(to: string, message: string) {
   const res = await axios.post(messagesUrl(), payload, {
     headers: authHeaders(),
     timeout: 20_000,
+    httpsAgent,
   });
 
   return res.data?.messages?.[0]?.id;
@@ -95,6 +105,7 @@ export async function sendWhatsAppButtons(
   const res = await axios.post(messagesUrl(), payload, {
     headers: authHeaders(),
     timeout: 20_000,
+    httpsAgent,
   });
   
   return res.data?.messages?.[0]?.id;
@@ -135,6 +146,7 @@ export async function sendWhatsAppList(
   const res = await axios.post(messagesUrl(), payload, {
     headers: authHeaders(),
     timeout: 20_000,
+    httpsAgent,
   });
 
   return res.data?.messages?.[0]?.id;
@@ -181,6 +193,7 @@ export async function sendWhatsAppFlow(
   const res = await axios.post(messagesUrl(), payload, {
     headers: authHeaders(),
     timeout: 20_000,
+    httpsAgent,
   });
 
   return res.data?.messages?.[0]?.id;
@@ -216,6 +229,7 @@ export async function sendWhatsAppMediaById(opts: {
   await axios.post(messagesUrl(), payload, {
     headers: authHeaders(),
     timeout: 20_000,
+    httpsAgent,
   });
 }
 
@@ -234,6 +248,7 @@ export async function markWhatsAppMessageRead(messageId: string) {
   await axios.post(messagesUrl(), payload, {
     headers: authHeaders(),
     timeout: 20_000,
+    httpsAgent,
   });
 }
 
@@ -257,6 +272,7 @@ export async function sendTypingIndicator(messageId: string) {
       await axios.post(messagesUrl(), payload, {
         headers: authHeaders(),
         timeout: 20_000,
+        httpsAgent,
       });
   } catch (e) {
       // Ignore typing errors (non-critical)
@@ -301,6 +317,7 @@ export async function sendWhatsAppTemplate(opts: {
   await axios.post(messagesUrl(), payload, {
     headers: authHeaders(),
     timeout: 20_000,
+    httpsAgent,
   });
 }
 
@@ -327,6 +344,7 @@ export async function uploadWhatsAppMediaBuffer(opts: {
     maxBodyLength: Infinity,
     maxContentLength: Infinity,
     timeout: 60_000,
+    httpsAgent,
   });
 
   const mediaId = res?.data?.id;
