@@ -88,7 +88,7 @@ export const generateInvoicePdf = async (
         const contentWidth = pageWidth - margin * 2;
         
         // Exact height calculation via dummy doc dry run
-        const dummyDoc = new PDFDocument({ size: [pageWidth, 5000], margins: { top: 20, bottom: 20, left: margin, right: margin } });
+        const dummyDoc = new PDFDocument({ size: [pageWidth, 5000], margins: { top: 20, bottom: 0, left: margin, right: margin } });
         if (notoRegular) {
           dummyDoc.registerFont('Regular', notoRegular);
           dummyDoc.registerFont('Bold', notoBold || notoRegular);
@@ -145,7 +145,7 @@ export const generateInvoicePdf = async (
 
     const doc = new PDFDocument({
       size: format === 'thermal' ? [pageWidth, pageHeight] : 'A4',
-      margins: { top: format === 'thermal' ? 20 : 50, bottom: format === 'thermal' ? 20 : 50, left: margin, right: margin },
+      margins: { top: format === 'thermal' ? 20 : 50, bottom: format === 'thermal' ? 0 : 50, left: margin, right: margin },
       bufferPages: true,
       autoFirstPage: true,
     });
@@ -365,7 +365,7 @@ export const generateInvoicePdf = async (
     };
 
     const drawFooter = () => {
-      const footerY = doc.page.height - 70;
+      const footerY = doc.page.height - 65; // Raised by 5 points to prevent triggering auto-page-break
       doc.fillColor(THEME.muted).font('Regular').fontSize(9).text('Thank you for your business. Powered by TallyPadi', 0, footerY, {
         align: 'center',
       });

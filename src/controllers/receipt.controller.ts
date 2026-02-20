@@ -200,22 +200,13 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
   if (isThermal) {
       pageW = 226; // ~80mm
       topMargin = 10;
-      bottomMargin = 10;
+      bottomMargin = 0; // Set to 0 to completely disable auto-pagination near bottom
       sideMargin = 10;
       if (payload.exactHeight) {
           pageH = payload.exactHeight;
       } else {
-          // Estimate Height precisely to prevent accidental breaks
-          doc.font(regFont).fontSize(9);
-          let itemHeight = 0;
-          const items = Array.isArray(tx.items) ? tx.items : [];
-          items.forEach((item: any) => {
-              const desc = String(item.name || '-');
-              const descH = doc.heightOfString(desc, { width: (pageW - sideMargin * 2) * 0.5 - 8 });
-              itemHeight += Math.max(16, Math.ceil(descH + 8));
-          });
-          const baseHeight = 170; // Header + Footer + padding
-          pageH = baseHeight + itemHeight; 
+          // Dummy run: use huge page height so it NEVER paginates, letting us capture the true exact height
+          pageH = 5000;
       }
   }
 
