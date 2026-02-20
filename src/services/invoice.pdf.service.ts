@@ -507,6 +507,8 @@ export const generateInvoicePdf = async (
       doc.fillColor(THEME.primary).font('Bold').fontSize(16);
       doc.text(acct, margin + 105, y + 70, { width: contentWidth - 125, align: 'left' });
       doc.restore();
+      
+      y += cardH;
     }
 
     // Footer on last page content flow
