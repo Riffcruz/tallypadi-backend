@@ -22,6 +22,8 @@ function urlBase64ToUint8Array(base64String: string) {
 
 async function subscribeAndSave(token: string): Promise<boolean> {
   try {
+    // Ensure the service worker is registered before waiting for it
+    await navigator.serviceWorker.register('/service-worker.js');
     const registration = await navigator.serviceWorker.ready;
     
     const existing = await registration.pushManager.getSubscription();
@@ -30,11 +32,12 @@ async function subscribeAndSave(token: string): Promise<boolean> {
       await axios.post(`${API_URL}/shop/push/subscribe`, existing.toJSON(), {
         headers: { Authorization: `Bearer ${token}` },
       });
+      alert('✅ Notifications perfectly enabled & synced.');
       return true;
     }
 
     if (!VAPID_PUBLIC_KEY) {
-      console.warn('NEXT_PUBLIC_VAPID_PUBLIC_KEY not set');
+      alert('❌ Error: NEXT_PUBLIC_VAPID_PUBLIC_KEY is not set in frontend .env');
       return false;
     }
 
@@ -46,9 +49,11 @@ async function subscribeAndSave(token: string): Promise<boolean> {
     await axios.post(`${API_URL}/shop/push/subscribe`, subscription.toJSON(), {
       headers: { Authorization: `Bearer ${token}` },
     });
-
+    
+    alert('✅ Notifications successfully enabled!');
     return true;
-  } catch (err) {
+  } catch (err: any) {
+    alert(`❌ Push Subscription Failed: ${err?.message || err}`);
     console.error('Push subscribe error:', err);
     return false;
   }
@@ -69,13 +74,15 @@ export default function PushNotificationPrompt() {
       // Silently try to sync subscription if already granted
       const token = getCookie('tallyToken');
       if (token) {
-        navigator.serviceWorker.ready.then(async (reg) => {
-          const existing = await reg.pushManager.getSubscription();
-          if (existing) {
-            axios.post(`${API_URL}/shop/push/subscribe`, existing.toJSON(), {
-              headers: { Authorization: `Bearer ${token}` },
-            }).catch(() => {}); // silently fail
-          }
+        navigator.serviceWorker.register('/service-worker.js').then(() => {
+          navigator.serviceWorker.ready.then(async (reg) => {
+            const existing = await reg.pushManager.getSubscription();
+            if (existing) {
+              axios.post(`${API_URL}/shop/push/subscribe`, existing.toJSON(), {
+                headers: { Authorization: `Bearer ${token}` },
+              }).catch(() => {}); // silently fail
+            }
+          });
         });
       }
       return;
@@ -95,6 +102,8 @@ export default function PushNotificationPrompt() {
     if (permission === 'granted') {
       const token = getCookie('tallyToken');
       if (token) await subscribeAndSave(token);
+    } else {
+      alert('❌ Permission Denied. To receive alerts, you may need to open iOS Settings -> TallyPadi -> Allow Notifications.');
     }
   };
 
