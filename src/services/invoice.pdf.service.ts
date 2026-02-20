@@ -137,7 +137,7 @@ export const generateInvoicePdf = async (
 
         y += 10;
         dummyDoc.font('Regular').fontSize(8);
-        y += dummyDoc.heightOfString('Thank you for your business. Powered by TallyPadi.com', { width: contentWidth });
+        y += dummyDoc.heightOfString('Thank you. Powered by TallyPadi.com', { width: contentWidth });
         y += 20; // explicit cushion added in dummy
         
         pageHeight = y;
@@ -297,7 +297,7 @@ export const generateInvoicePdf = async (
         // Footer
         y += 10;
         doc.font('Regular').fontSize(8).fillColor(THEME.muted);
-        doc.text('Thank you for your business. Powered by TallyPadi.com', margin, y, { align: 'center', width: contentWidth });
+        doc.text('Thank you. Powered by TallyPadi.com', margin, y, { align: 'center', width: contentWidth });
     } else {
         // --- ORIGINAL A4 GENERATION ---
     const pageWidth = doc.page.width;
