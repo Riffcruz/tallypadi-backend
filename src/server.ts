@@ -371,21 +371,6 @@ app.use('/api/expenses', authRequired, expenseRouter);
 // --- LIVE SUPPORT ---
 app.use('/api/support', supportRouter);
 
-// --- ADMIN (SITE OWNER) ---
-const adminLimiterPerUser = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 120,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: 'Too many admin requests, slow down.',
-  keyGenerator: (req: any) => (req.user?.id ? `admin:${req.user.id}` : `ip:${ipKeyGenerator(req)}`),
-});
-
-
-app.use('/api/admin', authRequired, adminLimiterPerUser, adminRouter);
-app.use('/api/investor', authRequired, investorRouter);
-
-
 // ==========================================
 // 📊 QUEUE MONITORING DASHBOARD (Bull Board)
 // ==========================================
@@ -404,6 +389,21 @@ createBullBoard({
 
 // Mounted publicly or add authRequired if preferred, currently open local to server instance testing
 app.use('/api/admin/queues', serverAdapter.getRouter());
+
+
+// --- ADMIN (SITE OWNER) ---
+const adminLimiterPerUser = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: 'Too many admin requests, slow down.',
+  keyGenerator: (req: any) => (req.user?.id ? `admin:${req.user.id}` : `ip:${ipKeyGenerator(req)}`),
+});
+
+
+app.use('/api/admin', authRequired, adminLimiterPerUser, adminRouter);
+app.use('/api/investor', authRequired, investorRouter);
 
 
 // ==========================================
