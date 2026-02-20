@@ -17,7 +17,7 @@ export const replyWorker = new Worker(
 
     if (job.name === 'send-text') {
       const { phoneNumber, message, dbMessageId } = job.data || {};
-      await sendTypingIndicator(phoneNumber);
+      sendTypingIndicator(phoneNumber).catch(() => {});
       const waId = await sendWhatsAppText(phoneNumber, message);
       
       if (dbMessageId && waId) {
@@ -32,14 +32,14 @@ export const replyWorker = new Worker(
 
     if (job.name === 'send-list') {
       const { phoneNumber, bodyText, buttonText, sections } = job.data;
-      await sendTypingIndicator(phoneNumber);
+      sendTypingIndicator(phoneNumber).catch(() => {});
       await sendWhatsAppList(phoneNumber, bodyText, buttonText, sections);
       return;
     }
 
     if (job.name === 'send-sale-response') {
       const { phoneNumber, message, bodyText, buttons } = job.data;
-      await sendTypingIndicator(phoneNumber);
+      sendTypingIndicator(phoneNumber).catch(() => {});
       await sendWhatsAppText(phoneNumber, message); // ✅ first
       await sendWhatsAppButtons(phoneNumber, bodyText, buttons); // ✅ then
       return;
@@ -47,7 +47,7 @@ export const replyWorker = new Worker(
 
     if (job.name === 'send-welcome-response') {
       const { phoneNumber, message, loginUrl } = job.data;
-      await sendTypingIndicator(phoneNumber);
+      sendTypingIndicator(phoneNumber).catch(() => {});
       await sendWhatsAppText(phoneNumber, message); // ✅ first
       await sendWhatsAppText(phoneNumber, `🌐 *Web Access*\n\nLogin here to manage your shop on the web:\n${loginUrl}`); // ✅ then
 
@@ -63,7 +63,7 @@ export const replyWorker = new Worker(
     if (job.name === 'send-registration-complete') {
         const { phoneNumber, welcomeMsg, trialMsg, menuBatches } = job.data;
         
-        await sendTypingIndicator(phoneNumber);
+        sendTypingIndicator(phoneNumber).catch(() => {});
         // 1. Send Welcome Text
         await sendWhatsAppText(phoneNumber, welcomeMsg);
         
@@ -89,7 +89,7 @@ export const replyWorker = new Worker(
 
       const { buffer, filename, mimeType } = await generateSaleReceiptPdfBuffer(userId, saleId);
 
-      await sendTypingIndicator(phoneNumber);
+      sendTypingIndicator(phoneNumber).catch(() => {});
       await sendWhatsAppDocumentBuffer({
         to: phoneNumber,
         buffer,
@@ -128,7 +128,7 @@ export const replyWorker = new Worker(
             // Generate File (Buffer)
             const pdfBuffer = await generateInvoicePdf(inv, businessName, countryCode);
             
-            await sendTypingIndicator(phoneNumber);
+            sendTypingIndicator(phoneNumber).catch(() => {});
             await sendWhatsAppDocumentBuffer({
                 to: phoneNumber,
                 buffer: pdfBuffer,
@@ -145,14 +145,14 @@ export const replyWorker = new Worker(
 
     if (job.name === 'send-buttons') {
       const { phoneNumber, bodyText, buttons } = job.data;
-      await sendTypingIndicator(phoneNumber);
+      sendTypingIndicator(phoneNumber).catch(() => {});
       await sendWhatsAppButtons(phoneNumber, bodyText, buttons);
       return;
     }
 
     if (job.name === 'send-flow') {
       const { phoneNumber, headerText, bodyText, footerText, flowId, flowCta, screenId } = job.data;
-      await sendTypingIndicator(phoneNumber);
+      sendTypingIndicator(phoneNumber).catch(() => {});
       await sendWhatsAppFlow(phoneNumber, headerText, bodyText, footerText, flowId, flowCta, screenId);
       return;
     }
@@ -191,7 +191,7 @@ export const bulkWorker = new Worker(
 
     const { phoneNumber, message } = job.data as { phoneNumber: string; message: string };
     console.log(`📤 Bulk(TEXT) -> ${phoneNumber}`);
-    await sendTypingIndicator(phoneNumber);
+    sendTypingIndicator(phoneNumber).catch(() => {});
     await sendWhatsAppText(phoneNumber, message);
   },
   {

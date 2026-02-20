@@ -11,11 +11,12 @@ import { env } from '../config/env';
  */
 
 // ✅ Shared HTTPS Agent to prevent TCP port exhaustion at high scale
+// Tuned keepAliveMsecs to aggressively heartbeat idle sockets before Meta drops them
 const httpsAgent = new https.Agent({
   keepAlive: true,
+  keepAliveMsecs: 15000, 
   maxSockets: 100, // Handle up to 100 concurrent outgoing connections
   maxFreeSockets: 20,
-  timeout: 60000,
 });
 
 const WHATSAPP_API_VERSION = process.env.WHATSAPP_API_VERSION || 'v21.0';
