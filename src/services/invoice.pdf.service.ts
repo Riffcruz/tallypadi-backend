@@ -514,7 +514,7 @@ export const generateInvoicePdf = async (
     // Footer on last page content flow
     y += 20;
     const footerY = y; 
-    doc.fillColor(THEME.muted).font('Regular').fontSize(9).text('Thank you for your business. Powered by TallyPadi.com', 0, footerY, {
+    doc.fillColor(THEME.muted).font('Regular').fontSize(9).text('Thank you. Powered by TallyPadi.com', 0, footerY, {
       align: 'center',
     });
 
