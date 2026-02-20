@@ -402,6 +402,7 @@ export const supportService = {
     // 1. Notify User on WhatsApp
     try {
         await queueOutboundMessage(userPhone, "Session ended. Thank you for contacting us.");
+        
     } catch (e) {
         console.error("Failed to send end session confirmation", e);
     }
