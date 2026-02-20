@@ -1373,7 +1373,8 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 async function generateWithRetry(parts: any[], retries = 3) {
   for (let i = 0; i <= retries; i++) {
     try {
-      const result = await withTimeout(model.generateContent(parts), 15000);
+      // ✅ Increased timeout to 45s to allow for massive 15+ item invoice outputs
+      const result = await withTimeout(model.generateContent(parts), 45000);
       return result;
     } catch (err: any) {
       if (i === retries) throw err;
