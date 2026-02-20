@@ -31,7 +31,8 @@ import {
   queueOutboundFlow, // ✅ NEW: queued flow helper
   queueRegistrationComplete
 } from '../services/queue.service';
-import { sendWhatsAppDocumentBuffer, sendTypingIndicator, markWhatsAppMessageRead } from '../services/whatsapp.service';
+import { executeGlobalPushNotification, executePushNotification } from '../services/push.service';
+import { sendWhatsAppDocumentBuffer, sendTypingIndicator, markWhatsAppMessageRead, sendWhatsAppText } from '../services/whatsapp.service';
 
 
 import { undoLastSale } from '../services/undo.service';
@@ -1462,8 +1463,9 @@ Oga Boss Plan: ₦3,000/month (Save significantly with the yearly plan)`;
             // Update Transaction
             await Transaction.findByIdAndUpdate(txId, { customerName: name });
 
-            // Queue Receipt
-            await queueOutboundMessage(from, `🧾 Generating receipt for *${name}*…`);
+            // Instantly send the generation text directly to Meta API, bypassing the queue
+            sendWhatsAppText(from, `🧾 Generating receipt for *${name}*…`).catch(() => {});
+            
             await queueSaleReceipt(
                 from,
                 String(actor._id),
