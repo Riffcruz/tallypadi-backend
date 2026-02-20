@@ -138,7 +138,7 @@ async function presentPdfActions(url: string, fileName: string) {
  * ✅ IMPORTANT:
  * Fetch receipt ONLY for this saleId (NOT /sales/report).
  */
-async function fetchReceiptPdfForSale(token: string, saleId?: string, directReceiptUrl?: string) {
+async function fetchReceiptPdfForSale(token: string, saleId?: string, directReceiptUrl?: string, isThermal?: boolean) {
   if (!saleId && !directReceiptUrl) {
     throw new Error('Missing saleId from checkout response. Backend must return saleId.');
   }
@@ -163,11 +163,13 @@ async function fetchReceiptPdfForSale(token: string, saleId?: string, directRece
     }
   }
 
+  const query = isThermal ? '?format=thermal' : '';
+
   // 2) Otherwise call your receipt endpoint
   const endpoints = [
-    `${API_URL}/sales/${saleId}/receipt`, // ✅ your real route
-    `${API_URL}/sales/${saleId}/pdf`, // optional fallback if you add it later
-    `${API_URL}/sales/receipt?saleId=${encodeURIComponent(String(saleId))}`, // optional fallback
+    `${API_URL}/sales/${saleId}/receipt${query}`, // ✅ your real route
+    `${API_URL}/sales/${saleId}/pdf${query}`, // optional fallback if you add it later
+    `${API_URL}/sales/receipt?saleId=${encodeURIComponent(String(saleId))}${isThermal ? '&format=thermal' : ''}`, // optional fallback
   ];
 
   let lastErr: any = null;
@@ -213,6 +215,7 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [printReceipt, setPrintReceipt] = useState(true);
+  const [receiptType, setReceiptType] = useState<'standard' | 'thermal'>('standard');
   const [paymentMethod, setPaymentMethod] = useState<string>('CASH');
 
   // store blob url + saleId so buttons work after generation
@@ -363,7 +366,7 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
         didOpen: () => Swal.showLoading(),
       });
 
-      const pdfBlob = await fetchReceiptPdfForSale(token, saleId, directReceiptUrl);
+      const pdfBlob = await fetchReceiptPdfForSale(token, saleId, directReceiptUrl, receiptType === 'thermal');
 
       Swal.close();
 
@@ -637,6 +640,31 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
                     </p>
                   </div>
                 </label>
+                
+                {printReceipt && (
+                  <div className="mt-3 pl-7 flex items-center gap-4 animate-in slide-in-from-top-1">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="receiptType"
+                        checked={receiptType === 'standard'}
+                        onChange={() => setReceiptType('standard')}
+                        className="h-4 w-4 accent-emerald-600"
+                      />
+                      <span className="text-sm font-bold text-slate-700">Standard (A4)</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="receiptType"
+                        checked={receiptType === 'thermal'}
+                        onChange={() => setReceiptType('thermal')}
+                        className="h-4 w-4 accent-emerald-600"
+                      />
+                      <span className="text-sm font-bold text-slate-700">Thermal (80mm)</span>
+                    </label>
+                  </div>
+                )}
               </div>
 
               <div className="flex gap-3">

@@ -198,6 +198,22 @@ export default function SalesHistory({ user }: { user: UserProfile | null }) {
       return;
     }
 
+    // Ask for format
+    const { value: format } = await Swal.fire({
+      title: 'Receipt Format',
+      input: 'radio',
+      inputOptions: {
+        standard: 'Standard (A4)',
+        thermal: 'Thermal (80mm)'
+      },
+      inputValue: 'standard',
+      confirmButtonText: 'Download',
+      showCancelButton: true,
+      confirmButtonColor: '#0F766E',
+    });
+
+    if (!format) return;
+
     setRowPdfLoading((p) => ({ ...p, [saleId]: true }));
 
     Swal.fire({
@@ -211,6 +227,7 @@ export default function SalesHistory({ user }: { user: UserProfile | null }) {
     try {
       const res = await axios.get(`${API_URL}/sales/${encodeURIComponent(saleId)}/receipt`, {
         headers: { Authorization: `Bearer ${token}` },
+        params: { format },
         responseType: 'blob',
         timeout: 60_000,
       });

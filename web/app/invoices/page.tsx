@@ -131,6 +131,22 @@ export default function InvoicesPage() {
     const token = getToken();
     if (!token) return;
 
+    // Ask for format
+    const { value: format } = await Swal.fire({
+      title: 'Invoice Format',
+      input: 'radio',
+      inputOptions: {
+        A4: 'Standard (A4)',
+        thermal: 'Thermal (80mm)'
+      },
+      inputValue: 'A4',
+      confirmButtonText: 'View PDF',
+      showCancelButton: true,
+      confirmButtonColor: '#0F766E',
+    });
+
+    if (!format) return;
+
     try {
         Swal.fire({
             title: 'Opening PDF...',
@@ -141,6 +157,7 @@ export default function InvoicesPage() {
 
         const res = await axios.get(`${API_URL}/invoices/${id}/pdf`, {
             headers: { Authorization: `Bearer ${token}` },
+            params: { format },
             responseType: 'blob'
         });
         

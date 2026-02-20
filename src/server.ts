@@ -14,6 +14,12 @@ import { generateSaleReceiptPdf } from './controllers/receipt.controller';
 import { initSocket } from './socket';
 import { authRequired } from './middleware/authRequired';
 
+// --- BULL BOARD ADAPTERS ---
+import { createBullBoard } from '@bull-board/api';
+import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
+import { ExpressAdapter } from '@bull-board/express';
+import { replyQueue, bulkQueue, messageQueue, notificationQueue } from './services/queue.service';
+
 // --- ROUTERS ---
 import whatsappRouter from './routes/whatsapp.routes';
 import paymentRouter from './routes/payment.routes';
@@ -380,6 +386,24 @@ app.use('/api/admin', authRequired, adminLimiterPerUser, adminRouter);
 app.use('/api/investor', authRequired, investorRouter);
 
 
+// ==========================================
+// 📊 QUEUE MONITORING DASHBOARD (Bull Board)
+// ==========================================
+const serverAdapter = new ExpressAdapter();
+serverAdapter.setBasePath('/admin/queues');
+
+createBullBoard({
+  queues: [
+    new BullMQAdapter(replyQueue),
+    new BullMQAdapter(bulkQueue),
+    new BullMQAdapter(messageQueue),
+    new BullMQAdapter(notificationQueue)
+  ],
+  serverAdapter: serverAdapter,
+});
+
+// Mounted publicly or add authRequired if preferred, currently open local to server instance testing
+app.use('/admin/queues', serverAdapter.getRouter());
 
 
 // ==========================================

@@ -64,6 +64,19 @@ export const generateInvoicePdf = async (
   };
 
   return new Promise((resolve, reject) => {
+    // Fonts (try proper bold if available, fallback safely)
+    const notoRegular = pickFirstExisting([
+      path.join(__dirname, '..', '..', 'assets', 'fonts', 'NotoSans-Regular.ttf'),
+      '/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf',
+      '/usr/share/fonts/opentype/noto/NotoSans-Regular.ttf',
+    ]);
+
+    const notoBold = pickFirstExisting([
+      path.join(__dirname, '..', '..', 'assets', 'fonts', 'NotoSans-Bold.ttf'),
+      '/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf',
+      '/usr/share/fonts/opentype/noto/NotoSans-Bold.ttf',
+    ]);
+
     // --- THERMAL LAYOUT CALCULATIONS ---
     let pageWidth = 595.28; // A4 default
     let pageHeight = 841.89; // A4 default
@@ -72,13 +85,62 @@ export const generateInvoicePdf = async (
     if (format === 'thermal') {
         pageWidth = 226; // ~80mm
         margin = 10;
+        const contentWidth = pageWidth - margin * 2;
         
-        // Calculate estimated height
-        const baseHeight = 250; // Header + Footer + padding
-        const itemHeight = (invoice.items?.length || 0) * 50; // generous per-item height
-        const bankHeight = invoice.bankDetailsSnapshot ? 150 : 0;
-        const totalHeight = baseHeight + itemHeight + bankHeight;
-        pageHeight = totalHeight; 
+        // Exact height calculation via dummy doc dry run
+        const dummyDoc = new PDFDocument({ size: [pageWidth, 5000], margins: { top: 20, bottom: 20, left: margin, right: margin } });
+        if (notoRegular) {
+          dummyDoc.registerFont('Regular', notoRegular);
+          dummyDoc.registerFont('Bold', notoBold || notoRegular);
+        } else {
+          dummyDoc.registerFont('Regular', 'Helvetica');
+          dummyDoc.registerFont('Bold', 'Helvetica-Bold');
+        }
+
+        let y = 20;
+
+        dummyDoc.font('Bold').fontSize(14);
+        y += dummyDoc.heightOfString(businessName.toUpperCase(), { width: contentWidth }) + 5;
+
+        dummyDoc.font('Regular').fontSize(10);
+        y += 15;
+
+        y += 12;
+        y += 12;
+        y += 18;
+
+        y += 10;
+
+        y += 12;
+        
+        y += 8;
+
+        dummyDoc.font('Regular').fontSize(9);
+        const colW = { desc: contentWidth * 0.5 };
+        (invoice.items || []).forEach((item) => {
+            const desc = String(item?.name || '-');
+            const descH = dummyDoc.heightOfString(desc, { width: colW.desc });
+            y += Math.max(descH, 12) + 8;
+        });
+
+        y += 10;
+
+        y += 20;
+
+        if (invoice.bankDetailsSnapshot) {
+            y += 12;
+            y += 12;
+            y += 12;
+            y += 12;
+            y += 20;
+        }
+
+        y += 10;
+        dummyDoc.font('Regular').fontSize(8);
+        y += dummyDoc.heightOfString('Thank you for your business. Powered by TallyPadi', { width: contentWidth });
+        y += 20; // explicit cushion added in dummy
+        
+        pageHeight = y;
     }
 
     const doc = new PDFDocument({
@@ -95,19 +157,6 @@ export const generateInvoicePdf = async (
         resolve(pdfData);
     });
     doc.on('error', reject);
-
-    // Fonts (try proper bold if available, fallback safely)
-    const notoRegular = pickFirstExisting([
-      path.join(__dirname, '..', '..', 'assets', 'fonts', 'NotoSans-Regular.ttf'),
-      '/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf',
-      '/usr/share/fonts/opentype/noto/NotoSans-Regular.ttf',
-    ]);
-
-    const notoBold = pickFirstExisting([
-      path.join(__dirname, '..', '..', 'assets', 'fonts', 'NotoSans-Bold.ttf'),
-      '/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf',
-      '/usr/share/fonts/opentype/noto/NotoSans-Bold.ttf',
-    ]);
 
     if (notoRegular) {
       doc.registerFont('Regular', notoRegular);
@@ -208,20 +257,6 @@ export const generateInvoicePdf = async (
         y += 10;
         doc.font('Regular').fontSize(8).fillColor(THEME.muted);
         doc.text('Thank you for your business. Powered by TallyPadi', margin, y, { align: 'center', width: contentWidth });
-
-        // Trim empty space (if desired, by setting page height to actual y + buffer)
-        // PDFKit doesn't allow resizing page *after* creation easily in standard flow without creating new doc.
-        // But since we estimated high, we might have whitespace. 
-        // For thermal, users often prefer NO whitespace. 
-        // We can't resize this instance. 
-        // However, we calculated `pageHeight` roughly.
-        // A common trick is to not set height initially or set it very long, but that doesn't "trim" it.
-        // Given constraint "check why empty space is been generated", implies we want it tight.
-        // Refinement: We could dry-run to calculate height, but that's expensive.
-        // For now, the estimation is acceptable, or we can use a "continuous" page approach if supported, 
-        // but PDF is page-based.
-        // Let's stick to the estimated height for now, but make the estimation better next time if needed.
-
     } else {
         // --- ORIGINAL A4 GENERATION ---
     const pageWidth = doc.page.width;
