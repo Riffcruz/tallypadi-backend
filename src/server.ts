@@ -390,7 +390,7 @@ app.use('/api/investor', authRequired, investorRouter);
 // 📊 QUEUE MONITORING DASHBOARD (Bull Board)
 // ==========================================
 const serverAdapter = new ExpressAdapter();
-serverAdapter.setBasePath('/admin/queues');
+serverAdapter.setBasePath('/api/admin/queues');
 
 createBullBoard({
   queues: [
@@ -403,7 +403,7 @@ createBullBoard({
 });
 
 // Mounted publicly or add authRequired if preferred, currently open local to server instance testing
-app.use('/admin/queues', serverAdapter.getRouter());
+app.use('/api/admin/queues', serverAdapter.getRouter());
 
 
 // ==========================================
