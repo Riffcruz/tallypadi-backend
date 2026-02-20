@@ -438,7 +438,7 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
   if (isThermal) {
       y += 10;
       doc.font(regFont).fontSize(8).fillColor(THEME_INVOICE.muted);
-      doc.text('Thank you for your business. Powered by TallyPadi', margin, y, { align: 'center', width: contentW });
+      doc.text('Thank you for your business. Powered by TallyPadi.com', margin, y, { align: 'center', width: contentW });
       y += 20; // Final bottom margin cushion
   } else {
       y += 40;
