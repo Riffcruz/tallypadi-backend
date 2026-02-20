@@ -1,6 +1,6 @@
 // src/services/queue.worker.ts
 import { Worker } from 'bullmq'; // ✅ Switched to BullMQ
-import { connection } from './queue.service'; // ✅ Import shared Redis connection
+import { createRedisConnection } from './queue.service'; // ✅ Factory for dedicated connections
 import { sendWhatsAppText, sendWhatsAppButtons, sendWhatsAppList, sendWhatsAppDocumentBuffer, sendWhatsAppFlow } from './whatsapp.service';
 import { generateSaleReceiptPdfBuffer } from '../controllers/receipt.controller';
 import { Invoice } from '../models/invoice.model';
@@ -151,7 +151,7 @@ export const replyWorker = new Worker(
     console.log(`⚠️ Unknown reply job name: ${job.name}`);
   },
   {
-    connection: connection as any, // ✅ Redis connection
+    connection: createRedisConnection('worker-reply') as any, // ✅ Dedicated Redis connection
     concurrency: 50,
     // lockDuration: 60_000,
   }
@@ -185,7 +185,7 @@ export const bulkWorker = new Worker(
     await sendWhatsAppText(phoneNumber, message);
   },
   {
-    connection: connection as any, // ✅ Redis connection
+    connection: createRedisConnection('worker-bulk') as any, // ✅ Dedicated Redis connection
     // limiter: { max: 5, duration: 1000 },
     concurrency:50,
   }
@@ -213,7 +213,7 @@ export const messageWorker = new Worker(
     }
   },
   {
-    connection: connection as any, // ✅ Redis connection
+    connection: createRedisConnection('worker-inbound') as any, // ✅ Dedicated Redis connection
     concurrency: 50, // High concurrency
   }
 );
@@ -238,7 +238,7 @@ export const notificationWorker = new Worker(
     }
   },
   {
-    connection: connection as any,
+    connection: createRedisConnection('worker-push') as any, // ✅ Dedicated Redis connection
     concurrency: 50, // Lower concurrency for push to avoid rate limits
   }
 );
