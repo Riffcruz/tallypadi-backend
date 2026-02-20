@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
 import Sidebar from '../../components/Sidebar';
+import PushNotificationPrompt from '../../components/PushNotificationPrompt';
 import {
   Wallet,
   Coins,
@@ -748,7 +749,8 @@ const topTransactions = filteredTransactions.slice(0, 6);
         </div>
       )}
 
-    
+      {/* Push Notification Opt-in Banner */}
+      <PushNotificationPrompt />
     </div>
   );
 }

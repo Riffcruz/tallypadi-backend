@@ -5,6 +5,7 @@ import { User } from '../models/user.model';
 import { ProcessedMessage } from '../models/processedMessage.model';
 import { sendWhatsAppText, sendWhatsAppTemplate } from '../services/whatsapp.service';
 import { isSubActive, isTycoon } from '../utils/permissions';
+import { PushSubscription } from '../models/pushSubscription.model';
 
 // --- Helpers ---
 const sanitizeString = (input: unknown): string | null => {
@@ -546,5 +547,34 @@ export const verifyChangePhoneOTP = async (req: any, res: Response) => {
   } catch (err) {
     console.error('Verify Change Phone Error:', err);
     return res.status(500).json({ error: 'Server Error' });
+  }
+};
+
+export const subscribeUserPush = async (req: any, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    const subscription = req.body;
+    if (!subscription || !subscription.endpoint || !subscription.keys) {
+       return res.status(400).json({ error: 'Invalid subscription payload' });
+    }
+
+    // Upsert to avoid duplicates for the same browser endpoint
+    await PushSubscription.findOneAndUpdate(
+      { endpoint: subscription.endpoint }, // find by unique browser endpoint
+      {
+        userId: userId,
+        endpoint: subscription.endpoint,
+        keys: subscription.keys,
+        userAgent: req.headers['user-agent']
+      },
+      { upsert: true, new: true }
+    );
+
+    res.status(200).json({ success: true, message: 'Push subscription saved' });
+  } catch (err) {
+    console.error('Push Subscribe Error:', err);
+    res.status(500).json({ error: 'Failed to subscribe to push notifications' });
   }
 };

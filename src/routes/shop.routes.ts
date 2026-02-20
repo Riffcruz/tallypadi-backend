@@ -8,10 +8,12 @@ import {
   recordShopVisit
 } from '../controllers/shop.controller';
 import { authRequired } from '../middleware/authRequired';
+import { subscribeUserPush } from '../controllers/auth.controller';
 
 const router = Router();
 
 // ✅ Owner Routes (Auth Required)
+router.post('/push/subscribe', authRequired, subscribeUserPush);
 router.get('/me', authRequired, getShopMe);
 router.put('/me', authRequired, updateShopSettings);
 

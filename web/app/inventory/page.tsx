@@ -223,14 +223,53 @@ export default function InventoryPage() {
 
   const handleScan = (code: string) => {
     setShowScanner(false);
-    if (scannerTarget === 'search') {
-        setSearchTerm(code);
-    } else if (scannerTarget === 'add') {
-        setNewItemBarcode(code);
-    } else if (scannerTarget === 'edit') {
-        setEditBarcode(code);
+    
+    // Intelligent Routing based on active modal
+    if (addOpen) {
+      setNewItemBarcode(code);
+    } else if (editOpen) {
+      setEditBarcode(code);
+    } else {
+      setSearchTerm(code);
     }
   };
+
+  useEffect(() => {
+    // USB/Bluetooth Scanner Hardware Detection
+    let buffer = '';
+    let lastKeyTime = Date.now();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+        // Ignore if user is manually typing in an input field and it's not a rapid scan
+        const target = e.target as HTMLElement;
+        const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA';
+
+        const currentTime = Date.now();
+        // Hardware scanners simulate keystrokes extremely fast (< 50ms)
+        if (currentTime - lastKeyTime > 50) {
+            buffer = '';
+        }
+        lastKeyTime = currentTime;
+
+        if (e.key === 'Enter') {
+            if (buffer.length > 2) {
+                // If we detected a fast string ending in Enter, it's a scan
+                e.preventDefault();
+                console.log('USB Scanner Detected:', buffer);
+                handleScan(buffer);
+                buffer = '';
+                
+                // If it originated in an input, blur it so they don't accidentally type normally over it
+                if (isInput) target.blur();
+            }
+        } else if (e.key.length === 1) {
+            buffer += e.key;
+        }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [addOpen, editOpen]); // Rebind when modal states change so handleScan routes correctly
 
   const showLockedModal = () => {
     const isTrial = user?.subscriptionStatus === 'trial';
