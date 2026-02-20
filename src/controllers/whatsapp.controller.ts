@@ -3281,7 +3281,8 @@ Oga Boss Plan: ₦3,000/month (Save significantly with the yearly plan)`;
               break;
           }
 
-          await queueOutboundMessage(from, "📄 Generating invoice...");
+          // Instantly send the generation text directly to Meta API, bypassing the queue
+          sendWhatsAppText(from, "📄 Generating invoice...").catch(() => {});
 
           try {
               // 4. Calculate Total

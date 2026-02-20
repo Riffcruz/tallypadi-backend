@@ -10,7 +10,8 @@ import { DailyStats } from '../models/dailyStats.model';
 import { ProcessedMessage } from '../models/processedMessage.model';
 import { Debtor } from '../models/debtor.model';
 
-import { sendWhatsAppText } from '../services/whatsapp.service';
+import { sendWhatsAppText, sendWhatsAppMediaById } from '../services/whatsapp.service';
+import { executeGlobalPushNotification } from '../services/push.service';
 
 import bcrypt from 'bcryptjs';
 
@@ -72,6 +73,10 @@ const broadcastSchema = z
   .object({
     target: z.enum(['all', 'tycoon', 'oga_boss', 'active_24h']).default('all'),
     message: z.string().trim().min(1).max(1500),
+    mediaId: z.string().trim().optional(),
+    mediaType: z.enum(['image', 'video', 'document', 'audio']).optional(),
+    sendPush: z.boolean().optional().default(false),
+    sendWhatsapp: z.boolean().optional().default(true),
   })
   .strict();
 
@@ -534,28 +539,53 @@ export const broadcastMessage = async (req: Request, res: Response) => {
     const parsed = broadcastSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
-    const { target, message } = parsed.data;
+    const { target, message, mediaId, mediaType, sendPush, sendWhatsapp } = parsed.data;
 
-    const query: any = { role: 'OWNER' };
-    if (target === 'tycoon') query.planType = 'TYCOON';
-    if (target === 'oga_boss') query.planType = 'OGA_BOSS';
-    if (target === 'active_24h') query.updatedAt = { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) };
+    // 1. Send PWA Push Notification Instantly (If requested)
+    if (sendPush) {
+      // Execute globally without blocking the response
+      executeGlobalPushNotification({
+        title: 'TallyPadi Update',
+        body: message,
+      }).catch(err => console.error('Failed to trigger global PWA broadcast:', err));
+    }
 
-    const recipients = await User.find(query).select('phoneNumber').lean();
+    // 2. Prepare WhatsApp Recipients (if requested)
+    if (sendWhatsapp) {
+      const query: any = { role: 'OWNER' };
+      if (target === 'tycoon') query.planType = 'TYCOON';
+      if (target === 'oga_boss') query.planType = 'OGA_BOSS';
+      if (target === 'active_24h') query.updatedAt = { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) };
 
-    (async () => {
-      for (const u of recipients) {
-        try {
-          if (!u.phoneNumber) continue;
-          await sendWhatsAppText(u.phoneNumber, message);
-          await new Promise((r) => setTimeout(r, 150));
-        } catch {
-          console.error(`Failed to msg ${u.phoneNumber}`);
+      const recipients = await User.find(query).select('phoneNumber').lean();
+
+      // 3. Dispatch to WhatsApp in background
+      (async () => {
+        for (const u of recipients) {
+          try {
+            if (!u.phoneNumber) continue;
+
+            if (mediaId && mediaType) {
+              await sendWhatsAppMediaById({
+                to: u.phoneNumber,
+                mediaId,
+                type: mediaType as any,
+                caption: message // Send text as caption if media is present
+              });
+            } else {
+              await sendWhatsAppText(u.phoneNumber, message);
+            }
+
+            // Throttle to respect Meta API rate limits
+            await new Promise((r) => setTimeout(r, 150));
+          } catch {
+            console.error(`Failed to msg ${u.phoneNumber}`);
+          }
         }
-      }
-    })();
+      })();
+    }
 
-    res.json({ success: true, message: `Broadcast queued for ${recipients.length} users` });
+    res.json({ success: true, message: `Broadcast queued.` + (sendWhatsapp ? ' WhatsApp delivery started.' : '') + (sendPush ? ' PWA Push broadcast triggered.' : '') });
   } catch (error) {
     console.error('Broadcast Error:', error);
     res.status(500).json({ error: 'Broadcast Error' });
