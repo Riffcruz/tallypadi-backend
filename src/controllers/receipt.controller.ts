@@ -431,6 +431,7 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
         width: totalsBoxW - 32,
         align: 'right',
       });
+      y += totalsBoxH;
   }
 
   // --- FOOTER ---
