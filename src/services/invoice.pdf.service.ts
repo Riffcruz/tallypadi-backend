@@ -141,11 +141,52 @@ export const generateInvoicePdf = async (
         y += 20; // explicit cushion added in dummy
         
         pageHeight = y;
+    } else {
+        const dummyDoc = new PDFDocument({ size: [pageWidth, 5000], margins: { top: 50, bottom: 0, left: margin, right: margin } });
+        const contentWidth = pageWidth - margin * 2;
+        
+        if (notoRegular) {
+          dummyDoc.registerFont('Regular', notoRegular);
+          dummyDoc.registerFont('Bold', notoBold || notoRegular);
+        } else {
+          dummyDoc.registerFont('Regular', 'Helvetica');
+          dummyDoc.registerFont('Bold', 'Helvetica-Bold');
+        }
+
+        dummyDoc.font('Regular').fontSize(10);
+
+        const colW_desc = Math.floor(contentWidth * 0.52);
+        const cellPadX = 8;
+        const cellPadY = 7;
+        
+        let y = 230; 
+        const tableHeaderHeight = 32;
+        y += tableHeaderHeight + 2;
+
+        (invoice.items || []).forEach((item) => {
+            const desc = String(item?.name || '-');
+            const descH = dummyDoc.heightOfString(desc, { width: colW_desc - cellPadX * 2, align: 'left' });
+            const rowH = Math.max(28, Math.ceil(descH + cellPadY * 2));
+            y += rowH;
+        });
+
+        y += 16;
+        const totalsBoxH = 62;
+        y += totalsBoxH;
+
+        if (invoice.bankDetailsSnapshot) {
+            y += 86; 
+            y += 105; 
+        }
+        
+        y += 80;
+
+        pageHeight = y;
     }
 
     const doc = new PDFDocument({
-      size: format === 'thermal' ? [pageWidth, pageHeight] : 'A4',
-      margins: { top: format === 'thermal' ? 20 : 50, bottom: format === 'thermal' ? 0 : 50, left: margin, right: margin },
+      size: [pageWidth, pageHeight],
+      margins: { top: format === 'thermal' ? 20 : 50, bottom: 0, left: margin, right: margin },
       bufferPages: true,
       autoFirstPage: true,
     });
@@ -355,21 +396,11 @@ export const generateInvoicePdf = async (
     };
 
     const ensureSpace = (nextHeight: number, currentY: number) => {
-      if (currentY + nextHeight > pageHeight - safeBottom) {
-        doc.addPage();
-        drawHeader();
-        const startY = 230; // consistent table start after header on new page
-        return drawTableHeader(startY) + 2;
-      }
+      // Pagination check removed for continuous PDF flow constraint
       return currentY;
     };
 
-    const drawFooter = () => {
-      const footerY = doc.page.height - 65; // Raised by 5 points to prevent triggering auto-page-break
-      doc.fillColor(THEME.muted).font('Regular').fontSize(9).text('Thank you for your business. Powered by TallyPadi', 0, footerY, {
-        align: 'center',
-      });
-    };
+    // drawFooter implementation merged into end block inline previously
 
     // Build document
     drawHeader();
@@ -443,6 +474,8 @@ export const generateInvoicePdf = async (
       width: totalsBoxW - 32,
       align: 'right',
     });
+    
+    y += totalsBoxH;
 
     // --- BANK / PAYMENT INFO (make account number VERY visible) ---
     if (invoice.bankDetailsSnapshot) {
@@ -477,20 +510,12 @@ export const generateInvoicePdf = async (
     }
 
     // Footer on last page content flow
-    drawFooter();
+    y += 20;
+    const footerY = y; 
+    doc.fillColor(THEME.muted).font('Regular').fontSize(9).text('Thank you for your business. Powered by TallyPadi', 0, footerY, {
+      align: 'center',
+    });
 
-    // Optional: page numbering (safe because bufferPages: true)
-    const range = doc.bufferedPageRange(); // { start: 0, count: n }
-    for (let i = 0; i < range.count; i++) {
-      doc.switchToPage(i);
-      doc.fillColor(THEME.muted).font('Regular').fontSize(8).text(
-        `Page ${i + 1} of ${range.count}`,
-        margin,
-        doc.page.height - 28,
-        { width: contentWidth, align: 'right' }
-      );
-    }
-    doc.switchToPage(range.count - 1);
     } // END ELSE (A4)
 
     doc.end();
