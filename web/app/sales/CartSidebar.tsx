@@ -215,7 +215,7 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [printReceipt, setPrintReceipt] = useState(true);
-  const [receiptType, setReceiptType] = useState<'standard' | 'thermal'>('standard');
+  const [receiptType, setReceiptType] = useState<'standard' | 'thermal'>('thermal');
   const [paymentMethod, setPaymentMethod] = useState<string>('CASH');
 
   // store blob url + saleId so buttons work after generation

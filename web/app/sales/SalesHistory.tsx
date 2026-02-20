@@ -206,7 +206,7 @@ export default function SalesHistory({ user }: { user: UserProfile | null }) {
         standard: 'Standard (A4)',
         thermal: 'Thermal (80mm)'
       },
-      inputValue: 'standard',
+      inputValue: 'thermal',
       confirmButtonText: 'Download',
       showCancelButton: true,
       confirmButtonColor: '#0F766E',

@@ -139,7 +139,7 @@ export default function InvoicesPage() {
         A4: 'Standard (A4)',
         thermal: 'Thermal (80mm)'
       },
-      inputValue: 'A4',
+      inputValue: 'thermal',
       confirmButtonText: 'View PDF',
       showCancelButton: true,
       confirmButtonColor: '#0F766E',
