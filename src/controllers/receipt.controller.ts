@@ -186,6 +186,7 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
     bgLight: '#F8FAFC',
     bgHeader: '#F1F5F9',
     white: '#FFFFFF',
+    alert: '#EF4444',
   };
 
   const isThermal = format === 'thermal';
@@ -411,26 +412,63 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
   y += 16;
 
   const totalMoney = Number(tx.totalMoney ?? computedTotal ?? 0);
+  const discount = Number(tx.discount ?? 0);
+  const netTotal = Number(tx.amountPaid ?? totalMoney - discount);
+  const pointsEarned = Number(tx.pointsEarned ?? 0);
 
   if (isThermal) {
       doc.moveTo(margin, y).lineTo(pageW - margin, y).strokeColor(THEME_INVOICE.border).stroke();
       y += 10;
+      
+      if (discount > 0) {
+        doc.font(regFont).fontSize(10).fillColor(THEME_INVOICE.dark);
+        doc.text(`Subtotal: ${formatMoney(totalMoney)}`, margin, y, { align: 'right', width: contentW });
+        y += 14;
+        doc.text(`Discount: -${formatMoney(discount)}`, margin, y, { align: 'right', width: contentW });
+        y += 14;
+      }
+      
       doc.font(boldFont).fontSize(12).fillColor(THEME_INVOICE.dark);
-      doc.text(`TOTAL: ${formatMoney(totalMoney)}`, margin, y, { align: 'right', width: contentW });
+      doc.text(`TOTAL: ${formatMoney(netTotal)}`, margin, y, { align: 'right', width: contentW });
       y += 20;
+      
+      if (pointsEarned > 0) {
+        doc.font(boldFont).fontSize(9).fillColor(THEME_INVOICE.dark); // using dark instead of primary to ensure thermal printer contrast
+        doc.text(`*** Loyalty Points Earned: ${pointsEarned} ***`, margin, y, { align: 'center', width: contentW });
+        y += 16;
+      }
   } else {
-      const totalsBoxH = 62;
+      const boxLines = 1 + (discount > 0 ? 2 : 0) + (pointsEarned > 0 ? 1 : 0);
+      const totalsBoxH = 50 + (boxLines * 16);
       const totalsBoxW = Math.min(260, contentW);
       const totalsBoxX = pageW - margin - totalsBoxW;
 
       doc.roundedRect(totalsBoxX, y, totalsBoxW, totalsBoxH, 12).fill(THEME_INVOICE.bgHeader);
       doc.rect(totalsBoxX, y, 5, totalsBoxH).fill(THEME_INVOICE.accent);
 
-      doc.fillColor(THEME_INVOICE.muted).font(boldFont).fontSize(9).text('TOTAL PAID', totalsBoxX + 16, y + 12);
-      doc.fillColor(THEME_INVOICE.dark).font(boldFont).fontSize(18).text(formatMoney(totalMoney), totalsBoxX + 16, y + 28, {
+      let currentY = y + 14;
+
+      if (discount > 0) {
+          doc.fillColor(THEME_INVOICE.muted).font(regFont).fontSize(10).text('Subtotal:', totalsBoxX + 16, currentY);
+          doc.fillColor(THEME_INVOICE.dark).font(regFont).fontSize(10).text(formatMoney(totalMoney), totalsBoxX + 16, currentY, { width: totalsBoxW - 32, align: 'right' });
+          currentY += 16;
+          doc.fillColor(THEME_INVOICE.muted).text('Discount:', totalsBoxX + 16, currentY);
+          doc.fillColor(THEME_INVOICE.alert).text(`-${formatMoney(discount)}`, totalsBoxX + 16, currentY, { width: totalsBoxW - 32, align: 'right' });
+          currentY += 16;
+      }
+
+      doc.fillColor(THEME_INVOICE.muted).font(boldFont).fontSize(9).text('TOTAL PAID', totalsBoxX + 16, currentY);
+      currentY += 14;
+      doc.fillColor(THEME_INVOICE.dark).font(boldFont).fontSize(18).text(formatMoney(netTotal), totalsBoxX + 16, currentY, {
         width: totalsBoxW - 32,
         align: 'right',
       });
+      currentY += 24;
+
+      if (pointsEarned > 0) {
+          doc.fillColor(THEME_INVOICE.primary).font(boldFont).fontSize(10).text(`★ Loyalty Points Earned: ${pointsEarned}`, totalsBoxX + 16, currentY, { width: totalsBoxW - 32, align: 'right' });
+      }
+
       y += totalsBoxH;
   }
 

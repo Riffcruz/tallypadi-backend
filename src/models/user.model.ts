@@ -52,6 +52,13 @@ export interface IUser extends Document {
        canManageCustomers?: boolean;
        canViewSettings?: boolean;
     };
+
+    // ✅ Royalty / Loyalty Program Settings
+    royalty?: {
+      enabled: boolean;
+      pointsPerPurchase: number; // e.g., 1 point per 1000 NGN spent
+      currencyValuePerPoint: number; // e.g., 1 point = 10 NGN when redeeming
+    };
   };
 
   bankDetails?: {
@@ -167,6 +174,13 @@ const userSchema = new Schema<IUser>(
          canViewReports: { type: Boolean, default: false },       // Access reports page
          canManageCustomers: { type: Boolean, default: true },    // Access debtors
          canViewSettings: { type: Boolean, default: false },      // Access settings page
+      },
+
+      // ✅ Royalty Program Config
+      royalty: {
+        enabled: { type: Boolean, default: false },
+        pointsPerPurchase: { type: Number, default: 0 },
+        currencyValuePerPoint: { type: Number, default: 0 }
       }
     },
 

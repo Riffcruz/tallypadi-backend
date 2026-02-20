@@ -161,6 +161,23 @@ export const updateSettings = async (req: AuthReq, res: Response) => {
             $set['settings.utcOffsetMinutes'] = offset;
           }
         }
+
+        // ✅ Royalty Program Update
+        if (inputSettings.royalty && typeof inputSettings.royalty === 'object') {
+           const ryl = inputSettings.royalty;
+           if (ryl.enabled !== undefined) {
+             const en = validateBoolean(ryl.enabled);
+             if (en !== undefined) $set['settings.royalty.enabled'] = en;
+           }
+           if (ryl.pointsPerPurchase !== undefined) {
+             const pts = validateNumber(ryl.pointsPerPurchase);
+             if (pts !== undefined && pts >= 0) $set['settings.royalty.pointsPerPurchase'] = pts;
+           }
+           if (ryl.currencyValuePerPoint !== undefined) {
+             const val = validateNumber(ryl.currencyValuePerPoint);
+             if (val !== undefined && val >= 0) $set['settings.royalty.currencyValuePerPoint'] = val;
+           }
+        }
       }
 
       // ✅ Bank Details Update

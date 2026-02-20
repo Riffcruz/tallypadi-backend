@@ -13,6 +13,9 @@ export interface IInvoice extends Document {
   customerName: string;
   items: IInvoiceItem[];
   totalAmount: number;
+  discount?: number;
+  customerId?: Types.ObjectId;
+  pointsEarned?: number;
   dateIssued: Date;
   invoiceNumber: string;
   status: 'DRAFT' | 'GENERATED' | 'SENT' | 'PAID' | 'CANCELLED';
@@ -44,6 +47,9 @@ const invoiceSchema = new Schema<IInvoice>(
       },
     ],
     totalAmount: { type: Number, required: true },
+    discount: { type: Number, default: 0 },
+    customerId: { type: Schema.Types.ObjectId, ref: 'Customer' },
+    pointsEarned: { type: Number, default: 0 },
     dateIssued: { type: Date, default: Date.now },
     invoiceNumber: { type: String, required: true }, // unique per user preferably, but global unique is easier
     status: {

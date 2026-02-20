@@ -30,6 +30,10 @@ export interface ITransaction extends Document {
   customerName?: string | null;
   customerKey?: string | null;
 
+  // Royalty / CRM Logic
+  customerId?: Types.ObjectId | null;
+  pointsEarned?: number;
+
   // Financial tracking
   amountPaid: number;  // Cash actually received
   discount: number;
@@ -110,6 +114,17 @@ const transactionSchema = new Schema<ITransaction>(
       type: String, 
       default: null, 
       index: true 
+    },
+    // Loyalty Program
+    customerId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Customer',
+      default: null,
+      index: true
+    },
+    pointsEarned: {
+      type: Number,
+      default: 0
     },
     // Financials
     amountPaid: { 

@@ -5,6 +5,9 @@ import { User, IUser } from '../models/user.model';
 import { isSubActive } from '../utils/permissions';
 import { getRelevantUserIds } from './report.service';
 
+import { queuePushNotification } from './queue.service';
+import { Customer } from '../models/customer.model';
+
 export class SalesService {
 
   // --- Helpers ---
@@ -26,6 +29,8 @@ export class SalesService {
     userId: string,
     itemsInput: any[],
     paymentMethod: string,
+    customerId: string | null = null,
+    discountAmount: number = 0,
     session: ClientSession
   ) {
     // 1. Fetch User & Validate Subscription
@@ -96,6 +101,18 @@ export class SalesService {
         }
       });
 
+      // Low Stock Alert Logic
+      const newStock = (invItem.quantity || 0) - it.quantity;
+      if (invItem.quantity >= 5 && newStock < 5) {
+         // Fire Push Notification asynchronously
+         queuePushNotification({
+            type: 'SINGLE',
+            agentId: ownerForSub._id.toString(), // Send to shop owner
+            title: '⚠️ Low Stock Alert',
+            body: `${invItem.name} is running low (${newStock} left in stock)`,
+         }).catch(console.error);
+      }
+
       const lineTotal = it.quantity * it.price;
       totalMoney += lineTotal;
 
@@ -110,6 +127,19 @@ export class SalesService {
         costPrice: invItem.costPrice || 0,
         total: lineTotal
       });
+    }
+
+    const finalDiscount = discountAmount > 0 ? discountAmount : 0;
+    const finalAmountPaid = totalMoney > finalDiscount ? totalMoney - finalDiscount : 0;
+
+    // Loyalty Points Calculation
+    let pointsEarned = 0;
+    if (customerId && ownerForSub.settings?.royalty?.enabled) {
+      const ppp = ownerForSub.settings.royalty.pointsPerPurchase || 0;
+      if (ppp > 0) {
+        // e.g. if ppp = 1000 NGN, and sale is 3500 NGN => 3 points
+        pointsEarned = Math.floor(finalAmountPaid / ppp);
+      }
     }
 
     // 5. Execute Bulk Write
@@ -128,10 +158,27 @@ export class SalesService {
       paymentStatus: 'PAID',
       paymentMethod: String(paymentMethod || 'CASH').toUpperCase(),
       items: txItems,
-      totalMoney,
+      totalMoney: totalMoney, // Gross
+      discount: finalDiscount,
+      amountPaid: finalAmountPaid, // Net 
+      customerId: customerId || null,
+      pointsEarned: pointsEarned,
       date: this.getCurrentDateString(),
       timestamp: new Date()
     } as any], { session });
+
+    // 7. Update Customer Points asynchronously if earned
+    if (customerId && pointsEarned > 0) {
+      // Background update (could be session'd but we allow it non-blocking if preferred, or within session to guarantee)
+      await Customer.updateOne(
+        { _id: customerId }, 
+        { 
+           $inc: { royaltyPoints: pointsEarned, totalSpent: finalAmountPaid },
+           $set: { lastPurchaseAt: new Date() }
+        },
+        { session }
+      );
+    }
 
     return createdTx[0];
   }

@@ -33,6 +33,7 @@ interface CartSidebarProps {
   setCart: React.Dispatch<React.SetStateAction<CartItem[]>>;
   user: UserProfile | null;
   onCheckoutSuccess: () => void;
+  onHoldCart: () => void;
 }
 
 function currencyPrefix(code?: string) {
@@ -207,7 +208,7 @@ function extractSaleId(data: any): string | undefined {
   return s ? s : undefined;
 }
 
-export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: CartSidebarProps) {
+export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess, onHoldCart }: CartSidebarProps) {
   const router = useRouter();
 
   const [loading, setLoading] = useState(false);
@@ -217,6 +218,18 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
   const [printReceipt, setPrintReceipt] = useState(true);
   const [receiptType, setReceiptType] = useState<'standard' | 'thermal'>('thermal');
   const [paymentMethod, setPaymentMethod] = useState<string>('CASH');
+  
+  const [customerId, setCustomerId] = useState<string>('');
+  const [discountAmount, setDiscountAmount] = useState<number>(0);
+  const [customers, setCustomers] = useState<any[]>([]);
+
+  useEffect(() => {
+    const token = getCookie('tallyToken');
+    if (!token) return;
+    axios.get(`${API_URL}/customers`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(res => setCustomers(Array.isArray(res.data) ? res.data : (res.data?.data || [])))
+      .catch(console.error);
+  }, []);
 
   // store blob url + saleId so buttons work after generation
   const [receipt, setReceipt] = useState<{ saleId?: string; url?: string } | null>(null);
@@ -234,6 +247,7 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
   }, [receipt?.url]);
 
   const total = useMemo(() => cart.reduce((acc, item) => acc + item.sellQty * item.sellPrice, 0), [cart]);
+  const netTotal = Math.max(0, total - discountAmount);
 
   const formatMoney = (amount: number) => {
     return new Intl.NumberFormat(user?.locale || 'en-NG', {
@@ -312,6 +326,8 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
     try {
       const payload = {
         paymentMethod, // ✅ Add this
+        customerId: customerId || undefined,
+        discountAmount: discountAmount || 0,
         items: cart.map((i) => ({
           itemId: i.id,
           quantity: Number(i.sellQty),
@@ -420,13 +436,22 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
           </div>
 
           {cart.length > 0 && (
-            <button
-              onClick={() => setCart([])}
-              className="ml-auto text-xs font-bold text-slate-500 hover:text-slate-900 transition"
-              title="Clear cart"
-            >
-              Clear
-            </button>
+            <div className="ml-auto flex items-center gap-2">
+              <button
+                onClick={onHoldCart}
+                className="text-xs font-bold text-yellow-600 bg-yellow-50 px-2 py-1 rounded-md hover:bg-yellow-100 transition"
+                title="Hold Order"
+              >
+                Hold
+              </button>
+              <button
+                onClick={() => setCart([])}
+                className="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded-md hover:bg-slate-200 hover:text-slate-900 transition"
+                title="Clear cart"
+              >
+                Clear
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -555,9 +580,47 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
           </div>
         )}
 
+        {/* Cart Controls: Customer & Discount */}
+        {cart.length > 0 && (
+          <div className="mb-4 space-y-3 p-3 bg-white rounded-2xl border border-slate-200">
+            <div>
+              <label className="text-[10px] uppercase tracking-widest font-black text-slate-400 mb-1.5 block">Customer (Optional)</label>
+              <select 
+                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:border-emerald-500 transition-colors"
+                value={customerId}
+                onChange={(e) => setCustomerId(e.target.value)}
+              >
+                <option value="">Guest (Walk-in)</option>
+                {customers.map(c => <option key={c._id} value={c._id}>{c.name} {c.phoneNumber ? `(${c.phoneNumber})` : ''}</option>)}
+              </select>
+            </div>
+            
+            <div className="flex items-center justify-between gap-4">
+              <label className="text-[10px] uppercase tracking-widest font-black text-slate-400">Discount</label>
+              <div className="relative w-1/2">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">{prefix}</span>
+                <input 
+                  type="number" 
+                  className="w-full pl-7 pr-3 py-2 text-sm font-bold border border-slate-200 rounded-xl outline-none focus:border-emerald-500 text-right bg-slate-50"
+                  value={discountAmount || ''}
+                  onChange={(e) => setDiscountAmount(Number(e.target.value))}
+                  placeholder="0"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {discountAmount > 0 && (
+          <div className="flex justify-between items-end mb-1">
+            <span className="text-slate-500 font-bold text-sm">Subtotal</span>
+            <span className="text-sm font-bold text-slate-700">{formatMoney(total)}</span>
+          </div>
+        )}
+
         <div className="flex justify-between items-end mb-4">
           <span className="text-slate-500 font-extrabold text-sm mb-1">Total</span>
-          <span className="text-2xl font-black text-slate-900 tracking-tight">{formatMoney(total)}</span>
+          <span className="text-2xl font-black text-slate-900 tracking-tight">{formatMoney(netTotal)}</span>
         </div>
 
         <button
@@ -587,7 +650,7 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess }: 
               <div>
                 <h3 className="text-slate-900 font-black text-lg">Confirm Sale</h3>
                 <p className="text-slate-500 text-sm font-semibold mt-1">
-                  Total: <span className="text-slate-900">{formatMoney(total)}</span> • {cart.length} item(s)
+                  Total: <span className="text-slate-900">{formatMoney(netTotal)}</span> • {cart.length} item(s)
                 </p>
               </div>
               <button

@@ -34,6 +34,7 @@ import invoiceRouter from './routes/invoice.routes';
 import supportRouter from './routes/support.routes';
 import supportWebhookRouter from './routes/support.webhook.routes';
 import expenseRouter from './routes/expense.routes';
+import customerRouter from './routes/customer.routes';
 
 // --- SERVICES & CONFIG ---
 import {
@@ -67,7 +68,8 @@ import { presignUpload } from './controllers/upload.controller';
 import {
   recordSale,
   getSalesHistory,
-  generateSalesReport
+  generateSalesReport,
+  closeRegister
 } from './controllers/sales.controller';
 
 import {
@@ -339,12 +341,16 @@ app.post('/api/uploads/presign', authRequired, presignUploadLimiter, presignUplo
 app.post('/api/sales', authRequired, recordSale);
 app.get('/api/sales', authRequired, getSalesHistory);
 app.get('/api/sales/report', authRequired, generateSalesReport);
+app.post('/api/sales/close-register', authRequired, closeRegister);
 
 // --- DEBTORS ---
 app.get('/api/debtors', authRequired, getDebtors);
 app.post('/api/debtors', authRequired, createDebtor);
 app.put('/api/debtors/:id', authRequired, updateDebtor);
 app.delete('/api/debtors/:id', authRequired, deleteDebtor);
+
+// --- CUSTOMERS & CRM ---
+app.use('/api/customers', customerRouter);
 
 // --- DEBTOR PAYMENTS ---
 app.post('/api/debtors/payment', authRequired, recordDebtPayment);

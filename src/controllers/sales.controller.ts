@@ -32,11 +32,13 @@ export const recordSale = async (req: Request | any, res: Response) => {
 
     const items = req.body.items || (Array.isArray(req.body) ? req.body : [req.body]);
     const paymentMethod = req.body.paymentMethod || 'CASH';
+    const customerId = req.body.customerId || null;
+    const discountAmount = Number(req.body.discountAmount) || 0;
 
     // If transaction active, pass session. Else pass undefined so service runs normally.
     const sessionToUse = transactionActive ? session : undefined;
 
-    const transaction = await SalesService.recordSale(userId, items, paymentMethod, sessionToUse as any);
+    const transaction = await SalesService.recordSale(userId, items, paymentMethod, customerId, discountAmount, sessionToUse as any);
 
     if (transactionActive) await session.commitTransaction();
 
@@ -58,8 +60,10 @@ export const recordSale = async (req: Request | any, res: Response) => {
            const userId = req.user?.id || req.user?._id;
            const items = req.body.items || (Array.isArray(req.body) ? req.body : [req.body]);
            const paymentMethod = req.body.paymentMethod || 'CASH';
+           const customerId = req.body.customerId || null;
+           const discountAmount = Number(req.body.discountAmount) || 0;
            
-           const transaction = await SalesService.recordSale(userId, items, paymentMethod, undefined as any);
+           const transaction = await SalesService.recordSale(userId, items, paymentMethod, customerId, discountAmount, undefined as any);
            return res.json({
              success: true,
              saleId: transaction._id,
@@ -232,13 +236,70 @@ export const generateSalesReport = async (req: Request | any, res: Response) => 
       if (err) {
         console.error("Download error:", err);
       }
-      // Cleanup file after download? 
-      // pdf.service.ts has a cleanup job, but we can do it here too if desired.
-      // Leaving it to the cleanup job or explicit cleanupPdfReports() call is safer for retries.
     });
 
   } catch (error: any) {
     console.error('PDF Gen Error:', error?.stack || error);
     if (!res.headersSent) res.status(500).json({ error: 'Could not generate report' });
+  }
+};
+
+// =====================================================
+// 4) CLOSE REGISTER (Z-REPORT)
+// =====================================================
+import { queuePushNotification } from '../services/queue.service';
+
+export const closeRegister = async (req: Request | any, res: Response) => {
+  try {
+    const userId = req.user?.id || req.user?._id;
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    const { physicalCash } = req.body;
+    if (typeof physicalCash !== 'number') {
+       return res.status(400).json({ error: "Physical cash amount is required" });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    const ownerId = (user.role === 'STAFF' && user.ownerId) ? user.ownerId : user._id;
+    const authorName = user.role === 'STAFF' ? user.name : 'Owner';
+
+    // Calculate Today's Sales for this specific user (Cashier)
+    const todayStr = new Date().toISOString().split('T')[0];
+    
+    // Aggregate cash sales
+    const sales = await Transaction.find({
+      user: userId,
+      type: 'SALE',
+      date: todayStr,
+      isUndone: { $ne: true },
+      paymentMethod: 'CASH'
+    });
+
+    const expectedCash = sales.reduce((acc, sale) => acc + (sale.amountPaid || 0), 0);
+    const discrepancy = physicalCash - expectedCash;
+
+    // Send Push Notification to Owner
+    const message = `Register Closed by ${authorName}\nExpected Cash: ${expectedCash}\nActual Cash: ${physicalCash}\nDiscrepancy: ${discrepancy >= 0 ? '+' : ''}${discrepancy}`;
+
+    await queuePushNotification({
+      type: 'SINGLE',
+      agentId: ownerId.toString(),
+      title: '📊 Z-Report (Register Closed)',
+      body: message,
+    });
+
+    res.json({
+      success: true,
+      expectedCash,
+      physicalCash,
+      discrepancy,
+      message: 'Register closed successfully. Report sent to owner.'
+    });
+
+  } catch (error: any) {
+    console.error('Close Register Error:', error);
+    res.status(500).json({ error: 'Failed to close register' });
   }
 };

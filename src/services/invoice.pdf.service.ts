@@ -287,9 +287,27 @@ export const generateInvoicePdf = async (
         y += 10;
 
         // Total
-        doc.font('Bold').fontSize(12);
-        doc.text(`TOTAL: ${formatMoney(invoice.totalAmount || 0)}`, margin, y, { align: 'right', width: contentWidth });
+        const discount = Number((invoice as any).discount || 0);
+        const netTotal = Number(invoice.totalAmount || 0) - discount;
+        const pointsEarned = Number((invoice as any).pointsEarned || 0);
+
+        if (discount > 0) {
+            doc.font('Regular').fontSize(10).fillColor(THEME.dark);
+            doc.text(`Subtotal: ${formatMoney(invoice.totalAmount || 0)}`, margin, y, { align: 'right', width: contentWidth });
+            y += 14;
+            doc.text(`Discount: -${formatMoney(discount)}`, margin, y, { align: 'right', width: contentWidth });
+            y += 14;
+        }
+
+        doc.font('Bold').fontSize(12).fillColor(THEME.dark);
+        doc.text(`TOTAL: ${formatMoney(netTotal)}`, margin, y, { align: 'right', width: contentWidth });
         y += 20;
+
+        if (pointsEarned > 0) {
+            doc.font('Bold').fontSize(9).fillColor(THEME.dark);
+            doc.text(`*** Loyalty Points Earned: ${pointsEarned} ***`, margin, y, { align: 'center', width: contentWidth });
+            y += 16;
+        }
 
         // Bank Info (if exists)
         if (invoice.bankDetailsSnapshot) {
@@ -473,20 +491,42 @@ export const generateInvoicePdf = async (
 
     // --- TOTALS BOX ---
     y += 16;
-    y = ensureSpace(90, y);
+    y = ensureSpace(110, y);
 
-    const totalsBoxH = 62;
+    const discount = Number((invoice as any).discount || 0);
+    const netTotal = Number(invoice.totalAmount || 0) - discount;
+    const pointsEarned = Number((invoice as any).pointsEarned || 0);
+
+    const boxLines = 1 + (discount > 0 ? 2 : 0) + (pointsEarned > 0 ? 1 : 0);
+    const totalsBoxH = 50 + (boxLines * 16);
     const totalsBoxW = Math.min(260, contentWidth);
     const totalsBoxX = pageWidth - margin - totalsBoxW;
 
     doc.roundedRect(totalsBoxX, y, totalsBoxW, totalsBoxH, 12).fill(THEME.bgHeader);
     doc.rect(totalsBoxX, y, 5, totalsBoxH).fill(THEME.accent);
 
-    doc.fillColor(THEME.muted).font('Bold').fontSize(9).text('TOTAL', totalsBoxX + 16, y + 12);
-    doc.fillColor(THEME.dark).font('Bold').fontSize(18).text(formatMoney(invoice.totalAmount || 0), totalsBoxX + 16, y + 28, {
+    let currentY = y + 14;
+
+    if (discount > 0) {
+        doc.fillColor(THEME.muted).font('Regular').fontSize(10).text('Subtotal:', totalsBoxX + 16, currentY);
+        doc.fillColor(THEME.dark).font('Regular').fontSize(10).text(formatMoney(invoice.totalAmount || 0), totalsBoxX + 16, currentY, { width: totalsBoxW - 32, align: 'right' });
+        currentY += 16;
+        doc.fillColor(THEME.muted).text('Discount:', totalsBoxX + 16, currentY);
+        doc.fillColor(THEME.alert).text(`-${formatMoney(discount)}`, totalsBoxX + 16, currentY, { width: totalsBoxW - 32, align: 'right' });
+        currentY += 16;
+    }
+
+    doc.fillColor(THEME.muted).font('Bold').fontSize(9).text('TOTAL', totalsBoxX + 16, currentY);
+    currentY += 14;
+    doc.fillColor(THEME.dark).font('Bold').fontSize(18).text(formatMoney(netTotal), totalsBoxX + 16, currentY, {
       width: totalsBoxW - 32,
       align: 'right',
     });
+    currentY += 24;
+
+    if (pointsEarned > 0) {
+        doc.fillColor(THEME.primary).font('Bold').fontSize(10).text(`★ Loyalty Points Earned: ${pointsEarned}`, totalsBoxX + 16, currentY, { width: totalsBoxW - 32, align: 'right' });
+    }
     
     y += totalsBoxH;
 
