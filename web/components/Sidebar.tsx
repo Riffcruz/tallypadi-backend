@@ -4,7 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 // ✅ Added 'Users' icon for Debtors
-import { LayoutDashboard, ShoppingCart, Package, Settings, LogOut, Users, BookOpen, ClipboardList, FileText, Banknote, UserPlus } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, Package, Settings, LogOut, Users, BookOpen, ClipboardList, FileText, Banknote, UserPlus, Users2, Store, CreditCard } from 'lucide-react';
 import { removeCookie } from '../utils/cookies';
 
 export default function Sidebar() {
@@ -90,24 +90,71 @@ export default function Sidebar() {
       </div>
       
       {/* Navigation Links */}
-      <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-        {menuItems.map((item) => {
-          const isActive = pathname === item.href;
-          return (
-            <Link 
-              key={item.href} 
-              href={item.href}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 font-medium text-sm ${
-                isActive 
-                ? 'bg-emerald-50 text-emerald-700 shadow-sm' 
-                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-              }`}
-            >
-              <item.icon size={20} className={isActive ? 'text-emerald-600' : 'text-gray-400'} />
-              <span>{item.label}</span>
+      <nav className="flex-1 p-4 overflow-y-auto">
+        
+        {/* MENU Group */}
+        <div className="mb-6">
+          <p className="px-4 mb-2 text-[10px] font-black tracking-widest text-gray-400 uppercase">Menu</p>
+          <div className="space-y-1">
+            {menuItems.slice(0, 6).map((item) => {
+              const isActive = pathname === item.href;
+              return (
+                <Link 
+                  key={item.href} 
+                  href={item.href}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 font-bold text-sm ${
+                    isActive 
+                    ? 'bg-black text-white shadow-md' 
+                    : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'
+                  }`}
+                >
+                  <item.icon size={18} className={isActive ? 'text-emerald-400' : 'text-gray-400'} />
+                  <span>{item.label}</span>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ADMIN Group */}
+        <div className="mb-6">
+          <p className="px-4 mb-2 text-[10px] font-black tracking-widest text-gray-400 uppercase">Admin</p>
+          <div className="space-y-1">
+            <Link href="/settings" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 font-bold text-sm ${pathname === '/settings' ? 'bg-black text-white shadow-md' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'}`}>
+              <Users2 size={18} className={pathname === '/settings' ? 'text-emerald-400' : 'text-gray-400'} />
+              <span>All Staff</span>
             </Link>
-          );
-        })}
+            
+            {menuItems.slice(6, 7).map((item) => {
+              const isActive = pathname === item.href;
+              return (
+                <Link 
+                  key={item.href} 
+                  href={item.href}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 font-bold text-sm ${isActive ? 'bg-black text-white shadow-md' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'}`}
+                >
+                  <item.icon size={18} className={isActive ? 'text-emerald-400' : 'text-gray-400'} />
+                  <span>Products</span>
+                </Link>
+              );
+            })}
+
+            <Link href="/hq/dashboard" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 font-bold text-sm ${pathname === '/hq/dashboard' ? 'bg-black text-white shadow-md' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'}`}>
+              <Store size={18} className={pathname === '/hq/dashboard' ? 'text-emerald-400' : 'text-gray-400'} />
+              <span>Warehouse</span>
+            </Link>
+
+            <Link href="/settings" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 font-bold text-sm text-gray-500 hover:bg-gray-100 hover:text-gray-900`}>
+              <LayoutDashboard size={18} className="text-gray-400" />
+              <span>Online store(Website)</span>
+            </Link>
+
+            <Link href="/settings" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 font-bold text-sm text-gray-500 hover:bg-gray-100 hover:text-gray-900`}>
+              <CreditCard size={18} className="text-gray-400" />
+              <span>Subscription</span>
+            </Link>
+          </div>
+        </div>
       </nav>
 
       {/* Logout Section - Lifted up slightly with mb-4 */}

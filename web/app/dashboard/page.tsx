@@ -24,6 +24,7 @@ import {
   Clipboard,
   CreditCard,
   Package,
+  Banknote,
   Eye,
   Copy,
   ExternalLink,
@@ -77,19 +78,21 @@ interface DashboardResponse {
   };
   stats?: {
     revenue?: number; // in user's currency
-    totalExpenses?: number; // ✅ Added totalExpenses
+    grossProfit?: number; // ✅ added
+    netProfit?: number; // ✅ added
+    totalExpenses?: number; 
     itemsSold?: number;
+    totalOrders?: number; // ✅ added
     debtorsCount?: number;
     debtorsAmount?: number;
     pendingOrders?: number;
+    paymentMethods?: Record<string, number>; // ✅ added mapping mapping like { "CASH": 5000, "TRANSFER": 12000 }
     visits?: {
       today: number;
       week: number;
       month: number;
       year: number;
     };
-    // Optional: If your backend supports it, you can send multi-currency totals:
-    // revenueByCurrency?: Record<string, number>;
   };
   inventory?: InventoryItem[];
   transactions?: TransactionRow[];
@@ -463,44 +466,66 @@ const topTransactions = filteredTransactions.slice(0, 6);
           </div>
         </header>
 
-        {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+        {/* Top Stats Grid (POSA Look) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           <StatCard
-            title="Total Revenue"
+            title="Sales"
             value={formattedRevenue}
             sub={formattedRevenueConverted ? `≈ ${formattedRevenueConverted} (${baseCurrency})` : undefined}
             icon={Wallet}
             accent="emerald"
           />
           <StatCard
-            title="Total Expenses"
-            value={formatCurrency(data?.stats?.totalExpenses || 0, currencyCode, userLocale)}
-            sub="All time spent"
-            icon={TrendingDown}
-            accent="red"
-          />
-          <StatCard
-            title="Items Sold Today"
-            value={String(data?.stats?.itemsSold || 0)}
-            sub="Live count"
-            icon={ShoppingBag}
+            title="Gross Profit"
+            value={formatCurrency(data?.stats?.grossProfit || 0, currencyCode, userLocale)}
+            icon={TrendingUp}
             accent="blue"
           />
           <StatCard
-            title="Total Debtors"
+            title="Net Profit"
+            value={formatCurrency(data?.stats?.netProfit || 0, currencyCode, userLocale)}
+            icon={Coins}
+            accent="purple"
+          />
+          <StatCard
+            title="Receivables"
             value={formatCurrency(data?.stats?.debtorsAmount || 0, currencyCode, userLocale)}
             sub={`${data?.stats?.debtorsCount || 0} people owing`}
             icon={CreditCard}
             accent="orange"
           />
           <StatCard
-            title="Pending Orders"
-            value={String(data?.stats?.pendingOrders || 0)}
-            sub="Orders to fulfill"
-            icon={Package}
-            accent="purple"
+            title="Orders"
+            value={String(data?.stats?.totalOrders || 0)}
+            icon={Clipboard}
+            accent="emerald"
           />
         </div>
+
+        {/* Sales by Payment Method Grid */}
+        {data?.stats?.paymentMethods && Object.keys(data.stats.paymentMethods).length > 0 && (
+           <div className="mt-8">
+              <h3 className="text-xl font-black tracking-tight text-slate-900 mb-4">Sales by payment method</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+                {['CASH', 'POS', 'TRANSFER', 'OPAY'].map((pm) => {
+                  const val = data?.stats?.paymentMethods?.[pm] || 0;
+                  if (val === 0) return null; // Only show active payment methods
+                  return (
+                    <div key={pm} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 hover:shadow-md transition-all">
+                      <div className="flex items-center gap-2 mb-2">
+                        {pm === 'CASH' && <Banknote className="w-4 h-4 text-emerald-600" />}
+                        {(pm === 'POS' || pm === 'CARD') && <CreditCard className="w-4 h-4 text-blue-600" />}
+                        {pm === 'TRANSFER' && <Layout className="w-4 h-4 text-purple-600" />}
+                        {pm === 'OPAY' && <Wallet className="w-4 h-4 text-emerald-600" />}
+                        <span className="text-sm font-bold text-slate-500 capitalize">{pm === 'POS' ? 'Card' : pm.toLowerCase()}</span>
+                      </div>
+                      <div className="text-2xl font-black text-slate-900">{formatCurrency(val, currencyCode, userLocale)}</div>
+                    </div>
+                  );
+                })}
+              </div>
+           </div>
+        )}
 
         {/* Visit Stats */}
         <div className="mt-6">

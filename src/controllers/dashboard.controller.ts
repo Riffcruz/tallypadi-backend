@@ -80,6 +80,7 @@ export const getDashboardData = async (req: Request | any, res: Response) => {
     const [
       totalRevenueRaw,
       itemsSoldRaw,
+      recentSalesCount,
       dailyStats,
       recentSales,
       topItems,
@@ -88,12 +89,27 @@ export const getDashboardData = async (req: Request | any, res: Response) => {
       inventoryDocs,
       visitStatsRaw,
       totalExpensesRaw,
-      recentExpenses
+      recentExpenses,
+      paymentMethodStatsRaw
     ] = await Promise.all([
-      // 1. Total Revenue
+      // 1. Total Revenue & Cost of Goods Sold (COGS)
       Transaction.aggregate([
         { $match: { user: { $in: relevantIds }, type: 'SALE', ...validSaleMatch } },
-        { $group: { _id: null, total: { $sum: '$totalMoney' } } },
+        { $unwind: '$items' },
+        { 
+          $group: { 
+            _id: '$_id', // Group by transaction first to avoid duplicating discount/amountPaid
+            totalMoney: { $first: '$amountPaid' }, // Net amount paid by customer
+            totalCost: { $sum: { $multiply: ['$items.qty', { $ifNull: ['$items.costPrice', 0] }] } }
+          }
+        },
+        { 
+          $group: { 
+            _id: null, 
+            totalRevenue: { $sum: '$totalMoney' },
+            totalCOGS: { $sum: '$totalCost' }
+          } 
+        },
       ]),
 
       // 2. Total Items Sold
@@ -102,6 +118,9 @@ export const getDashboardData = async (req: Request | any, res: Response) => {
         { $unwind: '$items' },
         { $group: { _id: null, total: { $sum: '$items.qty' } } },
       ]),
+
+      // 2.5 Total Orders
+      Transaction.countDocuments({ user: { $in: relevantIds }, type: 'SALE', ...validSaleMatch }),
 
       // 3. Daily Stats
       Transaction.aggregate([
@@ -191,12 +210,35 @@ export const getDashboardData = async (req: Request | any, res: Response) => {
 
       // 11. Recent Expenses
       Expense.find({ user: { $in: relevantIds } }).sort({ timestamp: -1 }).limit(10).lean(),
+
+      // 12. Sales By Payment Method
+      Transaction.aggregate([
+        { $match: { user: { $in: relevantIds }, type: 'SALE', ...validSaleMatch } },
+        { 
+          $group: { 
+            _id: { $toUpper: { $ifNull: ['$paymentMethod', 'CASH'] } }, 
+            total: { $sum: { $ifNull: ['$amountPaid', '$totalMoney'] } } 
+          } 
+        }
+      ]),
     ]);
 
-    const totalRevenue = totalRevenueRaw[0]?.total || 0;
+    const totalRevenue = totalRevenueRaw[0]?.totalRevenue || 0;
+    const totalCOGS = totalRevenueRaw[0]?.totalCOGS || 0;
+    const grossProfit = totalRevenue - totalCOGS;
+    
     const itemsSold = itemsSoldRaw[0]?.total || 0;
+    const totalOrders = recentSalesCount || 0; // mapped from Promise.all index 2
+    
     const totalExpenses = totalExpensesRaw[0]?.totalAmount || 0;
     const expensesCount = totalExpensesRaw[0]?.count || 0;
+    
+    const netProfit = grossProfit - totalExpenses;
+
+    const paymentMethods = paymentMethodStatsRaw.reduce((acc: any, curr: any) => {
+      acc[curr._id] = curr.total;
+      return acc;
+    }, {});
 
     // Process Visit Stats
     const visitData = (visitStatsRaw[0]?.all || []) as { date: string; count: number }[];
@@ -300,12 +342,16 @@ export const getDashboardData = async (req: Request | any, res: Response) => {
       },
       stats: {
         revenue: totalRevenue,
+        grossProfit: grossProfit,
+        netProfit: netProfit,
         itemsSold: itemsSold,
+        totalOrders: totalOrders, // the SALE count is actually index 2, fixing variable naming below
         totalExpenses: totalExpenses,
         stockValue: 0,
         debtorsCount: totalDebtors[0]?.count || 0,
         debtorsAmount: totalDebtors[0]?.totalAmount || 0,
         pendingOrders: pendingOrders,
+        paymentMethods: paymentMethods,
         visits: {
           today: visitsToday,
           week: visitsWeek,
