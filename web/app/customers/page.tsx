@@ -32,6 +32,7 @@ interface UserProfile {
       enabled: boolean;
       pointsPerPurchase: number;
       currencyValuePerPoint: number;
+      redemptionValuePerPoint: number;
     }
   };
 }
@@ -56,7 +57,8 @@ export default function CustomersPage() {
   const [settingsData, setSettingsData] = useState({
     enabled: false,
     pointsPerPurchase: 1,
-    currencyValuePerPoint: 10
+    currencyValuePerPoint: 10,
+    redemptionValuePerPoint: 1
   });
 
   const [submitting, setSubmitting] = useState(false);
@@ -82,7 +84,8 @@ export default function CustomersPage() {
                 setSettingsData({
                   enabled: !!r.enabled,
                   pointsPerPurchase: r.pointsPerPurchase || 1,
-                  currencyValuePerPoint: r.currencyValuePerPoint || 1
+                  currencyValuePerPoint: r.currencyValuePerPoint || 1,
+                  redemptionValuePerPoint: r.redemptionValuePerPoint || 1
                 });
              }
           }
@@ -205,7 +208,8 @@ export default function CustomersPage() {
           royalty: {
             enabled: settingsData.enabled,
             pointsPerPurchase: Number(settingsData.pointsPerPurchase),
-            currencyValuePerPoint: Number(settingsData.currencyValuePerPoint)
+            currencyValuePerPoint: Number(settingsData.currencyValuePerPoint),
+            redemptionValuePerPoint: Number(settingsData.redemptionValuePerPoint)
           }
         }
       }, { headers: { Authorization: `Bearer ${token}` } });
@@ -439,10 +443,26 @@ export default function CustomersPage() {
                       </div>
                    </div>
                    
-                   <p className="mt-4 text-xs font-medium text-indigo-600 bg-indigo-50 p-2.5 rounded-lg">
-                      Example: If a customer spends {formatMoney(Number(settingsData.currencyValuePerPoint) * 5 || 50)}, they will earn <span className="font-bold">{settingsData.pointsPerPurchase * 5 || 5} points</span>.
-                   </p>
-                </div>
+                    <p className="mt-4 text-xs font-medium text-emerald-600 bg-emerald-50 p-2.5 rounded-lg border border-emerald-100">
+                       Example: If a customer spends {formatMoney(Number(settingsData.currencyValuePerPoint) * 5 || 50)}, they earn <span className="font-bold">{settingsData.pointsPerPurchase * 5 || 5} points</span>.
+                    </p>
+                 </div>
+
+                 <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 mt-4">
+                    <p className="text-sm font-bold text-gray-900 mb-4">Redemption Value (Pay with Points)</p>
+                    <div className="flex items-center gap-4 flex-wrap sm:flex-nowrap">
+                       <div className="flex-1 min-w-[120px]">
+                         <label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5">1 Point is Worth</label>
+                         <div className="relative">
+                            <input type="number" step="0.01" min="0" required className="w-full p-3 font-bold text-gray-900 border border-gray-300 rounded-xl outline-none focus:border-indigo-500 pl-8" value={settingsData.redemptionValuePerPoint} onChange={e => setSettingsData({...settingsData, redemptionValuePerPoint: Number(e.target.value)})} />
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">{currencyCode === 'NGN' ? '₦' : '$'}</span>
+                         </div>
+                       </div>
+                    </div>
+                    <p className="mt-4 text-xs font-medium text-indigo-600 bg-indigo-50 p-2.5 rounded-lg border border-indigo-100">
+                       Example: If a customer has 50 points, they can use it to pay for {formatMoney(Number(settingsData.redemptionValuePerPoint) * 50 || 50)} worth of goods.
+                    </p>
+                 </div>
 
               </div>
 

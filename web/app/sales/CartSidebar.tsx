@@ -22,6 +22,8 @@ import {
   Landmark,
   Smartphone,
   Banknote,
+  Search,
+  Star,
 } from 'lucide-react';
 import { CartItem, UserProfile } from './page';
 import { getCookie } from '../../utils/cookies';
@@ -219,7 +221,10 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess, on
   const [receiptType, setReceiptType] = useState<'standard' | 'thermal'>('thermal');
   const [paymentMethod, setPaymentMethod] = useState<string>('CASH');
   
-  const [customerId, setCustomerId] = useState<string>('');
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
+
   const [discountAmount, setDiscountAmount] = useState<number>(0);
   const [customers, setCustomers] = useState<any[]>([]);
 
@@ -248,6 +253,21 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess, on
 
   const total = useMemo(() => cart.reduce((acc, item) => acc + item.sellQty * item.sellPrice, 0), [cart]);
   const netTotal = Math.max(0, total - discountAmount);
+
+  const royaltySettings = user?.settings?.royalty;
+  const isRoyaltyEnabled = royaltySettings?.enabled;
+  const pointValue = royaltySettings?.redemptionValuePerPoint || 1;
+  const pointsRequired = netTotal / pointValue;
+  const hasEnoughPoints = selectedCustomer ? (selectedCustomer.royaltyPoints || 0) >= pointsRequired : false;
+
+  const filteredCustomers = useMemo(() => {
+    if (!customerSearch) return customers;
+    const q = customerSearch.toLowerCase();
+    return customers.filter(c => 
+      (c.name || '').toLowerCase().includes(q) || 
+      (c.phoneNumber || '').toLowerCase().includes(q)
+    );
+  }, [customers, customerSearch]);
 
   const formatMoney = (amount: number) => {
     return new Intl.NumberFormat(user?.locale || 'en-NG', {
@@ -326,7 +346,7 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess, on
     try {
       const payload = {
         paymentMethod, // ✅ Add this
-        customerId: customerId || undefined,
+        customerId: selectedCustomer?._id || undefined,
         discountAmount: discountAmount || 0,
         items: cart.map((i) => ({
           itemId: i.id,
@@ -583,16 +603,68 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess, on
         {/* Cart Controls: Customer & Discount */}
         {cart.length > 0 && (
           <div className="mb-4 space-y-3 p-3 bg-white rounded-2xl border border-slate-200">
-            <div>
+            <div className="relative">
               <label className="text-[10px] uppercase tracking-widest font-black text-slate-400 mb-1.5 block">Customer (Optional)</label>
-              <select 
-                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:border-emerald-500 transition-colors"
-                value={customerId}
-                onChange={(e) => setCustomerId(e.target.value)}
-              >
-                <option value="">Guest (Walk-in)</option>
-                {customers.map(c => <option key={c._id} value={c._id}>{c.name} {c.phoneNumber ? `(${c.phoneNumber})` : ''}</option>)}
-              </select>
+              
+              {selectedCustomer ? (
+                <div className="flex items-center justify-between p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl">
+                  <div>
+                    <p className="text-sm font-bold text-emerald-900">{selectedCustomer.name}</p>
+                    <p className="text-[10px] font-extrabold text-emerald-600 uppercase tracking-wider">{selectedCustomer.phoneNumber}</p>
+                  </div>
+                  <button onClick={() => { setSelectedCustomer(null); setCustomerSearch(''); if (paymentMethod === 'POINTS') setPaymentMethod('CASH'); }} className="p-1.5 hover:bg-emerald-100 rounded-lg text-emerald-700 transition">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"><Search className="w-4 h-4" /></span>
+                  <input 
+                    type="text"
+                    placeholder="Search name or phone..."
+                    className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:border-emerald-500 transition-colors"
+                    value={customerSearch}
+                    onChange={(e) => {
+                      setCustomerSearch(e.target.value);
+                      setShowCustomerDropdown(true);
+                    }}
+                    onFocus={() => setShowCustomerDropdown(true)}
+                  />
+                  
+                  {showCustomerDropdown && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setShowCustomerDropdown(false)} />
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 shadow-xl rounded-xl z-50 max-h-48 overflow-y-auto">
+                        <button 
+                          className="w-full text-left px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50 border-b border-slate-100"
+                          onClick={() => { setSelectedCustomer(null); setShowCustomerDropdown(false); }}
+                        >
+                          Guest (Walk-in)
+                        </button>
+                        {filteredCustomers.length === 0 ? (
+                           <div className="px-3 py-4 text-xs font-bold text-slate-400 text-center">No customers found</div>
+                        ) : (
+                          filteredCustomers.map(c => (
+                            <button 
+                              key={c._id}
+                              className="w-full text-left px-3 py-2.5 hover:bg-emerald-50 hover:text-emerald-700 transition-colors border-b border-slate-50 flex justify-between items-center"
+                              onClick={() => { setSelectedCustomer(c); setShowCustomerDropdown(false); }}
+                            >
+                              <div>
+                                <p className="text-sm font-extrabold text-slate-800">{c.name}</p>
+                                <p className="text-[10px] font-bold text-slate-500">{c.phoneNumber}</p>
+                              </div>
+                              {isRoyaltyEnabled && c.royaltyPoints > 0 && (
+                                <span className="text-[10px] font-black text-yellow-600 bg-yellow-50 px-2 py-1 rounded-md flex items-center gap-1"><Star className="w-3 h-3 fill-current" /> {c.royaltyPoints}</span>
+                              )}
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
             
             <div className="flex items-center justify-between gap-4">
@@ -671,21 +743,51 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess, on
                     { id: 'TRANSFER', label: 'Transfer', icon: Landmark },
                     { id: 'POS', label: 'POS', icon: CreditCard },
                     { id: 'OPAY', label: 'OPay', icon: Smartphone },
+                    ...(isRoyaltyEnabled ? [{ id: 'POINTS', label: 'Points', icon: Star }] : [])
                   ].map((pm) => (
                     <button
                       key={pm.id}
                       onClick={() => setPaymentMethod(pm.id)}
                       className={`flex items-center gap-2 px-3 py-2.5 rounded-2xl border text-sm font-bold transition-all ${
                         paymentMethod === pm.id
-                          ? 'bg-emerald-50 border-emerald-500 text-emerald-800 shadow-sm ring-1 ring-emerald-500/20'
+                          ? pm.id === 'POINTS' 
+                             ? 'bg-yellow-50 border-yellow-500 text-yellow-800 shadow-sm ring-1 ring-yellow-500/20' 
+                             : 'bg-emerald-50 border-emerald-500 text-emerald-800 shadow-sm ring-1 ring-emerald-500/20'
                           : 'bg-white border-slate-200 text-slate-600 hover:border-emerald-200 hover:bg-slate-50'
                       }`}
                     >
-                      <pm.icon className={`w-4 h-4 ${paymentMethod === pm.id ? 'text-emerald-600' : 'text-slate-400'}`} />
+                      <pm.icon className={`w-4 h-4 ${paymentMethod === pm.id ? (pm.id === 'POINTS' ? 'text-yellow-600 fill-yellow-600 mt-[-1px]' : 'text-emerald-600') : 'text-slate-400'}`} />
                       {pm.label}
                     </button>
                   ))}
                 </div>
+                
+                {paymentMethod === 'POINTS' && (
+                  <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-xl animate-in slide-in-from-top-1">
+                    {!selectedCustomer ? (
+                      <p className="text-xs font-bold text-yellow-800 flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4" /> Please select a Customer to pay with points.
+                      </p>
+                    ) : (
+                       <div className="space-y-2">
+                         <div className="flex justify-between items-end">
+                            <span className="text-xs font-bold text-yellow-700">Points Required:</span>
+                            <span className="text-sm font-black text-yellow-900">{Math.ceil(pointsRequired)} pts</span>
+                         </div>
+                         <div className="flex justify-between items-end">
+                            <span className="text-xs font-bold text-yellow-700">Customer Balance:</span>
+                            <span className="text-sm font-black text-yellow-900">{selectedCustomer.royaltyPoints || 0} pts</span>
+                         </div>
+                         
+                         {!hasEnoughPoints && (
+                           <div className="pt-2 border-t border-yellow-200/50 mt-2">
+                              <p className="text-xs font-bold text-red-600 flex items-center gap-1.5"><AlertCircle className="w-3.5 h-3.5" /> Insufficient points for this order.</p>
+                           </div>
+                         )}
+                       </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
@@ -740,7 +842,7 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess, on
                 </button>
 
                 <button
-                  disabled={loading}
+                  disabled={loading || (paymentMethod === 'POINTS' && (!selectedCustomer || !hasEnoughPoints))}
                   onClick={async () => {
                     setConfirmOpen(false);
                     await doCheckout(printReceipt);

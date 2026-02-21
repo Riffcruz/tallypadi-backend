@@ -50,6 +50,14 @@ export interface UserProfile {
   currencyCode?: string;
   locale?: string;
   role?: string;
+  settings?: {
+    royalty?: {
+      enabled: boolean;
+      pointsPerPurchase: number;
+      currencyValuePerPoint: number;
+      redemptionValuePerPoint: number;
+    }
+  };
 }
 
 export default function SalesPage() {

@@ -58,6 +58,7 @@ export interface IUser extends Document {
       enabled: boolean;
       pointsPerPurchase: number; // e.g., 1 point per 1000 NGN spent
       currencyValuePerPoint: number; // e.g., 1 point = 10 NGN when redeeming
+      redemptionValuePerPoint: number; // e.g., 1 point gives 1 NGN discount
     };
   };
 

@@ -177,6 +177,10 @@ export const updateSettings = async (req: AuthReq, res: Response) => {
              const val = validateNumber(ryl.currencyValuePerPoint);
              if (val !== undefined && val >= 0) $set['settings.royalty.currencyValuePerPoint'] = val;
            }
+           if (ryl.redemptionValuePerPoint !== undefined) {
+             const redVal = validateNumber(ryl.redemptionValuePerPoint);
+             if (redVal !== undefined && redVal >= 0) $set['settings.royalty.redemptionValuePerPoint'] = redVal;
+           }
         }
       }
 

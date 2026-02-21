@@ -132,13 +132,37 @@ export class SalesService {
     const finalDiscount = discountAmount > 0 ? discountAmount : 0;
     const finalAmountPaid = totalMoney > finalDiscount ? totalMoney - finalDiscount : 0;
 
-    // Loyalty Points Calculation
+    // Loyalty Points Calculation / Redemption
     let pointsEarned = 0;
-    if (customerId && ownerForSub.settings?.royalty?.enabled) {
-      const ppp = ownerForSub.settings.royalty.pointsPerPurchase || 0;
-      if (ppp > 0) {
-        // e.g. if ppp = 1000 NGN, and sale is 3500 NGN => 3 points
-        pointsEarned = Math.floor(finalAmountPaid / ppp);
+    
+    // --- PAY WITH POINTS LOGIC ---
+    if (paymentMethod === 'POINTS') {
+      if (!customerId) throw new Error("A Customer must be selected to pay with points.");
+      if (!ownerForSub.settings?.royalty?.enabled) throw new Error("Royalty program is disabled.");
+      
+      const pointValue = ownerForSub.settings.royalty.redemptionValuePerPoint || 1;
+      const pointsRequired = Math.ceil(finalAmountPaid / pointValue);
+      
+      const customer = await Customer.findById(customerId).session(session);
+      if (!customer) throw new Error("Customer not found.");
+      if ((customer.royaltyPoints || 0) < pointsRequired) {
+        throw new Error(`Insufficient points. Customer has ${customer.royaltyPoints || 0} pts, but ${pointsRequired} pts are required.`);
+      }
+      
+      // Deduct Points
+      customer.royaltyPoints -= pointsRequired;
+      customer.totalSpent = (customer.totalSpent || 0) + finalAmountPaid;
+      customer.lastPurchaseAt = new Date();
+      await customer.save({ session });
+      
+    } else {
+      // --- EARN POINTS LOGIC (Not paying with points) ---
+      if (customerId && ownerForSub.settings?.royalty?.enabled) {
+        const ppp = ownerForSub.settings.royalty.pointsPerPurchase || 0;
+        if (ppp > 0) {
+          // e.g. if ppp = 1000 NGN, and sale is 3500 NGN => 3 points
+          pointsEarned = Math.floor(finalAmountPaid / ppp);
+        }
       }
     }
 
@@ -167,9 +191,9 @@ export class SalesService {
       timestamp: new Date()
     } as any], { session });
 
-    // 7. Update Customer Points asynchronously if earned
-    if (customerId && pointsEarned > 0) {
-      // Background update (could be session'd but we allow it non-blocking if preferred, or within session to guarantee)
+    // 7. Update Customer Points asynchronously if earned (Only if NOT paying with points)
+    if (paymentMethod !== 'POINTS' && customerId && pointsEarned > 0) {
+      // Background update
       await Customer.updateOne(
         { _id: customerId }, 
         { 
