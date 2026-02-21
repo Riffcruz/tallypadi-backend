@@ -94,6 +94,21 @@ Debt payment triggers: "paid", "settled", "cleared", "balance paid"
   "Emeka settled 5k" => DEBT_PAYMENT, total_money=5000
 - If it is unclear WHO paid or AMOUNT paid, set needs_clarification=true with a clear clarification_question.
 
+✅ DUE DATE EXTRACTION (CRITICAL for debt automation)
+- If a CREDIT SALE includes a repayment due date, extract it into "due_date" as YYYY-MM-DD.
+- Trigger phrases: "collect by", "pay by", "pay me by", "due", "deadline", "expected by",
+  "before Friday", "by end of month", "by next week", "in 3 days", "on the 15th".
+- Interpret relative to Current Date:
+  "pay by Monday" → next Monday's date
+  "by end of month" → last day of current month
+  "in 2 weeks" → currentDate + 14 days
+  "by the 20th" → 20th of current month (or next month if past)
+- If NO due date is mentioned, set due_date=null (do NOT make one up).
+- EXAMPLES:
+  "Sold rice to Emeka on credit, collect by Friday" => is_credit=true, due_date="YYYY-MM-DD" (next Friday)
+  "Emeka owes me 5k for garri, pay by end of month" => is_credit=true, due_date="YYYY-MM-DD" (last day of month)
+  "Sold 2 bags of flour to Ada on credit" => is_credit=true, due_date=null
+
 *** 4. REPORT & DATE HANDLING (MAKE REPORT ALWAYS VALID) ***
 Your goal: when the user says "report" or asks for reports, return a valid REPORT_* intent with usable report_params.
 DO NOT return SALE for report commands.
@@ -550,6 +565,7 @@ Distinct from "Sales" (which are immediate).
     "account_name": string | null
   },
   "settings_update": { "key": string | null, "value": any | null },
+  "due_date": string | null,
   "reply_text": string
 }
 

@@ -14,13 +14,15 @@ import { getCookie } from '../../utils/cookies';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 
-// --- TYPES ---
 interface Debtor {
   _id: string;
   displayName: string;
   aliases: string[];
   totalDebt: number; 
   lastProductStr?: string;
+  phone?: string;
+  dueDate?: string;
+  dueDateReminderSent?: boolean;
 }
 
 interface UserProfile {
@@ -42,7 +44,7 @@ export default function DebtorsPage() {
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
   const [selectedDebtor, setSelectedDebtor] = useState<Debtor | null>(null);
   const [formData, setFormData] = useState({ 
-    displayName: '', aliases: '', initialDebt: '', initialProduct: '' 
+    displayName: '', aliases: '', initialDebt: '', initialProduct: '', phone: '', dueDate: '' 
   });
   const [paymentData, setPaymentData] = useState({ amount: '' });
   const [submitting, setSubmitting] = useState(false);
@@ -126,6 +128,8 @@ export default function DebtorsPage() {
       const payload = {
         displayName: formData.displayName,
         aliases: formData.aliases.split(',').map(s => s.trim()).filter(Boolean),
+        phone: formData.phone || undefined,
+        dueDate: formData.dueDate || undefined,
         initialDebt: !selectedDebtor && formData.initialDebt ? Number(formData.initialDebt) : undefined,
         initialProduct: !selectedDebtor ? formData.initialProduct : undefined
       };
@@ -217,7 +221,7 @@ export default function DebtorsPage() {
             </div>
             <p className="text-gray-500 text-sm mt-1">Total Outstanding: <span className="text-red-600 font-bold">{formatMoney(totalOutstanding)}</span></p>
           </div>
-          <button onClick={() => { setSelectedDebtor(null); setFormData({displayName:'', aliases:'', initialDebt:'', initialProduct:''}); setIsFormOpen(true); }} 
+          <button onClick={() => { setSelectedDebtor(null); setFormData({displayName:'', aliases:'', initialDebt:'', initialProduct:'', phone:'', dueDate:''}); setIsFormOpen(true); }} 
             className="w-full md:w-auto px-6 py-4 bg-gray-900 text-white font-bold rounded-2xl shadow-xl hover:bg-black transition-all flex items-center justify-center gap-2">
             <Plus className="w-5 h-5" /> Add New Debtor
           </button>
@@ -267,7 +271,7 @@ export default function DebtorsPage() {
                             </div>
                           </div>
                           <div className="flex gap-2 shrink-0">
-                            <button onClick={() => { setSelectedDebtor(debtor); setFormData({displayName: debtor.displayName, aliases: (debtor.aliases || []).join(', '), initialDebt: '', initialProduct: ''}); setIsFormOpen(true); }} 
+                            <button onClick={() => { setSelectedDebtor(debtor); setFormData({displayName: debtor.displayName, aliases: (debtor.aliases || []).join(', '), initialDebt: '', initialProduct: '', phone: debtor.phone || '', dueDate: debtor.dueDate ? new Date(debtor.dueDate).toISOString().split('T')[0] : ''}); setIsFormOpen(true); }} 
                               className="p-2.5 bg-gray-50 text-gray-400 hover:text-emerald-600 rounded-xl transition-colors"><Edit2 className="w-4 h-4" /></button>
                             <button onClick={() => handleDelete(debtor)} className="p-2.5 bg-gray-50 text-gray-400 hover:text-red-600 rounded-xl transition-colors"><Trash2 className="w-4 h-4" /></button>
                           </div>
@@ -280,6 +284,16 @@ export default function DebtorsPage() {
                               {formatMoney(debtor.totalDebt)}
                             </span>
                           </div>
+                          
+                          {(debtor.dueDate || debtor.phone) && (
+                            <div className="flex flex-col items-end">
+                              <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Reminder</span>
+                              <div className="flex items-center gap-1.5 mt-1">
+                                {debtor.dueDate && <span className="text-xs font-bold text-gray-700 bg-gray-200 px-2 py-0.5 rounded-md">{new Date(debtor.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>}
+                              </div>
+                            </div>
+                          )}
+
                           <div className="text-right">
                             <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Status</span>
                             <div className="mt-1 flex items-center gap-1.5 justify-end">
@@ -333,6 +347,15 @@ export default function DebtorsPage() {
               <div>
                 <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Aliases</label>
                 <input className="w-full p-4 bg-gray-50 border border-gray-200 rounded-2xl font-medium outline-none focus:border-emerald-500 transition-colors" placeholder="e.g. Mechanic" value={formData.aliases} onChange={e => setFormData({...formData, aliases: e.target.value})} />
+              </div>
+
+              <div>
+                <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">WhatsApp Phone (For Reminders)</label>
+                <input type="tel" className="w-full p-4 bg-gray-50 border border-gray-200 rounded-2xl font-medium outline-none focus:border-emerald-500 transition-colors" placeholder="e.g. 2348012345678" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
+              </div>
+              <div>
+                <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Due Date</label>
+                <input type="date" className="w-full p-4 bg-gray-50 border border-gray-200 rounded-2xl font-medium outline-none focus:border-emerald-500 transition-colors" value={formData.dueDate} onChange={e => setFormData({...formData, dueDate: e.target.value})} />
               </div>
 
               {!selectedDebtor && (

@@ -220,6 +220,7 @@ export function safeParsedResult(p: any): ParsedResult {
       key: p?.settings_update?.key || null,
       value: p?.settings_update?.value ?? null,
     },
+    due_date: typeof p?.due_date === 'string' && p.due_date ? p.due_date : null,
     reply_text: typeof p?.reply_text === 'string' && p.reply_text.length > 2 ? p.reply_text.trim() : fallback,
   };
 }

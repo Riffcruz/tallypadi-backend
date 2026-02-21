@@ -88,6 +88,7 @@ export interface ParsedResult {
     account_name: string | null;
   };
   settings_update: { key: string | null; value: string | boolean | null };
+  due_date?: string | null;   // ISO date extracted from credit sale context (e.g. "collect by Monday")
   reply_text: string;
 }
 

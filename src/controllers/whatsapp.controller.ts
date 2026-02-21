@@ -582,7 +582,8 @@ async function markSaleCredit(txUserId: any, txId: string) {
 export async function attachCreditNameToLatest(
   actorId: any,
   shopId: any,
-  rawName: string
+  rawName: string,
+  dueDate?: string | null
 ): Promise<{ ok: boolean; msg: string }> {
   const name = String(rawName || '').trim();
   if (!name) return { ok: false, msg: 'Reply like: credit John' };
@@ -636,10 +637,14 @@ export async function attachCreditNameToLatest(
 
   await Debtor.findByIdAndUpdate(debtorId, {
     $inc: { totalDebt: Number(tx.totalMoney || 0) },
-    $set: { lastProductStr: (tx.items || []).map((i: any) => `${i.qty} ${i.name}`).join(', ') },
+    $set: {
+      lastProductStr: (tx.items || []).map((i: any) => `${i.qty} ${i.name}`).join(', '),
+      // Auto-set due date if provided by the parsed message
+      ...(dueDate ? { dueDate: new Date(dueDate), dueDateReminderSent: false } : {}),
+    },
   });
 
-  return { ok: true, msg: `✅ Credit linked to *${displayName}*.` };
+  return { ok: true, msg: `✅ Credit linked to *${displayName}*.${dueDate ? `\n📅 Due: ${new Date(dueDate).toDateString()}` : ''}` };
 }
 
 
@@ -1644,6 +1649,7 @@ Oga Boss Plan: ₦3,000/month (Save significantly with the yearly plan)`;
 
            if (res.status === 'new') {
                 const created = await Debtor.create({ user: shopId, displayName: res.displayName, debtorKey: res.debtorKey, aliases: [res.debtorKey], totalDebt: 0 });
+
                 debtorId = created._id;
                 displayName = created.displayName;
                 debtorKey = created.debtorKey;
@@ -1668,7 +1674,7 @@ Oga Boss Plan: ₦3,000/month (Save significantly with the yearly plan)`;
            }
 
            await Transaction.findByIdAndUpdate(txId, { debtorId, customerName: displayName, customerKey: debtorKey });
-           
+
            actor.interactionState = { type: 'WAITING_FOR_PARTIAL_PAYMENT_AMOUNT', data: { txId, debtorId, displayName } };
            await actor.save();
 

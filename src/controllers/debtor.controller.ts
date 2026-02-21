@@ -248,8 +248,16 @@ export const recordDebtPayment = async (req: Request | any, res: Response) => {
       { upsert: true }
     );
 
-    // ✅ Sync frontend data immediately
-    await Debtor.findByIdAndUpdate(debtorId, { $inc: { totalDebt: -paymentAmount } });
+    // ✅ Sync frontend data + reset reminder state when debt is cleared
+    const newBalance = Math.max(0, debtor.totalDebt - paymentAmount);
+    const reminderReset = newBalance <= 0
+      ? { dueDateReminderSent: false, dueDate: null } // ← clear reminder so it can fire on future debts
+      : {};
+
+    await Debtor.findByIdAndUpdate(debtorId, {
+      $inc: { totalDebt: -paymentAmount },
+      $set: reminderReset,
+    });
 
     res.json({ success: true, transaction: tx });
   } catch (error) {

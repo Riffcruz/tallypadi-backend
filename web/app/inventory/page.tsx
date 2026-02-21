@@ -43,6 +43,9 @@ type InventoryItem = {
   image?: string;
   category?: string;
   barcode?: string;
+  lowStockThreshold?: number;
+  supplierName?: string;
+  supplierPhone?: string;
 };
 
 function currencyPrefix(code?: string) {
@@ -76,6 +79,9 @@ export default function InventoryPage() {
   const [newItemCostPrice, setNewItemCostPrice] = useState('');
   const [newItemCategory, setNewItemCategory] = useState(''); // ✅ New Item Category
   const [newItemBarcode, setNewItemBarcode] = useState(''); // ✅ New Item Barcode
+  const [newItemLowStockThreshold, setNewItemLowStockThreshold] = useState('');
+  const [newItemSupplierName, setNewItemSupplierName] = useState('');
+  const [newItemSupplierPhone, setNewItemSupplierPhone] = useState('');
   const [newItemImage, setNewItemImage] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(true);
@@ -99,6 +105,9 @@ export default function InventoryPage() {
   const [editCostPrice, setEditCostPrice] = useState<number | string>('');
   const [editCategory, setEditCategory] = useState<string>(''); // ✅ Edit Category
   const [editBarcode, setEditBarcode] = useState<string>(''); // ✅ Edit Barcode
+  const [editLowStockThreshold, setEditLowStockThreshold] = useState<number | string>('');
+  const [editSupplierName, setEditSupplierName] = useState<string>('');
+  const [editSupplierPhone, setEditSupplierPhone] = useState<string>('');
   const [editImage, setEditImage] = useState<string | null>(null);
 
   // ✅ Bulk Edit State
@@ -174,6 +183,9 @@ export default function InventoryPage() {
         image: x.image || null,
         category: x.category || '',
         barcode: x.barcode || '',
+        lowStockThreshold: x.lowStockThreshold !== undefined && x.lowStockThreshold !== null ? Number(x.lowStockThreshold) : undefined,
+        supplierName: x.supplierName || '',
+        supplierPhone: x.supplierPhone || '',
       }));
 
       setInventory(normalized.filter((i) => i.id && i.name));
@@ -311,6 +323,9 @@ export default function InventoryPage() {
       image: newItemImage,
       category: newItemCategory,
       barcode: newItemBarcode,
+      lowStockThreshold: newItemLowStockThreshold ? parseInt(newItemLowStockThreshold, 10) : undefined,
+      supplierName: newItemSupplierName || undefined,
+      supplierPhone: newItemSupplierPhone || undefined,
     };
 
     try {
@@ -348,6 +363,9 @@ export default function InventoryPage() {
       setNewItemCostPrice('');
       setNewItemCategory('');
       setNewItemBarcode('');
+      setNewItemLowStockThreshold('');
+      setNewItemSupplierName('');
+      setNewItemSupplierPhone('');
       setNewItemImage(null);
       setAddOpen(false);
 
@@ -429,6 +447,9 @@ export default function InventoryPage() {
     setEditImage(item.image || null);
     setEditCategory(item.category || '');
     setEditBarcode(item.barcode || '');
+    setEditLowStockThreshold(item.lowStockThreshold || '');
+    setEditSupplierName(item.supplierName || '');
+    setEditSupplierPhone(item.supplierPhone || '');
     setEditOpen(true);
   };
 
@@ -441,6 +462,9 @@ export default function InventoryPage() {
     setEditCostPrice('');
     setEditCategory('');
     setEditBarcode('');
+    setEditLowStockThreshold('');
+    setEditSupplierName('');
+    setEditSupplierPhone('');
     setEditImage(null);
   };
 
@@ -463,6 +487,9 @@ export default function InventoryPage() {
           image: editImage,
           category: editCategory,
           barcode: editBarcode,
+          lowStockThreshold: editLowStockThreshold ? Number(editLowStockThreshold) : null,
+          supplierName: editSupplierName || null,
+          supplierPhone: editSupplierPhone || null,
         },
         {
           headers: { Authorization: `Bearer ${token}` },
@@ -480,6 +507,9 @@ export default function InventoryPage() {
             image: editImage || item.image,
             category: editCategory,
             barcode: editBarcode,
+            lowStockThreshold: editLowStockThreshold ? Number(editLowStockThreshold) : undefined,
+            supplierName: editSupplierName || undefined,
+            supplierPhone: editSupplierPhone || undefined,
           } : item
         )
       );
@@ -1088,6 +1118,50 @@ export default function InventoryPage() {
                             disabled={showLockUI}
                           />
                          </div>
+                      </div>
+                   </div>
+
+                   {/* Restock Alerts Section */}
+                   <div className="p-4 bg-emerald-50/50 border border-emerald-100 rounded-2xl space-y-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Sparkles className="w-4 h-4 text-emerald-600" />
+                        <h4 className="text-sm font-black text-emerald-900 uppercase tracking-widest">Restock Alerts</h4>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="space-y-1.5">
+                           <label className="text-xs font-extrabold text-emerald-700 uppercase tracking-wider ml-1">Low Stock At</label>
+                           <input
+                            type="number"
+                            value={newItemLowStockThreshold}
+                            onChange={(e) => setNewItemLowStockThreshold(e.target.value)}
+                            className="w-full px-4 py-3 bg-white border border-emerald-200 rounded-xl outline-none focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 text-sm font-bold text-slate-900 placeholder:text-slate-400"
+                            placeholder="Optional: e.g. 5"
+                            disabled={showLockUI}
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                           <label className="text-xs font-extrabold text-emerald-700 uppercase tracking-wider ml-1">Supplier Name</label>
+                           <input
+                            type="text"
+                            value={newItemSupplierName}
+                            onChange={(e) => setNewItemSupplierName(e.target.value)}
+                            className="w-full px-4 py-3 bg-white border border-emerald-200 rounded-xl outline-none focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 text-sm font-bold text-slate-900 placeholder:text-slate-400"
+                            placeholder="Optional"
+                            disabled={showLockUI}
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                           <label className="text-xs font-extrabold text-emerald-700 uppercase tracking-wider ml-1">WhatsApp Phone</label>
+                           <input
+                            type="tel"
+                            value={newItemSupplierPhone}
+                            onChange={(e) => setNewItemSupplierPhone(e.target.value)}
+                            className="w-full px-4 py-3 bg-white border border-emerald-200 rounded-xl outline-none focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 text-sm font-bold text-slate-900 placeholder:text-slate-400"
+                            placeholder="Optional"
+                            disabled={showLockUI}
+                          />
+                        </div>
                       </div>
                    </div>
 
@@ -1716,6 +1790,46 @@ export default function InventoryPage() {
                     />
                   </div>
                 </div>
+              </div>
+
+              {/* Restock Alerts Section (Edit) */}
+              <div className="rounded-2xl border border-emerald-100 bg-emerald-50/50 p-4 space-y-3">
+                 <div className="flex items-center gap-2">
+                   <Sparkles className="w-4 h-4 text-emerald-600" />
+                   <p className="text-xs font-extrabold text-emerald-800 uppercase tracking-widest">Restock Configuration</p>
+                 </div>
+                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                   <div>
+                     <label className="block text-xs font-extrabold text-emerald-700 mb-1">Alert At Quantity</label>
+                     <input
+                       type="number"
+                       value={editLowStockThreshold}
+                       onChange={(e) => setEditLowStockThreshold(e.target.value)}
+                       className="w-full px-3 py-2.5 bg-white border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-sm font-semibold"
+                       placeholder="0"
+                     />
+                   </div>
+                   <div>
+                     <label className="block text-xs font-extrabold text-emerald-700 mb-1">Supplier Name</label>
+                     <input
+                       type="text"
+                       value={editSupplierName}
+                       onChange={(e) => setEditSupplierName(e.target.value)}
+                       className="w-full px-3 py-2.5 bg-white border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-sm font-semibold"
+                       placeholder="Optional"
+                     />
+                   </div>
+                   <div>
+                     <label className="block text-xs font-extrabold text-emerald-700 mb-1">Supplier Phone</label>
+                     <input
+                       type="tel"
+                       value={editSupplierPhone}
+                       onChange={(e) => setEditSupplierPhone(e.target.value)}
+                       className="w-full px-3 py-2.5 bg-white border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-sm font-semibold"
+                       placeholder="e.g. 234801234..."
+                     />
+                   </div>
+                 </div>
               </div>
 
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">

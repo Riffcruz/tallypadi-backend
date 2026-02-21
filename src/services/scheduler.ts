@@ -458,9 +458,9 @@ export function startScheduler() {
           `- ${item.name}: please restock (currently ${item.quantity} units left)`
         ).join('\n');
 
-        const supplierMsg = encodeURIComponent(
-          `Hi, I need to restock the following items:\n\n${orderLines}\n\nPlease advise on availability. Thank you.`
-        );
+        const supplierMsg = `Hi, I need to restock the following items:\n\n${orderLines}\n\nPlease advise on availability. Thank you.`
+          .replace(/\n/g, '%0A')
+          .replace(/ /g, '%20');
 
         // Pick the first item's supplier phone for the deep link (if any)
         const firstWithPhone = items.find((i) => i.supplierPhone);
