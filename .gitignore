@@ -14,8 +14,10 @@ web/.env.local
 
 # --- Next.js Frontend (web folder) ---
 web/.next/
+web/.next/cache/
 web/out/
 web/build/
+web/next-env.d.ts
 .next/
 out/
 

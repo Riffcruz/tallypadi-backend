@@ -7,6 +7,10 @@ export interface IDebtor extends Document {
   aliases: string[];           // optional extra normalized keys
   totalDebt: number;           // ✅ Cached balance for frontend speed
   lastProductStr?: string;     // ✅ Cached last purchase string
+  // ── Debt Reminder Automation ──
+  phone?: string;              // Debtor's WhatsApp number (e.g. 2348012345678)
+  dueDate?: Date;              // When the debt is due
+  dueDateReminderSent?: boolean; // True after reminder has been sent
   createdAt: Date;
   updatedAt: Date;
 }
@@ -20,6 +24,10 @@ const debtorSchema = new Schema<IDebtor>(
     // ✅ Added to support real-time dashboard updates
     totalDebt: { type: Number, default: 0 },
     lastProductStr: { type: String, default: '' },
+    // ── Debt Reminder Automation ──
+    phone: { type: String, trim: true },
+    dueDate: { type: Date },
+    dueDateReminderSent: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

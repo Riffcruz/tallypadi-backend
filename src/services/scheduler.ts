@@ -2,6 +2,8 @@
 import cron from 'node-cron';
 import { User } from '../models/user.model';
 import { Transaction } from '../models/transaction.model';
+import { Debtor } from '../models/debtor.model';
+import { Inventory } from '../models/inventory.model';
 import { queueOutboundMessage } from './queue.service';
 import { cleanupPdfReports } from './pdf.service';
 import { orderService } from './order.service';
@@ -355,6 +357,126 @@ export function startScheduler() {
       }
     } catch (err) {
       console.error('❌ Auto-expire scheduler error:', err);
+    }
+  });
+
+  // 6) 💰 Debt Due-Date Reminders (Daily at 9 AM UTC)
+  //    - Finds debtors whose dueDate is TODAY and haven't been reminded yet
+  //    - WhatsApps the DEBTOR directly if their phone is recorded
+  //    - WhatsApps the OWNER if debtor has no phone
+  cron.schedule('0 9 * * *', async () => {
+    try {
+      const now = new Date();
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+      const todayEnd   = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+      const dueTodayDebtors = await Debtor.find({
+        dueDate: { $gte: todayStart, $lte: todayEnd },
+        dueDateReminderSent: { $ne: true },
+        totalDebt: { $gt: 0 },
+      }).populate('user', 'phoneNumber businessName currencyCode locale countryCode').lean();
+
+      if (!dueTodayDebtors.length) return;
+      console.log(`🔔 Debt reminder: ${dueTodayDebtors.length} debtors due today`);
+
+      const bulkOps: any[] = [];
+
+      for (const debtor of dueTodayDebtors) {
+        const owner = debtor.user as any;
+        if (!owner?.phoneNumber) continue;
+
+        const { currencyCode, locale } = resolveCurrencyAndLocale(owner);
+        const amount = formatMoney(debtor.totalDebt, locale, currencyCode);
+        const shopName = owner.businessName || 'your supplier';
+
+        if (debtor.phone) {
+          // ── Message TO the debtor ──
+          const debtorMsg =
+            `👋 Hi *${debtor.displayName}*,\n\n` +
+            `This is a friendly reminder from *${shopName}* that your balance of *${amount}* is due today.\n\n` +
+            `Please make payment as soon as possible. Thank you! 🙏`;
+
+          await queueOutboundMessage(debtor.phone, debtorMsg);
+        } else {
+          // ── Message TO the owner if debtor has no phone ──
+          const ownerMsg =
+            `💰 *Debt Due Today*\n\n` +
+            `*${debtor.displayName}* owes you *${amount}* and their due date is today.\n\n` +
+            `No phone number saved for them — contact them manually or update their number in the Debtors page.`;
+
+          await queueOutboundMessage(owner.phoneNumber, ownerMsg);
+        }
+
+        bulkOps.push({
+          updateOne: {
+            filter: { _id: debtor._id },
+            update: { $set: { dueDateReminderSent: true } },
+          },
+        });
+      }
+
+      if (bulkOps.length) await Debtor.bulkWrite(bulkOps, { ordered: false });
+    } catch (err) {
+      console.error('❌ Debt reminder scheduler error:', err);
+    }
+  });
+
+  // 7) 📦 Low Stock Restock Alerts (Daily at 7 AM UTC)
+  //    - Finds items where quantity <= lowStockThreshold
+  //    - WhatsApps the OWNER with a pre-formatted supplier message
+  //    - Groups all low-stock items per owner in ONE message (not per item)
+  cron.schedule('0 7 * * *', async () => {
+    try {
+      const lowStockItems = await Inventory.find({
+        lowStockThreshold: { $ne: null, $gt: 0 },
+        isDeleted: { $ne: true },
+        $expr: { $lte: ['$quantity', '$lowStockThreshold'] },
+      }).populate('user', 'phoneNumber businessName currencyCode locale countryCode settings').lean();
+
+      if (!lowStockItems.length) return;
+      console.log(`📦 Restock alert: ${lowStockItems.length} low-stock items across all shops`);
+
+      // Group items by owner
+      const byOwner = new Map<string, { owner: any; items: any[] }>();
+      for (const item of lowStockItems) {
+        const owner = item.user as any;
+        if (!owner?.phoneNumber) continue;
+        const key = String(owner._id);
+        if (!byOwner.has(key)) byOwner.set(key, { owner, items: [] });
+        byOwner.get(key)!.items.push(item);
+      }
+
+      for (const [, { owner, items }] of byOwner.entries()) {
+        // Build item list
+        const itemLines = items.map((item) =>
+          `• *${item.name}* — ${item.quantity} left (threshold: ${item.lowStockThreshold})` +
+          (item.supplierName ? ` | Supplier: ${item.supplierName}` : '')
+        ).join('\n');
+
+        // Pre-format a supplier order message (one tap from the owner to forward)
+        const orderLines = items.map((item) =>
+          `- ${item.name}: please restock (currently ${item.quantity} units left)`
+        ).join('\n');
+
+        const supplierMsg = encodeURIComponent(
+          `Hi, I need to restock the following items:\n\n${orderLines}\n\nPlease advise on availability. Thank you.`
+        );
+
+        // Pick the first item's supplier phone for the deep link (if any)
+        const firstWithPhone = items.find((i) => i.supplierPhone);
+        const supplierLink = firstWithPhone
+          ? `\n\n📲 *Tap to order from supplier:*\nhttps://wa.me/${firstWithPhone.supplierPhone}?text=${supplierMsg}`
+          : `\n\n💡 Tip: Save your supplier's number on the Products page to get a one-tap order link next time.`;
+
+        const msg =
+          `📦 *Low Stock Alert — ${items.length} item${items.length > 1 ? 's' : ''} need restocking*\n\n` +
+          `${itemLines}\n` +
+          supplierLink;
+
+        await queueOutboundMessage(owner.phoneNumber, msg);
+      }
+    } catch (err) {
+      console.error('❌ Restock alert scheduler error:', err);
     }
   });
 

@@ -163,15 +163,25 @@ export const updateDebtor = async (req: Request | any, res: Response) => {
   try {
     const userId = req.user?.id;
     const { id } = req.params;
-    const { displayName, aliases } = req.body;
+    const { displayName, aliases, phone, dueDate } = req.body;
+
+    const updateFields: any = {
+      displayName,
+      debtorKey: displayName.toLowerCase().trim(),
+      aliases,
+    };
+
+    // Optional debt reminder fields
+    if (phone !== undefined) updateFields.phone = phone?.trim() || null;
+    if (dueDate !== undefined) {
+      updateFields.dueDate = dueDate ? new Date(dueDate) : null;
+      // Reset reminder flag so it fires again if date is updated
+      updateFields.dueDateReminderSent = false;
+    }
 
     const debtor = await Debtor.findOneAndUpdate(
-      { _id: id, user: userId }, 
-      { 
-        displayName, 
-        debtorKey: displayName.toLowerCase().trim(), 
-        aliases 
-      }, 
+      { _id: id, user: userId },
+      { $set: updateFields },
       { new: true }
     );
 

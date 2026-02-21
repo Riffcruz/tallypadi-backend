@@ -278,7 +278,6 @@ export const updateInventoryItem = async (req: Request, res: Response) => {
         } else if (body.image.startsWith(trustedUrl)) {
              imageUrl = body.image;
         } else {
-             // Block arbitrary external URLs
              imageUrl = null; 
         }
     } else {
@@ -287,6 +286,11 @@ export const updateInventoryItem = async (req: Request, res: Response) => {
 
     const safeCategory = sanitizeString(body.category);
     const safeBarcode = sanitizeString(body.barcode);
+
+    // ── Restock Alert fields ──
+    const safeLowStockThreshold = body.lowStockThreshold !== undefined ? validateNumber(body.lowStockThreshold) : undefined;
+    const safeSupplierName = sanitizeString(body.supplierName);
+    const safeSupplierPhone = sanitizeString(body.supplierPhone);
 
     const user = await getAuthUser(req);
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
@@ -305,6 +309,11 @@ export const updateInventoryItem = async (req: Request, res: Response) => {
     if (safeCategory !== undefined) item.category = safeCategory?.toLowerCase();
     if (safeBarcode !== undefined) item.barcode = safeBarcode;
 
+    // ── Restock Alert fields ──
+    if (safeLowStockThreshold !== undefined) item.lowStockThreshold = safeLowStockThreshold ?? undefined;
+    if (safeSupplierName !== undefined) item.supplierName = safeSupplierName;
+    if (safeSupplierPhone !== undefined) item.supplierPhone = safeSupplierPhone;
+
     await item.save();
 
     return res.json({
@@ -316,12 +325,16 @@ export const updateInventoryItem = async (req: Request, res: Response) => {
       image: item.image,
       category: item.category,
       barcode: item.barcode,
+      lowStockThreshold: item.lowStockThreshold,
+      supplierName: item.supplierName,
+      supplierPhone: item.supplierPhone,
     });
   } catch (error) {
     console.error('Update Item Error:', error);
     return res.status(500).json({ error: 'Server Error' });
   }
 };
+
 
 // BULK UPDATE (e.g. for cost prices)
 export const bulkUpdateInventory = async (req: Request, res: Response) => {
