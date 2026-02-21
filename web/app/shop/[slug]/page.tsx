@@ -6,7 +6,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 // Helper to fetch shop data
 async function getShopData(slug: string) {
   // Revalidate every 60 seconds
-  const res = await fetch(`${API_URL}/shop/${slug}`, { next: { revalidate: 60 } });
+  const res = await fetch(`${API_URL}/shop/${slug}`, { next: { revalidate: 10 } });
   
   if (!res.ok) {
       if (res.status === 404) return null;
@@ -17,7 +17,7 @@ async function getShopData(slug: string) {
 
 // Helper to fetch single product data for metadata
 async function getProductData(slug: string, productId: string) {
-  const res = await fetch(`${API_URL}/shop/${slug}/products/${productId}`, { next: { revalidate: 60 } });
+  const res = await fetch(`${API_URL}/shop/${slug}/products/${productId}`, { next: { revalidate: 10 } });
   if (!res.ok) return null;
   return res.json();
 }
