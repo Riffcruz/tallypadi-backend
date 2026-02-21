@@ -119,8 +119,8 @@ export const getDashboardData = async (req: Request, res: Response) => {
         { $group: { _id: null, total: { $sum: '$items.qty' } } },
       ]),
 
-      // 2.5 Total Orders
-      Transaction.countDocuments({ user: { $in: relevantIds }, type: 'SALE', ...validSaleMatch }),
+      // 2.5 Total Orders (All statuses)
+      Order.countDocuments({ user: { $in: relevantIds } }),
 
       // 3. Daily Stats
       Transaction.aggregate([
@@ -228,7 +228,7 @@ export const getDashboardData = async (req: Request, res: Response) => {
     const grossProfit = totalRevenue - totalCOGS;
     
     const itemsSold = itemsSoldRaw[0]?.total || 0;
-    const totalOrders = recentSalesCount || 0; // mapped from Promise.all index 2
+    const totalOrders = recentSalesCount || 0; // mapped from Promise.all index 2 (Total Orders)
     
     const totalExpenses = totalExpensesRaw[0]?.totalAmount || 0;
     const expensesCount = totalExpensesRaw[0]?.count || 0;
