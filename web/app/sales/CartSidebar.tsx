@@ -227,7 +227,7 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess, on
     const token = getCookie('tallyToken');
     if (!token) return;
     axios.get(`${API_URL}/customers`, { headers: { Authorization: `Bearer ${token}` } })
-      .then(res => setCustomers(Array.isArray(res.data) ? res.data : (res.data?.data || [])))
+      .then(res => setCustomers(Array.isArray(res.data) ? res.data : (res.data?.customers || res.data?.data || [])))
       .catch(console.error);
   }, []);
 

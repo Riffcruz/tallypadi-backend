@@ -50,7 +50,7 @@ const getAuthUser = async (req: Request) => {
   return await User.findById(userId);
 };
 
-// GET all inventory items
+// GET all inventory items (with optional pagination & search)
 export const getInventory = async (req: Request, res: Response) => {
   try {
     const user: any = await getAuthUser(req);
@@ -59,6 +59,56 @@ export const getInventory = async (req: Request, res: Response) => {
     // ✅ If staff, fetch owner's inventory
     const targetUserId = (user.role === 'STAFF' && user.ownerId) ? user.ownerId : user._id;
 
+    const { page, limit, search } = req.query;
+    
+    // Base filter
+    const filter: any = { user: targetUserId };
+    
+    if (search) {
+      const q = String(search).trim();
+      filter.$or = [
+         { name: { $regex: q, $options: 'i' } },
+         { barcode: { $regex: q, $options: 'i' } }
+      ];
+    }
+
+    // Determine if request wants pagination
+    const isPaginated = page !== undefined || limit !== undefined;
+    
+    if (isPaginated) {
+      const pageNum = Math.max(1, Number(page) || 1);
+      const limitNum = Math.min(100, Math.max(1, Number(limit) || 20));
+      const skip = (pageNum - 1) * limitNum;
+
+      const [items, total] = await Promise.all([
+        Inventory.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limitNum).lean(),
+        Inventory.countDocuments(filter)
+      ]);
+
+      const formattedItems = items.map((item: any) => ({
+        id: item._id,
+        name: item.name,
+        stock: item.quantity,
+        price: item.lastUnitPrice || 0,
+        costPrice: item.costPrice || 0,
+        image: item.image || null,
+        category: item.category || null,
+        barcode: item.barcode || null,
+      }));
+
+      return res.json({
+         data: formattedItems,
+         pagination: {
+            page: pageNum,
+            limit: limitNum,
+            totalItems: total,
+            totalPages: Math.ceil(total / limitNum),
+            hasMore: skip + items.length < total
+         }
+      });
+    }
+
+    // Legacy un-paginated request
     const items = await Inventory.find({ user: targetUserId }).lean();
 
     const formattedItems = (items || []).map((item: any) => ({

@@ -30,36 +30,89 @@ interface ProductGridProps {
 export default function ProductGrid({ user, onAddToCart, currencyCode }: ProductGridProps) {
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [search, setSearch] = useState('');
-  const [showScanner, setShowScanner] = useState(false); // State for scanner visibility
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [showScanner, setShowScanner] = useState(false);
+  const observerTarget = React.useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  const fetchInventory = async (pageNum: number, searchQuery: string, isLoadMore = false) => {
     const token = getCookie('tallyToken');
     if (!token) {
       setLoading(false);
       return;
     }
 
-    axios
-      .get(`${API_URL}/inventory`, { headers: { Authorization: `Bearer ${token}` } })
-      .then((res) => {
-        const raw = Array.isArray(res.data) ? res.data : res.data?.data || [];
-        const clean = raw.map((item: any) => ({
-          id: item._id || item.id,
-          name: item.name,
-          stock: Number(item.quantity ?? item.stock ?? 0),
-          price: Number(item.lastUnitPrice ?? item.price ?? 0),
-          costPrice: Number(item.costPrice ?? 0),
-          barcode: item.barcode, // Ensure barcode is included
-        }));
-        setInventory(clean);
-        setLoading(false);
-      })
-      .catch((err) => {
-        console.error('Inventory Error:', err);
-        setLoading(false);
+    if (!isLoadMore) setLoading(true);
+    else setLoadingMore(true);
+
+    try {
+      const res = await axios.get(`${API_URL}/inventory`, {
+        headers: { Authorization: `Bearer ${token}` },
+        params: { page: pageNum, limit: 20, search: searchQuery }
       });
-  }, []);
+
+      // Handle the new paginated API format or fallback to array
+      const rawData = res.data?.data ? res.data.data : (Array.isArray(res.data) ? res.data : []);
+      const paginationInfo = res.data?.pagination || { hasMore: false };
+
+      const clean = rawData.map((item: any) => ({
+        id: item._id || item.id,
+        name: item.name,
+        stock: Number(item.quantity ?? item.stock ?? 0),
+        price: Number(item.lastUnitPrice ?? item.price ?? 0),
+        costPrice: Number(item.costPrice ?? 0),
+        barcode: item.barcode,
+      }));
+
+      if (isLoadMore) {
+        setInventory(prev => [...prev, ...clean]);
+      } else {
+        setInventory(clean);
+      }
+
+      setHasMore(paginationInfo.hasMore || false);
+    } catch (err) {
+      console.error('Inventory Error:', err);
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
+    }
+  };
+
+  useEffect(() => {
+    // Reset page and fetch when search changes (with basic debounce)
+    const timeoutId = setTimeout(() => {
+      setPage(1);
+      fetchInventory(1, search, false);
+    }, 300);
+    return () => clearTimeout(timeoutId);
+  }, [search]);
+
+  useEffect(() => {
+    // Fetch more when page increments
+    if (page > 1) {
+      fetchInventory(page, search, true);
+    }
+  }, [page]);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      entries => {
+        if (entries[0].isIntersecting && hasMore && !loading && !loadingMore) {
+          setPage(p => p + 1);
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    if (observerTarget.current) {
+      observer.observe(observerTarget.current);
+    }
+
+    return () => observer.disconnect();
+  }, [hasMore, loading, loadingMore]);
 
   useEffect(() => {
     // USB Scanner Detection
@@ -97,27 +150,17 @@ export default function ProductGrid({ user, onAddToCart, currencyCode }: Product
   const handleScan = (code: string) => {
     setShowScanner(false);
     
-    // 1. Try to find exact match by barcode
+    // 1. Try to find exact match by barcode in current list
     const exactMatch = inventory.find(i => i.barcode === code);
     
     if (exactMatch) {
       onAddToCart(exactMatch);
-      // Optional: clear search if it was set
       setSearch('');
     } else {
-      // 2. If no exact match, set search to barcode
+      // 2. If no exact match (or it's on a further page), set search to let backend find it
       setSearch(code);
     }
   };
-
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return inventory;
-    return inventory.filter((i) => 
-      String(i.name || '').toLowerCase().includes(q) || 
-      String(i.barcode || '').toLowerCase().includes(q)
-    );
-  }, [inventory, search]);
 
   const formatPrice = (amount: number) => {
     return new Intl.NumberFormat(user?.locale || 'en-NG', {
@@ -253,7 +296,7 @@ export default function ProductGrid({ user, onAddToCart, currencyCode }: Product
               </div>
             ))}
           </div>
-        ) : filtered.length === 0 ? (
+        ) : inventory.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center bg-white rounded-3xl border border-dashed border-slate-200">
             <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center mb-4 border border-slate-200">
               <PackageOpen className="w-8 h-8 text-slate-300" />
@@ -265,7 +308,7 @@ export default function ProductGrid({ user, onAddToCart, currencyCode }: Product
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 pb-24">
-            {filtered.map((item) => {
+            {inventory.map((item, index) => {
               const tone = stockTone(item.stock);
 
               const badge =
@@ -366,6 +409,23 @@ export default function ProductGrid({ user, onAddToCart, currencyCode }: Product
                 </button>
               );
             })}
+            
+            {/* Infinite Scroll Sentinel */}
+            {hasMore && (
+              <div 
+                ref={observerTarget} 
+                className="col-span-2 sm:col-span-3 py-8 flex flex-col items-center justify-center gap-3"
+              >
+                <Loader2 className="w-8 h-8 animate-spin text-emerald-500" />
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Loading fast...</span>
+              </div>
+            )}
+            
+            {!hasMore && inventory.length > 0 && (
+              <div className="col-span-2 sm:col-span-3 py-8 flex items-center justify-center">
+                <span className="text-xs font-bold text-slate-300 uppercase tracking-widest">End of catalog</span>
+              </div>
+            )}
           </div>
         )}
       </div>

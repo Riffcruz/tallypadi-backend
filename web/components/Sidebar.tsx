@@ -4,7 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 // ✅ Added 'Users' icon for Debtors
-import { LayoutDashboard, ShoppingCart, Package, Settings, LogOut, Users, BookOpen, ClipboardList, FileText, Banknote } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, Package, Settings, LogOut, Users, BookOpen, ClipboardList, FileText, Banknote, UserPlus } from 'lucide-react';
 import { removeCookie } from '../utils/cookies';
 
 export default function Sidebar() {
@@ -39,6 +39,7 @@ export default function Sidebar() {
       { href: '/dashboard/expenses', icon: Banknote, label: 'Expenses' }, // ✅ NEW
       { href: '/invoices', icon: FileText, label: 'Invoices' }, // ✅ NEW
       { href: '/inventory', icon: Package, label: 'Product/Stocks', key: 'canManageInventory' },
+      { href: '/customers', icon: UserPlus, label: 'Customers', key: 'canManageCustomers' },
       { href: '/debtors', icon: Users, label: 'Debtors', key: 'canManageCustomers' },
       { href: '/settings', icon: Settings, label: 'Settings', key: 'canViewSettings' },
       { href: '/help', icon: BookOpen, label: 'Guide' },

@@ -97,7 +97,7 @@ export default function CustomersPage() {
     try {
       setLoading(true);
       const res = await axios.get(`${API_URL}/customers`, { headers: { Authorization: `Bearer ${token}` } });
-      const data = Array.isArray(res.data) ? res.data : (Array.isArray(res.data?.data) ? res.data.data : []);
+      const data = Array.isArray(res.data) ? res.data : (res.data?.customers || res.data?.data || []);
       setCustomers(data);
     } catch (err) {
       console.warn("API unavailable or failed:", err);
