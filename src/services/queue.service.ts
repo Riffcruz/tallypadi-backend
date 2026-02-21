@@ -27,7 +27,7 @@ export const connection = createRedisConnection('queue-shared');
 // Queue name: outbound-replies
 // ============================================================
 export const replyQueue = new Queue('outbound-replies', {
-  connection: createRedisConnection('queue-reply'),
+  connection: createRedisConnection('queue-reply') as any,
   defaultJobOptions: {
     attempts: 10,
     backoff: { type: 'exponential', delay: 5000 },
@@ -41,7 +41,7 @@ export const replyQueue = new Queue('outbound-replies', {
 // Queue name: outbound-bulk
 // ============================================================
 export const bulkQueue = new Queue('outbound-bulk', {
-  connection: createRedisConnection('queue-bulk'),
+  connection: createRedisConnection('queue-bulk') as any,
   defaultJobOptions: {
     attempts: 10,
     backoff: { type: 'exponential', delay: 5000 },
@@ -55,7 +55,7 @@ export const bulkQueue = new Queue('outbound-bulk', {
 // Queue name: incoming-messages
 // ============================================================
 export const messageQueue = new Queue('incoming-messages', {
-  connection: createRedisConnection('queue-message'),
+  connection: createRedisConnection('queue-message') as any,
   defaultJobOptions: {
     attempts: 10,
     backoff: { type: 'exponential', delay: 5000 },
@@ -69,7 +69,7 @@ export const messageQueue = new Queue('incoming-messages', {
 // Queue name: push-notifications
 // ============================================================
 export const notificationQueue = new Queue('push-notifications', {
-  connection: createRedisConnection('queue-notification'),
+  connection: createRedisConnection('queue-notification') as any,
   defaultJobOptions: {
     attempts: 3,
     backoff: { type: 'exponential', delay: 5000 },

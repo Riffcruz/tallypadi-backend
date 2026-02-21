@@ -160,7 +160,7 @@ export const replyWorker = new Worker(
     console.log(`⚠️ Unknown reply job name: ${job.name}`);
   },
   {
-    connection: createRedisConnection('worker-reply') as unknown as import('ioredis').Redis, // ✅ Dedicated Redis connection
+    connection: createRedisConnection('worker-reply') as any, // ✅ Dedicated Redis connection
     concurrency: 50,
     // lockDuration: 60_000,
   }
@@ -195,7 +195,7 @@ export const bulkWorker = new Worker(
     await sendWhatsAppText(phoneNumber, message);
   },
   {
-    connection: createRedisConnection('worker-bulk') as unknown as import('ioredis').Redis, // ✅ Dedicated Redis connection
+    connection: createRedisConnection('worker-bulk') as any, // ✅ Dedicated Redis connection
     // limiter: { max: 5, duration: 1000 },
     concurrency:50,
   }
@@ -223,7 +223,7 @@ export const messageWorker = new Worker(
     }
   },
   {
-    connection: createRedisConnection('worker-inbound') as unknown as import('ioredis').Redis, // ✅ Dedicated Redis connection
+    connection: createRedisConnection('worker-inbound') as any, // ✅ Dedicated Redis connection
     concurrency: 50, // High concurrency
   }
 );
@@ -248,7 +248,7 @@ export const notificationWorker = new Worker(
     }
   },
   {
-    connection: createRedisConnection('worker-push') as unknown as import('ioredis').Redis, // ✅ Dedicated Redis connection
+    connection: createRedisConnection('worker-push') as any, // ✅ Dedicated Redis connection
     concurrency: 50, // Lower concurrency for push to avoid rate limits
   }
 );
