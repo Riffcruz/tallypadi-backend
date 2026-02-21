@@ -81,7 +81,7 @@ export default function Sidebar() {
   const menuItems = getMenuItems();
 
   return (
-    <div className="w-64 bg-white h-[100dvh] border-r border-gray-200 flex flex-col fixed left-0 top-0 z-10">
+    <div className="w-full md:w-64 bg-white h-full md:h-[100dvh] border-r border-gray-200 flex flex-col fixed left-0 top-0 z-10">
       
       {/* Brand Header */}
       <div className="p-6 border-b border-gray-100 flex items-center gap-2 shrink-0">
@@ -96,7 +96,7 @@ export default function Sidebar() {
         <div className="mb-6">
           <p className="px-4 mb-2 text-[10px] font-black tracking-widest text-gray-400 uppercase">Menu</p>
           <div className="space-y-1">
-            {menuItems.slice(0, 6).map((item) => {
+            {menuItems.slice(0, 8).map((item) => {
               const isActive = pathname === item.href;
               return (
                 <Link 
@@ -125,7 +125,7 @@ export default function Sidebar() {
               <span>All Staff</span>
             </Link>
             
-            {menuItems.slice(6, 7).map((item) => {
+            {menuItems.slice(5, 6).map((item) => {
               const isActive = pathname === item.href;
               return (
                 <Link 
@@ -144,8 +144,8 @@ export default function Sidebar() {
               <span>Warehouse</span>
             </Link>
 
-            <Link href="/settings" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 font-bold text-sm text-gray-500 hover:bg-gray-100 hover:text-gray-900`}>
-              <LayoutDashboard size={18} className="text-gray-400" />
+            <Link href="/online-store" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 font-bold text-sm ${pathname === '/online-store' ? 'bg-black text-white shadow-md' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'}`}>
+              <LayoutDashboard size={18} className={pathname === '/online-store' ? 'text-emerald-400' : 'text-gray-400'} />
               <span>Online store(Website)</span>
             </Link>
 
