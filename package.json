@@ -5,8 +5,10 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
+    "dev:worker": "ts-node-dev --respawn --transpile-only src/worker.ts",
     "build": "tsc",
     "start": "node dist/server.js",
+    "start:worker": "node dist/worker.js",
     "test": "echo \"Error: no test specified\" && exit 1",
     "db:reset": "ts-node src/scripts/reset-db.ts"
   },

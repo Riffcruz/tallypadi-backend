@@ -54,12 +54,12 @@ export default function Sidebar() {
     const isHqManager = user.isHqManager === true;
     const isOwnerTycoon = isTycoon && user.role === 'OWNER';
 
-    if (isHqUser || isHqManager || isOwnerTycoon) {
-       // Check duplication before unshifting if re-renders happen (though this function runs on render)
-       if (!baseItems.find(i => i.label === 'HQ Dashboard')) {
-         baseItems.unshift({ href: '/hq/dashboard', icon: LayoutDashboard, label: 'HQ Dashboard' });
-       }
-    }
+    // if (isHqUser || isHqManager || isOwnerTycoon) {
+    //    // Check duplication before unshifting if re-renders happen (though this function runs on render)
+    //    if (!baseItems.find(i => i.label === 'HQ Dashboard')) {
+    //      baseItems.unshift({ href: '/hq/dashboard', icon: LayoutDashboard, label: 'HQ Dashboard' });
+    //    }
+    // }
 
     // Staff Permission Filtering
     if (user.role === 'STAFF') {

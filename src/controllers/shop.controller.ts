@@ -8,15 +8,11 @@ import { isSubActive, isTycoon } from '../utils/permissions';
 
 // Schema for updating shop settings
 const updateShopSchema = z.object({
-  shopSlug: z
-    .string()
-    .min(3)
-    .max(30)
-    .regex(/^[a-z0-9-]+$/, 'Slug must only contain lowercase letters, numbers, and hyphens')
-    .optional(),
+  shopSlug: z.string().min(3).max(30).regex(/^[a-z0-9-]+$/, 'Slug must only contain lowercase letters, numbers, and hyphens').optional(),
   businessName: z.string().min(2).max(50).optional(),
   shopDescription: z.string().max(500).optional(),
   heroImageUrl: z.string().url().optional().or(z.literal('')),
+  themeColor: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Invalid hex color').optional(),
 });
 
 /**
@@ -60,7 +56,7 @@ export const getShopBySlug = async (req: Request, res: Response): Promise<any> =
     if (!slug) return res.status(400).json({ error: 'Shop slug required' });
 
     const shopOwner = await User.findOne({ shopSlug: slug })
-      .select('businessName phoneNumber planType settings _id subscriptionStatus trialEndsAt shopDescription heroImageUrl');
+      .select('businessName phoneNumber planType settings _id subscriptionStatus trialEndsAt shopDescription heroImageUrl themeColor');
 
     if (!shopOwner) return res.status(404).json({ error: 'Shop not found' });
 
@@ -77,13 +73,14 @@ export const getShopBySlug = async (req: Request, res: Response): Promise<any> =
 
     return res.json({
       shop: {
-        id: shopOwner._id, // needed for fetching products
+        id: shopOwner._id,
         name: shopOwner.businessName,
         description: shopOwner.shopDescription,
         heroImageUrl: shopOwner.heroImageUrl,
         phone: shopOwner.phoneNumber,
         planExpired,
         categories: cleanCategories.sort(),
+        themeColor: shopOwner.themeColor || '#10b981',
       },
     });
   } catch (error) {
@@ -194,12 +191,13 @@ export const updateShopSettings = async (req: Request, res: Response): Promise<a
     
     // Handle Hero Image + Deletion
     if (body.heroImageUrl !== undefined) {
-      // If replacing an existing R2 image, delete the old one
       if (user.heroImageUrl && user.heroImageUrl !== body.heroImageUrl) {
          await r2Service.deleteFile(user.heroImageUrl);
       }
       user.heroImageUrl = body.heroImageUrl || undefined;
     }
+
+    if (body.themeColor !== undefined) user.themeColor = body.themeColor;
 
     await user.save();
 

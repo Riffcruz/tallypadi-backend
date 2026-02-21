@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import Sidebar from '../../components/Sidebar';
 import Preloader from '../../components/Preloader';

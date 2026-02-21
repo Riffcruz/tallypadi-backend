@@ -21,6 +21,7 @@ export interface IUser extends Document {
   shopSlug?: string; // unique URL part for tallypadi.com/shop/:slug
   shopDescription?: string; 
   heroImageUrl?: string;
+  themeColor?: string; // hex color for shop accent (e.g. '#10b981')
 
   nextSummaryAt?: Date | null;        // UTC date when next summary should run
   lastSummaryDateKey?: string | null; // YYYY-MM-DD for last summary sent (user-local day)
@@ -138,6 +139,7 @@ const userSchema = new Schema<IUser>(
     shopSlug: { type: String, unique: true, sparse: true, trim: true, lowercase: true },
     shopDescription: { type: String, maxLength: 500 },
     heroImageUrl: { type: String },
+    themeColor: { type: String, default: '#10b981' },
 
     planType: {
       type: String,
