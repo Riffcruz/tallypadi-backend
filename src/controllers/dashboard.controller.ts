@@ -333,6 +333,7 @@ export const getDashboardData = async (req: Request | any, res: Response) => {
         shopSlug: user.shopSlug || null,
         shopDescription: user.shopDescription || null,
         heroImageUrl: user.heroImageUrl || null,
+        themeColor: user.themeColor || '#10b981',
 
         bankDetails: user.bankDetails, // ✅ Added
 
