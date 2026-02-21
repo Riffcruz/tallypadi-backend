@@ -98,7 +98,17 @@ body {
 
 /* Prevent Auto-Zoom on Mobile Inputs */
 @media screen and (max-width: 768px) {
-  input, select, textarea {
+  input,
+  select,
+  textarea {
     font-size: 16px !important;
+  }
+}
+
+/* ✅ Tablet Zoom Fix: Scale desktop layout on medium screens (iPad, Nest Hub, etc.) */
+/* This lets the full sidebar + content remain visible on tablets without collapsing. */
+@media screen and (min-width: 768px) and (max-width: 1024px) {
+  body {
+    zoom: 0.8;
   }
 }

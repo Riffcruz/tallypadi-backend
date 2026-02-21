@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
 import Sidebar from '../../components/Sidebar';
+import Preloader from '../../components/Preloader';
 import {
   Plus,
   Edit2,
@@ -703,14 +704,7 @@ export default function InventoryPage() {
   };
 
   if (loading) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-slate-50">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-10 w-10 animate-spin text-emerald-600" />
-          <p className="text-slate-500 font-semibold animate-pulse">Loading Inventory...</p>
-        </div>
-      </div>
-    );
+    return <Preloader />;
   }
 
   const showLockUI = !hasFeatureAccess;
@@ -724,28 +718,28 @@ export default function InventoryPage() {
       {/* Mobile Sidebar Overlay */}
       {isMobileMenuOpen && (
         <div
-          className="fixed inset-0 bg-slate-900/50 z-40 lg:hidden backdrop-blur-sm transition-opacity"
+          className="fixed inset-0 bg-slate-900/50 z-40 md:hidden backdrop-blur-sm transition-opacity"
           onClick={() => setIsMobileMenuOpen(false)}
         />
       )}
 
       {/* Sidebar */}
       <div
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-slate-200 transform transition-transform duration-300 ease-in-out lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-slate-200 transform transition-transform duration-300 ease-in-out md:translate-x-0 ${
           isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
         <Sidebar />
       </div>
 
-      <main className="relative z-10 flex-1 lg:ml-64 p-4 lg:p-8 min-h-screen w-full">
+      <main className="relative z-10 flex-1 md:ml-64 p-4 md:p-8 min-h-screen w-full">
         {/* Header */}
-        <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-8">
+        <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
           <div className="flex items-start md:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setIsMobileMenuOpen(true)}
-                className="p-2 -ml-2 text-slate-700 bg-white rounded-xl border border-slate-200 shadow-sm lg:hidden"
+                className="p-2 -ml-2 text-slate-700 bg-white rounded-xl border border-slate-200 shadow-sm md:hidden"
               >
                 <Menu className="w-6 h-6" />
               </button>

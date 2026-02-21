@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import Sidebar from '../../components/Sidebar';
+import Preloader from '../../components/Preloader';
 import { useRouter } from 'next/navigation';
 import {
   Save,
@@ -342,14 +343,8 @@ export default function SettingsPage() {
   };
 
   if (loading)
-    return (
-      <div className="flex h-screen items-center justify-center bg-slate-50">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-10 w-10 animate-spin text-green-600" />
-          <p className="text-gray-500 font-medium animate-pulse">Loading Settings...</p>
-        </div>
-      </div>
-    );
+    return <Preloader />;
+
 
   return (
     <div className="flex min-h-screen bg-slate-50 font-sans text-gray-900 relative">

@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
 import Sidebar from '../../components/Sidebar';
+import Preloader from '../../components/Preloader';
 import { ShoppingCart, History, Menu, Loader2, Sparkles, PauseCircle, Clock, X, Trash2, ShieldAlert } from 'lucide-react';
 
 // Import Components
@@ -181,14 +182,7 @@ const handleAddToCart = (item: InventoryItem) => {
   const handleClearCart = () => setCart([]);
 
   if (loadingUser) {
-    return (
-      <div className="h-screen flex items-center justify-center bg-slate-50">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="animate-spin w-10 h-10 text-emerald-600"/>
-          <p className="text-sm font-bold text-gray-500 animate-pulse">Loading Register...</p>
-        </div>
-      </div>
-    );
+    return <Preloader />;
   }
 
   return (
@@ -200,21 +194,21 @@ const handleAddToCart = (item: InventoryItem) => {
 
       {/* Mobile Overlay */}
       {isMobileMenuOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 z-40 lg:hidden backdrop-blur-sm transition-opacity" onClick={() => setIsMobileMenuOpen(false)} />
+        <div className="fixed inset-0 bg-slate-900/50 z-40 md:hidden backdrop-blur-sm transition-opacity" onClick={() => setIsMobileMenuOpen(false)} />
       )}
 
       {/* Sidebar */}
-      <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 transform transition-transform duration-300 lg:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+      <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 transform transition-transform duration-300 md:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <Sidebar />
       </div>
 
       {/* Main Content */}
-      <main className="relative z-10 flex-1 lg:ml-64 p-4 lg:p-8 min-h-screen">
+      <main className="relative z-10 flex-1 md:ml-64 p-4 md:p-8 min-h-screen">
         
         {/* Header Section */}
-        <header className="flex flex-col lg:flex-row justify-between items-start lg:items-end mb-8 gap-6">
+        <header className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-6">
           <div className="flex items-center gap-4">
-            <button onClick={() => setIsMobileMenuOpen(true)} className="p-2 -ml-2 lg:hidden bg-white rounded-xl shadow-sm border border-gray-200 text-gray-700">
+            <button onClick={() => setIsMobileMenuOpen(true)} className="p-2 -ml-2 md:hidden bg-white rounded-xl shadow-sm border border-gray-200 text-gray-700">
               <Menu className="w-6 h-6" />
             </button>
             

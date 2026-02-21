@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import Sidebar from '../../components/Sidebar';
+import Preloader from '../../components/Preloader';
 import { useRouter } from 'next/navigation';
 import {
   Users,
@@ -318,12 +319,9 @@ export default function StaffPage() {
   };
 
   if (loading) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-slate-50">
-        <Loader2 className="h-10 w-10 animate-spin text-purple-600" />
-      </div>
-    );
+    return <Preloader />;
   }
+
 
   return (
     <div className="flex min-h-screen bg-slate-50 font-sans text-gray-900 relative overflow-x-hidden">
@@ -333,25 +331,25 @@ export default function StaffPage() {
       {/* Mobile Sidebar Overlay */}
       {isMobileMenuOpen && (
         <div
-          className="fixed inset-0 bg-slate-900/50 z-40 lg:hidden backdrop-blur-sm transition-opacity"
+          className="fixed inset-0 bg-slate-900/50 z-40 md:hidden backdrop-blur-sm transition-opacity"
           onClick={() => setIsMobileMenuOpen(false)}
         />
       )}
 
       {/* Sidebar */}
       <div
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 transform transition-transform duration-300 ease-in-out lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 transform transition-transform duration-300 ease-in-out md:translate-x-0 ${
           isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
         <Sidebar />
       </div>
 
-      <main className="relative z-10 flex-1 lg:ml-64 p-4 lg:p-8 min-h-screen">
+      <main className="relative z-10 flex-1 md:ml-64 p-4 md:p-8 min-h-screen">
         <header className="flex items-center gap-4 mb-8">
           <button
             onClick={() => setIsMobileMenuOpen(true)}
-            className="lg:hidden p-2 -ml-2 text-slate-600 bg-white rounded-xl border border-slate-200 shadow-sm"
+            className="md:hidden p-2 -ml-2 text-slate-600 bg-white rounded-xl border border-slate-200 shadow-sm"
           >
             <Menu className="w-6 h-6" />
           </button>

@@ -5,6 +5,7 @@ import axios from 'axios';
 import { useRouter } from 'next/navigation';
 import Sidebar from '../../components/Sidebar';
 import PushNotificationPrompt from '../../components/PushNotificationPrompt';
+import Preloader from '../../components/Preloader';
 import {
   Wallet,
   Coins,
@@ -351,18 +352,8 @@ const topTransactions = filteredTransactions.slice(0, 6);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-slate-50">
-        <div className="flex flex-col items-center gap-3">
-          <div className="relative">
-            <div className="w-12 h-12 border-4 border-emerald-100 rounded-full" />
-            <div className="absolute top-0 left-0 w-12 h-12 border-4 border-emerald-600 rounded-full border-t-transparent animate-spin" />
-          </div>
-          <p className="text-slate-500 font-extrabold text-xs tracking-[0.25em] uppercase">Loading dashboard…</p>
-        </div>
-      </div>
-    );
+  if (loading || !data) {
+    return <Preloader />;
   }
 
   const visitCount = data?.stats?.visits?.[visitDuration] || 0;

@@ -227,18 +227,18 @@ export default function OrdersPage() {
   return (
     <div className="flex min-h-screen bg-slate-50 font-sans text-gray-900 relative overflow-x-hidden">
       {isMobileMenuOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 z-40 lg:hidden backdrop-blur-sm" onClick={() => setIsMobileMenuOpen(false)} />
+        <div className="fixed inset-0 bg-slate-900/60 z-40 md:hidden backdrop-blur-sm" onClick={() => setIsMobileMenuOpen(false)} />
       )}
 
-      <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 transform transition-transform duration-300 lg:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+      <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 transform transition-transform duration-300 md:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <Sidebar />
       </div>
 
-      <main className="flex-1 lg:ml-64 p-4 lg:p-8 w-full max-w-full overflow-x-hidden">
-        <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-8 gap-6">
+      <main className="flex-1 md:ml-64 p-4 md:p-8 w-full max-w-full overflow-x-hidden">
+        <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-6">
           <div>
             <div className="flex items-center gap-3">
-              <button onClick={() => setIsMobileMenuOpen(true)} className="p-2 bg-white border border-gray-200 rounded-xl lg:hidden">
+              <button onClick={() => setIsMobileMenuOpen(true)} className="p-2 bg-white border border-gray-200 rounded-xl md:hidden">
                 <Menu className="w-6 h-6" />
               </button>
               <h1 className="text-3xl font-black text-gray-900">Orders</h1>
@@ -249,7 +249,7 @@ export default function OrdersPage() {
             <p className="text-gray-500 text-sm mt-1">Manage jobs and orders</p>
           </div>
           <button onClick={openNew} 
-            className="w-full lg:w-auto px-6 py-4 bg-gray-900 text-white font-bold rounded-2xl shadow-xl hover:bg-black transition-all flex items-center justify-center gap-2">
+            className="w-full md:w-auto px-6 py-4 bg-gray-900 text-white font-bold rounded-2xl shadow-xl hover:bg-black transition-all flex items-center justify-center gap-2">
             <Plus className="w-5 h-5" /> New Order
           </button>
         </header>
