@@ -200,21 +200,21 @@ const handleAddToCart = (item: InventoryItem) => {
 
       {/* Mobile Overlay */}
       {isMobileMenuOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 z-40 md:hidden backdrop-blur-sm transition-opacity" onClick={() => setIsMobileMenuOpen(false)} />
+        <div className="fixed inset-0 bg-slate-900/50 z-40 lg:hidden backdrop-blur-sm transition-opacity" onClick={() => setIsMobileMenuOpen(false)} />
       )}
 
       {/* Sidebar */}
-      <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 transform transition-transform duration-300 md:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+      <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 transform transition-transform duration-300 lg:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <Sidebar />
       </div>
 
       {/* Main Content */}
-      <main className="relative z-10 flex-1 md:ml-64 p-4 md:p-8 min-h-screen">
+      <main className="relative z-10 flex-1 lg:ml-64 p-4 lg:p-8 min-h-screen">
         
         {/* Header Section */}
-        <header className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-6">
+        <header className="flex flex-col lg:flex-row justify-between items-start lg:items-end mb-8 gap-6">
           <div className="flex items-center gap-4">
-            <button onClick={() => setIsMobileMenuOpen(true)} className="p-2 -ml-2 md:hidden bg-white rounded-xl shadow-sm border border-gray-200 text-gray-700">
+            <button onClick={() => setIsMobileMenuOpen(true)} className="p-2 -ml-2 lg:hidden bg-white rounded-xl shadow-sm border border-gray-200 text-gray-700">
               <Menu className="w-6 h-6" />
             </button>
             
@@ -250,10 +250,10 @@ const handleAddToCart = (item: InventoryItem) => {
           </div>
 
           {/* Segmented Tab Control */}
-          <div className="flex p-1.5 bg-gray-200/50 backdrop-blur-sm rounded-xl border border-gray-200 w-full md:w-auto">
+          <div className="flex p-1.5 bg-gray-200/50 backdrop-blur-sm rounded-xl border border-gray-200 w-full lg:w-auto">
             <button
               onClick={() => setActiveTab('new')}
-              className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all duration-200 ${
+              className={`flex-1 lg:flex-none flex items-center justify-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all duration-200 ${
                 activeTab === 'new' 
                   ? 'bg-white text-emerald-700 shadow-sm ring-1 ring-gray-200' 
                   : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'
@@ -263,7 +263,7 @@ const handleAddToCart = (item: InventoryItem) => {
             </button>
             <button
               onClick={() => setActiveTab('history')}
-              className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all duration-200 ${
+              className={`flex-1 lg:flex-none flex items-center justify-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all duration-200 ${
                 activeTab === 'history' 
                   ? 'bg-white text-emerald-700 shadow-sm ring-1 ring-gray-200' 
                   : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'

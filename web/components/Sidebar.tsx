@@ -120,8 +120,8 @@ export default function Sidebar() {
         <div className="mb-6">
           <p className="px-4 mb-2 text-[10px] font-black tracking-widest text-gray-400 uppercase">Admin</p>
           <div className="space-y-1">
-            <Link href="/settings" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 font-bold text-sm ${pathname === '/settings' ? 'bg-black text-white shadow-md' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'}`}>
-              <Users2 size={18} className={pathname === '/settings' ? 'text-emerald-400' : 'text-gray-400'} />
+            <Link href="/staff" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 font-bold text-sm ${pathname === '/staff' ? 'bg-black text-white shadow-md' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'}`}>
+              <Users2 size={18} className={pathname === '/staff' ? 'text-emerald-400' : 'text-gray-400'} />
               <span>All Staff</span>
             </Link>
             

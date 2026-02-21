@@ -372,14 +372,14 @@ const topTransactions = filteredTransactions.slice(0, 6);
       {/* Sidebar Overlay */}
       {isMobileMenuOpen && (
         <div
-          className="fixed inset-0 bg-slate-900/60 z-40 md:hidden backdrop-blur-sm"
+          className="fixed inset-0 bg-slate-900/60 z-40 lg:hidden backdrop-blur-sm"
           onClick={() => setIsMobileMenuOpen(false)}
         />
       )}
 
       {/* Sidebar */}
       <div
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-slate-200 transform transition-transform duration-300 ease-in-out md:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-slate-200 transform transition-transform duration-300 ease-in-out lg:translate-x-0 ${
           isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
@@ -387,13 +387,13 @@ const topTransactions = filteredTransactions.slice(0, 6);
       </div>
 
       {/* Main */}
-      <main className="flex-1 md:ml-64 p-4 md:p-8 w-full max-w-full min-h-screen overflow-x-hidden">
+      <main className="flex-1 lg:ml-64 p-4 lg:p-8 w-full max-w-full min-h-screen overflow-x-hidden">
         {/* Header */}
-        <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
+        <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-8">
           <div className="flex items-center gap-4 min-w-0">
             <button
               onClick={() => setIsMobileMenuOpen(true)}
-              className="p-2.5 bg-white border border-slate-200 rounded-2xl md:hidden text-slate-600 shadow-sm active:scale-95 transition"
+              className="p-2.5 bg-white border border-slate-200 rounded-2xl lg:hidden text-slate-600 shadow-sm active:scale-95 transition"
             >
               <Menu className="w-6 h-6" />
             </button>
@@ -455,7 +455,7 @@ const topTransactions = filteredTransactions.slice(0, 6);
             </div>
           </div>
 
-          <div className="flex items-center gap-3 self-end md:self-auto shrink-0">
+          <div className="flex items-center gap-3 self-end lg:self-auto shrink-0">
             <button className="p-3 bg-white rounded-2xl border border-slate-200 text-slate-400 hover:text-emerald-600 hover:border-emerald-200 transition-all relative shadow-sm">
               <Bell className="w-5 h-5" />
               <span className="absolute top-3 right-3 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white" />
