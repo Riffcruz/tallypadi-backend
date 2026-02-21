@@ -206,8 +206,6 @@ export default function PaymentPage() {
       }
       fullPhone = phoneId;
 
-      console.log(`Connecting to Backend: ${endpoint} with phone: ${fullPhone}`);
-
       // 3. Call Backend
       const response = await axios.post(endpoint, {
         email: cleanEmail,
@@ -220,7 +218,6 @@ export default function PaymentPage() {
 
       // 4. Validate URL before redirecting
       if (authorization_url && authorization_url.startsWith('http')) {
-        console.log('Redirecting to Paystack:', authorization_url);
         window.location.href = authorization_url;
       } else {
         throw new Error('Received invalid redirect URL from payment provider.');

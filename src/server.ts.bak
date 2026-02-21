@@ -244,7 +244,7 @@ const forgotPasswordLimiter = rateLimit({
   message: 'Too many password reset requests. Please try again in an hour.',
   keyGenerator: (req: Request) => {
     const identifier = normalizeStr(req.body?.identifier);
-    if (!identifier) return `ip:${ipKeyGenerator(req as any)}`;
+    if (!identifier) return `ip:${ipKeyGenerator(req)}`;
     return `fp:${normalizePhoneDigits(identifier)}`;
   },
 });

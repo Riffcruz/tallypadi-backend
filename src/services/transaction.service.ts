@@ -44,7 +44,7 @@ function rootItemName(name: string) {
   return n || '';
 }
 
-function toNumber(v: any): number {
+function toNumber(v: unknown): number {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 }
@@ -122,7 +122,7 @@ export const processTransaction = async (
   userId: Types.ObjectId,
   parsed: ParsedResult,
   messageId: string,
-  actor?: any // ✅ NEW: pass actor from message handler so we can enforce OWNER-only actions
+  actor?: Record<string, unknown> | null // ✅ NEW: pass actor from message handler so we can enforce OWNER-only actions
 ) => {
   // ✅ 0) CLAIM LOCK FIRST (prevents double inventory update)
   try {
@@ -131,8 +131,8 @@ export const processTransaction = async (
       messageId,
       status: 'PROCESSING',
     });
-  } catch (e: any) {
-    if (e?.code === 11000) {
+  } catch (e: unknown) {
+    if (typeof e === 'object' && e !== null && 'code' in e && (e as Record<string, unknown>).code === 11000) {
       console.log(`⚠️ Duplicate message detected (${messageId}). Skipping safely.`);
       return;
     }
@@ -175,7 +175,7 @@ export const processTransaction = async (
         return;
       }
 
-      const inv = resolved.status === 'found' ? (resolved as any).inv : null;
+      const inv = resolved.status === 'found' ? resolved.inv : null;
       if (!inv) {
         parsed.reply_text =
           `I couldn't find *${itemName}* in your inventory.\n` +
@@ -223,11 +223,11 @@ export const processTransaction = async (
         return;
       }
 
-      let inv = resolved.status === 'found' ? (resolved as any).inv : null;
+      let inv = resolved.status === 'found' ? resolved.inv : null;
 
       // If not found, create item (price-first workflow)
       if (!inv) {
-        const rootName = (resolved as any).rootName || rootItemName(cleanName) || cleanName;
+        const rootName = ('rootName' in resolved ? resolved.rootName : null) || rootItemName(cleanName) || cleanName;
         if (!rootName) {
           parsed.reply_text = 'Please tell me the item name clearly. Example: *rice price is 1200*';
           await ProcessedMessage.updateOne({ user: userId, messageId }, { $set: { status: 'DONE' } });
@@ -284,7 +284,7 @@ export const processTransaction = async (
         return;
       }
 
-      const inv = resolved.status === 'found' ? (resolved as any).inv : null;
+      const inv = resolved.status === 'found' ? resolved.inv : null;
       if (!inv) {
         parsed.reply_text = `I couldn't find *${itemName}* in your inventory.`;
         await ProcessedMessage.updateOne({ user: userId, messageId }, { $set: { status: 'DONE' } });
@@ -344,11 +344,11 @@ export const processTransaction = async (
           debtorKey: res.debtorKey,
           aliases: [res.debtorKey],
         });
-        debtorId = created._id as any;
+        debtorId = created._id as Types.ObjectId;
         displayName = created.displayName;
         debtorKey = created.debtorKey;
       } else {
-        debtorId = res.debtorId as any;
+        debtorId = res.debtorId as Types.ObjectId;
         displayName = res.displayName;
         debtorKey = res.debtorKey;
       }
@@ -464,11 +464,11 @@ export const processTransaction = async (
           debtorKey: res.debtorKey,
           aliases: [res.debtorKey],
         });
-        debtorId = created._id as any;
+        debtorId = created._id as Types.ObjectId;
         customerName = created.displayName;
         customerKey = created.debtorKey;
       } else {
-        debtorId = res.debtorId as any;
+        debtorId = res.debtorId as Types.ObjectId;
         customerName = res.displayName;
         customerKey = res.debtorKey;
       }
@@ -477,7 +477,7 @@ export const processTransaction = async (
     // =========================================================
     // INVENTORY UPDATES + PRICE CALCULATIONS
     // =========================================================
-    const finalItems: any[] = [];
+    const finalItems: Record<string, unknown>[] = [];
     let calculatedTotal = 0;
 
     for (const item of parsed.items || []) {
@@ -507,11 +507,11 @@ export const processTransaction = async (
         return;
       }
 
-      let inv = resolved.status === 'found' ? (resolved as any).inv : null;
+      let inv = resolved.status === 'found' ? resolved.inv : null;
 
       // If item doesn't exist, create it using ROOT name (clean inventory)
       if (!inv) {
-        const rootName = (resolved as any).rootName || rootItemName(cleanName) || cleanName;
+        const rootName = ('rootName' in resolved ? resolved.rootName : null) || rootItemName(cleanName) || cleanName;
         if (!rootName) continue;
 
         inv = new Inventory({
@@ -633,7 +633,7 @@ export const processTransaction = async (
     const balance = type === 'SALE' ? (isCredit ? finalTotalMoney : 0) : 0;
 
     await Transaction.create({
-      user: actor ? actor._id : userId, // ✅ Record the actual actor (Staff) for audit trails
+      user: actor ? actor._id as Types.ObjectId : userId, // ✅ Record the actual actor (Staff) for audit trails
       type,
       paymentStatus,
       items: finalItems,
@@ -664,7 +664,7 @@ export const processTransaction = async (
 
              if (isOwnerActive) {
                 const itemsStr = finalItems.map(i => `${i.qty} ${i.name}`).join(', ');
-                const staffName = actor.name || 'Staff';
+                const staffName = (actor && actor.name ) ? String(actor.name) : 'Staff';
                 const msg = `👤 *Staff Sale Alert*\n\n*${staffName}* sold:\n${itemsStr}\n\n💰 Total: ${finalTotalMoney.toLocaleString()}`;
                 
                 await queueOutboundMessage(owner.phoneNumber, msg);
@@ -698,12 +698,12 @@ export const processTransaction = async (
       { user: userId, messageId },
       { $set: { status: 'DONE' } }
     );
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('❌ processTransaction error:', err);
 
     await ProcessedMessage.updateOne(
       { user: userId, messageId },
-      { $set: { status: 'FAILED', error: String(err?.message || err) } }
+      { $set: { status: 'FAILED', error: err instanceof Error ? err.message : String(err) } }
     );
 
     throw err;
@@ -731,11 +731,11 @@ export const deductStockForItems = async (userId: Types.ObjectId, items: {name: 
          continue; 
     }
 
-    let inv = resolved.status === 'found' ? (resolved as any).inv : null;
+    let inv = resolved.status === 'found' ? resolved.inv : null;
 
     // If not found, create new (tracking negative stock)
     if (!inv) {
-        const rootName = (resolved as any).rootName || rootItemName(cleanName) || cleanName;
+        const rootName = ('rootName' in resolved ? resolved.rootName : null) || rootItemName(cleanName) || cleanName;
         if (!rootName) continue;
 
         inv = new Inventory({
@@ -763,10 +763,10 @@ export async function getHistoricalPrices(userId: Types.ObjectId, itemName: stri
   // Transaction items store `itemId`.
   
   const resolved = await findExistingItem(userId, clean);
-  let query: any = { user: userId, 'items.name': { $regex: new RegExp(escapeRegex(clean), 'i') } };
+  let query: Record<string, unknown> = { user: userId, 'items.name': { $regex: new RegExp(escapeRegex(clean), 'i') } };
 
   if (resolved.status === 'found') {
-      query = { user: userId, 'items.itemId': (resolved as any).inv._id };
+      query = { user: userId, 'items.itemId': 'inv' in resolved ? resolved.inv._id : null };
   }
 
   // 1. Cost Prices (from RESTOCK)
@@ -795,8 +795,8 @@ export async function getHistoricalPrices(userId: Types.ObjectId, itemName: stri
   
   // Also add current inventory price
   if (resolved.status === 'found') {
-      const inv = (resolved as any).inv;
-      if (inv.lastUnitPrice > 0) sellSet.add(inv.lastUnitPrice);
+      const inv = 'inv' in resolved ? resolved.inv : null;
+      if (inv && inv.lastUnitPrice > 0) sellSet.add(inv.lastUnitPrice);
   }
 
   sales.forEach(tx => {

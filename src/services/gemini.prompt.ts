@@ -564,7 +564,7 @@ Distinct from "Sales" (which are immediate).
     "account_number": string | null,
     "account_name": string | null
   },
-  "settings_update": { "key": string | null, "value": any | null },
+  "settings_update": { "key": string | null, "value": unknown | null },
   "due_date": string | null,
   "reply_text": string
 }

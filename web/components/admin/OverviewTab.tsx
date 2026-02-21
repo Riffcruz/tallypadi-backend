@@ -3,8 +3,16 @@ import React from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { Activity, Users, Shield, Crown, TrendingUp } from 'lucide-react';
 
-const StatCard = ({ title, value, sub, color, icon: Icon }: any) => {
-    const colorClasses: any = {
+interface StatCardProps {
+    title: string;
+    value: React.ReactNode;
+    sub: string;
+    color: 'green' | 'blue' | 'purple' | 'white';
+    icon: React.ElementType;
+}
+
+const StatCard = ({ title, value, sub, color, icon: Icon }: StatCardProps) => {
+    const colorClasses: Record<string, string> = {
         green: 'text-green-400 bg-green-900/30',
         blue: 'text-blue-400 bg-blue-900/30',
         purple: 'text-purple-400 bg-purple-900/30',
@@ -24,7 +32,13 @@ const StatCard = ({ title, value, sub, color, icon: Icon }: any) => {
     );
 };
 
-export default function OverviewTab({ stats }: any) {
+interface OverviewStats {
+    financials: { gmv: number, txCount: number };
+    users: { total: number, active24h: number, ogaBoss: number, tycoon: number };
+    graph: { date: string, sales: number }[];
+}
+
+export default function OverviewTab({ stats }: { stats: OverviewStats | null }) {
     if (!stats) return null;
     return (
         // Added pt-16 md:pt-0 to ensure the mobile menu button doesn't overlap the title
@@ -56,11 +70,11 @@ export default function OverviewTab({ stats }: any) {
                             fontSize={12} 
                             tickLine={false} 
                             axisLine={false} 
-                            tickFormatter={(val: any) => `₦${(Number(val) || 0)/1000}k`} 
+                            tickFormatter={(val: number) => `₦${(Number(val) || 0)/1000}k`}
                         />
                         <Tooltip 
                             contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#fff', borderRadius: '8px' }} 
-                            formatter={(val: any) => [`₦${(Number(val) || 0).toLocaleString()}`, 'Revenue']} 
+                            formatter={(val: number | string | undefined) => [`₦${(Number(val) || 0).toLocaleString()}`, 'Revenue']}
                         />
                         <Area type="monotone" dataKey="sales" stroke="#10b981" fillOpacity={1} fill="url(#colorSales)" />
                     </AreaChart>

@@ -37,13 +37,13 @@ function authHeaders() {
   };
 }
 
-function safeText(s: any, max = 4096) {
+function safeText(s: unknown, max = 4096) {
   return String(s ?? '')
     .replace(/\u0000/g, '')
     .slice(0, max);
 }
 
-function safeFileName(name: any, fallback = 'document.pdf') {
+function safeFileName(name: unknown, fallback = 'document.pdf') {
   const s = safeText(name, 200)
     .replace(/[\\/:*?"<>|]+/g, '_')
     .replace(/\s+/g, ' ')
@@ -212,7 +212,7 @@ export async function sendWhatsAppMediaById(opts: {
 }) {
   const { to, mediaId, type, caption, filename } = opts;
 
-  const payload: any = {
+  const payload: Record<string, unknown> = {
     messaging_product: 'whatsapp',
     to,
     type,
@@ -220,11 +220,11 @@ export async function sendWhatsAppMediaById(opts: {
   };
 
   if (caption && (type === 'image' || type === 'document' || type === 'video')) {
-    payload[type].caption = safeText(caption, 1024);
+    (payload[type] as Record<string, unknown>).caption = safeText(caption, 1024);
   }
 
   if (filename && type === 'document') {
-    payload.document.filename = safeText(filename, 200);
+    (payload.document as Record<string, unknown>).filename = safeText(filename, 200);
   }
 
   await axios.post(messagesUrl(), payload, {
@@ -299,11 +299,11 @@ export async function sendWhatsAppTemplate(opts: {
   to: string;
   name: string;
   languageCode?: string;
-  components?: any[];
+  components?: Record<string, unknown>[];
 }) {
   const { to, name, languageCode = 'en_US', components = [] } = opts;
 
-  const payload: any = {
+  const payload: Record<string, unknown> = {
     messaging_product: 'whatsapp',
     to,
     type: 'template',
@@ -313,7 +313,7 @@ export async function sendWhatsAppTemplate(opts: {
     },
   };
 
-  if (components?.length) payload.template.components = components;
+  if (components?.length) (payload.template as Record<string, unknown>).components = components;
 
   await axios.post(messagesUrl(), payload, {
     headers: authHeaders(),

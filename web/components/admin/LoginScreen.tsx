@@ -19,9 +19,10 @@ export default function LoginScreen({ authLoading, onLogin }: LoginScreenProps) 
 
   const busy = authLoading || submitting;
 
-  const extractToken = (data: any): string | null => {
+  const extractToken = (data: Record<string, unknown>): string | null => {
     if (!data) return null;
-    return data.token || data.accessToken || data?.data?.token || data?.data?.accessToken || null;
+    const typedData = data as { token?: string, accessToken?: string, data?: { token?: string, accessToken?: string } };
+    return typedData.token || typedData.accessToken || typedData.data?.token || typedData.data?.accessToken || null;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -57,11 +58,12 @@ export default function LoginScreen({ authLoading, onLogin }: LoginScreenProps) 
         await axios.get(`${API_URL}/admin/analytics`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-      } catch (e: any) {
+      } catch (e: unknown) {
+        const error = e as { response?: { status?: number } };
         const msg =
-          e?.response?.status === 403
+          error?.response?.status === 403
             ? 'This account is not an admin.'
-            : e?.response?.status === 401
+            : error?.response?.status === 401
               ? 'Token rejected by server.'
               : 'Admin verification failed.';
         Swal.fire('Access denied', msg, 'error');
@@ -69,12 +71,13 @@ export default function LoginScreen({ authLoading, onLogin }: LoginScreenProps) 
       }
 
       onLogin(token);
-    } catch (err: any) {
-      const status = err?.response?.status;
+    } catch (err: unknown) {
+      const error = err as { response?: { status?: number, data?: { error?: string, message?: string } }, message?: string };
+      const status = error?.response?.status;
       const serverMsg =
-        err?.response?.data?.error ||
-        err?.response?.data?.message ||
-        err?.message ||
+        error?.response?.data?.error ||
+        error?.response?.data?.message ||
+        error?.message ||
         'Login failed';
 
       if (status === 429) {

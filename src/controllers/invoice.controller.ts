@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { Request, Response } from 'express';
 import { User, IUser } from '../models/user.model';
 import { Invoice } from '../models/invoice.model';
@@ -49,7 +50,7 @@ export const createInvoice = async (req: AuthReq, res: Response) => {
 
         // Validate items
         let totalAmount = 0;
-        const validItems = items.map((i: any) => {
+        const validItems = items.map((i: { qty?: string | number; unitPrice?: string | number; name?: string; unit?: string }) => {
             const qty = Number(i.qty || 0);
             const price = Number(i.unitPrice || 0);
             const total = qty * price;
@@ -88,14 +89,14 @@ export const createInvoice = async (req: AuthReq, res: Response) => {
 
         res.status(201).json({ success: true, invoice: inv, pdfUrl });
 
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Create Invoice Error:", error);
         res.status(500).json({ error: 'Server Error' });
     }
 };
 
 // Helper to determine Shop ID (Owner's ID)
-const getShopId = (user: any): string => {
+const getShopId = (user: { _id?: unknown, role?: string, ownerId?: unknown } | null): string => {
     if (!user) return '';
     if (user.role === 'STAFF' && user.ownerId) return String(user.ownerId);
     return String(user._id);
@@ -114,9 +115,9 @@ export const getInvoicePdf = async (req: AuthReq, res: Response) => {
         if (!viewer) return res.status(401).json({ error: 'User not found' });
 
         // Security Check
-        const creator = inv.user as any;
+        const creator = inv.user as { _id?: unknown, role?: string, ownerId?: unknown, name?: string, businessName?: string, countryCode?: string };
         const creatorShopId = getShopId(creator);
-        const viewerShopId = getShopId(viewer);
+        const viewerShopId = getShopId(viewer as unknown as { _id?: unknown, role?: string, ownerId?: unknown });
 
         if (creatorShopId !== viewerShopId) {
             return res.status(403).json({ error: 'Access denied' });
@@ -140,7 +141,7 @@ export const getInvoicePdf = async (req: AuthReq, res: Response) => {
         const { format } = req.query;
 
         const pdfBuffer = await generateInvoicePdf(
-            inv as any,
+            inv as Parameters<typeof generateInvoicePdf>[0],
             businessName,
             countryCode,
             undefined,
@@ -181,7 +182,7 @@ export const getInvoices = async (req: AuthReq, res: Response) => {
         const { page = 1, limit = 20, search } = req.query;
         const skip = (Number(page) - 1) * Number(limit);
 
-        const query: any = { user: { $in: shopUserIds } };
+        const query: Record<string, unknown> = { user: { $in: shopUserIds } };
         
         if (search) {
             query.$or = [
@@ -200,7 +201,7 @@ export const getInvoices = async (req: AuthReq, res: Response) => {
 
         res.json({ success: true, data: invoices, total, page: Number(page) });
 
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Get Invoices Error:", error);
         res.status(500).json({ error: 'Server Error' });
     }
@@ -219,8 +220,8 @@ export const getInvoice = async (req: AuthReq, res: Response) => {
         if (!viewer) return res.status(401).json({ error: 'User not found' });
 
         // Security Check
-        const creatorShopId = getShopId(inv.user as any);
-        const viewerShopId = getShopId(viewer);
+        const creatorShopId = getShopId(inv.user as { _id?: unknown, role?: string, ownerId?: unknown });
+        const viewerShopId = getShopId(viewer as unknown as { _id?: unknown, role?: string, ownerId?: unknown });
 
         if (creatorShopId !== viewerShopId) {
             return res.status(403).json({ error: 'Access denied' });
@@ -228,7 +229,7 @@ export const getInvoice = async (req: AuthReq, res: Response) => {
 
         res.json({ success: true, invoice: inv });
 
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({ error: 'Server Error' });
     }
 }
@@ -248,8 +249,8 @@ export const updateInvoiceStatus = async (req: AuthReq, res: Response) => {
         if (!user) return res.status(404).json({ error: 'User not found' });
 
         // Security Check
-        const creatorShopId = getShopId(inv.user as any);
-        const viewerShopId = getShopId(user);
+        const creatorShopId = getShopId(inv.user as { _id?: unknown, role?: string, ownerId?: unknown });
+        const viewerShopId = getShopId(user as unknown as { _id?: unknown, role?: string, ownerId?: unknown });
 
         if (creatorShopId !== viewerShopId) {
              return res.status(403).json({ error: 'Access denied' });
@@ -300,14 +301,15 @@ export const updateInvoiceStatus = async (req: AuthReq, res: Response) => {
 
              // Deduct stock
              const shopId = (user?.role === 'STAFF' && user.ownerId) ? user.ownerId : userId;
-             await deductStockForItems(shopId as any, inv.items.map(i => ({ name: i.name, qty: i.qty })));
+             const shopIdStr = String(shopId) as unknown as mongoose.Types.ObjectId;
+             await deductStockForItems(shopIdStr, inv.items.map(i => ({ name: i.name, qty: i.qty })));
 
              return res.json({ success: true, invoice: inv });
         }
 
         return res.status(400).json({ error: 'Invalid status' });
 
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Update Invoice Error:", error);
         res.status(500).json({ error: 'Server Error' });
     }
@@ -325,8 +327,8 @@ export const deleteInvoice = async (req: AuthReq, res: Response) => {
         const user = await User.findById(userId);
         if (!user) return res.status(404).json({ error: 'User not found' });
         
-        const creatorShopId = getShopId(inv.user as any);
-        const viewerShopId = getShopId(user);
+        const creatorShopId = getShopId(inv.user as { _id?: unknown, role?: string, ownerId?: unknown });
+        const viewerShopId = getShopId(user as unknown as { _id?: unknown, role?: string, ownerId?: unknown });
 
         if (creatorShopId !== viewerShopId) {
              return res.status(403).json({ error: 'Access denied' });
@@ -341,14 +343,14 @@ export const deleteInvoice = async (req: AuthReq, res: Response) => {
 
             if (tx) {
                 // Undo the sale (restores stock, reverses stats)
-                await undoSaleById(user._id as any, String(tx._id), 'web_invoice_deletion');
+                await undoSaleById(String(user._id) as unknown as mongoose.Types.ObjectId, String(tx._id), 'web_invoice_deletion');
             }
         }
 
         await Invoice.deleteOne({ _id: id });
         res.json({ success: true, message: 'Invoice deleted' });
 
-    } catch (error: any) {
+    } catch (error: unknown) {
          console.error("Delete Invoice Error:", error);
          res.status(500).json({ error: 'Server Error' });
     }

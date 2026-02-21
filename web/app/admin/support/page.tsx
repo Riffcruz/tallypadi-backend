@@ -116,7 +116,6 @@ function AdminSupportContent() {
             setSocket(socketConn);
 
             socketConn.on('connect', () => {
-                console.log('Admin Socket connected');
                 // Join 'agents' room to receive global ticket updates (list view)
                 socketConn.emit('join_agent', 'ADMIN_VIEWER');
             });

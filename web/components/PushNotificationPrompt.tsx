@@ -52,8 +52,9 @@ async function subscribeAndSave(token: string): Promise<boolean> {
     
     alert('✅ Notifications successfully enabled!');
     return true;
-  } catch (err: any) {
-    alert(`❌ Push Subscription Failed: ${err?.message || err}`);
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    alert(`❌ Push Subscription Failed: ${errorMsg}`);
     console.error('Push subscribe error:', err);
     return false;
   }

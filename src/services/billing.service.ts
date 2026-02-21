@@ -36,7 +36,7 @@ export const initializePayment = async (
   try {
     // 1. Determine which plan to charge for
     const selectedPlanType = targetPlan || user.planType || 'OGA_BOSS';
-    const planConfig = (PLAN_CONFIG as any)[selectedPlanType];
+    const planConfig = (PLAN_CONFIG as Record<string, { name: string, pricing: Record<number, number> }>)[selectedPlanType];
 
     if (!planConfig) {
       throw new Error(`Invalid plan type: ${selectedPlanType}`);
@@ -92,8 +92,14 @@ export const initializePayment = async (
     );
 
     return response.data.data.authorization_url;
-  } catch (error: any) {
-    console.error('❌ Paystack Initialization Error:', error.response?.data || error.message);
+  } catch (error: unknown) {
+    if (error instanceof Error && 'response' in error) {
+      console.error('❌ Paystack Initialization Error:', (error as any).response?.data || error.message);
+    } else if (error instanceof Error) {
+        console.error('❌ Paystack Initialization Error:', error.message);
+    } else {
+        console.error('❌ Paystack Initialization Error:', error);
+    }
     return null;
   }
 };

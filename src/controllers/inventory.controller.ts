@@ -11,18 +11,19 @@ const sanitizeString = (input: unknown): string | undefined => {
 };
 
 const validateNumber = (input: unknown): number | undefined => {
-  const n = typeof input === 'string' ? Number(input) : (input as any);
+  const n = typeof input === 'string' ? Number(input) : (input as number);
   return typeof n === 'number' && Number.isFinite(n) ? n : undefined;
 };
 
 // --- Subscription Guard ---
-const hasInventoryWriteAccess = (user: any): boolean => {
+const hasInventoryWriteAccess = (user: { subscriptionStatus?: string, trialEndsAt?: Date | string | null } | null): boolean => {
   if (!user) return false;
 
   if (user.subscriptionStatus === 'active') return true;
 
   if (user.subscriptionStatus === 'trial') {
-    const trialEndsAtMs = new Date(user.trialEndsAt).getTime();
+    if (!user.trialEndsAt) return false;
+    const trialEndsAtMs = new Date(user.trialEndsAt as string | number | Date).getTime();
     if (!Number.isFinite(trialEndsAtMs)) return false;
     return Date.now() < trialEndsAtMs;
   }
@@ -30,7 +31,7 @@ const hasInventoryWriteAccess = (user: any): boolean => {
   return false;
 };
 
-const denySubscription = (res: Response, user: any) => {
+const denySubscription = (res: Response, user: { subscriptionStatus?: string, trialEndsAt?: Date | string | null } | null) => {
   const trialEndsAt = user?.trialEndsAt ? new Date(user.trialEndsAt).toISOString() : null;
 
   return res.status(403).json({
@@ -45,7 +46,7 @@ const denySubscription = (res: Response, user: any) => {
 };
 
 const getAuthUser = async (req: Request) => {
-  const userId = (req as any).user?.id || (req as any).user?.userId || (req as any).userId;
+  const userId = req.user?.id || (req as Request & { userId?: string }).userId;
   if (!userId) return null;
   return await User.findById(userId);
 };
@@ -53,7 +54,7 @@ const getAuthUser = async (req: Request) => {
 // GET all inventory items (with optional pagination & search)
 export const getInventory = async (req: Request, res: Response) => {
   try {
-    const user: any = await getAuthUser(req);
+    const user = await getAuthUser(req);
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
 
     // ✅ If staff, fetch owner's inventory
@@ -62,7 +63,7 @@ export const getInventory = async (req: Request, res: Response) => {
     const { page, limit, search } = req.query;
     
     // Base filter
-    const filter: any = { user: targetUserId };
+    const filter: Record<string, unknown> = { user: targetUserId };
     
     if (search) {
       const q = String(search).trim();
@@ -85,7 +86,7 @@ export const getInventory = async (req: Request, res: Response) => {
         Inventory.countDocuments(filter)
       ]);
 
-      const formattedItems = items.map((item: any) => ({
+      const formattedItems = items.map((item) => ({
         id: item._id,
         name: item.name,
         stock: item.quantity,
@@ -111,7 +112,7 @@ export const getInventory = async (req: Request, res: Response) => {
     // Legacy un-paginated request
     const items = await Inventory.find({ user: targetUserId }).lean();
 
-    const formattedItems = (items || []).map((item: any) => ({
+    const formattedItems = (items || []).map((item) => ({
       id: item._id,
       name: item.name,
       stock: item.quantity,
@@ -353,9 +354,9 @@ export const bulkUpdateInventory = async (req: Request, res: Response) => {
       return res.json({ success: true, count: 0 });
     }
 
-    const operations = updates.map((u: any) => {
+    const operations = updates.map((u: { id: string, costPrice: number }) => {
       const safeCost = validateNumber(u.costPrice);
-      const update: any = {};
+      const update: Record<string, unknown> = {};
       if (safeCost !== undefined) update.costPrice = safeCost;
 
       return {

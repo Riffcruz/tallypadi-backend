@@ -13,7 +13,7 @@ if (publicVapidKey && privateVapidKey) {
 }
 
 // ✅ PUBLIC API: Adds to Queue
-export const sendPushNotification = async (agentId: string, payload: { title: string; body: string; data?: any }) => {
+export const sendPushNotification = async (agentId: string, payload: { title: string; body: string; data?: Record<string, unknown> }) => {
   await queuePushNotification({
     type: 'SINGLE',
     agentId,
@@ -23,7 +23,7 @@ export const sendPushNotification = async (agentId: string, payload: { title: st
   });
 };
 
-export const sendGlobalPushNotification = async (payload: { title: string; body: string; data?: any }) => {
+export const sendGlobalPushNotification = async (payload: { title: string; body: string; data?: Record<string, unknown> }) => {
   await queuePushNotification({
     type: 'GLOBAL',
     title: payload.title,
@@ -33,7 +33,7 @@ export const sendGlobalPushNotification = async (payload: { title: string; body:
 };
 
 // ✅ WORKER LOGIC: Executes Sending
-export const executePushNotification = async (agentId: string, payload: { title: string; body: string; data?: any }) => {
+export const executePushNotification = async (agentId: string, payload: { title: string; body: string; data?: Record<string, unknown> }) => {
   try {
     const subscriptions = await PushSubscription.find({ agentId });
     if (!subscriptions.length) return;
@@ -63,7 +63,7 @@ export const executePushNotification = async (agentId: string, payload: { title:
   }
 };
 
-export const executeGlobalPushNotification = async (payload: { title: string; body: string; data?: any }) => {
+export const executeGlobalPushNotification = async (payload: { title: string; body: string; data?: Record<string, unknown> }) => {
   try {
     // Send to ALL subscriptions (Admins + Agents)
     const subscriptions = await PushSubscription.find({});

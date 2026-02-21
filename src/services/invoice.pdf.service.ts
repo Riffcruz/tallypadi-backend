@@ -37,7 +37,7 @@ const formatAcctNumber = (acct: string) => {
   return raw.replace(/(.{4})/g, '$1 ').trim();
 };
 
-const formatDate = (d: any) => {
+const formatDate = (d: string | Date | number) => {
   const dt = new Date(d);
   if (Number.isNaN(dt.getTime())) return '';
   return dt.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: '2-digit' });
@@ -289,9 +289,9 @@ export const generateInvoicePdf = async (
         y += 10;
 
         // Total
-        const discount = Number((invoice as any).discount || 0);
+        const discount = Number(invoice.discount || 0);
         const netTotal = Number(invoice.totalAmount || 0) - discount;
-        const pointsEarned = Number((invoice as any).pointsEarned || 0);
+        const pointsEarned = Number(invoice.pointsEarned || 0);
 
         if (discount > 0) {
             doc.font('Regular').fontSize(10).fillColor(THEME.dark);
@@ -497,9 +497,9 @@ export const generateInvoicePdf = async (
     y += 16;
     y = ensureSpace(110, y);
 
-    const discount = Number((invoice as any).discount || 0);
+    const discount = Number(invoice.discount || 0);
     const netTotal = Number(invoice.totalAmount || 0) - discount;
-    const pointsEarned = Number((invoice as any).pointsEarned || 0);
+    const pointsEarned = Number(invoice.pointsEarned || 0);
 
     const boxLines = 1 + (discount > 0 ? 2 : 0) + (pointsEarned > 0 ? 1 : 0);
     const totalsBoxH = 50 + (boxLines * 16);

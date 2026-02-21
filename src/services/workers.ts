@@ -12,7 +12,7 @@ import { executePushNotification, executeGlobalPushNotification } from './push.s
 
 export const replyWorker = new Worker(
   'outbound-replies', // ✅ Fixed: Matches queue.service.ts
-  async (job: any) => {
+  async (job: import('bullmq').Job) => {
     // console.log('📌 Reply job:', job.name, job.data?.phoneNumber);
 
     if (job.name === 'send-text') {
@@ -160,17 +160,17 @@ export const replyWorker = new Worker(
     console.log(`⚠️ Unknown reply job name: ${job.name}`);
   },
   {
-    connection: createRedisConnection('worker-reply') as any, // ✅ Dedicated Redis connection
+    connection: createRedisConnection('worker-reply') as unknown as import('ioredis').Redis, // ✅ Dedicated Redis connection
     concurrency: 50,
     // lockDuration: 60_000,
   }
 );
 
-replyWorker.on('completed', (job: any) =>
+replyWorker.on('completed', (job: import('bullmq').Job) =>
   console.log(`✅ Reply sent: ${job.name} -> ${job.data?.phoneNumber}`)
 );
 
-replyWorker.on('failed', (job: any, err: any) => {
+replyWorker.on('failed', (job: import('bullmq').Job | undefined, err: Error) => {
   console.error(`❌ Reply failed [${job?.name}]: ${err.message}`);
 });
 
@@ -181,7 +181,7 @@ replyWorker.on('failed', (job: any, err: any) => {
 // ============================================================
 export const bulkWorker = new Worker(
   'outbound-bulk',
-  async (job: any) => {
+  async (job: import('bullmq').Job) => {
     const name = job.name;
 
     if (name !== 'send-text') {
@@ -195,14 +195,14 @@ export const bulkWorker = new Worker(
     await sendWhatsAppText(phoneNumber, message);
   },
   {
-    connection: createRedisConnection('worker-bulk') as any, // ✅ Dedicated Redis connection
+    connection: createRedisConnection('worker-bulk') as unknown as import('ioredis').Redis, // ✅ Dedicated Redis connection
     // limiter: { max: 5, duration: 1000 },
     concurrency:50,
   }
 );
 
-bulkWorker.on('completed', (job: any) => console.log(`✅ Bulk sent: ${job.data?.phoneNumber}`));
-bulkWorker.on('failed', (job: any, err: any) =>
+bulkWorker.on('completed', (job: import('bullmq').Job) => console.log(`✅ Bulk sent: ${job.data?.phoneNumber}`));
+bulkWorker.on('failed', (job: import('bullmq').Job | undefined, err: Error) =>
   console.error(`❌ Bulk failed: ${err.message}`)
 );
 
@@ -211,7 +211,7 @@ bulkWorker.on('failed', (job: any, err: any) =>
 // ============================================================
 export const messageWorker = new Worker(
   'incoming-messages',
-  async (job: any) => {
+  async (job: import('bullmq').Job) => {
     if (job.data.rawBody) {
       // ✅ New Path: Raw Webhook
       await processRawWebhook(job.data.rawBody);
@@ -223,13 +223,13 @@ export const messageWorker = new Worker(
     }
   },
   {
-    connection: createRedisConnection('worker-inbound') as any, // ✅ Dedicated Redis connection
+    connection: createRedisConnection('worker-inbound') as unknown as import('ioredis').Redis, // ✅ Dedicated Redis connection
     concurrency: 50, // High concurrency
   }
 );
 
-messageWorker.on('completed', (job: any) => console.log(`✔️ Done: ${job.data?.from}`));
-messageWorker.on('failed', (job: any, err: any) =>
+messageWorker.on('completed', (job: import('bullmq').Job) => console.log(`✔️ Done: ${job.data?.from}`));
+messageWorker.on('failed', (job: import('bullmq').Job | undefined, err: Error) =>
   console.error(`❌ Message failed: ${err.message}`)
 );
 
@@ -238,7 +238,7 @@ messageWorker.on('failed', (job: any, err: any) =>
 // ============================================================
 export const notificationWorker = new Worker(
   'push-notifications',
-  async (job: any) => {
+  async (job: import('bullmq').Job) => {
     const { type, agentId, title, body, data } = job.data;
 
     if (type === 'SINGLE') {
@@ -248,12 +248,12 @@ export const notificationWorker = new Worker(
     }
   },
   {
-    connection: createRedisConnection('worker-push') as any, // ✅ Dedicated Redis connection
+    connection: createRedisConnection('worker-push') as unknown as import('ioredis').Redis, // ✅ Dedicated Redis connection
     concurrency: 50, // Lower concurrency for push to avoid rate limits
   }
 );
 
-notificationWorker.on('completed', (job: any) => console.log(`🔔 Push sent: ${job.data?.type}`));
-notificationWorker.on('failed', (job: any, err: any) =>
+notificationWorker.on('completed', (job: import('bullmq').Job) => console.log(`🔔 Push sent: ${job.data?.type}`));
+notificationWorker.on('failed', (job: import('bullmq').Job | undefined, err: Error) =>
   console.error(`❌ Push failed: ${err.message}`)
 );

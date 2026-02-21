@@ -1,4 +1,4 @@
-import { Types, ClientSession } from 'mongoose';
+import mongoose, { Types, ClientSession } from 'mongoose';
 import { Inventory } from '../models/inventory.model';
 import { Transaction } from '../models/transaction.model';
 import { User, IUser } from '../models/user.model';
@@ -34,14 +34,16 @@ export class SalesService {
     session: ClientSession
   ) {
     // 1. Fetch User & Validate Subscription
-    const user: any = await User.findById(userId).session(session);
+    const user = await User.findById(userId).session(session) as (mongoose.Document & IUser & { ownerId?: mongoose.Types.ObjectId, role?: string }) | null;
     if (!user) throw new Error("User not found");
 
     const ownerIdForSub = (user.role === 'STAFF' && user.ownerId) ? user.ownerId : user._id;
-    let ownerForSub = user;
-    if (String(ownerIdForSub) !== String(user._id)) {
-      ownerForSub = await User.findById(ownerIdForSub).session(session);
-      if (!ownerForSub) throw new Error("Owner account invalid");
+    let ownerForSub: (mongoose.Document & IUser & { ownerId?: mongoose.Types.ObjectId, role?: string }) | null = user;
+    if (user.role === 'STAFF' && user.ownerId) {
+      ownerForSub = await User.findById(ownerIdForSub).session(session) as (mongoose.Document & IUser & { ownerId?: mongoose.Types.ObjectId, role?: string }) | null;
+    }
+    if (!ownerForSub) {
+      throw new Error("Owner account invalid");
     }
 
     if (!isSubActive(ownerForSub)) {
@@ -79,8 +81,8 @@ export class SalesService {
     const inventoryMap = new Map(inventoryItems.map(i => [String(i._id), i]));
 
     // 4. Validate Stock & Prepare Bulk Operations
-    const bulkOps: any[] = [];
-    const txItems: any[] = [];
+    const bulkOps: mongoose.AnyBulkWriteOperation<any>[] = [];
+    const txItems: Record<string, unknown>[] = [];
     let totalMoney = 0;
 
     for (const it of finalItems) {
@@ -221,7 +223,7 @@ export class SalesService {
     const { startDate, endDate, page = 1, limit = 20 } = queryDetails;
     const skip = (page - 1) * limit;
 
-    const query: any = {
+    const query: Record<string, unknown> = {
       user: { $in: relevantIds },
       type: 'SALE',
       $or: [ // Hide undone
@@ -233,13 +235,10 @@ export class SalesService {
     };
 
     if (startDate || endDate) {
-      const start = startDate ? new Date(`${startDate}T00:00:00.000Z`) : null;
-      const end = endDate ? new Date(`${endDate}T23:59:59.999Z`) : null;
-
       query.timestamp = {};
-      if (start) query.timestamp.$gte = start;
-      if (end) query.timestamp.$lte = end;
-      if (!Object.keys(query.timestamp).length) delete query.timestamp;
+      if (startDate) (query.timestamp as Record<string, unknown>).$gte = new Date(startDate);
+      if (endDate) (query.timestamp as Record<string, unknown>).$lte = new Date(endDate);
+      if (Object.keys(query.timestamp as object).length === 0) delete query.timestamp;
     }
 
     const [transactions, totalCount] = await Promise.all([
@@ -265,7 +264,7 @@ export class SalesService {
 
       let profit = 0;
       if (Array.isArray(t.items)) {
-        t.items.forEach((i: any) => {
+        (t.items as Record<string, unknown>[]).forEach((i: Record<string, unknown>) => {
           const q = Number(i.qty ?? i.quantity ?? 0);
           const p = Number(i.unitPrice ?? i.price ?? 0);
           const c = Number(i.costPrice ?? 0);
@@ -282,8 +281,8 @@ export class SalesService {
         paidAmount: paid,
         balance,
         paymentStatus,
-        soldBy: (t.user && (t.user as any).role === 'STAFF') ? (t.user as any).name : 'Owner',
-        items: (t.items || []).map((i: any) => ({
+        soldBy: (t.user && (t.user as Record<string, unknown>).role === 'STAFF') ? (t.user as Record<string, unknown>).name : 'Owner',
+        items: ((t.items as Record<string, unknown>[]) || []).map((i: Record<string, unknown>) => ({
           name: i.name,
           quantity: i.qty ?? i.quantity ?? 0,
           price: i.unitPrice ?? i.price ?? 0,
@@ -314,7 +313,7 @@ export class SalesService {
     const originalSale = await Transaction.findById(originalSaleId).session(session);
     if (!originalSale) throw new Error("Original sale not found");
 
-    const user: any = await User.findById(userId).session(session);
+    const user = await User.findById(userId).session(session) as (mongoose.Document & IUser & { ownerId?: mongoose.Types.ObjectId, role?: string }) | null;
     const inventoryOwnerId = (user?.role === 'STAFF' && user?.ownerId) ? user.ownerId : userId;
 
     // 2. Calculate Already Returned Quantities
@@ -332,8 +331,8 @@ export class SalesService {
     }
 
     // 3. Validate Returns & Prepare Bulk Update
-    const bulkOps: any[] = [];
-    const returnItems: any[] = [];
+    const bulkOps: mongoose.AnyBulkWriteOperation<any>[] = [];
+    const returnItems: Record<string, unknown>[] = [];
     let refundTotal = 0;
 
     for (const returnItem of items) {

@@ -56,9 +56,8 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
           onScan(decodedText);
           stopScanning();
         },
-        (errorMessage) => {
+        () => {
           // Error callback (ignore for now as it triggers on every frame without code)
-          // console.log(errorMessage);
         }
       );
       setIsScanning(true);

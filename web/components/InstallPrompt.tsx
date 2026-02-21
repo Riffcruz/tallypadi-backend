@@ -13,7 +13,13 @@ import { usePathname } from "next/navigation";
 
 export default function InstallPrompt() {
   const pathname = usePathname();
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  interface BeforeInstallPromptEvent extends Event {
+    readonly platforms: Array<string>;
+    readonly userChoice: Promise<{ outcome: 'accepted' | 'dismissed', platform: string }>;
+    prompt(): Promise<void>;
+  }
+
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isIOS, setIsIOS] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
   const [showInstructions, setShowInstructions] = useState(false);
@@ -30,7 +36,7 @@ export default function InstallPrompt() {
     const checkStandalone = () => {
       const isStandaloneMode =
         window.matchMedia("(display-mode: standalone)").matches ||
-        (window.navigator as any).standalone === true;
+        (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
 
       setIsStandalone(isStandaloneMode);
       return isStandaloneMode;
@@ -51,9 +57,9 @@ export default function InstallPrompt() {
     }
 
     // 3. Android/Desktop Event
-    const handleBeforeInstallPrompt = (e: any) => {
+    const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
-      setDeferredPrompt(e);
+      setDeferredPrompt(e as BeforeInstallPromptEvent);
       setShowInstallButton(true);
     };
 

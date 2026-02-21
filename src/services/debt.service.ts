@@ -2,7 +2,7 @@ import { Types } from 'mongoose';
 import { Transaction } from '../models/transaction.model';
 
 export async function applyPaymentToDebts(
-  shopUserId: any,
+  shopUserId: string | Types.ObjectId,
   debtorId: Types.ObjectId,
   amount: number
 ) {

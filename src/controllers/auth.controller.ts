@@ -97,7 +97,7 @@ export const loginStaffWithOTP = async (req: Request, res: Response) => {
         const candidates = buildPhoneCandidates(identifier);
         
         // Select fields needed
-        const user: any = await User.findOne({ phoneNumber: { $in: candidates } }).select('+otp +otpExpires +password');
+        const user = await User.findOne({ phoneNumber: { $in: candidates } }).select('+otp +otpExpires +password');
 
         if (!user) {
             return res.status(404).json({ error: 'User not found' });
@@ -214,7 +214,7 @@ export const loginUser = async (req: Request, res: Response) => {
       : { phoneNumber: { $in: buildPhoneCandidates(identifier) } };
 
     // select password explicitly
-    const user: any = await User.findOne(userQuery).select('+password');
+    const user = await User.findOne(userQuery).select('+password');
 
     // generic error
     if (!user?.password) {
@@ -365,9 +365,9 @@ export const registerUser = async (req: Request, res: Response) => {
       }
     });
 
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Register Error:', err);
-    if (err.code === 11000) {
+    if (typeof err === 'object' && err !== null && 'code' in err && (err as { code: number }).code === 11000) {
         return res.status(400).json({ error: 'Phone number or email already registered' });
     }
     return res.status(500).json({ error: 'Server Error' });
@@ -440,7 +440,7 @@ export const resetPassword = async (req: Request, res: Response) => {
     }
 
     const candidates = buildPhoneCandidates(identifier);
-    const user: any = await User.findOne({ phoneNumber: { $in: candidates } }).select('+password +otp +otpExpires');
+    const user = await User.findOne({ phoneNumber: { $in: candidates } }).select('+password +otp +otpExpires');
 
     if (!user) return res.status(404).json({ error: 'User not found' });
 
@@ -468,7 +468,7 @@ export const resetPassword = async (req: Request, res: Response) => {
 
 // --- Change Phone Number ---
 
-export const requestChangePhoneOTP = async (req: any, res: Response) => {
+export const requestChangePhoneOTP = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id; // from authRequired
     const { newPhoneNumber } = req.body;
@@ -515,14 +515,14 @@ export const requestChangePhoneOTP = async (req: any, res: Response) => {
   }
 };
 
-export const verifyChangePhoneOTP = async (req: any, res: Response) => {
+export const verifyChangePhoneOTP = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     const { otp } = req.body;
 
     if (!otp) return res.status(400).json({ error: 'OTP required' });
 
-    const user: any = await User.findById(userId).select('+otp +otpExpires +tempPhone');
+    const user = await User.findById(userId).select('+otp +otpExpires +tempPhone');
     if (!user) return res.status(404).json({ error: 'User not found' });
 
     if (!user.otp || user.otp !== otp) {
@@ -550,7 +550,7 @@ export const verifyChangePhoneOTP = async (req: any, res: Response) => {
   }
 };
 
-export const subscribeUserPush = async (req: any, res: Response) => {
+export const subscribeUserPush = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });

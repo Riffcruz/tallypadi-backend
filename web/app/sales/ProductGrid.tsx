@@ -134,7 +134,6 @@ export default function ProductGrid({ user, onAddToCart, currencyCode }: Product
         if (e.key === 'Enter') {
             if (buffer.length > 2) {
                 e.preventDefault();
-                console.log('USB Scanner Detected:', buffer);
                 handleScan(buffer);
                 buffer = '';
             }
@@ -257,7 +256,6 @@ export default function ProductGrid({ user, onAddToCart, currencyCode }: Product
       {showScanner && (
         <BarcodeScanner
           onScan={(code) => {
-            console.log('Scanned:', code);
             const item = inventory.find((i) => i.barcode === code);
             if (item) {
               onAddToCart(item);

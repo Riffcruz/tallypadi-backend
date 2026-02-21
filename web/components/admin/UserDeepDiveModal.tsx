@@ -36,20 +36,48 @@ const COUNTRY_CURRENCIES: Record<string, string> = {
 
 type ViewType = 'info' | 'inventory' | 'sales' | 'staff';
 
+export interface DeepDiveUser {
+  id?: string;
+  _id?: string;
+  businessName?: string;
+  phoneNumber?: string;
+  email?: string;
+}
+
+export interface UserProfile {
+  businessName?: string;
+  phoneNumber?: string;
+  email?: string;
+  countryCode?: string;
+  subscriptionStatus?: string;
+  trialEndsAt?: string | Date;
+  nextBillingDate?: string | Date;
+  planType?: string;
+  shopSlug?: string;
+}
+
+export interface DeepDiveDetails {
+  profile?: UserProfile;
+  staff?: Record<string, unknown>[];
+  recentSales?: Record<string, unknown>[];
+  lastMessages?: string[];
+  inventory?: Record<string, unknown>[];
+}
+
 export default function UserDeepDiveModal({
   user,
   onClose,
   adminToken,
   onAction,
 }: {
-  user: any;
+  user: DeepDiveUser;
   onClose: () => void;
-  adminToken: string; // ✅ JWT token
-  onAction: (userId: string, action: string, payload?: any) => Promise<any>;
+  adminToken: string;
+  onAction: (userId: string, action: string, payload?: Record<string, unknown>) => Promise<unknown>;
 }) {
   const userId = String(user?.id || user?._id || '').trim();
 
-  const [details, setDetails] = useState<any>(null);
+  const [details, setDetails] = useState<DeepDiveDetails | null>(null);
   const [view, setView] = useState<ViewType>('info');
   const [salesDate, setSalesDate] = useState({ start: '', end: '' });
   const [loadingDetails, setLoadingDetails] = useState(false);
@@ -85,9 +113,10 @@ export default function UserDeepDiveModal({
       const res = await axios.get(`${API_URL}/admin/users/${userId}/details`, {
         headers: authHeaders,
       });
-      setDetails(res.data);
-    } catch (e: any) {
-      const status = e?.response?.status;
+      setDetails(res.data as DeepDiveDetails);
+    } catch (e: unknown) {
+      const error = e as { response?: { status?: number } };
+      const status = error?.response?.status;
       if (status === 401) Swal.fire('Unauthorized', 'Your session expired. Please login again.', 'error');
       else if (status === 403) Swal.fire('Forbidden', 'Admin access required.', 'error');
       else Swal.fire('Error', 'Failed to load details', 'error');
@@ -104,7 +133,7 @@ export default function UserDeepDiveModal({
   useEffect(() => {
     const staff = details?.staff || [];
     if (staff.length && !staffTarget) {
-      setStaffTarget(staff[0]?.phoneNumber || '');
+      setStaffTarget(String(staff[0]?.phoneNumber || ''));
     }
   }, [details?.staff, staffTarget]);
 
@@ -168,15 +197,15 @@ export default function UserDeepDiveModal({
 
       Swal.fire('Success', `Plan set to ${plan} until ${expiryDate.toLocaleDateString()}`, 'success');
 
-      setDetails((prev: any) => ({
+      setDetails((prev) => prev ? ({
         ...prev,
         profile: {
-          ...prev.profile,
+          ...(prev.profile as UserProfile),
           planType: plan,
           subscriptionStatus: 'active',
           trialEndsAt: expiryDate,
         },
-      }));
+      }) : null);
     } catch {
       Swal.fire('Error', 'Failed to update plan', 'error');
     }
@@ -196,27 +225,28 @@ export default function UserDeepDiveModal({
 
     if (newDate < new Date()) {
       await onAction(userId, 'cancel');
-      setDetails((prev: any) => ({
+      setDetails((prev) => prev ? ({
         ...prev,
-        profile: { ...prev.profile, subscriptionStatus: 'cancelled', trialEndsAt: newDate },
-      }));
+        profile: { ...(prev.profile as UserProfile), subscriptionStatus: 'cancelled', trialEndsAt: newDate },
+      }) : null);
       Swal.fire('Updated', 'Date is in past. User Cancelled.', 'info');
     } else {
       await onAction(userId, 'activate');
-      setDetails((prev: any) => ({
+      setDetails((prev) => prev ? ({
         ...prev,
-        profile: { ...prev.profile, subscriptionStatus: 'active', trialEndsAt: newDate },
-      }));
+        profile: { ...(prev.profile as UserProfile), subscriptionStatus: 'active', trialEndsAt: newDate },
+      }) : null);
       Swal.fire('Updated', 'Expiration date extended.', 'success');
     }
   };
 
-  const isUnknownItemSale = (s: any) => {
+  const isUnknownItemSale = (s: Record<string, unknown>) => {
     const items = Array.isArray(s?.items) ? s.items : [];
     if (!items.length) return true;
 
-    return items.some((i: any) => {
-      const name = String(i?.name ?? '').trim().toLowerCase();
+    return items.some((i: unknown) => {
+      const itemRecord = i as { name?: string };
+      const name = String(itemRecord?.name ?? '').trim().toLowerCase();
       return (
         !name ||
         name === 'unknown_item' ||
@@ -231,14 +261,14 @@ export default function UserDeepDiveModal({
   const getFilteredSales = () => {
     let data = details?.recentSales || [];
 
-    data = data.filter((s: any) => !s?.isUndone && !isUnknownItemSale(s));
+    data = data.filter((s: Record<string, unknown>) => !s?.isUndone && !isUnknownItemSale(s));
 
-    if (salesDate.start) data = data.filter((s: any) => new Date(s.timestamp) >= new Date(salesDate.start));
+    if (salesDate.start) data = data.filter((s: Record<string, unknown>) => new Date(String(s.timestamp)) >= new Date(salesDate.start));
 
     if (salesDate.end) {
       const end = new Date(salesDate.end);
       end.setHours(23, 59, 59);
-      data = data.filter((s: any) => new Date(s.timestamp) <= end);
+      data = data.filter((s: Record<string, unknown>) => new Date(String(s.timestamp)) <= end);
     }
 
     return data;
@@ -255,10 +285,10 @@ export default function UserDeepDiveModal({
       const csv =
         `Date,Item Details,Amount (${currencySymbol})\n` +
         data
-          .map((s: any) => {
-            const items = (s.items || []).map((i: any) => `${i.qty}x ${i.name}`).join('; ');
+          .map((s: Record<string, unknown>) => {
+            const items = ((s.items as Record<string, unknown>[]) || []).map((i) => `${i.qty}x ${i.name}`).join('; ');
             const amount = s.totalMoney ?? 0;
-            return `${new Date(s.timestamp).toLocaleDateString()},"${items}",${amount}`;
+            return `${new Date(String(s.timestamp)).toLocaleDateString()},"${items}",${amount}`;
           })
           .join('\n');
 
@@ -276,11 +306,11 @@ export default function UserDeepDiveModal({
 
     autoTable(doc, {
       head: [['Date', 'Items', `Amount (${currencySymbol})`]],
-      body: data.map((s: any) => {
+      body: data.map((s: Record<string, unknown>) => {
         const amount = s.totalMoney ?? 0;
         return [
-          new Date(s.timestamp).toLocaleDateString(),
-          (s.items || []).map((i: any) => `${i.qty}x ${i.name}`).join(', '),
+          new Date(String(s.timestamp)).toLocaleDateString(),
+          ((s.items as Record<string, unknown>[]) || []).map((i) => `${i.qty}x ${i.name}`).join(', '),
           `${currencySymbol}${Number(amount).toLocaleString()}`,
         ];
       }),
@@ -304,7 +334,7 @@ export default function UserDeepDiveModal({
     try {
       setDeletingSales(true);
       await onAction(userId, 'delete_sales_history');
-      setDetails((prev: any) => ({ ...prev, recentSales: [] }));
+      setDetails((prev) => prev ? ({ ...prev, recentSales: [] }) : null);
       await refreshDetails();
       Swal.fire('Deleted', 'Sales history deleted successfully.', 'success');
     } catch (e) {
@@ -351,7 +381,7 @@ export default function UserDeepDiveModal({
     try {
       setClearingMsgHistory(true);
       await onAction(userId, 'clear_history');
-      setDetails((prev: any) => ({ ...prev, lastMessages: [] }));
+      setDetails((prev) => prev ? ({ ...prev, lastMessages: [] }) : null);
       Swal.fire('Cleared', 'Message history cleared.', 'success');
     } catch (e) {
       Swal.fire('Error', 'Failed to clear history', 'error');
@@ -464,13 +494,13 @@ export default function UserDeepDiveModal({
       try {
         await onAction(userId, 'update_phone', { phone: newPhone });
         
-        setDetails((prev: any) => ({
+        setDetails((prev) => prev ? ({
           ...prev,
           profile: {
             ...prev.profile,
             phoneNumber: newPhone,
           },
-        }));
+        }) : null);
       } catch (error) {
         // Error handled by parent
       }
@@ -495,13 +525,13 @@ export default function UserDeepDiveModal({
       try {
         await onAction(userId, 'update_email', { email: newEmail });
         
-        setDetails((prev: any) => ({
+        setDetails((prev) => prev ? ({
           ...prev,
           profile: {
             ...prev.profile,
             email: newEmail,
           },
-        }));
+        }) : null);
         Swal.fire('Success', 'Email updated successfully', 'success');
       } catch (error) {
         // Error handled by parent/onAction
@@ -686,7 +716,7 @@ export default function UserDeepDiveModal({
                         <select
                           className="w-full bg-slate-900 border border-slate-600 rounded-xl px-4 py-3 text-white focus:border-green-500 outline-none"
                           value={target}
-                          onChange={(e) => setTarget(e.target.value as any)}
+                          onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setTarget(e.target.value as 'user' | 'staff')}
                         >
                           <option value="user">User (Main Number)</option>
                           <option value="staff">Staff</option>
@@ -706,9 +736,9 @@ export default function UserDeepDiveModal({
                             onChange={(e) => setStaffTarget(e.target.value)}
                           >
                             {(details?.staff || []).length ? (
-                              (details.staff || []).map((s: any) => (
-                                <option key={s._id} value={s.phoneNumber}>
-                                  {(s.name || 'Staff')} — {s.phoneNumber}
+                              (details.staff as Record<string, unknown>[]).map((s) => (
+                                <option key={String(s._id)} value={String(s.phoneNumber)}>
+                                  {String(s.name || 'Staff')} — {String(s.phoneNumber)}
                                 </option>
                               ))
                             ) : (
@@ -818,35 +848,35 @@ export default function UserDeepDiveModal({
                     No sales found in this period.
                   </div>
                 ) : (
-                  getFilteredSales().map((s: any) => (
-                    <div key={s._id} className="rounded-xl border border-slate-700 bg-slate-900 p-4">
+                  (getFilteredSales() as Record<string, unknown>[]).map((s) => (
+                    <div key={String(s._id)} className="rounded-xl border border-slate-700 bg-slate-900 p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <p className="text-slate-200 font-bold">{new Date(s.timestamp).toLocaleDateString()}</p>
+                          <p className="text-slate-200 font-bold">{new Date(String(s.timestamp)).toLocaleDateString()}</p>
                           <p className="text-xs text-slate-500">
-                            {new Date(s.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            {new Date(String(s.timestamp)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </p>
                         </div>
                         <div className="text-emerald-300 font-mono font-bold whitespace-nowrap">
                           {currencySymbol}
-                          {(s.totalMoney ?? 0).toLocaleString()}
+                          {Number(s.totalMoney ?? 0).toLocaleString()}
                         </div>
                       </div>
 
                       <div className="mt-3 space-y-1">
-                        {(s.items || []).length ? (
-                          (s.items || []).slice(0, 4).map((i: any, idx: number) => (
+                        {((s.items as Record<string, unknown>[]) || []).length ? (
+                          ((s.items as Record<string, unknown>[]) || []).slice(0, 4).map((i, idx: number) => (
                             <div key={idx} className="text-sm text-slate-200">
-                              <span className="font-semibold">{i.name}</span>{' '}
-                              <span className="text-slate-400">x{i.qty}</span>
+                              <span className="font-semibold">{String(i.name)}</span>{' '}
+                              <span className="text-slate-400">x{String(i.qty)}</span>
                             </div>
                           ))
                         ) : (
                           <p className="text-slate-500 text-sm">Unknown Item</p>
                         )}
 
-                        {(s.items || []).length > 4 && (
-                          <p className="text-xs text-slate-500">+{(s.items || []).length - 4} more…</p>
+                        {((s.items as unknown[]) || []).length > 4 && (
+                          <p className="text-xs text-slate-500">+{(s.items as unknown[]).length - 4} more…</p>
                         )}
                       </div>
                     </div>
@@ -872,21 +902,21 @@ export default function UserDeepDiveModal({
                         </td>
                       </tr>
                     ) : (
-                      getFilteredSales().map((s: any) => (
-                        <tr key={s._id} className="hover:bg-white/5">
+                      (getFilteredSales() as Record<string, unknown>[]).map((s) => (
+                        <tr key={String(s._id)} className="hover:bg-white/5">
                           <td className="px-4 py-3 text-slate-400 whitespace-nowrap">
-                            {new Date(s.timestamp).toLocaleDateString()}
+                            {new Date(String(s.timestamp)).toLocaleDateString()}
                             <br />
                             <span className="text-[10px] opacity-70">
-                              {new Date(s.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              {new Date(String(s.timestamp)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </span>
                           </td>
                           <td className="px-4 py-3">
-                            {(s.items || []).length ? (
-                              (s.items || []).map((i: any, idx: number) => (
+                            {((s.items as unknown[]) || []).length ? (
+                              ((s.items as Record<string, unknown>[]) || []).map((i, idx: number) => (
                                 <div key={idx} className="mb-0.5">
-                                  <span className="text-white font-medium">{i.name}</span>
-                                  <span className="text-slate-500 ml-1">x{i.qty}</span>
+                                  <span className="text-white font-medium">{String(i.name)}</span>
+                                  <span className="text-slate-500 ml-1">x{String(i.qty)}</span>
                                 </div>
                               ))
                             ) : (
@@ -895,7 +925,7 @@ export default function UserDeepDiveModal({
                           </td>
                           <td className="px-4 py-3 text-right text-emerald-300 font-mono font-bold whitespace-nowrap">
                             {currencySymbol}
-                            {(s.totalMoney ?? 0).toLocaleString()}
+                            {Number(s.totalMoney ?? 0).toLocaleString()}
                           </td>
                         </tr>
                       ))
@@ -909,24 +939,24 @@ export default function UserDeepDiveModal({
           {/* INVENTORY */}
           {view === 'inventory' && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {(details?.inventory || []).map((item: any) => (
+              {((details?.inventory as Record<string, unknown>[]) || []).map((item) => (
                 <div
-                  key={item._id}
+                  key={String(item._id)}
                   className="bg-slate-700/50 p-3 rounded-xl border border-slate-600 flex justify-between items-center"
                 >
                   <div className="min-w-0">
-                    <p className="font-extrabold text-white truncate">{item.name}</p>
+                    <p className="font-extrabold text-white truncate">{String(item.name)}</p>
                     <p className="text-xs text-slate-400">
                       {currencySymbol}
-                      {(item.lastUnitPrice ?? 0).toLocaleString()}
+                      {Number(item.lastUnitPrice ?? 0).toLocaleString()}
                     </p>
                   </div>
                   <span className="bg-slate-800 text-slate-200 px-2 py-1 rounded-lg text-xs whitespace-nowrap font-bold">
-                    x{item.quantity}
+                    x{String(item.quantity)}
                   </span>
                 </div>
               ))}
-              {(details?.inventory || []).length === 0 && (
+              {((details?.inventory as unknown[]) || []).length === 0 && (
                 <p className="text-slate-500 p-4">No inventory found for this user.</p>
               )}
             </div>
@@ -935,29 +965,29 @@ export default function UserDeepDiveModal({
           {/* STAFF */}
           {view === 'staff' && (
             <div className="space-y-2">
-              {(details?.staff || []).length === 0 ? (
+              {((details?.staff as unknown[]) || []).length === 0 ? (
                 <p className="text-slate-500 p-4">No staff found.</p>
               ) : (
-                (details.staff || []).map((s: any) => (
+                ((details?.staff as Record<string, unknown>[]) || []).map((s) => (
                   <div
-                    key={s._id}
+                    key={String(s._id)}
                     className="flex justify-between items-center bg-slate-700/50 p-3 rounded-xl border border-slate-600"
                   >
                     <div className="min-w-0">
-                      <p className="font-extrabold text-white truncate">{s.name || 'Staff'}</p>
-                      <p className="text-xs text-slate-400 break-words">{s.phoneNumber}</p>
+                      <p className="font-extrabold text-white truncate">{String(s.name || 'Staff')}</p>
+                      <p className="text-xs text-slate-400 break-words">{String(s.phoneNumber)}</p>
                     </div>
 
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={() => handleUnlinkStaff(s._id, s.name)}
+                        onClick={() => handleUnlinkStaff(String(s._id), String(s.name))}
                         className="p-2 rounded-xl hover:bg-white/10 transition text-slate-400 hover:text-amber-400"
                         title="Unlink (Promote to Owner)"
                       >
                         <Unlink size={16} />
                       </button>
                       <button
-                        onClick={() => handleDeleteStaff(s._id, s.name)}
+                        onClick={() => handleDeleteStaff(String(s._id), String(s.name))}
                         className="p-2 rounded-xl hover:bg-white/10 transition text-slate-400 hover:text-red-400"
                         title="Delete Staff"
                       >
@@ -966,9 +996,9 @@ export default function UserDeepDiveModal({
                       <button
                         onClick={() => {
                           setTarget('staff');
-                          setStaffTarget(s.phoneNumber);
+                          setStaffTarget(String(s.phoneNumber));
                           setView('info');
-                          Swal.fire('Selected', `Staff selected: ${s.name || 'Staff'}`, 'info');
+                          Swal.fire('Selected', `Staff selected: ${String(s.name || 'Staff')}`, 'info');
                         }}
                         className="p-2 rounded-xl hover:bg-white/10 transition text-slate-400 hover:text-emerald-400"
                         title="Send message to staff"

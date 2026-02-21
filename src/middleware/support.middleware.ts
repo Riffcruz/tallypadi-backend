@@ -4,7 +4,7 @@ import { env } from '../config/env';
 
 const JWT_SECRET = process.env.JWT_SECRET || (env as any).jwtSecret || 'fallback_secret';
 
-export const supportAgentAuth = (req: any, res: Response, next: NextFunction) => {
+export const supportAgentAuth = (req: Request, res: Response, next: NextFunction) => {
   const auth = req.headers.authorization || '';
   if (!auth.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Unauthorized' });
@@ -13,17 +13,21 @@ export const supportAgentAuth = (req: any, res: Response, next: NextFunction) =>
   const token = auth.slice(7);
 
   try {
-    const decoded: any = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, JWT_SECRET) as { agentId: string; username: string; role: string };
     if (!decoded.agentId) return res.status(401).json({ error: 'Invalid token payload' });
 
-    req.agent = { id: decoded.agentId, username: decoded.username, role: decoded.role };
+    (req as Request & { agent: { id: string; username: string; role: string } }).agent = { 
+      id: decoded.agentId, 
+      username: decoded.username, 
+      role: decoded.role 
+    };
     next();
   } catch (err) {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
 };
 
-export const adminAuth = (req: any, res: Response, next: NextFunction) => {
+export const adminAuth = (req: Request, res: Response, next: NextFunction) => {
   // Reuse existing admin logic or check a specific secret
   // For now, let's assume if they have the ADMIN_SECRET header or similar
   // OR reuse the project's 'authRequired' + role check if we integrate with main user system.

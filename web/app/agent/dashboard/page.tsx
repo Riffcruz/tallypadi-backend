@@ -116,7 +116,6 @@ function AgentDashboardContent() {
             setSocket(socketConn);
 
             socketConn.on('connect', () => {
-                console.log('Socket connected');
                 socketConn.emit('join_agent', me._id);
             });
 

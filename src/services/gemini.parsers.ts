@@ -44,7 +44,7 @@ export const extractJsonObject = (text: string): string => {
 };
 
 // ─── Normalize phone number ──────────────────────────────────
-export const normalizePhone = (raw: any): string | undefined => {
+export const normalizePhone = (raw: unknown): string | undefined => {
   if (typeof raw !== 'string') return undefined;
   const s = sanitizeInput(raw);
   const cleaned = s.replace(/\D/g, '');
@@ -52,7 +52,7 @@ export const normalizePhone = (raw: any): string | undefined => {
 };
 
 // ─── Detect currency symbol from text ───────────────────────
-export const detectMoneySymbol = (raw: any): string => {
+export const detectMoneySymbol = (raw: unknown): string => {
   const s = String(raw || '').toLowerCase();
   if (s.includes('$') || s.includes('dollar') || s.includes('usd')) return '$';
   if (s.includes('£') || s.includes('pound') || s.includes('gbp')) return '£';
@@ -65,7 +65,7 @@ export const detectMoneySymbol = (raw: any): string => {
 };
 
 // ─── Parse money string to number ───────────────────────────
-export const parseMoney = (raw: any): number | null => {
+export const parseMoney = (raw: unknown): number | null => {
   if (raw == null) return null;
   if (typeof raw === 'number') return Number.isFinite(raw) && raw >= 0 ? raw : null;
 
@@ -129,7 +129,7 @@ export function safeParsedResult(p: any): ParsedResult {
   const intent: ParsedIntent = allowedIntents.includes(p?.intent) ? p.intent : 'UNKNOWN';
   const items = Array.isArray(p?.items) ? p.items : [];
 
-  const normalizedItems: ParsedItem[] = items.slice(0, 30).map((it: any) => ({
+  const normalizedItems: ParsedItem[] = items.slice(0, 30).map((it: Record<string, unknown>) => ({
     name: typeof it?.name === 'string' ? normalizeItemName(it.name) : 'unknown_item',
     qty: Number.isFinite(Number(it?.qty)) ? Math.max(0, Number(it.qty)) : 0,
     unit_price: parseMoney(it?.unit_price),

@@ -151,7 +151,7 @@ export const getStockReport = async (userId: Types.ObjectId, itemQuery: string |
 
   const relevantUserIds = await getRelevantUserIds(user, 'SHOP');
 
-  const query: any = { user: { $in: relevantUserIds } };
+  const query: Record<string, unknown> = { user: { $in: relevantUserIds } };
 
   if (itemQuery) {
     query.name = { $regex: itemQuery, $options: 'i' };
@@ -168,7 +168,7 @@ export const getStockReport = async (userId: Types.ObjectId, itemQuery: string |
     { $sort: { _id: 1 } },
   ]);
 
-  return stock.map((item: any) => ({
+  return stock.map((item: { _id: string, quantity: number }) => ({
     name: item._id,
     quantity: item.quantity,
   }));
@@ -227,7 +227,7 @@ export const getFullSummary = async (
   // C) Merge
   const reportMap = new Map<string, FullSummaryEntry>();
 
-  stock.forEach((item: any) => {
+  stock.forEach((item: { name?: string, quantity?: number }) => {
     const name = String(item.name || '').trim();
     if (!name) return;
 
@@ -365,7 +365,7 @@ export const getSmartSuggestions = async (userId: Types.ObjectId): Promise<strin
     { $limit: 3 },
   ]);
 
-  return suggestions.map((s: any) => s._id);
+  return suggestions.map((s: { _id: string }) => s._id);
 };
 
 // 6) BEST SELLING PRODUCTS

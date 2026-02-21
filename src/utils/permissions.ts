@@ -1,6 +1,6 @@
 import { IUser } from '../models/user.model';
 
-export const isSubActive = (user: IUser | any): boolean => {
+export const isSubActive = (user: IUser | null | undefined): boolean => {
     if (!user) return false;
     
     // Explicitly suspended/banned

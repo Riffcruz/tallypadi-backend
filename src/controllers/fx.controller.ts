@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import axios from 'axios';
 
 // Very small in-memory cache
-let FX_CACHE: any = null;
+let FX_CACHE: Record<string, unknown> | null = null;
 let FX_CACHE_TIME = 0;
 
 // Returns USD base rates so frontend can convert any currency

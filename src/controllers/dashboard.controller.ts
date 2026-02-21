@@ -53,9 +53,9 @@ const getCurrencyConfig = (countryCode: string = 'NG') => {
   return map[countryCode.toUpperCase()] || map['NG'];
 };
 
-export const getDashboardData = async (req: Request | any, res: Response) => {
+export const getDashboardData = async (req: Request, res: Response) => {
   try {
-    const userId = req.user?.id || req.user?._id || req.userId;
+    const userId = req.user?.id;
     
     if (!userId) {
       return res.status(401).json({ error: "Unauthorized. Please login." });
@@ -235,7 +235,7 @@ export const getDashboardData = async (req: Request | any, res: Response) => {
     
     const netProfit = grossProfit - totalExpenses;
 
-    const paymentMethods = paymentMethodStatsRaw.reduce((acc: any, curr: any) => {
+    const paymentMethods = paymentMethodStatsRaw.reduce((acc: Record<string, number>, curr: { _id: string, total: number }) => {
       acc[curr._id] = curr.total;
       return acc;
     }, {});
@@ -297,8 +297,8 @@ export const getDashboardData = async (req: Request | any, res: Response) => {
       return ({
         id: t._id,
         type: t.type,
-        item: t.items.map((i: any) => i.name).join(', '),
-        qty: t.items.reduce((acc: number, i: any) => acc + i.qty, 0),
+        item: t.items.map((i: { name: string }) => i.name).join(', '),
+        qty: t.items.reduce((acc: number, i: { qty: number }) => acc + i.qty, 0),
         amount: t.totalMoney || 0,
         date: t.timestamp.toISOString(),
         soldBy: (transactingUser as IUser) && (transactingUser as IUser).role === 'STAFF' ? (transactingUser as IUser).name : 'Owner',
@@ -311,7 +311,7 @@ export const getDashboardData = async (req: Request | any, res: Response) => {
       lastUnitPrice: doc.lastUnitPrice || 0,
     }));
 
-    const expenses = recentExpenses.map((e: any) => ({
+    const expenses = recentExpenses.map((e) => ({
       id: e._id,
       description: e.description,
       category: e.category,
@@ -364,7 +364,7 @@ export const getDashboardData = async (req: Request | any, res: Response) => {
       transactions,
       expenses,
       salesChart,
-      topItems: topItems.map((i: any) => ({
+      topItems: topItems.map((i: { _id: string, revenue: number, qty: number }) => ({
         name: i._id,
         revenue: i.revenue,
         qty: i.qty,

@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { LayoutDashboard, Users, Settings as SettingsIcon, Send, ShieldAlert, Briefcase, Headphones, MessageSquare } from 'lucide-react';
 
-export default function Sidebar({ tab, setTab }: { tab: string, setTab: (t: any) => void }) {
+export default function Sidebar({ tab, setTab }: { tab: string, setTab: (t: string) => void }) {
     // 🔴 Removed: isOpen state and setIsOpen setter
 
     const menu = [
@@ -30,7 +30,7 @@ export default function Sidebar({ tab, setTab }: { tab: string, setTab: (t: any)
             </h1>
             
             <nav className="flex flex-col gap-2">
-                {menu.map((item: any) => (
+                {menu.map((item: { id: string, icon: React.ElementType, label: string, href?: string }) => (
                     item.href ? (
                         <Link
                             key={item.id}

@@ -8,7 +8,7 @@ function escapeRegex(s: string) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-async function restoreStock(userId: Types.ObjectId, items: any[]) {
+async function restoreStock(userId: Types.ObjectId, items: Record<string, unknown>[]) {
   for (const it of items || []) {
     const name = String(it?.name || '').trim();
     const qty = Number(it?.qty || 0);
@@ -32,7 +32,7 @@ async function restoreStock(userId: Types.ObjectId, items: any[]) {
   }
 }
 
-async function reverseDebtIfAny(tx: any) {
+async function reverseDebtIfAny(tx: Record<string, unknown>) {
   const debtorId = tx?.debtorId;
   if (!debtorId) return;
 
@@ -78,8 +78,8 @@ export async function undoSaleById(userId: Types.ObjectId, txId: string, undoneB
   tx.undoneByMessageId = undoneByMessageId;
   await tx.save();
 
-  await restoreStock(userId, (tx as any).items || []);
-  await reverseDebtIfAny(tx);
+  await restoreStock(userId, (tx as unknown as Record<string, unknown>).items as Record<string, unknown>[] || []);
+  await reverseDebtIfAny(tx as unknown as Record<string, unknown>);
 
   // ✅ Reverse Daily Stats if it was a PAID sale
   if (tx.paymentStatus === 'PAID' && (tx.totalMoney || 0) > 0 && tx.date) {

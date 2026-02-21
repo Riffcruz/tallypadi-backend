@@ -41,12 +41,12 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 }
 
 // ─── Retry with exponential backoff ─────────────────────────
-async function generateWithRetry(parts: any[], retries = 3) {
+async function generateWithRetry(parts: (string | import('@google/generative-ai').Part)[], retries = 3) {
   for (let i = 0; i <= retries; i++) {
     try {
       const result = await withTimeout(model.generateContent(parts), 45000);
       return result;
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (i === retries) throw err;
       const baseDelay = 1000 * Math.pow(2, i);
       const jitter = Math.floor(Math.random() * 500);
@@ -186,7 +186,7 @@ export const parseMessageWithGemini = async (
     userPrompt += '\n\n🔊 AUDIO INSTRUCTION: The user has sent a voice note. Listen carefully and extract intent/data as if it were written text. Ignore the text "Analyze this audio".';
   }
 
-  const parts: any[] = [userPrompt];
+  const parts: (string | import('@google/generative-ai').Part)[] = [userPrompt];
   if (imageBuffer && imageMimeType) {
     parts.push({ inlineData: { data: imageBuffer, mimeType: imageMimeType } });
   }

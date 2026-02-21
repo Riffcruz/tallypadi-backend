@@ -56,11 +56,11 @@ export const hqService = {
         todaySales: todayStats[0]?.count || 0,
         activeBranches: branchIds.length
       },
-      recentNetworkSales: recentSales.map((t: any) => ({
+      recentNetworkSales: recentSales.map((t) => ({
         id: t._id,
-        branchName: t.user?.businessName || 'Unknown Branch',
+        branchName: (t.user as { businessName?: string })?.businessName || 'Unknown Branch',
         amount: t.totalMoney,
-        items: t.items?.map((i: any) => i.name).join(', '),
+        items: (t.items as { name?: string }[])?.map((i) => i.name).join(', '),
         date: t.timestamp
       }))
     };

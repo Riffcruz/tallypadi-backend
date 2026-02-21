@@ -21,7 +21,7 @@ const updateShopSchema = z.object({
  */
 export const getShopMe = async (req: Request, res: Response): Promise<any> => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user?.id;
     const user = await User.findById(userId).select('businessName shopSlug shopDescription heroImageUrl planType');
 
     if (!user) return res.status(404).json({ error: 'User not found' });
@@ -112,7 +112,7 @@ export const getShopProducts = async (req: Request, res: Response): Promise<any>
     const limit = 20;
     const skip = (Number(page) - 1) * limit;
 
-    const filter: any = {
+    const filter: Record<string, unknown> = {
       user: shopOwner._id,
       quantity: { $gt: 0 }, // Only in-stock
     };
@@ -125,7 +125,7 @@ export const getShopProducts = async (req: Request, res: Response): Promise<any>
       filter.category = String(category).toLowerCase();
     }
 
-    let sortOptions: any = { createdAt: -1 }; // Default newest
+    let sortOptions: Record<string, 1 | -1> = { createdAt: -1 }; // Default newest
     if (sort === 'price_asc') sortOptions = { lastUnitPrice: 1 };
     if (sort === 'price_desc') sortOptions = { lastUnitPrice: -1 };
 
@@ -167,7 +167,7 @@ export const getShopProducts = async (req: Request, res: Response): Promise<any>
  */
 export const updateShopSettings = async (req: Request, res: Response): Promise<any> => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user?.id;
     const body = updateShopSchema.parse(req.body);
 
     const user = await User.findById(userId);

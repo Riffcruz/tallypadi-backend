@@ -13,7 +13,7 @@ const MAX_ACTIVE_TICKETS = Number(process.env.MAX_ACTIVE_TICKETS_PER_AGENT || 1)
 
 
 // Helper to safely emit socket events
-const safeEmit = (room: string, event: string, data: any) => {
+const safeEmit = (room: string, event: string, data: unknown) => {
   try {
     const io = getIO();
     io.to(room).emit(event, data);
@@ -188,7 +188,7 @@ export const supportService = {
       // 2. End Chat Command
       if (cleanText.toLowerCase() === 'end chat') {
           if (agent.currentTicketId) {
-              await this.closeTicket(agent._id as any, String(agent.currentTicketId));
+              await this.closeTicket(String(agent._id), String(agent.currentTicketId));
               agent.currentTicketId = undefined;
               await agent.save();
               await queueOutboundMessage(phone, "✅ Chat ended. You are free.");
@@ -202,10 +202,10 @@ export const supportService = {
       // 3. Proxy Chat to User
       if (agent.currentTicketId) {
           try {
-            await this.sendOutboundMessage(agent._id as any, String(agent.currentTicketId), text);
+            await this.sendOutboundMessage(String(agent._id), String(agent.currentTicketId), text);
             // Optionally confirm sent? No, too noisy.
-          } catch (e: any) {
-            await queueOutboundMessage(phone, `❌ Failed to send: ${e.message}`);
+          } catch (e: unknown) {
+            await queueOutboundMessage(phone, `❌ Failed to send: ${e instanceof Error ? e.message : String(e)}`);
           }
           return true;
       }
@@ -222,7 +222,7 @@ export const supportService = {
       try {
           await this.pickupTicket(agentId, ticketId);
           
-          agent.currentTicketId = ticketId as any;
+          agent.currentTicketId = ticketId as unknown as mongoose.Types.ObjectId;
           agent.isWhatsAppActive = true;
           await agent.save();
 
@@ -232,13 +232,13 @@ export const supportService = {
               agent.phoneNumber, 
               `✅ You are connected to *${ticket?.userPhone}*.\n\nReply here to chat with them directly.`
           );
-      } catch (e: any) {
-          await queueOutboundMessage(agent.phoneNumber, `❌ Could not pick up: ${e.message}`);
+      } catch (e: unknown) {
+          await queueOutboundMessage(agent.phoneNumber, `❌ Could not pick up: ${e instanceof Error ? e.message : String(e)}`);
       }
   },
 
   // 2. Try Assign Ticket
-  async tryAssignTicket(ticket: any) {
+  async tryAssignTicket(ticket: mongoose.Document & ISupportTicket) {
     if (ticket.status !== 'QUEUED') return;
 
     // Disabled auto-assignment to allow agents to accept manually
@@ -250,7 +250,7 @@ export const supportService = {
     }).sort({ activeTicketsCount: 1, lastSeenAt: -1 }); // Balanced load, then most active
 
     if (agent) {
-      ticket.assignedAgentId = agent._id as any;
+      ticket.assignedAgentId = agent._id as mongoose.Types.ObjectId;
       ticket.status = 'ASSIGNED';
       ticket.assignedAt = new Date();
       await ticket.save();
@@ -366,7 +366,7 @@ export const supportService = {
     if (!toAgent) throw new Error('Target agent not found');
 
     // Update Ticket
-    ticket.assignedAgentId = toAgent._id as any;
+    ticket.assignedAgentId = toAgent._id as mongoose.Types.ObjectId;
     ticket.status = 'ASSIGNED'; // Reset to ASSIGNED so new agent sees it as fresh
     await ticket.save();
 
@@ -518,7 +518,7 @@ export const supportService = {
     // Assign to new
     const isNewAssignment = String(ticket.assignedAgentId) !== agentId;
     
-    ticket.assignedAgentId = targetAgent._id as any;
+    ticket.assignedAgentId = targetAgent._id as mongoose.Types.ObjectId;
     ticket.status = 'ASSIGNED';
     ticket.assignedAt = new Date();
     await ticket.save();
@@ -538,7 +538,7 @@ export const supportService = {
     const agent = await SupportAgent.findById(agentId);
     if (!agent) throw new Error('Agent not found');
 
-    ticket.assignedAgentId = agent._id as any;
+    ticket.assignedAgentId = agent._id as mongoose.Types.ObjectId;
     ticket.status = 'ASSIGNED';
     ticket.assignedAt = new Date();
     await ticket.save();
@@ -560,7 +560,7 @@ export const supportService = {
 
     const nextTicket = await SupportTicket.findOne({ status: 'QUEUED' }).sort({ createdAt: 1 });
     if (nextTicket) {
-      nextTicket.assignedAgentId = agent._id as any;
+      nextTicket.assignedAgentId = agent._id as mongoose.Types.ObjectId;
       nextTicket.status = 'ASSIGNED';
       nextTicket.assignedAt = new Date();
       await nextTicket.save();

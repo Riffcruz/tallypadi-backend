@@ -8,7 +8,7 @@ import { PushSubscription } from '../models/pushSubscription.model';
 import { supportService } from '../services/support.service';
 import { env } from '../config/env';
 
-const JWT_SECRET = process.env.JWT_SECRET || (env as any).jwtSecret || 'fallback_secret';
+const JWT_SECRET = process.env.JWT_SECRET || (env as { jwtSecret?: string }).jwtSecret || 'fallback_secret';
 
 export const supportController = {
   // --- ADMIN ---
@@ -34,9 +34,9 @@ export const supportController = {
         message: 'Agent created', 
         agent: { id: agent._id, username: agent.username } 
       });
-    } catch (e: any) {
-      if (e.code === 11000) return res.status(400).json({ error: 'Username or Phone taken' });
-      res.status(500).json({ error: e.message });
+    } catch (e: unknown) {
+      if (typeof e === 'object' && e !== null && 'code' in e && (e as { code: number }).code === 11000) return res.status(400).json({ error: 'Username or Phone taken' });
+      res.status(500).json({ error: e instanceof Error ? e.message : 'Server error' });
     }
   },
 
@@ -50,7 +50,7 @@ export const supportController = {
       const { id } = req.params;
       const { username, password, phoneNumber } = req.body;
 
-      const updateData: any = {};
+      const updateData: Record<string, string | boolean> = {};
       if (username) updateData.username = username;
       if (phoneNumber) {
           const cleanPhone = String(phoneNumber).replace(/\D/g, '');
@@ -66,9 +66,9 @@ export const supportController = {
       if (!agent) return res.status(404).json({ error: 'Agent not found' });
 
       res.json(agent);
-    } catch (e: any) {
-      if (e.code === 11000) return res.status(400).json({ error: 'Username or Phone taken' });
-      res.status(500).json({ error: e.message });
+    } catch (e: unknown) {
+      if (typeof e === 'object' && e !== null && 'code' in e && (e as { code: number }).code === 11000) return res.status(400).json({ error: 'Username or Phone taken' });
+      res.status(500).json({ error: e instanceof Error ? e.message : 'Server error' });
     }
   },
 
@@ -78,14 +78,14 @@ export const supportController = {
       const agent = await SupportAgent.findByIdAndDelete(id);
       if (!agent) return res.status(404).json({ error: 'Agent not found' });
       res.json({ message: 'Agent deleted' });
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
+    } catch (e: unknown) {
+      res.status(500).json({ error: e instanceof Error ? e.message : 'Server error' });
     }
   },
 
   async adminListTickets(req: Request, res: Response) {
     const { status, search } = req.query;
-    const filter: any = {};
+    const filter: Record<string, unknown> = {};
     
     if (status) {
          if (typeof status === 'string' && status.includes(',')) {
@@ -117,8 +117,8 @@ export const supportController = {
     try {
         await supportService.deleteTicket(String(ticketId));
         res.json({ success: true });
-    } catch (e: any) {
-        res.status(500).json({ error: e.message });
+    } catch (e: unknown) {
+        res.status(500).json({ error: e instanceof Error ? e.message : 'Server error' });
     }
   },
 
@@ -128,8 +128,8 @@ export const supportController = {
     try {
         await supportService.adminAssignTicket(String(ticketId), agentId);
         res.json({ success: true });
-    } catch (e: any) {
-        res.status(400).json({ error: e.message });
+    } catch (e: unknown) {
+        res.status(400).json({ error: e instanceof Error ? e.message : 'Server error' });
     }
   },
 
@@ -137,36 +137,36 @@ export const supportController = {
       const { ticketId } = req.params;
       const { text } = req.body;
       // Assume admin name is in req.user or generic
-      const adminName = (req as any).user?.name || 'Admin';
+      const adminName = (req as Request & { user?: { name?: string } }).user?.name || 'Admin';
       
       try {
           const msg = await supportService.adminSendOutboundMessage(String(ticketId), text, adminName);
           res.json(msg);
-      } catch (e: any) {
-          res.status(400).json({ error: e.message });
+      } catch (e: unknown) {
+          res.status(400).json({ error: e instanceof Error ? e.message : 'Server error' });
       }
   },
 
   // --- AGENT AUTH ---
-  async agentDeleteTicket(req: any, res: Response) {
+  async agentDeleteTicket(req: Request & { agent: { id: string } }, res: Response) {
     const { ticketId } = req.params;
     try {
         // Optional: Check if agent owns the ticket or has permission
         // For now, allow deletion as requested
         await supportService.deleteTicket(String(ticketId));
         res.json({ success: true });
-    } catch (e: any) {
-        res.status(500).json({ error: e.message });
+    } catch (e: unknown) {
+        res.status(500).json({ error: e instanceof Error ? e.message : 'Server error' });
     }
   },
 
-  async agentPickupTicket(req: any, res: Response) {
+  async agentPickupTicket(req: Request & { agent: { id: string } }, res: Response) {
     const { ticketId } = req.params;
     try {
-        await supportService.pickupTicket(req.agent.id, ticketId);
+        await supportService.pickupTicket(req.agent.id, ticketId as string);
         res.json({ success: true });
-    } catch (e: any) {
-        res.status(400).json({ error: e.message });
+    } catch (e: unknown) {
+        res.status(400).json({ error: e instanceof Error ? e.message : 'Server error' });
     }
   },
 
@@ -188,12 +188,12 @@ export const supportController = {
     res.json({ token, agent: { id: agent._id, username: agent.username, status: agent.status } });
   },
 
-  async getMe(req: any, res: Response) {
+  async getMe(req: Request & { agent: { id: string } }, res: Response) {
     const agent = await SupportAgent.findById(req.agent.id, '-passwordHash');
     res.json(agent);
   },
 
-  async setStatus(req: any, res: Response) {
+  async setStatus(req: Request & { agent: { id: string } }, res: Response) {
     const { status } = req.body; // ONLINE, OFFLINE, BUSY
     if (!['ONLINE', 'OFFLINE', 'BUSY'].includes(status)) {
         return res.status(400).json({ error: 'Invalid status' });
@@ -215,10 +215,10 @@ export const supportController = {
   },
 
   // --- DASHBOARD ---
-  async getTickets(req: any, res: Response) {
+  async getTickets(req: Request & { agent: { id: string } }, res: Response) {
     const { status } = req.query; // QUEUED, ASSIGNED, ACTIVE, CLOSED
     
-    const filter: any = {};
+    const filter: Record<string, unknown> = {};
     if (status) {
         if (typeof status === 'string' && status.includes(',')) {
             filter.status = { $in: status.split(',') };
@@ -245,7 +245,7 @@ export const supportController = {
     res.json(tickets);
   },
 
-  async getMessages(req: any, res: Response) {
+  async getMessages(req: Request & { agent: { id: string } }, res: Response) {
     const { ticketId } = req.params;
     // Check access?
     const ticket = await SupportTicket.findById(ticketId);
@@ -258,40 +258,40 @@ export const supportController = {
     res.json(messages);
   },
 
-  async sendMessage(req: any, res: Response) {
+  async sendMessage(req: Request & { agent: { id: string } }, res: Response) {
     const { ticketId } = req.params;
     const { text } = req.body;
     
     try {
-        const msg = await supportService.sendOutboundMessage(req.agent.id, ticketId, text);
+        const msg = await supportService.sendOutboundMessage(req.agent.id, ticketId as string, text);
         res.json(msg);
-    } catch (e: any) {
-        res.status(400).json({ error: e.message });
+    } catch (e: unknown) {
+        res.status(400).json({ error: e instanceof Error ? e.message : 'Server error' });
     }
   },
 
-  async closeTicket(req: any, res: Response) {
+  async closeTicket(req: Request & { agent: { id: string } }, res: Response) {
     const { ticketId } = req.params;
     try {
-        await supportService.closeTicket(req.agent.id, ticketId);
+        await supportService.closeTicket(req.agent.id, ticketId as string);
         res.json({ success: true });
-    } catch (e: any) {
-        res.status(400).json({ error: e.message });
+    } catch (e: unknown) {
+        res.status(400).json({ error: e instanceof Error ? e.message : 'Server error' });
     }
   },
 
-  async escalateTicket(req: any, res: Response) {
+  async escalateTicket(req: Request & { agent: { id: string } }, res: Response) {
     const { ticketId } = req.params;
     const { toAgentId } = req.body;
     try {
-        await supportService.escalateTicket(req.agent.id, ticketId, toAgentId);
+        await supportService.escalateTicket(req.agent.id, ticketId as string, toAgentId);
         res.json({ success: true });
-    } catch (e: any) {
-        res.status(400).json({ error: e.message });
+    } catch (e: unknown) {
+        res.status(400).json({ error: e instanceof Error ? e.message : 'Server error' });
     }
   },
 
-  async subscribePush(req: any, res: Response) {
+  async subscribePush(req: Request & { agent: { id: string } }, res: Response) {
     const subscription = req.body;
     await PushSubscription.create({
         agentId: req.agent.id,

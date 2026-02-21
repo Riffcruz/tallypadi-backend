@@ -6,7 +6,27 @@ import Swal from 'sweetalert2';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 
-export default function SettingsTab({ settings, onUpdate, headers }: any) {
+export interface SettingsLimits {
+  maxMessageHistory: number;
+  maxStaffAccounts: number;
+}
+export interface SettingsSecurity {
+  autoSuspendOnJailbreak: boolean;
+}
+export interface SettingsProfile {
+  whatsappUrl: string;
+  security: SettingsSecurity;
+  limits: SettingsLimits;
+}
+export default function SettingsTab({ 
+  settings, 
+  onUpdate, 
+  headers 
+}: { 
+  settings?: Partial<SettingsProfile>, 
+  onUpdate: () => void, 
+  headers: Record<string, string> 
+}) {
     // Initialize with default structure if settings is partial
     const [localSettings, setLocalSettings] = useState({
         whatsappUrl: '',
@@ -18,26 +38,26 @@ export default function SettingsTab({ settings, onUpdate, headers }: any) {
 
     useEffect(() => {
         if (settings) {
-            setLocalSettings((prev: any) => ({ ...prev, ...settings }));
+            setLocalSettings((prev) => ({ ...prev, ...settings }));
         }
     }, [settings]);
 
     const handleToggle = (key: keyof typeof localSettings.security) => {
-        setLocalSettings((prev: any) => ({
+        setLocalSettings((prev) => ({
             ...prev,
             security: { ...prev.security, [key]: !prev.security[key] }
         }));
     };
 
     const handleLimitChange = (key: keyof typeof localSettings.limits, value: string) => {
-        setLocalSettings((prev: any) => ({
+        setLocalSettings((prev) => ({
             ...prev,
             limits: { ...prev.limits, [key]: parseInt(value) || 0 }
         }));
     };
 
     const handleUrlChange = (value: string) => {
-        setLocalSettings((prev: any) => ({
+        setLocalSettings((prev) => ({
             ...prev,
             whatsappUrl: value
         }));

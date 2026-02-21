@@ -43,7 +43,7 @@ export type ResolveDebtorResult =
   | { status: 'suggest'; options: { debtorId: Types.ObjectId; displayName: string; score: number }[] }
   | { status: 'new'; debtorKey: string; displayName: string };
 
-export async function resolveDebtor(shopUserId: any, rawName: string): Promise<ResolveDebtorResult> {
+export async function resolveDebtor(shopUserId: string | Types.ObjectId, rawName: string): Promise<ResolveDebtorResult> {
   const debtorKey = normName(rawName);
   const displayName = String(rawName || '').trim();
 
@@ -52,7 +52,7 @@ export async function resolveDebtor(shopUserId: any, rawName: string): Promise<R
   // 1) exact match
   const exact = await Debtor.findOne({ user: shopUserId, debtorKey }).lean();
   if (exact?._id) {
-    return { status: 'exact', debtorId: exact._id as any, displayName: exact.displayName, debtorKey: exact.debtorKey };
+    return { status: 'exact', debtorId: exact._id as Types.ObjectId, displayName: exact.displayName, debtorKey: exact.debtorKey };
   }
 
   // 2) fuzzy suggestions (top 5)
@@ -63,7 +63,7 @@ export async function resolveDebtor(shopUserId: any, rawName: string): Promise<R
       const keys = [d.debtorKey, ...(d.aliases || [])].filter(Boolean);
       let best = 0;
       for (const k of keys) best = Math.max(best, similarity(debtorKey, String(k)));
-      return { debtorId: d._id as any, displayName: d.displayName, score: best };
+      return { debtorId: d._id as Types.ObjectId, displayName: d.displayName, score: best };
     })
     .filter((x) => x.score >= 0.75)
     .sort((a, b) => b.score - a.score)

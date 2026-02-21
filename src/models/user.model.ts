@@ -81,7 +81,7 @@ export interface IUser extends Document {
 
   interactionState?: {
     type: string | null;
-    data?: any;
+    data?: Record<string, unknown>;
   };
 
   lastLogin?: Date;

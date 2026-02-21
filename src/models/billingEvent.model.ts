@@ -5,7 +5,7 @@ export interface IBillingEvent extends Document {
   event: string;
   user?: Types.ObjectId | null;
   processedAt: Date;
-  payload?: any;
+  payload?: Record<string, unknown>;
 }
 
 const billingEventSchema = new Schema<IBillingEvent>(

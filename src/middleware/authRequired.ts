@@ -10,7 +10,7 @@ type JwtPayload = {
   aud?: string | string[];
 };
 
-export const authRequired = (req: any, res: Response, next: NextFunction) => {
+export const authRequired = (req: Request, res: Response, next: NextFunction) => {
   let token = '';
 
   const auth = String(req.headers.authorization || '');
@@ -28,13 +28,13 @@ export const authRequired = (req: any, res: Response, next: NextFunction) => {
   const secret = process.env.JWT_SECRET || 'supersecret_fallback_key_123';
 
   try {
-    const decoded = jwt.verify(token, secret) as any;
+    const decoded = jwt.verify(token, secret) as JwtPayload & { _id?: string; userId?: string };
 
     if (!decoded?.id && !decoded?._id && !decoded?.userId) {
       return res.status(401).json({ error: 'Invalid token payload' });
     }
 
-    req.user = { id: decoded.id || decoded._id || decoded.userId, role: decoded.role || 'OWNER' };
+    req.user = { id: decoded.id || decoded._id || decoded.userId || '', role: decoded.role || 'OWNER' };
     next();
   } catch (err) {
     return res.status(401).json({ error: 'Invalid or expired token' });

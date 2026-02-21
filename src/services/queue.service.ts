@@ -27,7 +27,7 @@ export const connection = createRedisConnection('queue-shared');
 // Queue name: outbound-replies
 // ============================================================
 export const replyQueue = new Queue('outbound-replies', {
-  connection: createRedisConnection('queue-reply') as any,
+  connection: createRedisConnection('queue-reply'),
   defaultJobOptions: {
     attempts: 10,
     backoff: { type: 'exponential', delay: 5000 },
@@ -41,7 +41,7 @@ export const replyQueue = new Queue('outbound-replies', {
 // Queue name: outbound-bulk
 // ============================================================
 export const bulkQueue = new Queue('outbound-bulk', {
-  connection: createRedisConnection('queue-bulk') as any,
+  connection: createRedisConnection('queue-bulk'),
   defaultJobOptions: {
     attempts: 10,
     backoff: { type: 'exponential', delay: 5000 },
@@ -55,7 +55,7 @@ export const bulkQueue = new Queue('outbound-bulk', {
 // Queue name: incoming-messages
 // ============================================================
 export const messageQueue = new Queue('incoming-messages', {
-  connection: createRedisConnection('queue-message') as any,
+  connection: createRedisConnection('queue-message'),
   defaultJobOptions: {
     attempts: 10,
     backoff: { type: 'exponential', delay: 5000 },
@@ -69,7 +69,7 @@ export const messageQueue = new Queue('incoming-messages', {
 // Queue name: push-notifications
 // ============================================================
 export const notificationQueue = new Queue('push-notifications', {
-  connection: createRedisConnection('queue-notification') as any,
+  connection: createRedisConnection('queue-notification'),
   defaultJobOptions: {
     attempts: 3,
     backoff: { type: 'exponential', delay: 5000 },
@@ -92,8 +92,7 @@ function safeJobId(id: string) {
     .slice(0, 240);
 }
 
-// ✅ Notification Helper
-export const queuePushNotification = async (payload: { type: 'SINGLE' | 'GLOBAL'; agentId?: string; title: string; body: string; data?: any }) => {
+export const queuePushNotification = async (payload: { type: 'SINGLE' | 'GLOBAL'; agentId?: string; title: string; body: string; data?: Record<string, unknown> }) => {
   const finalJobId = safeJobId(`push_${payload.type}_${Date.now()}_${Math.random()}`);
   await notificationQueue.add('send-push', payload, { jobId: finalJobId });
 };
@@ -288,10 +287,7 @@ export async function queueInvoicePdf(
   );
 }
 
-// ============================================================
-// ✅ SOCKET EVENT PUBLISHER (For Workers)
-// ============================================================
-export const publishSocketEvent = async (room: string, event: string, data: any) => {
+export const publishSocketEvent = async (room: string, event: string, data: unknown) => {
   try {
     await connection.publish('socket-events', JSON.stringify({ room, event, data }));
   } catch (e) {

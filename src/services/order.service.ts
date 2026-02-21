@@ -73,14 +73,14 @@ export class OrderService {
    * Get orders for a user with optional filters
    */
   async getOrders(userId: string | Types.ObjectId, filters: OrderFilters) {
-    const query: any = { user: userId };
+    const query: Record<string, unknown> = { user: userId };
 
     if (filters.status) query.status = filters.status;
 
     if (filters.startDate || filters.endDate) {
       query.deliveryDate = {};
-      if (filters.startDate) query.deliveryDate.$gte = startOfDay(filters.startDate);
-      if (filters.endDate) query.deliveryDate.$lte = endOfDay(filters.endDate);
+      if (filters.startDate) (query.deliveryDate as Record<string, unknown>).$gte = startOfDay(filters.startDate);
+      if (filters.endDate) (query.deliveryDate as Record<string, unknown>).$lte = endOfDay(filters.endDate);
     }
 
     if (filters.search) {

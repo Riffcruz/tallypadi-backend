@@ -234,8 +234,17 @@ const Section = ({ title, description, children }: { title: string, description:
   </div>
 );
 
-const GuideCard = ({ icon, title, steps, commands, color, description }: any) => {
-  const colorClasses: any = {
+interface GuideCardProps {
+  icon: React.ReactNode;
+  title: string;
+  steps?: string[];
+  commands?: { cmd: string; desc: string }[];
+  color?: string;
+  description?: string;
+}
+
+const GuideCard = ({ icon, title, steps, commands, color, description }: GuideCardProps) => {
+  const colorClasses: Record<string, string> = {
     blue: "bg-blue-50 text-blue-600 border-blue-100",
     green: "bg-green-50 text-green-600 border-green-100",
     purple: "bg-purple-50 text-purple-600 border-purple-100",
@@ -246,7 +255,7 @@ const GuideCard = ({ icon, title, steps, commands, color, description }: any) =>
     slate: "bg-slate-50 text-slate-600 border-slate-200",
   };
 
-  const selectedColor = colorClasses[color] || colorClasses.slate;
+  const selectedColor = colorClasses[color || 'slate'] || colorClasses.slate;
 
   return (
     <div className={`p-6 rounded-3xl border ${selectedColor} bg-opacity-50`}>
@@ -277,7 +286,7 @@ const GuideCard = ({ icon, title, steps, commands, color, description }: any) =>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {commands.map((item: any, i: number) => (
+              {commands.map((item, i: number) => (
                 <tr key={i}>
                   <td className="px-4 py-3 font-mono text-slate-800 font-bold bg-slate-50/50 text-xs sm:text-sm">"{item.cmd}"</td>
                   <td className="px-4 py-3 text-slate-600 text-xs sm:text-sm">{item.desc}</td>

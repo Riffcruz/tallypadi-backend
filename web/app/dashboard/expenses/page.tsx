@@ -214,13 +214,7 @@ export default function ExpensesPage() {
           </button>
         </div>
 
-        {/* Filters / Search Bar (Placeholder for now) */}
-        {/* <div className="mb-6 flex gap-3">
-          <div className="flex-1 bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-center gap-2 shadow-sm">
-             <Search className="w-5 h-5 text-slate-400" />
-             <input placeholder="Search expenses..." className="w-full outline-none text-sm font-medium text-slate-700 placeholder:text-slate-400" />
-          </div>
-        </div> */}
+
 
         {/* Expenses Table */}
         <div className="bg-white rounded-[24px] border border-slate-200 shadow-sm overflow-hidden">

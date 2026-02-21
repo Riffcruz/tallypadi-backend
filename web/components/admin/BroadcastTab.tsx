@@ -6,7 +6,7 @@ import Swal from 'sweetalert2';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 
-export default function BroadcastTab({ headers }: any) {
+export default function BroadcastTab({ headers }: { headers: Record<string, string> }) {
     const [msg, setMsg] = useState('');
     const [target, setTarget] = useState('active_24h');
     
@@ -34,7 +34,7 @@ export default function BroadcastTab({ headers }: any) {
 
         if (res.isConfirmed) {
             try {
-                const payload: any = { 
+                const payload: Record<string, unknown> = {
                     target, 
                     message: msg,
                     sendWhatsapp,
@@ -50,8 +50,9 @@ export default function BroadcastTab({ headers }: any) {
                 Swal.fire('Sent', response.data.message || 'Broadcast queued successfully.', 'success');
                 setMsg('');
                 setMediaId('');
-            } catch (e: any) {
-                Swal.fire('Error', e?.response?.data?.error || 'Broadcast failed', 'error');
+            } catch (e: unknown) {
+                const error = e as { response?: { data?: { error?: string } } };
+                Swal.fire('Error', error?.response?.data?.error || 'Broadcast failed', 'error');
             }
         }
     };
@@ -130,7 +131,7 @@ export default function BroadcastTab({ headers }: any) {
                                     <select 
                                         className="w-full bg-slate-800 border border-slate-600 rounded-lg px-4 py-2.5 text-sm text-white focus:border-purple-500 outline-none transition-colors opacity-90"
                                         value={mediaType}
-                                        onChange={(e: any) => setMediaType(e.target.value)}
+                                        onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setMediaType(e.target.value as 'image' | 'video' | 'document' | 'audio')}
                                         disabled={!mediaId.trim()}
                                     >
                                         <option value="image">🖼️ Image (JPEG/PNG)</option>

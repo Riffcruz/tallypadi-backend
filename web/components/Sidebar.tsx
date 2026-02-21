@@ -13,7 +13,7 @@ import { removeCookie } from '../utils/cookies';
 export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const [user, setUser] = React.useState<any>(null);
+  const [user, setUser] = React.useState<Record<string, unknown> | null>(null);
 
   React.useEffect(() => {
     try {
@@ -49,7 +49,7 @@ export default function Sidebar() {
 
     // Staff Permission Filtering
     if (user.role === 'STAFF') {
-      const perms = user.settings?.staffPermissions || {};
+      const perms = (user.settings as { staffPermissions?: Record<string, boolean> })?.staffPermissions || {};
       return baseItems.filter(item => {
         if (item.key) return perms[item.key] === true;
         return true; // No key = always show (Sales, Orders, Guide)

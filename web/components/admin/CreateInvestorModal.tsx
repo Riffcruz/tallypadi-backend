@@ -6,7 +6,12 @@ import { X, Loader2, UserPlus } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 
-export default function CreateInvestorModal({ onClose, adminToken }: any) {
+interface CreateInvestorModalProps {
+  onClose: () => void;
+  adminToken: string;
+}
+
+export default function CreateInvestorModal({ onClose, adminToken }: CreateInvestorModalProps) {
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
@@ -40,8 +45,9 @@ export default function CreateInvestorModal({ onClose, adminToken }: any) {
         setSuccess('Investor account created successfully!');
         setFormData({ name: '', phoneNumber: '', email: '', password: '' });
       }
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to create investor');
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { error?: string } } };
+      setError(error.response?.data?.error || 'Failed to create investor');
     } finally {
       setLoading(false);
     }

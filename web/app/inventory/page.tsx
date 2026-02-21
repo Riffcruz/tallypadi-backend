@@ -268,7 +268,6 @@ export default function InventoryPage() {
             if (buffer.length > 2) {
                 // If we detected a fast string ending in Enter, it's a scan
                 e.preventDefault();
-                console.log('USB Scanner Detected:', buffer);
                 handleScan(buffer);
                 buffer = '';
                 

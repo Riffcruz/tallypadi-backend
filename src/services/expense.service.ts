@@ -49,7 +49,7 @@ export const expenseService = {
   },
 
   async getExpenses(userId: string | string[] | Types.ObjectId[], startDate?: string, endDate?: string, limit = 50, page = 1) {
-    const query: any = {};
+    const query: Record<string, unknown> = {};
     
     if (Array.isArray(userId)) {
         query.user = { $in: userId };

@@ -4,20 +4,36 @@ import { Search, Filter, Eye, Lock, Unlock, UserPlus } from 'lucide-react';
 import UserDeepDiveModal from './UserDeepDiveModal';
 import CreateInvestorModal from './CreateInvestorModal';
 
+export interface User {
+  id: string;
+  businessName?: string;
+  phone?: string;
+  email?: string;
+  status: string;
+  plan: string;
+  joinedAt?: string;
+}
+
+interface UsersTabProps {
+  users: User[];
+  onAction: (userId: string, action: string, payload?: unknown) => Promise<unknown>;
+  adminToken: string;
+}
+
 export default function UsersTab({
   users,
   onAction,
-  adminToken, // ✅ JWT token (Bearer)
-}: any) {
+  adminToken,
+}: UsersTabProps) {
   const [filterActive, setFilterActive] = useState(true);
   const [search, setSearch] = useState('');
-  const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [showCreateInvestor, setShowCreateInvestor] = useState(false);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
 
-    return (users || []).filter((u: any) => {
+    return (users || []).filter((u: User) => {
       const name = (u.businessName || '').toLowerCase();
       const phone = String(u.phone || '');
       const matchesSearch = !q || name.includes(q) || phone.includes(q);
@@ -111,7 +127,7 @@ export default function UsersTab({
             No users match your search.
           </div>
         ) : (
-          filtered.map((u: any) => (
+          filtered.map((u: User) => (
             <div key={u.id} className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -184,7 +200,7 @@ export default function UsersTab({
                   </td>
                 </tr>
               ) : (
-                filtered.map((u: any) => (
+                filtered.map((u: User) => (
                   <tr key={u.id} className="hover:bg-gray-700/30 transition-colors">
                     <td className="px-6 py-4">
                       <div className="font-extrabold text-white">{u.businessName}</div>

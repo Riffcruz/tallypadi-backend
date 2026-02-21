@@ -47,12 +47,20 @@ export default function SupportTab({ adminToken }: { adminToken: string }) {
 // ==========================================
 // 🎟️ TICKETS MANAGER
 // ==========================================
+interface Ticket {
+    _id: string;
+    userPhone: string;
+    status: string;
+    assignedAgentId?: { username?: string };
+    lastMessageAt: string;
+}
+
 function TicketsManager({ adminToken }: { adminToken: string }) {
-    const [tickets, setTickets] = useState<any[]>([]);
+    const [tickets, setTickets] = useState<Ticket[]>([]);
     const [loading, setLoading] = useState(false);
     const [statusFilter, setStatusFilter] = useState('ALL'); // ALL, ACTIVE, CLOSED, QUEUED
-    const [selectedTicket, setSelectedTicket] = useState<any>(null);
-    const [messages, setMessages] = useState<any[]>([]);
+    const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
+    const [messages, setMessages] = useState<Record<string, unknown>[]>([]);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -68,7 +76,7 @@ function TicketsManager({ adminToken }: { adminToken: string }) {
         setLoading(true);
         try {
             let url = `${API_URL}/support/admin/tickets`;
-            const params: any = {};
+            const params: Record<string, string> = {};
             
             if (statusFilter !== 'ALL') {
                  if (statusFilter === 'ACTIVE') params.status = 'ASSIGNED,ACTIVE';
@@ -87,7 +95,7 @@ function TicketsManager({ adminToken }: { adminToken: string }) {
         }
     };
 
-    const viewTicket = async (ticket: any) => {
+    const viewTicket = async (ticket: Ticket) => {
         setSelectedTicket(ticket);
         try {
             const res = await axios.get(`${API_URL}/support/admin/tickets/${ticket._id}/messages`, {
@@ -143,10 +151,10 @@ function TicketsManager({ adminToken }: { adminToken: string }) {
                                             ? 'bg-emerald-600/20 text-emerald-100 border border-emerald-500/30 rounded-tr-none' 
                                             : 'bg-slate-700/50 text-slate-200 border border-slate-600 rounded-tl-none'
                                         }`}>
-                                            {msg.text}
+                                            {String(msg.text)}
                                         </div>
                                         <span className="text-[10px] text-slate-500 mt-1 px-1">
-                                            {new Date(msg.timestamp).toLocaleString()}
+                                            {new Date(String(msg.timestamp)).toLocaleString()}
                                         </span>
                                     </div>
                                 </div>
@@ -205,7 +213,7 @@ function TicketsManager({ adminToken }: { adminToken: string }) {
                                 </td>
                             </tr>
                         ) : (
-                            tickets.map((t: any) => (
+                            tickets.map((t: Ticket) => (
                                 <tr key={t._id} className="hover:bg-slate-700/30 transition-colors group cursor-pointer" onClick={() => viewTicket(t)}>
                                     <td className="px-6 py-4 font-bold text-white flex items-center gap-2">
                                         <User size={16} className="text-slate-500" />
@@ -244,8 +252,17 @@ function TicketsManager({ adminToken }: { adminToken: string }) {
 // ==========================================
 // 🕵️ AGENTS MANAGER (Existing Logic)
 // ==========================================
+interface Agent {
+  _id: string;
+  username: string;
+  phoneNumber?: string;
+  status?: string;
+  activeTicketsCount?: number;
+  lastSeenAt?: string;
+}
+
 function AgentsManager({ adminToken }: { adminToken: string }) {
-  const [agents, setAgents] = useState<any[]>([]);
+  const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -267,7 +284,7 @@ function AgentsManager({ adminToken }: { adminToken: string }) {
         headers: { Authorization: `Bearer ${adminToken}` }
       });
       setAgents(res.data);
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error('Fetch agents error:', e);
       Swal.fire('Error', 'Failed to fetch support agents', 'error');
     } finally {
@@ -284,7 +301,7 @@ function AgentsManager({ adminToken }: { adminToken: string }) {
       setShowForm(true);
   };
 
-  const openEdit = (agent: any) => {
+  const openEdit = (agent: Agent) => {
       setIsEditing(true);
       setUsername(agent.username);
       setPhoneNumber(agent.phoneNumber || '');
@@ -296,7 +313,7 @@ function AgentsManager({ adminToken }: { adminToken: string }) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const payload: any = { username, phoneNumber };
+      const payload: Record<string, string> = { username, phoneNumber };
       if (password) payload.password = password;
 
       if (isEditing) {
@@ -322,13 +339,14 @@ function AgentsManager({ adminToken }: { adminToken: string }) {
       setPassword('');
       setShowForm(false);
       fetchAgents();
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error('Save agent error:', e);
-      Swal.fire('Error', e?.response?.data?.error || 'Failed to save agent', 'error');
+      const error = e as { response?: { data?: { error?: string } } };
+      Swal.fire('Error', error?.response?.data?.error || 'Failed to save agent', 'error');
     }
   };
 
-  const handleDelete = async (agent: any) => {
+  const handleDelete = async (agent: Agent) => {
       const result = await Swal.fire({
           title: 'Delete Agent?',
           text: `Are you sure you want to delete ${agent.username}? This cannot be undone.`,
@@ -346,7 +364,7 @@ function AgentsManager({ adminToken }: { adminToken: string }) {
               });
               Swal.fire('Deleted!', 'Agent has been deleted.', 'success');
               fetchAgents();
-          } catch (e: any) {
+          } catch (e: unknown) {
               Swal.fire('Error', 'Failed to delete agent', 'error');
           }
       }
@@ -460,7 +478,7 @@ function AgentsManager({ adminToken }: { adminToken: string }) {
                         </td>
                     </tr>
                 ) : (
-                    agents.map((agent: any) => (
+                    agents.map((agent: Agent) => (
                         <tr key={agent._id} className="hover:bg-slate-700/30 transition-colors">
                             <td className="px-6 py-4 font-bold text-white">
                                 <div>{agent.username}</div>
