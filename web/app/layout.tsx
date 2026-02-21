@@ -30,12 +30,12 @@ export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://tallypadi.com"),
   title: {
     default:
-      "TallyPadi — WhatsApp Receipts, Invoicing & Inventory for Business",
-    template: "%s — TallyPadi",
+      "TallyPadi — The #1 WhatsApp POS, Receipt Generator & Inventory Tracker",
+    template: "%s | TallyPadi",
   },
-  description: "Generate WhatsApp receipts & invoices, track sales, and manage inventory automatically. The #1 business tool for retail, wholesale, and teams.",
+  description: "Transform your WhatsApp into a powerful POS system. Generate professional receipts, track inventory, and manage debtors automatically. Built for African SMEs, retailers, and wholesale businesses.",
   applicationName: "TallyPadi",
-  keywords: ["WhatsApp receipts", "WhatsApp invoice generator", "sales tracking software", "inventory management", "business ledger", "SME", "enterprise", "POS"],
+  keywords: ["WhatsApp receipts", "WhatsApp invoice generator", "sales tracking software", "inventory management app", "business ledger", "SME business tool", "African startups", "retail POS", "wholesale inventory"],
 
   // ✅ REQUIRED for installability
   manifest: "/manifest.json",
@@ -57,15 +57,15 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     url: "/",
-    title: "TallyPadi — WhatsApp Sales & Inventory Tracker",
-    description: "Track sales, stock, and profit directly on WhatsApp. Built for Businesses and vendors.",
+    title: "TallyPadi — WhatsApp POS & Inventory Tracker",
+    description: "Sell faster on WhatsApp. Auto-generate receipts, track your stock, and manage shop debts easily. Try it free.",
     siteName: "TallyPadi",
-    images: [{ url: "/og.png", width: 1200, height: 630, alt: "TallyPadi" }],
+    images: [{ url: "/og.png", width: 1200, height: 630, alt: "TallyPadi App Preview" }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "TallyPadi — WhatsApp Sales & Inventory Tracker",
-    description: "Track sales, stock, and profit directly on WhatsApp. Built for Businesses and vendors.",
+    title: "TallyPadi — WhatsApp POS & Inventory Tracker",
+    description: "Sell faster on WhatsApp. Auto-generate receipts, track your stock, and manage shop debts easily.",
     images: ["/og.png"],
   },
   robots: {

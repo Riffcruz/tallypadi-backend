@@ -6,14 +6,14 @@ import MarketingNavbar from '../../components/MarketingNavbar';
 import MarketingFooter from '../../components/MarketingFooter';
 
 export const metadata: Metadata = {
-  title: 'Sales Tracking Software & Business Ledger | TallyPadi',
-  description: 'The easiest sales tracking software for businesses. Replace your paper ledger with a digital tool on WhatsApp. Track daily sales and profit.',
+  title: 'Best Sales Tracking Software & Business Ledger App | TallyPadi',
+  description: 'Replace your paper ledger with a digital sales tracker on WhatsApp. Auto-calculate daily profit, track cash flow, and manage business expenses easily.',
   alternates: {
     canonical: 'https://tallypadi.com/sales-tracking-ledger',
   },
   openGraph: {
-    title: 'Sales Tracking Software & Business Ledger',
-    description: 'Track your daily sales, expenses, and profit automatically. No more manual calculations. Works directly on WhatsApp.',
+    title: 'Automated Sales Tracking & Business Ledger',
+    description: 'Track daily sales, cash flow, and profit automatically on WhatsApp. The smartest ledger for African businesses.',
     url: 'https://tallypadi.com/sales-tracking-ledger',
     type: 'website',
   },
@@ -58,7 +58,7 @@ export default function SalesTrackingPage() {
             </span>
           </h1>
           <p className="text-xl text-slate-300 mb-10 max-w-2xl mx-auto font-light">
-            Replace your paper notebook. Record sales and expenses on WhatsApp, and let TallyPadi calculate your daily profit automatically.
+            Ditch the paper notebook. Log sales and expenses directly in WhatsApp, and let TallyPadi auto-calculate your daily profit and generate financial reports.
           </p>
           <div className="flex flex-col sm:flex-row justify-center gap-4">
             <a

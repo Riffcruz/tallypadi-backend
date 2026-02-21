@@ -551,23 +551,22 @@ export default function LandingPage() {
         </div>
 
         <h1 className="mt-6 text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight leading-[1.05]">
-          Run your shop from{" "}
+          Your complete shop on{" "}
           <span className="text-emerald-400">WhatsApp</span>.
           <br className="hidden sm:block" />
-          Know your profit instantly.
+          No POS machine needed.
         </h1>
 
         <p className="mt-5 text-base sm:text-lg text-stone-300 max-w-xl leading-relaxed">
-          Record sales in chat, track stock automatically, generate receipts, and manage staff —
-          without buying a POS machine.
+          Record sales by chatting, generate instant PDF receipts, and track your inventory on autopilot. The smartest business app for retailers, wholesalers, and growing teams.
         </p>
 
         {/* Proof chips */}
         <div className="mt-6 flex flex-wrap gap-2">
           {[
-            { icon: <CheckCircle2 size={16} className="text-emerald-400" />, text: "7-day free trial" },
-            { icon: <CheckCircle2 size={16} className="text-emerald-400" />, text: "No app required" },
-            { icon: <CheckCircle2 size={16} className="text-emerald-400" />, text: "Works with barcode scanners" },
+            { icon: <CheckCircle2 size={16} className="text-emerald-400" />, text: "Free to start" },
+            { icon: <CheckCircle2 size={16} className="text-emerald-400" />, text: "Automated Debt Tracking" },
+            { icon: <CheckCircle2 size={16} className="text-emerald-400" />, text: "Web Dashboard Included" },
           ].map((p, i) => (
             <span
               key={i}
@@ -863,39 +862,39 @@ export default function LandingPage() {
             <FeatureCard
               icon={<Wand2 size={24} />}
               color="emerald"
-              title="AI Powered Assistant"
-              desc="Talk naturally in English or Pidgin. Say 'I sold bread' or 'How much profit today?' and our AI understands instantly."
-            />
-            <FeatureCard
-              icon={<Users size={24} />}
-              color="purple"
-              title="Staff Management"
-              badge="TYCOON PLAN"
-              desc="Add your sales staff. They record sales on their own WhatsApp, and you see everything on your Master Dashboard."
+              title="AI WhatsApp Assistant"
+              desc="Just type 'Sold 2 bags of rice'. TallyPadi instantly reduces your stock, calculates profit, and logs the sale."
             />
             <FeatureCard
               icon={<FileText size={24} />}
               color="red"
-              title="Instant PDF Invoices"
-              desc="Need a receipt? Tallypadi generates professional PDF invoices instantly that you can share with customers."
-            />
-            <FeatureCard
-              icon={<BarChart3 size={24} />}
-              color="blue"
-              title="Dashboard & POS Terminal"
-              desc="Login to the web for a full Point of Sale. Scan barcodes, fast checkout, visual analytics, and export to Excel."
+              title="Instant PDF Receipts"
+              desc="Look professional. Generate branded receipts and invoices directly in WhatsApp to share with customers immediately."
             />
             <FeatureCard
               icon={<PackageOpen size={24} />}
               color="orange"
-              title="Low Stock Alerts"
-              desc="Get notified before you run out of stock. Never miss a sale because you forgot to restock."
+              title="Smart Inventory tracking"
+              desc="Never lose track of stock. Get automated low-stock alerts before you run out, saving you from lost sales."
+            />
+            <FeatureCard
+              icon={<Users size={24} />}
+              color="purple"
+              title="Multi-Branch Staff Sync"
+              badge="TYCOON PLAN"
+              desc="Monitor sales across all your locations in real-time. Staff log sales via their phones, you watch from the dashboard."
+            />
+            <FeatureCard
+              icon={<BarChart3 size={24} />}
+              color="blue"
+              title="Full Web POS Dashboard"
+              desc="Need a bigger screen? Log into the web app to manage products, view deep analytics, and ring up counter sales."
             />
             <FeatureCard
               icon={<Lock size={24} />}
               color="teal"
-              title="No Hardware Lock-in"
-              desc="Use your existing phone, tablet, or laptop. No need to buy expensive POS machines. Works with standard barcode scanners."
+              title="Debtors & Payment Follow-ups"
+              desc="Track customers who bought on credit. Keep clear ledgers and know exactly who owes your business money."
             />
           </div>
         </div>

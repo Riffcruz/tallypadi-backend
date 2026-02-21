@@ -6,14 +6,14 @@ import MarketingNavbar from '../../components/MarketingNavbar';
 import MarketingFooter from '../../components/MarketingFooter';
 
 export const metadata: Metadata = {
-  title: 'Best NairaTrack Alternative | TallyPadi',
-  description: 'TallyPadi is the best NairaTrack alternative for Nigerian businesses. Track sales, manage inventory, and send receipts via WhatsApp.',
+  title: 'Best NairaTrack Alternative for Nigerian SMEs | TallyPadi',
+  description: 'TallyPadi is the superior NairaTrack alternative for African businesses. Track sales, manage inventory, and send branded receipts directly via WhatsApp.',
   alternates: {
     canonical: 'https://tallypadi.com/nairatrack-alternative',
   },
   openGraph: {
-    title: 'Switch from NairaTrack to TallyPadi',
-    description: 'Get more features for your business. TallyPadi offers seamless WhatsApp integration and better reporting than NairaTrack.',
+    title: 'Switch from NairaTrack to TallyPadi Today',
+    description: 'Get more features for your retail business. TallyPadi offers seamless WhatsApp integration, superior POS features, and better profit reporting than NairaTrack.',
     url: 'https://tallypadi.com/nairatrack-alternative',
     type: 'website',
   },
@@ -56,7 +56,7 @@ export default function NairaTrackAlternativePage() {
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-emerald-300">NairaTrack Alternative</span>
           </h1>
           <p className="text-xl text-emerald-100/80 mb-10 max-w-2xl mx-auto font-light">
-            Simplify your business operations. TallyPadi combines expense tracking, inventory management, and customer messaging in one app.
+            Simplify your retail operations. TallyPadi combines expense tracking, multi-branch inventory management, and customer messaging into one powerful WhatsApp tool.
           </p>
           <div className="flex flex-col sm:flex-row justify-center gap-4">
             <a

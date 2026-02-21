@@ -6,14 +6,14 @@ import MarketingNavbar from '../../components/MarketingNavbar';
 import MarketingFooter from '../../components/MarketingFooter';
 
 export const metadata: Metadata = {
-  title: 'Best ReceiptBuddy Alternative | TallyPadi',
-  description: 'Looking for a ReceiptBuddy alternative? TallyPadi offers superior WhatsApp receipts, real-time inventory tracking, and detailed business analytics.',
+  title: 'Best ReceiptBuddy Alternative for WhatsApp Receipts | TallyPadi',
+  description: 'Looking for a ReceiptBuddy alternative? TallyPadi offers superior WhatsApp receipts, barcode scanning, real-time inventory tracking, and deep team analytics.',
   alternates: {
     canonical: 'https://tallypadi.com/receiptbuddy-alternative',
   },
   openGraph: {
-    title: 'Better Than ReceiptBuddy - TallyPadi',
-    description: 'Switch to the inventory tool that does more. TallyPadi gives you WhatsApp receipts + powerful stock tracking.',
+    title: 'The Smarter Alternative to ReceiptBuddy - TallyPadi',
+    description: 'Switch to the business tool that does more than just invoices. TallyPadi gives you instant WhatsApp receipts alongside a powerful POS and stock tracker.',
     url: 'https://tallypadi.com/receiptbuddy-alternative',
     type: 'website',
   },

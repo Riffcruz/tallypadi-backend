@@ -6,14 +6,14 @@ import MarketingFooter from '../../components/MarketingFooter';
 import InvoiceGeneratorClient from './InvoiceGeneratorClient';
 
 export const metadata: Metadata = {
-  title: 'Free Invoice Generator & Receipt Maker | TallyPadi',
-  description: 'Create professional invoices and receipts for free. No login required. Customize your template, add your logo, and download PDF instantly.',
+  title: 'Free Invoice Generator & Receipt Maker Online | TallyPadi',
+  description: 'Create professional, branded invoices and receipts for free. No signup needed. Add your logo, calculate taxes, and download PDF instantly for WhatsApp or Email.',
   alternates: {
     canonical: 'https://tallypadi.com/free-invoice-generator',
   },
   openGraph: {
-    title: 'Free Invoice Generator & Receipt Maker',
-    description: 'Create professional invoices and receipts for free. No login required. Customize your template, add your logo, and download PDF instantly.',
+    title: 'Free Invoice Generator & Receipt Maker Online',
+    description: 'Create professional, branded invoices and receipts for free. No signup needed. Download PDF instantly for WhatsApp or Email.',
     url: 'https://tallypadi.com/free-invoice-generator',
     type: 'website',
   },
@@ -47,11 +47,11 @@ export default function FreeInvoiceGeneratorPage() {
       <main className="flex-grow pt-24 pb-12 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full">
         <div className="text-center mb-10">
           <h1 className="text-4xl md:text-5xl font-extrabold text-slate-900 mb-4">
-            Free Invoice Generator
+            Free Online Invoice Generator
           </h1>
           <p className="text-xl text-slate-600 max-w-2xl mx-auto">
-            Create beautiful, professional invoices in seconds. <br/>
-            <span className="text-emerald-600 font-medium">No login required. 100% Free.</span>
+            Create beautiful, professional PDF invoices in seconds. <br/>
+            <span className="text-emerald-600 font-medium">No signup needed. 100% Free forever.</span>
           </p>
         </div>
 

@@ -7,13 +7,13 @@ import MarketingFooter from '../../components/MarketingFooter';
 
 export const metadata: Metadata = {
   title: 'WhatsApp Receipt Generator & Invoice Maker | TallyPadi',
-  description: 'Generate professional receipts and invoices directly on WhatsApp. Send digital PDFs to customers instantly. No app download needed.',
+  description: 'Generate professional, branded receipts and invoices directly on WhatsApp. Send instant PDF receipts to customers immediately after a sale.',
   alternates: {
     canonical: 'https://tallypadi.com/whatsapp-receipt-generator',
   },
   openGraph: {
-    title: 'WhatsApp Receipt Generator & Invoice Maker',
-    description: 'Send professional digital receipts to customers on WhatsApp instantly. The easiest way to issue invoices for your business.',
+    title: 'WhatsApp Receipt Generator & POS System',
+    description: 'Generate professional receipts on WhatsApp. Track your sales and impress your customers with instant digital invoices.',
     url: 'https://tallypadi.com/whatsapp-receipt-generator',
     type: 'website',
   },
@@ -57,8 +57,8 @@ export default function WhatsAppReceiptGeneratorPage() {
               Directly on WhatsApp.
             </span>
           </h1>
-          <p className="text-xl text-slate-300 mb-10 max-w-2xl mx-auto font-light">
-            Stop writing paper receipts. Create and send professional digital invoices to your customers instantly in chat. Fast, branded, and automatic.
+          <p className="text-xl text-emerald-100 mb-10 max-w-2xl mx-auto font-medium">
+             Turn your WhatsApp into a mobile POS. Generate instant, professional PDF receipts and send them to your customers exactly where they chat.
           </p>
           <div className="flex flex-col sm:flex-row justify-center gap-4">
             <a

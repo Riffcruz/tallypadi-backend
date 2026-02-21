@@ -6,14 +6,14 @@ import MarketingNavbar from '../../components/MarketingNavbar';
 import MarketingFooter from '../../components/MarketingFooter';
 
 export const metadata: Metadata = {
-  title: 'Debtors Tracking & Accounts Receivable Software | TallyPadi',
-  description: 'Track who owes you money. Simple accounts receivable manager on WhatsApp. Record debts, payments, and credit history.',
+  title: 'Accounts Receivable & Debtors Tracking Software | TallyPadi',
+  description: 'Keep track of customers who buy on credit. Manage accounts receivable, send automated payment reminders, and recover shop debts faster.',
   alternates: {
     canonical: 'https://tallypadi.com/accounts-receivable-debtors-tracking',
   },
   openGraph: {
-    title: 'Debtors Tracking & Accounts Receivable Software',
-    description: 'Never forget a debt again. Track customer credits and payments easily on WhatsApp. The best debt manager for small business.',
+    title: 'Business Debtors & Accounts Receivable Tracker',
+    description: 'Log credit sales easily and track who owes you money. The smartest way to manage shop debtors and cash flow. on WhatsApp. The best debt manager for small business.',
     url: 'https://tallypadi.com/accounts-receivable-debtors-tracking',
     type: 'website',
   },
@@ -57,8 +57,8 @@ export default function DebtorsPage() {
               Faster & Easier.
             </span>
           </h1>
-          <p className="text-xl text-slate-300 mb-10 max-w-2xl mx-auto font-light">
-            Stop losing money to forgotten debts. Track exactly who owes you, how much, and for how long—directly on WhatsApp.
+          <p className="text-xl text-red-100/90 mb-10 max-w-2xl mx-auto">
+             Never lose track of credit sales or "I will pay later" customers. Log shop debts in a secure digital ledger and send professional payment reminders via WhatsApp.
           </p>
           <div className="flex flex-col sm:flex-row justify-center gap-4">
             <a

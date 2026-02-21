@@ -6,14 +6,14 @@ import MarketingNavbar from '../../components/MarketingNavbar';
 import MarketingFooter from '../../components/MarketingFooter';
 
 export const metadata: Metadata = {
-  title: 'TallyPrime WhatsApp Alternative | TallyPadi',
-  description: 'Looking for a TallyPrime alternative that works on WhatsApp? TallyPadi is the mobile-first accounting and inventory solution for modern businesses.',
+  title: 'TallyPrime Alternative for WhatsApp & Mobile | TallyPadi',
+  description: 'Looking for a simpler TallyPrime alternative? TallyPadi is the mobile-first accounting, POS, and inventory solution built for modern business owners.',
   alternates: {
     canonical: 'https://tallypadi.com/tallyprime-whatsapp-alternative',
   },
   openGraph: {
-    title: 'TallyPrime vs TallyPadi - The WhatsApp Alternative',
-    description: 'Move your business to the cloud. TallyPadi offers the power of accounting on your smartphone via WhatsApp.',
+    title: 'TallyPrime vs TallyPadi - The Simple Mobile Alternative',
+    description: 'Move your business accounting to the cloud. TallyPadi offers the power of stock management and invoicing directly on your smartphone via WhatsApp.',
     url: 'https://tallypadi.com/tallyprime-whatsapp-alternative',
     type: 'website',
   },
@@ -56,7 +56,7 @@ export default function TallyPrimeAlternativePage() {
             Alternative.
           </h1>
           <p className="text-xl text-slate-300 mb-10 max-w-2xl mx-auto font-light">
-            Leave the desktop behind. Manage your inventory, invoices, and accounting directly from WhatsApp and the Web.
+            Leave the complex desktop software behind. Manage your inventory, PDF invoices, and daily accounting directly from WhatsApp and our simple Web POS.
           </p>
           <div className="flex flex-col sm:flex-row justify-center gap-4">
             <a

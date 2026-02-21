@@ -3,18 +3,18 @@ import Script from 'next/script';
 import LandingPageClient from './LandingPageClient';
 
 export const metadata: Metadata = {
-  title: 'Tallypadi — WhatsApp Receipts, Invoices & Inventory Management',
+  title: 'TallyPadi — The Smartest WhatsApp POS & Inventory Software',
   description:
-    "The best WhatsApp receipt generator and inventory tool for businesses of any size. Track sales, debtors, and stock easily. Start for free.",
+    "Record sales, generate instant WhatsApp receipts, and track your shop's inventory automatically. The easiest accounting tool designed for African businesses. Start your free trial today.",
   alternates: {
     canonical: 'https://tallypadi.com/',
   },
   openGraph: {
     type: 'website',
     url: 'https://tallypadi.com/',
-    title: 'Tallypadi — WhatsApp Receipts, Invoices & Inventory Management',
+    title: 'TallyPadi — The Smartest WhatsApp POS & Inventory Software',
     description:
-      'Send professional receipts on WhatsApp, track sales, and manage inventory automatically. Built for growing businesses.',
+      'Turn your WhatsApp into a professional POS. Auto-sync sales, manage multiple branches, and recover debts instantly.',
     siteName: 'Tallypadi',
     images: [
       {
@@ -27,9 +27,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Tallypadi — WhatsApp Receipts, Invoices & Inventory Management',
+    title: 'TallyPadi — The Smartest WhatsApp POS & Inventory Software',
     description:
-      'Send professional receipts on WhatsApp, track sales, and manage inventory automatically.',
+      'Turn your WhatsApp into a professional POS. Auto-sync sales, manage multiple branches, and recover debts instantly.',
     images: ['https://tallypadi.com/og.png'],
   },
 };

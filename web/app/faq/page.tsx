@@ -1,7 +1,6 @@
-'use client';
-
-import React, { useState } from 'react';
+import React from 'react';
 import Link from 'next/link';
+import FAQItemClient from './FAQItemClient';
 import { 
   ArrowLeft, 
   ChevronDown, 
@@ -12,6 +11,15 @@ import {
   FileText, 
   Users 
 } from 'lucide-react';
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  title: 'Frequently Asked Questions & Support | TallyPadi',
+  description: 'Get answers to common questions about using TallyPadi. Learn how to generate WhatsApp receipts, track inventory, and manage your business ledger.',
+  alternates: {
+    canonical: 'https://tallypadi.com/faq',
+  }
+};
 
 export default function FAQPage() {
   return (
@@ -152,7 +160,7 @@ export default function FAQPage() {
       {/* Footer */}
       <footer className="bg-slate-900 text-slate-400 py-12 mt-12">
         <div className="max-w-4xl mx-auto px-4 text-center">
-          <p className="font-medium">&copy; 2025 Tallypadi. All rights reserved.</p>
+          <p className="font-medium">&copy; 2026 TallyPadi. All rights reserved.</p>
           <div className="flex justify-center gap-4 mt-4 text-sm">
              <Link href="/" className="hover:text-white transition">Home</Link>
              <span>•</span>
@@ -220,22 +228,7 @@ const GuideCard = ({ icon, title, steps, commands, color, description }: any) =>
   );
 };
 
+// Remove "use client" from FAQPage to keep SEO, make FAQItem it's own client component inline
 const FAQItem = ({ question, answer }: { question: string, answer: string }) => {
-  const [isOpen, setIsOpen] = useState(false);
-
-  return (
-    <div className="border border-slate-200 rounded-2xl bg-white overflow-hidden transition-all duration-200 hover:shadow-md">
-      <button 
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex justify-between items-center p-5 text-left bg-white"
-      >
-        <span className="font-bold text-slate-800 text-lg">{question}</span>
-        {isOpen ? <ChevronUp className="text-green-500" /> : <ChevronDown className="text-slate-400" />}
-      </button>
-      
-      <div className={`px-5 text-slate-600 leading-relaxed overflow-hidden transition-all duration-300 ${isOpen ? 'max-h-48 pb-5 opacity-100' : 'max-h-0 opacity-0'}`}>
-        {answer}
-      </div>
-    </div>
-  );
+  return <FAQItemClient question={question} answer={answer}/>;
 };

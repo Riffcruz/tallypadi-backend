@@ -6,14 +6,14 @@ import MarketingNavbar from '../../components/MarketingNavbar';
 import MarketingFooter from '../../components/MarketingFooter';
 
 export const metadata: Metadata = {
-  title: 'Inventory Management System & Stock Tracking | TallyPadi',
-  description: 'Simple inventory management software for retail and wholesale. Track stock levels, get low stock alerts, and manage inventory on WhatsApp.',
+  title: 'Inventory Management Software & Stock Tracker | TallyPadi',
+  description: 'Track shop inventory, manage stock levels, and receive low-stock alerts automatically on WhatsApp. The best inventory software for small businesses.',
   alternates: {
     canonical: 'https://tallypadi.com/inventory-stock-management',
   },
   openGraph: {
-    title: 'Inventory Management System & Stock Tracking',
-    description: 'Never run out of stock again. Track inventory, receive low stock alerts, and manage multiple products directly from WhatsApp.',
+    title: 'Automated Inventory Management System',
+    description: 'Never run out of stock. Track your inventory in real-time and get automated alerts directly on WhatsApp.',
     url: 'https://tallypadi.com/inventory-stock-management',
     type: 'website',
   },
@@ -58,8 +58,8 @@ export default function InventoryPage() {
               Best Sellers Again.
             </span>
           </h1>
-          <p className="text-xl text-slate-300 mb-10 max-w-2xl mx-auto font-light">
-            Track your inventory in real-time. TallyPadi alerts you when stock is low, so you can restock on time and keep selling.
+          <p className="text-xl text-purple-100/90 mb-10 max-w-2xl mx-auto">
+            Say goodbye to manual stock counting. Record sales in WhatsApp and TallyPadi automatically updates your inventory, sending alerts before you run out of fast-moving items.
           </p>
           <div className="flex flex-col sm:flex-row justify-center gap-4">
             <a

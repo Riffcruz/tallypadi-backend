@@ -7,13 +7,13 @@ import MarketingFooter from '../../components/MarketingFooter';
 
 export const metadata: Metadata = {
   title: 'The Best Way to Grow a Business in 2026 (Revealed) | TallyPadi',
-  description: 'Discover the #1 secret strategy used by fast-growing businesses in 2026. Stop guessing and start scaling with automated profit tracking on WhatsApp.',
+  description: 'Discover the #1 secret strategy used by fast-growing African businesses in 2026. Stop guessing and start scaling with automated POS & profit tracking on WhatsApp.',
   alternates: {
     canonical: 'https://tallypadi.com/best-way-to-grow-business',
   },
   openGraph: {
-    title: 'The Best Way to Grow a Business in 2026 (Revealed)',
-    description: 'Why do some businesses explode while others struggle? The answer isn\'t luck. It\'s data. See the tool that automates growth.',
+    title: 'The Best Way to Grow a Small Business in 2026',
+    description: 'Why do some businesses explode while others struggle? The answer isn\'t luck. It\'s data. See the WhatsApp tool that automates growth.',
     url: 'https://tallypadi.com/best-way-to-grow-business',
     type: 'website',
   },
@@ -62,7 +62,7 @@ export default function GrowthPage() {
           <h1 className="text-4xl lg:text-7xl font-extrabold tracking-tight mb-6 leading-tight">
             The "Hidden" Secret to <br />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-300">
-              Explosive Growth in 2026.
+              Explosive SME Growth in 2026.
             </span>
           </h1>
           <p className="text-xl text-slate-300 mb-10 max-w-2xl mx-auto font-light leading-relaxed">
