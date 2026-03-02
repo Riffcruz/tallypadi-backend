@@ -197,6 +197,7 @@ const ComparisonSection = () => {
                 <td className="py-4 px-6">App Only</td>
                 <td className="py-4 px-6">Hardware Only</td>
               </tr>
+              
               <tr className="border-b border-stone-100 hover:bg-stone-50/50">
                 <td className="py-4 px-6 font-medium">POS Terminal (Scanning)</td>
                 <td className="py-4 px-6 bg-emerald-50/30 border-x border-emerald-100 text-emerald-700 font-bold">Included</td>
