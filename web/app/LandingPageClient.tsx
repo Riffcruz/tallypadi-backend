@@ -505,6 +505,8 @@ export default function LandingPage() {
     fetchSettings();
   }, []);
 
+
+
   return (
     <div className="bg-stone-50 text-stone-700 overflow-x-hidden font-sans selection:bg-emerald-500 selection:text-white">
       {/* --- Navbar --- */}
