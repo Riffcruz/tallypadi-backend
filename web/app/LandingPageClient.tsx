@@ -174,7 +174,7 @@ const ComparisonSection = () => {
           <span className="text-emerald-600 font-bold tracking-wider uppercase text-xs">Market Comparison</span>
           <h2 className="text-3xl md:text-5xl font-bold text-stone-900 mt-2">Top POS Software in Nigeria (2026)</h2>
           <p className="text-stone-500 mt-4 max-w-2xl mx-auto">
-            See how TallyPadi stacks up against Loyverse, VirtualRx, and traditional POS hardware.
+            See how TallyPadi stacks up against traditional app-based and hardware POS systems.
           </p>
         </AnimatedSection>
 
@@ -183,55 +183,55 @@ const ComparisonSection = () => {
             <thead>
               <tr className="border-b-2 border-stone-100">
                 <th className="py-4 px-6 text-stone-500 font-medium uppercase text-sm tracking-wider">Feature</th>
-                <th className="py-4 px-6 bg-emerald-50 text-emerald-700 font-bold text-lg rounded-t-2xl border-t border-x border-emerald-100">
+                <th className="py-4 px-6 bg-emerald-50 text-emerald-700 font-bold text-lg rounded-t-2xl border-t border-x border-emerald-100 whitespace-nowrap">
                   TallyPadi
                 </th>
-                <th className="py-4 px-6 text-stone-900 font-bold">Loyverse</th>
-                <th className="py-4 px-6 text-stone-900 font-bold">VirtualRx / Traditional POS</th>
+                <th className="py-4 px-6 text-stone-900 font-bold whitespace-nowrap">App-Based POS</th>
+                <th className="py-4 px-6 text-stone-900 font-bold whitespace-nowrap">Traditional POS Hardware</th>
               </tr>
             </thead>
             <tbody className="text-stone-600">
               <tr className="border-b border-stone-100 hover:bg-stone-50/50">
-                <td className="py-4 px-6 font-medium">WhatsApp Integration</td>
-                <td className="py-4 px-6 bg-emerald-50/30 border-x border-emerald-100 text-emerald-700 font-bold">✅ Native Chat Bot</td>
-                <td className="py-4 px-6">❌ App Only</td>
-                <td className="py-4 px-6">❌ Hardware Only</td>
+                <td className="py-4 px-6 font-medium">Platform</td>
+                <td className="py-4 px-6 bg-emerald-50/30 border-x border-emerald-100 text-emerald-700 font-bold">Native WhatsApp + Web</td>
+                <td className="py-4 px-6">App Only</td>
+                <td className="py-4 px-6">Hardware Only</td>
               </tr>
               <tr className="border-b border-stone-100 hover:bg-stone-50/50">
                 <td className="py-4 px-6 font-medium">POS Terminal (Scanning)</td>
-                <td className="py-4 px-6 bg-emerald-50/30 border-x border-emerald-100 text-emerald-700 font-bold">✅ Included</td>
-                <td className="py-4 px-6">✅ Included</td>
-                <td className="py-4 px-6">✅ Included</td>
+                <td className="py-4 px-6 bg-emerald-50/30 border-x border-emerald-100 text-emerald-700 font-bold">Included</td>
+                <td className="py-4 px-6">Included</td>
+                <td className="py-4 px-6">Included</td>
               </tr>
               <tr className="border-b border-stone-100 hover:bg-stone-50/50">
                 <td className="py-4 px-6 font-medium">Hardware Cost</td>
                 <td className="py-4 px-6 bg-emerald-50/30 border-x border-emerald-100 text-emerald-700 font-bold">₦0 (Use any device)</td>
-                <td className="py-4 px-6">₦0 (App)</td>
+                <td className="py-4 px-6">₦0 (Use phone app)</td>
                 <td className="py-4 px-6">₦250k - ₦500k+</td>
               </tr>
               <tr className="border-b border-stone-100 hover:bg-stone-50/50">
                 <td className="py-4 px-6 font-medium">Staff Ease of Use</td>
-                <td className="py-4 px-6 bg-emerald-50/30 border-x border-emerald-100 text-emerald-700 font-bold">⭐⭐⭐⭐⭐ (Chat)</td>
-                <td className="py-4 px-6">⭐⭐⭐ (App Training)</td>
-                <td className="py-4 px-6">⭐⭐ (Technical)</td>
+                <td className="py-4 px-6 bg-emerald-50/30 border-x border-emerald-100 text-emerald-700 font-bold">Excellent (Chat)</td>
+                <td className="py-4 px-6">Moderate (Training Required)</td>
+                <td className="py-4 px-6">Low (Technical)</td>
               </tr>
               <tr className="border-b border-stone-100 hover:bg-stone-50/50">
                 <td className="py-4 px-6 font-medium">Multi-Branch Sync</td>
-                <td className="py-4 px-6 bg-emerald-50/30 border-x border-emerald-100 text-emerald-700 font-bold">✅ Real-time (Tycoon)</td>
-                <td className="py-4 px-6">✅ Paid Add-on</td>
-                <td className="py-4 px-6">⚠️ Often Separate DB</td>
+                <td className="py-4 px-6 bg-emerald-50/30 border-x border-emerald-100 text-emerald-700 font-bold">Real-time</td>
+                <td className="py-4 px-6">Often a Paid Add-on</td>
+                <td className="py-4 px-6">Often Separate Database</td>
               </tr>
               <tr className="border-b border-stone-100 hover:bg-stone-50/50">
                 <td className="py-4 px-6 font-medium">Cloud Backup & Access</td>
-                <td className="py-4 px-6 bg-emerald-50/30 border-x border-emerald-100 text-emerald-700 font-bold">✅ Auto Cloud (24/7)</td>
-                <td className="py-4 px-6">✅ Cloud Based</td>
-                <td className="py-4 px-6">⚠️ Local Only (Risk)</td>
+                <td className="py-4 px-6 bg-emerald-50/30 border-x border-emerald-100 text-emerald-700 font-bold">Auto Cloud (24/7)</td>
+                <td className="py-4 px-6">Cloud Based</td>
+                <td className="py-4 px-6">Local Only (Risk)</td>
               </tr>
               <tr>
                 <td className="py-4 px-6 font-medium">Payment Recovery</td>
-                <td className="py-4 px-6 bg-emerald-50/30 border-x border-b border-emerald-100 text-emerald-700 font-bold rounded-b-2xl">✅ Debtors Tracking</td>
-                <td className="py-4 px-6">❌ Basic</td>
-                <td className="py-4 px-6">❌ Basic</td>
+                <td className="py-4 px-6 bg-emerald-50/30 border-x border-b border-emerald-100 text-emerald-700 font-bold rounded-b-2xl">Debtors Tracking</td>
+                <td className="py-4 px-6">Basic</td>
+                <td className="py-4 px-6">Basic</td>
               </tr>
             </tbody>
           </table>
@@ -312,7 +312,7 @@ const GlowStat = ({
           <p className="mt-2 text-4xl font-extrabold text-white tracking-tight">{value}</p>
           {sub ? <p className="mt-2 text-sm text-stone-300/80">{sub}</p> : null}
         </div>
-        <div className="rounded-2xl border border-stone-700/60 bg-stone-950/40 p-3 text-emerald-300 shadow-[0_0_30px_rgba(52,211,153,0.12)]">
+        <div className="rounded-2xl border border-stone-700/60 bg-stone-950/40 p-3 text-orange-500 shadow-[0_0_30px_rgba(249,115,22,0.12)]">
           {icon}
         </div>
       </div>
@@ -669,7 +669,7 @@ export default function LandingPage() {
         ]}
       />
 
-          <div className="w-16 h-16 bg-stone-950 text-emerald-400 border border-stone-700 rounded-2xl flex items-center justify-center text-2xl font-bold mb-6 shadow-lg group-hover:scale-110 transition-transform group-hover:rotate-3">
+          <div className="w-16 h-16 bg-orange-500 text-white rounded-2xl flex items-center justify-center text-2xl font-bold mb-6 shadow-lg shadow-orange-500/20 group-hover:scale-110 transition-transform group-hover:rotate-3">
             1
           </div>
 
@@ -691,7 +691,7 @@ export default function LandingPage() {
         ]}
         />
 
-          <div className="w-16 h-16 bg-emerald-700 text-white rounded-2xl flex items-center justify-center text-2xl font-bold mb-6 shadow-lg shadow-emerald-600/20 group-hover:scale-110 transition-transform group-hover:-rotate-3">
+          <div className="w-16 h-16 bg-orange-500 text-white rounded-2xl flex items-center justify-center text-2xl font-bold mb-6 shadow-lg shadow-orange-500/20 group-hover:scale-110 transition-transform group-hover:-rotate-3">
             2
           </div>
 
@@ -715,7 +715,7 @@ export default function LandingPage() {
   ]}
 />
 
-          <div className="w-16 h-16 bg-blue-700 text-white rounded-2xl flex items-center justify-center text-2xl font-bold mb-6 shadow-lg shadow-blue-600/20 group-hover:scale-110 transition-transform group-hover:rotate-6">
+          <div className="w-16 h-16 bg-orange-500 text-white rounded-2xl flex items-center justify-center text-2xl font-bold mb-6 shadow-lg shadow-orange-500/20 group-hover:scale-110 transition-transform group-hover:rotate-6">
             3
           </div>
 
@@ -733,7 +733,7 @@ export default function LandingPage() {
       <section id="pricing" className="py-24 bg-stone-100 relative">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <AnimatedSection className="text-center mb-16">
-            <span className="text-emerald-600 font-bold tracking-wider uppercase text-xs">Pricing Plans</span>
+            <span className="text-orange-600 font-bold tracking-wider uppercase text-xs">Pricing Plans</span>
             <h2 className="text-3xl md:text-5xl font-bold text-stone-900 mt-2">Scale your business, your way.</h2>
                       <p className="text-stone-500 mt-4 max-w-2xl mx-auto">
                         Start with a free trial, then choose the perfect plan. From solo vendors to multi-branch empires, we have you covered.
@@ -746,14 +746,14 @@ export default function LandingPage() {
               className="bg-white p-6 rounded-3xl border border-stone-200 flex flex-col shadow-lg transition-all hover:shadow-xl hover:scale-[1.02]"
             >
               <div className="flex items-center gap-4 mb-6">
-                <div className="p-3 rounded-xl bg-emerald-50 text-emerald-600">
+                <div className="p-3 rounded-xl bg-orange-50 text-orange-600">
                   <Gift size={24} />
                 </div>
                 <h3 className="text-2xl font-bold text-stone-900">7-Day Trial</h3>
               </div>
 
               <div className="mb-8">
-                <span className="text-5xl font-extrabold text-emerald-600">Free</span>
+                <span className="text-5xl font-extrabold text-orange-600">Free</span>
                 <span className="text-stone-500 text-sm"> / 7 Days</span>
                 <p className="text-stone-500 mt-2 text-sm">Experience the full power of Tallypadi with zero commitment.</p>
               </div>
@@ -767,7 +767,7 @@ export default function LandingPage() {
               </ul>
               <a
                 href={whatsappLink}
-                className="w-full block text-center bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 rounded-xl transition shadow-lg shadow-emerald-600/20 active:scale-95"
+                className="w-full block text-center bg-orange-600 hover:bg-orange-700 text-white font-bold py-3.5 rounded-xl transition shadow-lg shadow-orange-600/20 active:scale-95"
               >
                 Start 7-Day Free Trial
               </a>
@@ -776,20 +776,20 @@ export default function LandingPage() {
             {/* 2. Oga Boss - Highlighted */}
             <AnimatedSection
               animation="fade-up"
-              className="relative bg-white p-6 rounded-3xl shadow-2xl flex flex-col border-4 border-blue-500 transform md:-translate-y-6 transition-all hover:scale-[1.05] hover:shadow-blue-500/20"
+              className="relative bg-white p-6 rounded-3xl shadow-2xl flex flex-col border-4 border-orange-500 transform md:-translate-y-6 transition-all hover:scale-[1.05] hover:shadow-orange-500/20"
             >
-              <div className="absolute top-0 right-0 bg-blue-500 text-white text-xs font-bold px-4 py-1.5 rounded-bl-xl shadow-md">
+              <div className="absolute top-0 right-0 bg-orange-500 text-white text-xs font-bold px-4 py-1.5 rounded-bl-xl shadow-md">
                 BEST VALUE
               </div>
               <div className="flex items-center gap-4 mb-6">
-                <div className="p-3 rounded-xl bg-blue-50 text-blue-600 shadow-sm">
+                <div className="p-3 rounded-xl bg-orange-50 text-orange-600 shadow-sm">
                   <Shield size={24} />
                 </div>
                 <h3 className="text-2xl font-bold text-stone-900">Oga Boss</h3>
               </div>
 
               <div className="mb-8">
-                <span className="text-5xl font-extrabold text-blue-600">₦3,000</span>
+                <span className="text-5xl font-extrabold text-orange-600">₦3,000</span>
                 <span className="text-stone-500 text-sm"> / month</span>
                 <p className="text-stone-500 mt-2 text-sm">
                   The essential plan for serious owners focused on maximizing solo profit.
@@ -807,7 +807,7 @@ export default function LandingPage() {
               </ul>
               <a
                 href="/payment?plan=OGA_BOSS"
-                className="w-full block text-center bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl transition shadow-lg shadow-blue-600/20 active:scale-95"
+                className="w-full block text-center bg-orange-600 hover:bg-orange-700 text-white font-bold py-3.5 rounded-xl transition shadow-lg shadow-orange-600/20 active:scale-95"
               >
                 Choose Oga Boss Plan
               </a>
@@ -819,14 +819,14 @@ export default function LandingPage() {
               className="bg-stone-900 p-6 rounded-3xl border border-stone-700 flex flex-col shadow-lg transition-all hover:shadow-xl hover:scale-[1.02]"
             >
               <div className="flex items-center gap-4 mb-6">
-                <div className="p-3 rounded-xl bg-stone-800 text-amber-500 shadow-xl border border-stone-700">
+                <div className="p-3 rounded-xl bg-stone-800 text-orange-500 shadow-xl border border-stone-700">
                   <Crown size={24} />
                 </div>
                 <h3 className="text-2xl font-bold text-white">Tycoon</h3>
               </div>
 
               <div className="mb-8">
-                <span className="text-5xl font-extrabold text-amber-400">₦5,000</span>
+                <span className="text-5xl font-extrabold text-orange-500">₦5,000</span>
                 <span className="text-stone-400 text-sm"> / month</span>
                 <p className="text-stone-400 mt-2 text-sm">Full power plan designed for management teams and scaling operations.</p>
               </div>
@@ -841,7 +841,7 @@ export default function LandingPage() {
               </ul>
               <a
                 href="/payment?plan=TYCOON"
-                className="w-full block text-center bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl transition shadow-lg shadow-amber-500/20 active:scale-95"
+                className="w-full block text-center bg-orange-600 hover:bg-orange-700 text-white font-bold py-3.5 rounded-xl transition shadow-lg shadow-orange-500/20 active:scale-95"
               >
                 Choose Tycoon Plan
               </a>
@@ -861,13 +861,13 @@ export default function LandingPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             <FeatureCard
               icon={<Wand2 size={24} />}
-              color="emerald"
+              color="orange"
               title="AI WhatsApp Assistant"
               desc="Just type 'Sold 2 bags of rice'. TallyPadi instantly reduces your stock, calculates profit, and logs the sale."
             />
             <FeatureCard
               icon={<FileText size={24} />}
-              color="red"
+              color="orange"
               title="Instant PDF Receipts"
               desc="Look professional. Generate branded receipts and invoices directly in WhatsApp to share with customers immediately."
             />
@@ -879,20 +879,20 @@ export default function LandingPage() {
             />
             <FeatureCard
               icon={<Users size={24} />}
-              color="purple"
+              color="orange"
               title="Multi-Branch Staff Sync"
               badge="TYCOON PLAN"
               desc="Monitor sales across all your locations in real-time. Staff log sales via their phones, you watch from the dashboard."
             />
             <FeatureCard
               icon={<BarChart3 size={24} />}
-              color="blue"
+              color="orange"
               title="Full Web POS Dashboard"
               desc="Need a bigger screen? Log into the web app to manage products, view deep analytics, and ring up counter sales."
             />
             <FeatureCard
               icon={<Lock size={24} />}
-              color="teal"
+              color="orange"
               title="Debtors & Payment Follow-ups"
               desc="Track customers who bought on credit. Keep clear ledgers and know exactly who owes your business money."
             />

@@ -752,6 +752,11 @@ export const processRawWebhook = async (body: any) => {
         const btnTitle = i.button_reply.title;
         if (!btnId) return;
         text = `__BTN__:${btnId}:${btnTitle || ''}`;
+      } else if (i.type === 'list_reply') {
+        const listId = i.list_reply.id;
+        const listTitle = i.list_reply.title;
+        if (!listId) return;
+        text = `__BTN__:${listId}:${listTitle || ''}`;
       } else if (i.type === 'nfm_reply') {
         const responseJson = i.nfm_reply.response_json;
         text = `__FLOW__:${responseJson}`;
@@ -1130,9 +1135,23 @@ export const handleMessageLogic = async (
 You now have full access to the Tycoon Plan (our complete package) for the next seven days. Explore all our features without limitation.
 
 Current Pricing Options:
-Tycoon Plan: ₦5,000/month (Save significantly with the yearly plan)
 
-Oga Boss Plan: ₦3,000/month (Save significantly with the yearly plan)`;
+Tycoon Plan: ₦5,000/month (Save significantly with the yearly plan)
+What's included in Tycoon Plan:
+• Everything in Oga Boss
+• Staff Login (Up to 10)
+• Online Shop Link
+• Branded PDF Invoices
+• Advanced Web Dashboard
+• Priority VIP Support
+
+Oga Boss Plan: ₦3,000/month (Save significantly with the yearly plan)
+What's included in Oga Boss Plan:
+• Unlimited Sales Records
+• Basic Inventory Tracking
+• Daily Profit Summary
+• 1 User Account
+• Standard Support`;
 
         const menuBatches = [
             {
@@ -1727,11 +1746,9 @@ Oga Boss Plan: ₦3,000/month (Save significantly with the yearly plan)`;
            actor.interactionState = null;
            await actor.save();
            
-           await queueOutboundList(from, "Choose Action 👇", "Options", [
-             { title: 'Actions', rows: [
+           await queueOutboundButtons(from, "Choose Action 👇", [
                 { id: saleBtnId('RECEIPT', txId), title: '🧾 Receipt' },
                 { id: saleBtnId('UNDO', txId), title: '🗑️ Delete Sale' }
-             ]} 
            ]);
            return;
         }
@@ -1774,11 +1791,9 @@ Oga Boss Plan: ₦3,000/month (Save significantly with the yearly plan)`;
 
             await queueOutboundMessage(from, `Recorded sale.\nPaid: ${symbol}${newTotal.toLocaleString(locale)}\nDiscount: ${symbol}${discount.toLocaleString(locale)}`);
             
-            await queueOutboundList(from, "Choose Action 👇", "Options", [
-                 { title: 'Actions', rows: [
-                    { id: saleBtnId('RECEIPT', txId), title: '🧾 Receipt' },
-                    { id: saleBtnId('UNDO', txId), title: '🗑️ Delete Sale' }
-                 ]} 
+            await queueOutboundButtons(from, "Choose Action 👇", [
+                { id: saleBtnId('RECEIPT', txId), title: '🧾 Receipt' },
+                { id: saleBtnId('UNDO', txId), title: '🗑️ Delete Sale' }
             ]);
             return;
          }
