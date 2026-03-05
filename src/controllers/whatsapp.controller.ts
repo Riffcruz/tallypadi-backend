@@ -1651,11 +1651,11 @@ What's included in Oga Boss Plan:
                     const staffPhone = staffRecord.phoneNumber;
                     const staffName = staffRecord.name || staffPhone;
                     
-                    // Delete staff by unsetting owner/role or actually deleting. 
-                    // Let's strip rights to make them a normal user again as per FR.
+                    // Strip access by clearing owner linkage and resetting registration stage.
+                    // This makes them appear as a fresh/new user when they next message the bot.
                     staffRecord.ownerId = undefined;
-                    staffRecord.role = 'USER';
                     staffRecord.businessName = undefined;
+                    staffRecord.registrationStage = 'EMAIL';
                     await staffRecord.save();
 
                     const storeName = actor.businessName || 'the store';
