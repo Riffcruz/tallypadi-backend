@@ -383,3 +383,64 @@ export async function sendWhatsAppDocumentBuffer(opts: {
 
   return { mediaId };
 }
+
+// ============================================================
+// ✅ SEND: CTA URL BUTTON (single button that opens a URL)
+// ============================================================
+export async function sendWhatsAppCtaUrl(
+  to: string,
+  bodyText: string,
+  buttons: { displayText: string; url: string }[]
+) {
+  // WhatsApp only allows 1 CTA URL button per message. Send extra buttons as separate messages.
+  const [first, ...rest] = buttons;
+
+  const payload = {
+    messaging_product: 'whatsapp',
+    to,
+    type: 'interactive',
+    interactive: {
+      type: 'cta_url',
+      body: { text: safeText(bodyText, 1024) },
+      action: {
+        name: 'cta_url',
+        parameters: {
+          display_text: safeText(first.displayText, 20),
+          url: first.url,
+        },
+      },
+    },
+  };
+
+  await axios.post(messagesUrl(), payload, {
+    headers: authHeaders(),
+    timeout: 20_000,
+    httpsAgent,
+  });
+
+  // Send remaining buttons as separate CTA messages
+  for (const btn of rest) {
+    const extra = {
+      messaging_product: 'whatsapp',
+      to,
+      type: 'interactive',
+      interactive: {
+        type: 'cta_url',
+        body: { text: ' ' },
+        action: {
+          name: 'cta_url',
+          parameters: {
+            display_text: safeText(btn.displayText, 20),
+            url: btn.url,
+          },
+        },
+      },
+    };
+    await axios.post(messagesUrl(), extra, {
+      headers: authHeaders(),
+      timeout: 20_000,
+      httpsAgent,
+    });
+  }
+}
+

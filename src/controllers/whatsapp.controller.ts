@@ -22,13 +22,14 @@ import { applyPaymentToDebts } from '../services/debt.service';
 import {
   messageQueue,
   queueOutboundMessage,
-  queueOutboundButtons, // ✅ NEW: queued buttons helper
+  queueOutboundButtons, // ✅ queued buttons helper
+  queueOutboundCtaUrl,  // ✅ CTA URL buttons helper
   queueSaleResponse,
   queueWelcomeResponse,
   queueSaleReceipt,
   queueInvoicePdf,
   queueOutboundList,
-  queueOutboundFlow, // ✅ NEW: queued flow helper
+  queueOutboundFlow,
   queueRegistrationComplete
 } from '../services/queue.service';
 import { executeGlobalPushNotification, executePushNotification } from '../services/push.service';
@@ -2285,7 +2286,33 @@ What's included in Oga Boss Plan:
                  return;
             }
             else if (btn.id === 'CMD_SUBSCRIBE') {
-                 parsed = { intent: 'SUBSCRIBE' };
+                 const planMsg = `🚀 *Upgrade Your TallyPadi Plan*
+
+Choose the plan that best fits your business:
+
+*⭐ TYCOON (Recommended)*
+• Unlimited sales & stock tracking
+• PDF reports & invoices
+• Staff management (up to 5)
+• Daily summary reports
+• Priority support
+
+*OGA BOSS*
+• Unlimited sales & stock tracking
+• PDF reports & invoices
+• Unlimited staff management
+• Advanced analytics
+• Dedicated support
+
+Tap a button below to subscribe:`;
+                 await queueOutboundMessage(from, planMsg);
+                 await queueOutboundCtaUrl(from, '⭐ Tycoon (Recommended)', [
+                     { displayText: '⭐ Subscribe Tycoon', url: 'https://tallypadi.com/payment?plan=TYCOON' }
+                 ], `sub_tycoon_${from}`);
+                 await queueOutboundCtaUrl(from, 'Oga Boss plan', [
+                     { displayText: 'Subscribe Oga Boss', url: 'https://tallypadi.com/payment?plan=OGA_BOSS' }
+                 ], `sub_ogaboss_${from}`);
+                 return;
             }
             else if (btn.id === 'CMD_MANAGE_STAFF') {
                  await queueOutboundButtons(from, "Manage Staff", [

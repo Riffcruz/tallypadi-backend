@@ -139,6 +139,25 @@ export const queueOutboundButtons = async (
 };
 
 // ============================================================
+// ✅ CTA URL Button (opens a URL in browser)
+// Worker must handle job.name === 'send-cta-url'
+// Payload: { phoneNumber, bodyText, buttons: [{displayText, url}] }
+// ============================================================
+export const queueOutboundCtaUrl = async (
+  phoneNumber: string,
+  bodyText: string,
+  buttons: { displayText: string; url: string }[],
+  jobId?: string
+) => {
+  const finalJobId = safeJobId(jobId || `ctaurl_${phoneNumber}_${Date.now()}`);
+  await replyQueue.add(
+    'send-cta-url',
+    { phoneNumber, bodyText: String(bodyText || '').slice(0, 1024), buttons },
+    { jobId: finalJobId }
+  );
+};
+
+// ============================================================
 // ✅ List Message (QUEUED)
 // Worker must handle job.name === 'send-list'
 // ============================================================

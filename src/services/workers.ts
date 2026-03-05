@@ -1,7 +1,7 @@
 // src/services/queue.worker.ts
 import { Worker } from 'bullmq'; // ✅ Switched to BullMQ
 import { createRedisConnection } from './queue.service'; // ✅ Factory for dedicated connections
-import { sendWhatsAppText, sendWhatsAppButtons, sendWhatsAppList, sendWhatsAppDocumentBuffer, sendWhatsAppFlow, sendTypingIndicator } from './whatsapp.service';
+import { sendWhatsAppText, sendWhatsAppButtons, sendWhatsAppList, sendWhatsAppDocumentBuffer, sendWhatsAppFlow, sendTypingIndicator, sendWhatsAppCtaUrl } from './whatsapp.service';
 import { generateSaleReceiptPdfBuffer } from '../controllers/receipt.controller';
 import { Invoice } from '../models/invoice.model';
 import { generateInvoicePdf } from './invoice.pdf.service';
@@ -142,6 +142,13 @@ export const replyWorker = new Worker(
         return;
     }
 
+
+    if (job.name === 'send-cta-url') {
+      const { phoneNumber, bodyText, buttons } = job.data;
+      sendTypingIndicator(phoneNumber).catch(() => {});
+      await sendWhatsAppCtaUrl(phoneNumber, bodyText, buttons);
+      return;
+    }
 
     if (job.name === 'send-buttons') {
       const { phoneNumber, bodyText, buttons } = job.data;
