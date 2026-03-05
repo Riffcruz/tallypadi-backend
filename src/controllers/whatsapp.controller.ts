@@ -1175,13 +1175,15 @@ What's included in Oga Boss Plan:
                 buttons: [
                     { id: 'CMD_SET_STOCK', title: '7. Set stock' },
                     { id: 'CMD_SET_PRICE', title: '8. Set stock price' },
-                    { id: 'CMD_CREATE_INVOICE', title: '9. Generate invoice' }
+                    { id: 'CMD_RECORD_EXPENSE', title: '9. Record Expenses' }
                 ]
             },
             {
                 bodyText: "4",
                 buttons: [
-                    { id: 'CMD_MANAGE_STAFF', title: '10. Add/Remove Staff' }
+                    { id: 'CMD_MANAGE_STAFF', title: '10. Manage staff' },
+                    { id: 'CMD_SUBSCRIBE', title: '11. Subscribe' },
+                    { id: 'CMD_CREATE_INVOICE', title: '12. Generate invoice' }
                 ]
             }
         ];
@@ -1213,7 +1215,7 @@ What's included in Oga Boss Plan:
       }
       
       if (btn?.id === 'CMD_REGISTER_NO') {
-          await queueOutboundMessage(from, "No problem! You can type 'Hi padi' anytime to start.");
+          await queueOutboundMessage(from, "To access our services, kindly register your shop with us. In the meantime, please read our FAQs for further information on how to manage your shop with TallyPadi. If you would like to proceed with the registration, kindly respond with Yes\n\nFAQs: https://tallypadi.com/help");
           return;
       }
 
@@ -1337,7 +1339,7 @@ What's included in Oga Boss Plan:
               if (btn?.id === 'CMD_SET_NEW_SHOP_NAME') {
                   actor.registrationStage = 'SHOP_NAME_INPUT';
                   await actor.save();
-                  await queueOutboundMessage(from, "Okay, please type your new *Shop Name*:");
+                  await queueOutboundMessage(from, "Kindly enter the shop name.");
                   return;
               }
               // If user typed something instead of clicking button, assume it's the name?
@@ -1361,6 +1363,49 @@ What's included in Oga Boss Plan:
               return;
           }
       }
+    }
+
+    // ✅ "Hi Padi" Main Menu Intercept
+    if (actor.registrationStage === 'COMPLETED' && rawText.toLowerCase() === 'hi padi') {
+        const menuBatches = [
+            {
+                bodyText: "SOME THINGS YOU CAN DO:",
+                buttons: [
+                    { id: 'CMD_RECORD_INVENTORY', title: '1. Record stock' },
+                    { id: 'CMD_TRACK_INVENTORY', title: '2. Track inventory' },
+                    { id: 'CMD_RECORD_SALE', title: '3. Log transaction' }
+                ]
+            },
+            {
+                bodyText: "2",
+                buttons: [
+                    { id: 'CMD_RECORD_CREDIT', title: '4. Credit sales' },
+                    { id: 'CMD_VIEW_REPORT', title: '5. View sales report' },
+                    { id: 'CMD_DELETE_STOCK', title: '6. Delete stock item' }
+                ]
+            },
+            {
+                bodyText: "3",
+                buttons: [
+                    { id: 'CMD_SET_STOCK', title: '7. Set stock' },
+                    { id: 'CMD_SET_PRICE', title: '8. Set stock price' },
+                    { id: 'CMD_RECORD_EXPENSE', title: '9. Record Expenses' }
+                ]
+            },
+            {
+                bodyText: "4",
+                buttons: [
+                    { id: 'CMD_MANAGE_STAFF', title: '10. Manage staff' },
+                    { id: 'CMD_SUBSCRIBE', title: '11. Subscribe' },
+                    { id: 'CMD_CREATE_INVOICE', title: '12. Generate invoice' }
+                ]
+            }
+        ];
+
+        for (const batch of menuBatches) {
+            await queueOutboundButtons(from, batch.bodyText, batch.buttons);
+        }
+        return;
     }
 
     if (actor.interactionState && actor.interactionState.type === 'WAITING_FOR_RESTOCK_COST_PRICE') {
@@ -1568,22 +1613,22 @@ What's included in Oga Boss Plan:
                 debtorId: debtor._id,
            }).limit(5); // Show top 5 debts
 
-           let msg = `📉 *${debtor.displayName}'s Credit Report*\n\n`;
+           let msg = ``;
            debts.forEach(d => {
                const items = (d.items || []).map((i: any) => i.name).join(', ');
-               msg += `• Owes ${symbol}${Number(d.balance).toLocaleString(locale)} for ${items}\n`;
+               msg += `${debtor.displayName} owes ${Number(d.balance).toLocaleString(locale)} for ${items}\n`;
            });
            
            if (debts.length >= 5) msg += `...and more.\n`;
-           msg += `\n💰 *Total Owed:* ${symbol}${totalDebt.toLocaleString(locale)}`;
+           msg += `\nTotal amount owed: ${totalDebt.toLocaleString(locale)} naira.`;
 
            await queueSaleResponse(
                from,
                msg,
                "Select Action 👇",
                [
-                   { id: debtBtnId('FULL', String(debtor._id)), title: '✅ Full Payment' },
-                   { id: debtBtnId('PARTIAL', String(debtor._id)), title: '🔢 Partial Payment' },
+                   { id: debtBtnId('FULL', String(debtor._id)), title: 'Full payment' },
+                   { id: debtBtnId('PARTIAL', String(debtor._id)), title: 'Partial payment' },
                ],
                `debt_report_${debtor._id}`
            );
@@ -1635,15 +1680,10 @@ What's included in Oga Boss Plan:
            // Update Debtor Total
            await Debtor.findByIdAndUpdate(debtorId, { $inc: { totalDebt: -res.applied } });
 
-           await queueOutboundMessage(from, `✅ Recorded partial payment of ${symbol}${res.applied.toLocaleString(locale)} for ${debtorName}.\nRemaining Debt: ${symbol}${res.remaining.toLocaleString(locale)}`); // Wait, res.remaining is from amount provided? Or balance remaining?
-           // applyPaymentToDebts returns { applied, remaining, clearedCount } where remaining is "remaining amount from the payment provided that wasn't used" (excess payment).
-           // It does NOT return the debtor's NEW total debt balance.
-           // We need to fetch updated debtor balance.
-           
            const updatedDebtor = await Debtor.findById(debtorId);
            const newBalance = updatedDebtor?.totalDebt || 0;
 
-           await queueOutboundMessage(from, `✅ Payment Recorded!\n\nPAID: ${symbol}${res.applied.toLocaleString(locale)}\nBALANCE: ${symbol}${newBalance.toLocaleString(locale)}`);
+           await queueOutboundMessage(from, `${debtorName} paid off ${res.applied.toLocaleString(locale)} naira.\n\nBalance: ${newBalance.toLocaleString(locale)} naira.`);
            return;
         }
     }
@@ -1697,7 +1737,7 @@ What's included in Oga Boss Plan:
            actor.interactionState = { type: 'WAITING_FOR_PARTIAL_PAYMENT_AMOUNT', data: { txId, debtorId, displayName } };
            await actor.save();
 
-           await queueOutboundMessage(from, `✅ Linked to *${displayName}*.\n\nEnter the amount made as a down payment.`);
+           await queueOutboundMessage(from, `Enter the amount made as a down payment.`);
            return;
         }
         if (btn) { actor.interactionState = null; await actor.save(); }
@@ -1740,15 +1780,16 @@ What's included in Oga Boss Plan:
                    await Debtor.findByIdAndUpdate(debtorId, { $inc: { totalDebt: balance }, $set: { lastProductStr: (tx.items || []).map((i:any) => `${i.qty} ${i.name}`).join(', ') } });
                }
                
-               await queueOutboundMessage(from, `Recorded credit sale to ${displayName}.\nPaid: ${symbol}${amount.toLocaleString(locale)}\nBalance: ${symbol}${balance.toLocaleString(locale)}`);
+               const itemsStr = (tx.items || []).map((i:any) => `${i.qty} ${i.name}`).join(', ');
+               await queueOutboundMessage(from, `Recorded the credit sale of ${itemsStr} to ${displayName}.\nPaid: ${symbol}${amount.toLocaleString(locale)}\nBalance: ${symbol}${balance.toLocaleString(locale)}`);
            }
 
            actor.interactionState = null;
            await actor.save();
            
            await queueOutboundButtons(from, "Choose Action 👇", [
-                { id: saleBtnId('RECEIPT', txId), title: '🧾 Receipt' },
-                { id: saleBtnId('UNDO', txId), title: '🗑️ Delete Sale' }
+                { id: saleBtnId('RECEIPT', txId), title: 'Generate receipt' },
+                { id: saleBtnId('UNDO', txId), title: 'Delete this sale' }
            ]);
            return;
         }
@@ -1789,11 +1830,12 @@ What's included in Oga Boss Plan:
             actor.interactionState = null;
             await actor.save();
 
-            await queueOutboundMessage(from, `Recorded sale.\nPaid: ${symbol}${newTotal.toLocaleString(locale)}\nDiscount: ${symbol}${discount.toLocaleString(locale)}`);
+            const itemsStr = (tx.items || []).map((i:any) => `${i.qty} ${i.name}`).join(', ');
+            await queueOutboundMessage(from, `Recorded the sale of ${itemsStr}.\nPaid: ${symbol}${newTotal.toLocaleString(locale)}\nDiscount: ${symbol}${discount.toLocaleString(locale)}`);
             
             await queueOutboundButtons(from, "Choose Action 👇", [
-                { id: saleBtnId('RECEIPT', txId), title: '🧾 Receipt' },
-                { id: saleBtnId('UNDO', txId), title: '🗑️ Delete Sale' }
+                { id: saleBtnId('RECEIPT', txId), title: 'Generate receipt' },
+                { id: saleBtnId('UNDO', txId), title: 'Delete this sale' }
             ]);
             return;
          }
@@ -1863,7 +1905,7 @@ What's included in Oga Boss Plan:
              } else {
                  actor.interactionState = { type: 'WAITING_FOR_PARTIAL_DEBTOR_NAME', data: { txId: btn.id } };
                  await actor.save();
-                 await queueOutboundMessage(from, `Marked as CREDIT.\nWho owes you? Reply like: *Credit John*`);
+                 await queueOutboundMessage(from, `Marked as CREDIT.\nWho owes you? Reply like: Credit John`);
              }
              return;
         }
@@ -1871,7 +1913,7 @@ What's included in Oga Boss Plan:
         if (btn.action === 'DISCOUNT') {
              actor.interactionState = { type: 'WAITING_FOR_DISCOUNT_AMOUNT', data: { txId: btn.id } };
              await actor.save();
-             await queueOutboundMessage(from, `How much discount was given?\nReply like: *2000* or *5000*`);
+             await queueOutboundMessage(from, `How much discount was given?\nReply like: 2,000 naira or gave a discount of 5,000 naira.`);
              return;
         }
 
@@ -1997,22 +2039,7 @@ What's included in Oga Boss Plan:
               debtor.totalDebt = Math.max(0, debtor.totalDebt - res.applied);
               await debtor.save();
 
-              // Record Payment Transaction (optional but good for history)
-              // Actually applyPaymentToDebts updates the individual sale transactions to PAID.
-              // We might want to log a "Debt Payment" transaction if we track cash flow separately,
-              // but for now let's assume the individual sales being marked PAID is enough.
-              // (Wait, if we mark them PAID, they show up in daily stats as paid sales? 
-              // Usually yes, if we update paymentStatus. 
-              // But we should check if we need to log a separate "Repayment" entry for cash reconciliation.
-              // The current system seems to update the original sale. 
-              // If we update original sale, the money "comes in" now? 
-              // Or does it change the past?
-              // `applyPaymentToDebts` updates `amountPaid` and `balance` and `settledAt`.
-              // It doesn't seem to create a NEW transaction.
-              // So to track CASH IN HAND TODAY, we might need a separate mechanism or just rely on "settledAt" query.
-              // For now, let's just confirm to user.)
-
-              await queueOutboundMessage(from, `✅ ${debtor.displayName} completely cleared credit sale of ${symbol}${res.applied.toLocaleString(locale)}.`);
+              await queueOutboundMessage(from, `${debtor.displayName} completely cleared credit sale of ${res.applied.toLocaleString(locale)} naira.`);
               return;
           }
 
@@ -2106,6 +2133,14 @@ What's included in Oga Boss Plan:
                  const msg = await generateGuidanceMessage('SET_PRICE', currentLang);
                  await queueOutboundMessage(from, msg);
                  return;
+            }
+            else if (btn.id === 'CMD_RECORD_EXPENSE') {
+                 const msg = await generateGuidanceMessage('EXPENSE', currentLang);
+                 await queueOutboundMessage(from, msg);
+                 return;
+            }
+            else if (btn.id === 'CMD_SUBSCRIBE') {
+                 parsed = { intent: 'SUBSCRIBE' };
             }
             else if (btn.id === 'CMD_MANAGE_STAFF') {
                  if (env.whatsappAddStaffFlowId) {
@@ -2275,7 +2310,7 @@ What's included in Oga Boss Plan:
         if (parsed.needs_clarification) {
             actor.interactionState = { type: 'WAITING_FOR_DEBTOR_NAME' };
             await actor.save();
-            await queueOutboundMessage(from, "Whose bill are you updating?");
+            await queueOutboundMessage(from, "Whose bill are you updating?\nReply like: John");
             break;
         }
         
