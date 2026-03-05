@@ -25,7 +25,8 @@ import {
   queueOutboundButtons,
   queueOutboundCtaUrl,
   queueSubscribePlans,
-  queueGreetingMenu,    // ✅ atomic greeting + menu flow
+  queueGreetingMenu,
+  queueRegErrorWithFlow,  // ✅ error + flow resend (ordered)
   queueSaleResponse,
   queueWelcomeResponse,
   queueSaleReceipt,
@@ -1244,21 +1245,29 @@ What's included in Oga Boss Plan:
                   return;
               }
 
-              // ✓ Confirm password check
-              if (confirm_password && String(password) !== String(confirm_password)) {
-                  // Re-send the registration flow with an error message
-                  const { queueOutboundFlow } = await import('../services/queue.service');
-                  await queueOutboundMessage(from, "❌ Passwords do not match. Please try again.");
+              // ✓ Confirm password — always required, must match
+              if (!confirm_password) {
                   if (env.whatsappRegistrationFlowId) {
-                      await queueOutboundFlow(
+                      await queueRegErrorWithFlow(
                           from,
-                          "Register",
-                          "Create your TallyPadi account.",
-                          "TallyPadi",
-                          env.whatsappRegistrationFlowId,
-                          "Register",
-                          "REGISTRATION"
+                          "⚠️ Please confirm your password before continuing.",
+                          env.whatsappRegistrationFlowId
                       );
+                  } else {
+                      await queueOutboundMessage(from, "⚠️ Please confirm your password before continuing.");
+                  }
+                  return;
+              }
+
+              if (String(password) !== String(confirm_password)) {
+                  if (env.whatsappRegistrationFlowId) {
+                      await queueRegErrorWithFlow(
+                          from,
+                          "❌ Passwords do not match. Please try again.",
+                          env.whatsappRegistrationFlowId
+                      );
+                  } else {
+                      await queueOutboundMessage(from, "❌ Passwords do not match. Please enter your password again.");
                   }
                   return;
               }

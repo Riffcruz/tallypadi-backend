@@ -143,6 +143,22 @@ export const replyWorker = new Worker(
     }
 
 
+    if (job.name === 'send-reg-error') {
+      const { phoneNumber, errorMsg, flowId } = job.data;
+      sendTypingIndicator(phoneNumber).catch(() => {});
+      await sendWhatsAppText(phoneNumber, errorMsg);
+      await sendWhatsAppFlow(
+        phoneNumber,
+        "Sign Up",
+        "Tap below to try again.",
+        "TallyPadi",
+        flowId,
+        "Sign in",
+        "SIGN_IN"
+      );
+      return;
+    }
+
     if (job.name === 'send-greeting-menu') {
       const { phoneNumber, greetingMsg, menuBatches } = job.data;
       sendTypingIndicator(phoneNumber).catch(() => {});

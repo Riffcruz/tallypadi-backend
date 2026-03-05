@@ -193,6 +193,24 @@ export const queueGreetingMenu = async (
 };
 
 // ============================================================
+// ✅ Registration Error + Flow Resend (ONE job, ordered)
+//  Sends error text then opens the registration flow button
+// ============================================================
+export const queueRegErrorWithFlow = async (
+  phoneNumber: string,
+  errorMsg: string,
+  flowId: string,
+  jobId?: string
+) => {
+  const finalJobId = safeJobId(jobId || `reg_error_${phoneNumber}_${Date.now()}`);
+  await replyQueue.add(
+    'send-reg-error',
+    { phoneNumber, errorMsg, flowId },
+    { jobId: finalJobId }
+  );
+};
+
+// ============================================================
 // ✅ List Message (QUEUED)
 // Worker must handle job.name === 'send-list'
 // ============================================================
