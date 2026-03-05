@@ -24,7 +24,8 @@ import {
   queueOutboundMessage,
   queueOutboundButtons,
   queueOutboundCtaUrl,
-  queueSubscribePlans,  // ✅ atomic subscribe flow
+  queueSubscribePlans,
+  queueGreetingMenu,    // ✅ atomic greeting + menu flow
   queueSaleResponse,
   queueWelcomeResponse,
   queueSaleReceipt,
@@ -1380,9 +1381,6 @@ What's included in Oga Boss Plan:
 
     // ✅ "Hi Padi" / "Hi" / "Hello" Main Menu Intercept
     if (actor.registrationStage === 'COMPLETED' && ['hi', 'hello', 'hi padi'].includes(rawText.toLowerCase())) {
-        
-        await queueOutboundMessage(from, "Hi, I'm TallyPadi, your professional business management tool. Here are some things you can do:");
-
         const menuBatches = [
             {
                 bodyText: "1",
@@ -1418,11 +1416,11 @@ What's included in Oga Boss Plan:
             }
         ];
 
-        let delayMs = 1500;
-        for (const batch of menuBatches) {
-            await queueOutboundButtons(from, batch.bodyText, batch.buttons, undefined, delayMs);
-            delayMs += 1000;
-        }
+        await queueGreetingMenu(
+            from,
+            "Hi, I'm TallyPadi, your professional business management tool. Here are some things you can do:",
+            menuBatches
+        );
         return;
     }
 
