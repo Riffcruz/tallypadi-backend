@@ -835,7 +835,7 @@ function normalizePhone(raw: string) {
   return String(raw || '').replace(/\D/g, '').trim();
 }
 
-async function addStaffUnderOwner(owner: any, staffPhoneRaw?: string | null, staffName?: string | null) {
+async function addStaffUnderOwner(owner: any, staffPhoneRaw?: string | null, staffName?: string | null, skipNameCheck = false) {
   let staffPhoneDigits = normalizePhone(staffPhoneRaw || ''); // e.g., "18599189638" from "+1 (859) 918-9638"
   if (!staffPhoneDigits) return { ok: false, msg: 'Reply with staff number (e.g. +2348123456789).' };
 
@@ -892,6 +892,17 @@ async function addStaffUnderOwner(owner: any, staffPhoneRaw?: string | null, sta
     await existing.save();
 
     return { ok: true, msg: `✅ Staff linked: ${finalStaffPhoneNumber}` };
+  }
+
+  // Check for duplicate name before creating
+  if (staffName && !skipNameCheck) {
+      const existingName = await User.findOne({ 
+          ownerId: owner._id, 
+          name: { $regex: new RegExp(`^${staffName.trim()}$`, 'i') } 
+      });
+      if (existingName) {
+          return { ok: false, duplicateName: true, staffPhone: finalStaffPhoneNumber, staffName: staffName.trim(), msg: '' };
+      }
   }
 
   await User.create({
@@ -1405,8 +1416,10 @@ What's included in Oga Boss Plan:
             }
         ];
 
+        let delayMs = 1500;
         for (const batch of menuBatches) {
-            await queueOutboundButtons(from, batch.bodyText, batch.buttons);
+            await queueOutboundButtons(from, batch.bodyText, batch.buttons, undefined, delayMs);
+            delayMs += 1000;
         }
         return;
     }
@@ -1501,6 +1514,25 @@ What's included in Oga Boss Plan:
                 
                 // Call the existing helper
                 const res = await addStaffUnderOwner(actor, staff_phone, staff_name);
+                
+                if (res.duplicateName) {
+                    actor.interactionState = {
+                        type: 'WAITING_FOR_DUPLICATE_STAFF_CONFIRM',
+                        data: { staffPhone: res.staffPhone, staffName: res.staffName }
+                    };
+                    await actor.save();
+
+                    await queueOutboundButtons(
+                        from,
+                        "This name has already been registered. Is this the same person?",
+                        [
+                            { id: 'DPSTAFF_YES', title: 'Yes' },
+                            { id: 'DPSTAFF_NO', title: 'No' }
+                        ]
+                    );
+                    return;
+                }
+
                 await queueOutboundMessage(from, res.msg);
                 return;
             }
@@ -1554,6 +1586,93 @@ What's included in Oga Boss Plan:
         if (btn) {
            actor.interactionState = null;
            await actor.save();
+        }
+    }
+
+    if (actor.interactionState && actor.interactionState.type === 'WAITING_FOR_DUPLICATE_STAFF_CONFIRM') {
+        if (btn) {
+            const data = actor.interactionState.data;
+            if (btn.id === 'DPSTAFF_YES') {
+                actor.interactionState = null;
+                await actor.save();
+                await queueOutboundMessage(from, "Please delete the already existing number before adding the new one.");
+                return;
+            } else if (btn.id === 'DPSTAFF_NO') {
+                actor.interactionState = {
+                    type: 'WAITING_FOR_STAFF_SURNAME',
+                    data: data
+                };
+                await actor.save();
+                await queueOutboundMessage(from, "Please enter a surname in order to differentiate both staff.");
+                return;
+            }
+        } else {
+             // User typed instead of clicking button
+             actor.interactionState = null;
+             await actor.save();
+        }
+    }
+
+    if (actor.interactionState && actor.interactionState.type === 'WAITING_FOR_STAFF_SURNAME') {
+        if (!btn) {
+            const surname = rawText.trim();
+            const data = actor.interactionState.data || {};
+            actor.interactionState = null;
+            await actor.save();
+
+            if (!surname) {
+                await queueOutboundMessage(from, "Name cancelled.");
+                return;
+            }
+
+            const staffPhone = data.staffPhone;
+            const newFullName = `${data.staffName} ${surname}`;
+
+            const res = await addStaffUnderOwner(actor, staffPhone, newFullName, true);
+            await queueOutboundMessage(from, res.msg);
+            return;
+        } else {
+             actor.interactionState = null;
+             await actor.save();
+        }
+    }
+
+    if (actor.interactionState && actor.interactionState.type === 'WAITING_FOR_STAFF_DELETION_CONFIRM') {
+        if (btn) {
+            const data = actor.interactionState.data;
+            actor.interactionState = null;
+            await actor.save();
+
+            if (btn.id === 'CONFIRM_DEL_STAFF_YES') {
+                const staffId = data.staffId;
+                const staffRecord = await User.findById(staffId);
+                
+                if (staffRecord) {
+                    const staffPhone = staffRecord.phoneNumber;
+                    const staffName = staffRecord.name || staffPhone;
+                    
+                    // Delete staff by unsetting owner/role or actually deleting. 
+                    // Let's strip rights to make them a normal user again as per FR.
+                    staffRecord.ownerId = undefined;
+                    staffRecord.role = 'USER';
+                    staffRecord.businessName = undefined;
+                    await staffRecord.save();
+
+                    const storeName = actor.businessName || 'the store';
+                    await queueOutboundMessage(from, `${staffName} successfully deleted from ${storeName} staff list.`);
+                    await queueOutboundMessage(staffPhone, `Hi ${staffName}, your account has been deleted from TallyPadi as a staff of ${storeName}.`);
+                } else {
+                    await queueOutboundMessage(from, "⚠️ Staff member no longer exists.");
+                }
+                return;
+            } else if (btn.id === 'CONFIRM_DEL_STAFF_NO') {
+                await queueOutboundMessage(from, "Noted. Deletion process canceled.");
+                return;
+            }
+        } else {
+            // User typed instead of clicking button
+            actor.interactionState = null;
+            await actor.save();
         }
     }
 
@@ -2060,6 +2179,29 @@ What's included in Oga Boss Plan:
       // ✅ GENERIC COMMANDS (CMD_) -> fall through
       if (btn.type === 'GENERIC' && btn.id.startsWith('CMD_')) {
           // Do nothing, let it proceed to next logic blocks
+      } else if (btn.type === 'GENERIC' && btn.id.startsWith('DEL_STAFF_')) {
+          const targetStaffId = btn.id.replace('DEL_STAFF_', '');
+          const targetStaff = await User.findById(targetStaffId);
+          if (!targetStaff) {
+              await queueOutboundMessage(from, "⚠️ Staff member not found.");
+              return;
+          }
+          
+          actor.interactionState = {
+              type: 'WAITING_FOR_STAFF_DELETION_CONFIRM',
+              data: { staffId: targetStaffId, staffName: targetStaff.name || targetStaff.phoneNumber }
+          };
+          await actor.save();
+
+          await queueOutboundButtons(
+              from,
+              `Are you sure you would like to delete ${targetStaff.name || targetStaff.phoneNumber} as a staff?`,
+              [
+                  { id: 'CONFIRM_DEL_STAFF_YES', title: 'Yes' },
+                  { id: 'CONFIRM_DEL_STAFF_NO', title: 'No' }
+              ]
+          );
+          return;
       } else {
           await queueOutboundMessage(from, 'Unknown action.');
           return;
@@ -2146,6 +2288,13 @@ What's included in Oga Boss Plan:
                  parsed = { intent: 'SUBSCRIBE' };
             }
             else if (btn.id === 'CMD_MANAGE_STAFF') {
+                 await queueOutboundButtons(from, "Manage Staff", [
+                     { id: 'CMD_ADD_STAFF', title: 'Add Staff' },
+                     { id: 'CMD_DELETE_STAFF_LIST', title: 'Delete Staff' }
+                 ]);
+                 return;
+            }
+            else if (btn.id === 'CMD_ADD_STAFF') {
                  if (env.whatsappAddStaffFlowId) {
                     await queueOutboundFlow(
                          from,
@@ -2160,6 +2309,29 @@ What's included in Oga Boss Plan:
                  }
                  const msg = await generateGuidanceMessage('MANAGE_STAFF', currentLang);
                  await queueOutboundMessage(from, msg);
+                 return;
+            }
+            else if (btn.id === 'CMD_DELETE_STAFF_LIST') {
+                 if (actor.role !== 'OWNER') {
+                     await queueOutboundMessage(from, '❌ Only the shop owner can delete staff.');
+                     return;
+                 }
+                 const staffList = await User.find({ ownerId: actor._id }).limit(10);
+                 if (staffList.length === 0) {
+                     await queueOutboundMessage(from, "You currently have no registered staff.");
+                     return;
+                 }
+
+                 // Group buttons into batches of 3
+                 let batchNum = 1;
+                 for (let i = 0; i < staffList.length; i += 3) {
+                     const batch = staffList.slice(i, i + 3).map(s => ({
+                         id: `DEL_STAFF_${s._id}`,
+                         title: String(s.name || '').slice(0, 20) || 'Staff'
+                     }));
+                     await queueOutboundButtons(from, `Select staff to delete (Page ${batchNum}):`, batch);
+                     batchNum++;
+                 }
                  return;
             }
             else if (btn.id === 'CMD_CREATE_INVOICE') {
@@ -2897,6 +3069,25 @@ What's included in Oga Boss Plan:
         }
 
         const r = await addStaffUnderOwner(actor, pPhone || null, (parsed as any).staffName || null);
+        
+        if ((r as any).duplicateName) {
+            actor.interactionState = {
+                type: 'WAITING_FOR_DUPLICATE_STAFF_CONFIRM',
+                data: { staffPhone: (r as any).staffPhone, staffName: (r as any).staffName }
+            };
+            await actor.save();
+
+            await queueOutboundButtons(
+                from,
+                "This name has already been registered. Is this the same person?",
+                [
+                    { id: 'DPSTAFF_YES', title: 'Yes' },
+                    { id: 'DPSTAFF_NO', title: 'No' }
+                ]
+            );
+            break;
+        }
+
         await queueOutboundMessage(from, r.msg);
         break;
       }
