@@ -1365,11 +1365,14 @@ What's included in Oga Boss Plan:
       }
     }
 
-    // ✅ "Hi Padi" Main Menu Intercept
-    if (actor.registrationStage === 'COMPLETED' && rawText.toLowerCase() === 'hi padi') {
+    // ✅ "Hi Padi" / "Hi" / "Hello" Main Menu Intercept
+    if (actor.registrationStage === 'COMPLETED' && ['hi', 'hello', 'hi padi'].includes(rawText.toLowerCase())) {
+        
+        await queueOutboundMessage(from, "Hi, I'm TallyPadi, your professional business management tool. Here are some things you can do:");
+
         const menuBatches = [
             {
-                bodyText: "SOME THINGS YOU CAN DO:",
+                bodyText: "1",
                 buttons: [
                     { id: 'CMD_RECORD_INVENTORY', title: '1. Record stock' },
                     { id: 'CMD_TRACK_INVENTORY', title: '2. Track inventory' },
