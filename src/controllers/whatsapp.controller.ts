@@ -1237,10 +1237,29 @@ What's included in Oga Boss Plan:
       if (rawText.startsWith('__FLOW__:')) {
           try {
               const flowJson = JSON.parse(rawText.replace('__FLOW__:', ''));
-              const { email, password } = flowJson;
+              const { email, password, confirm_password } = flowJson;
 
               if (!email || !password) {
                   await queueOutboundMessage(from, "⚠️ Please provide both email and password.");
+                  return;
+              }
+
+              // ✓ Confirm password check
+              if (confirm_password && String(password) !== String(confirm_password)) {
+                  // Re-send the registration flow with an error message
+                  const { queueOutboundFlow } = await import('../services/queue.service');
+                  await queueOutboundMessage(from, "❌ Passwords do not match. Please try again.");
+                  if (env.whatsappRegistrationFlowId) {
+                      await queueOutboundFlow(
+                          from,
+                          "Register",
+                          "Create your TallyPadi account.",
+                          "TallyPadi",
+                          env.whatsappRegistrationFlowId,
+                          "Register",
+                          "REGISTRATION"
+                      );
+                  }
                   return;
               }
 
@@ -1320,20 +1339,41 @@ What's included in Oga Boss Plan:
           }
 
           if (actor.registrationStage === 'PASSWORD') {
-            if (rawText.length < 1) { // Accept any non-empty for now
-               return; 
+            if (rawText.length < 1) {
+               return;
             }
+            // Store the raw password temporarily in interaction state, ask for confirmation
+            actor.interactionState = {
+                type: 'WAITING_FOR_PASSWORD_CONFIRM',
+                data: { tempPassword: rawText }
+            };
+            await actor.save();
+            await queueOutboundMessage(from, "Please re-enter your password to confirm.");
+            return;
+          }
+
+          if ((actor.interactionState as any)?.type === 'WAITING_FOR_PASSWORD_CONFIRM') {
+            const tempPassword = (actor.interactionState as any).data?.tempPassword;
+            if (rawText !== tempPassword) {
+                // Passwords don't match — clear state and ask them to re-enter
+                actor.interactionState = null;
+                await actor.save();
+                await queueOutboundMessage(from, "❌ Passwords do not match. Please enter your password again.");
+                actor.registrationStage = 'PASSWORD';
+                await actor.save();
+                return;
+            }
+            // Passwords match — hash and save
             const salt = await bcrypt.genSalt(10);
-            actor.password = await bcrypt.hash(rawText, salt);
-            
-            // Move to Shop Name Selection
+            actor.password = await bcrypt.hash(tempPassword, salt);
+            actor.interactionState = null;
             actor.registrationStage = 'SHOP_NAME_SELECTION';
             await actor.save();
 
             const currentName = actor.name || 'My Shop';
             await queueOutboundButtons(
                   from,
-                  `✅ Password saved!\n\nOne last step: What should we call your shop?\n\nI can use your WhatsApp name: *"${currentName}"*`,
+                  `✅ Password confirmed!\n\nOne last step: What should we call your shop?\n\nI can use your WhatsApp name: *"${currentName}"*`,
                   [
                       { id: 'CMD_USE_PROFILE_NAME', title: `Use "${currentName.slice(0, 10)}..."` },
                       { id: 'CMD_SET_NEW_SHOP_NAME', title: 'Set New Name' }
