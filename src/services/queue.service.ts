@@ -158,6 +158,41 @@ export const queueOutboundCtaUrl = async (
 };
 
 // ============================================================
+// ✅ Subscribe Plans (text + two CTA URL buttons in ONE job)
+// Worker sends them sequentially = guaranteed ordering
+// ============================================================
+export const queueSubscribePlans = async (
+  phoneNumber: string,
+  planMsg: string,
+  jobId?: string
+) => {
+  const finalJobId = safeJobId(jobId || `sub_plans_${phoneNumber}_${Date.now()}`);
+  await replyQueue.add(
+    'send-subscribe-plans',
+    { phoneNumber, planMsg },
+    { jobId: finalJobId }
+  );
+};
+
+// ============================================================
+// ✅ Greeting Menu (text + multiple button batches in ONE job)
+// Worker sends them in order = guaranteed ordering
+// ============================================================
+export const queueGreetingMenu = async (
+  phoneNumber: string,
+  greetingMsg: string,
+  menuBatches: { bodyText: string; buttons: { id: string; title: string }[] }[],
+  jobId?: string
+) => {
+  const finalJobId = safeJobId(jobId || `greeting_menu_${phoneNumber}_${Date.now()}`);
+  await replyQueue.add(
+    'send-greeting-menu',
+    { phoneNumber, greetingMsg, menuBatches },
+    { jobId: finalJobId }
+  );
+};
+
+// ============================================================
 // ✅ List Message (QUEUED)
 // Worker must handle job.name === 'send-list'
 // ============================================================

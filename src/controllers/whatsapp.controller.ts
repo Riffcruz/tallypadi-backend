@@ -22,8 +22,9 @@ import { applyPaymentToDebts } from '../services/debt.service';
 import {
   messageQueue,
   queueOutboundMessage,
-  queueOutboundButtons, // ✅ queued buttons helper
-  queueOutboundCtaUrl,  // ✅ CTA URL buttons helper
+  queueOutboundButtons,
+  queueOutboundCtaUrl,
+  queueSubscribePlans,  // ✅ atomic subscribe flow
   queueSaleResponse,
   queueWelcomeResponse,
   queueSaleReceipt,
@@ -2305,13 +2306,7 @@ Choose the plan that best fits your business:
 • Dedicated support
 
 Tap a button below to subscribe:`;
-                 await queueOutboundMessage(from, planMsg);
-                 await queueOutboundCtaUrl(from, '⭐ Tycoon (Recommended)', [
-                     { displayText: '⭐ Subscribe Tycoon', url: 'https://tallypadi.com/payment?plan=TYCOON' }
-                 ], `sub_tycoon_${from}`);
-                 await queueOutboundCtaUrl(from, 'Oga Boss plan', [
-                     { displayText: 'Subscribe Oga Boss', url: 'https://tallypadi.com/payment?plan=OGA_BOSS' }
-                 ], `sub_ogaboss_${from}`);
+                 await queueSubscribePlans(from, planMsg);
                  return;
             }
             else if (btn.id === 'CMD_MANAGE_STAFF') {

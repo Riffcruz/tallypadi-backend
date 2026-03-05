@@ -143,6 +143,29 @@ export const replyWorker = new Worker(
     }
 
 
+    if (job.name === 'send-greeting-menu') {
+      const { phoneNumber, greetingMsg, menuBatches } = job.data;
+      sendTypingIndicator(phoneNumber).catch(() => {});
+      await sendWhatsAppText(phoneNumber, greetingMsg);
+      for (const batch of menuBatches) {
+        await sendWhatsAppButtons(phoneNumber, batch.bodyText, batch.buttons);
+      }
+      return;
+    }
+
+    if (job.name === 'send-subscribe-plans') {
+      const { phoneNumber, planMsg } = job.data;
+      sendTypingIndicator(phoneNumber).catch(() => {});
+      await sendWhatsAppText(phoneNumber, planMsg);
+      await sendWhatsAppCtaUrl(phoneNumber, '⭐ TYCOON Plan (Recommended)', [
+          { displayText: '⭐ Subscribe Tycoon', url: 'https://tallypadi.com/payment?plan=TYCOON' }
+      ]);
+      await sendWhatsAppCtaUrl(phoneNumber, 'OGA BOSS Plan', [
+          { displayText: 'Subscribe Oga Boss', url: 'https://tallypadi.com/payment?plan=OGA_BOSS' }
+      ]);
+      return;
+    }
+
     if (job.name === 'send-cta-url') {
       const { phoneNumber, bodyText, buttons } = job.data;
       sendTypingIndicator(phoneNumber).catch(() => {});
