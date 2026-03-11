@@ -1840,6 +1840,7 @@ What's included in Oga Boss Plan:
 
            const data = actor.interactionState.data || {};
            actor.interactionState = null;
+           actor.messageHistory = [];
            await actor.save();
 
            const debtorId = data.debtorId;
@@ -1956,6 +1957,7 @@ What's included in Oga Boss Plan:
            }
 
            actor.interactionState = null;
+           actor.messageHistory = [];
            await actor.save();
            
            await queueOutboundButtons(from, "Choose Action 👇", [
@@ -2513,6 +2515,8 @@ Tap a button below to subscribe:`;
         }
 
         await processTransaction(shopId as any, parsed, messageId, actor);
+        actor.messageHistory = [];
+        await actor.save();
 
        
         const tx = await Transaction.findOne({ user: actor._id, messageId }).lean();
@@ -2520,9 +2524,12 @@ Tap a button below to subscribe:`;
           const txId = String(tx._id);
           
           try {
+             const itemsStr = (tx.items || []).map((i: any) => `${i.qty}${i.unit && i.unit !== 'pcs' ? ' ' + i.unit : ''} ${i.name}`).join(', ').trim();
+             const customReply = `✅ Recorded the sale of ${itemsStr} for ${symbol}${Number(tx.totalMoney || 0).toLocaleString(locale)}.`;
+
              await queueSaleResponse(
                 from,
-                parsed.reply_text || '✅ Sale recorded.',
+                customReply,
                 'Choose Action 👇',
                 [
                     { id: saleBtnId('RECEIPT', txId), title: '🧾 Receipt' },
@@ -2565,6 +2572,8 @@ Tap a button below to subscribe:`;
 
         try {
             await processTransaction(shopId as any, parsed, messageId, actor);
+            actor.messageHistory = [];
+            await actor.save();
             await queueOutboundMessage(from, parsed.reply_text || '✅ Done.');
         } catch (e) {
             console.error('processTransaction error:', e);
@@ -2582,27 +2591,50 @@ Tap a button below to subscribe:`;
                   break;
               }
 
-              const prices = await getHistoricalPrices(shopId, item.name);
-              const costOpts = prices.costPrices.map(p => ({ id: rstPriceBtnId('COST', String(p)), title: `${symbol}${p.toLocaleString(locale)}` }));
-              costOpts.push({ id: rstPriceBtnId('COST', 'SKIP'), title: 'Skip / Manual' });
+              if (!item?.cost_price) {
+                  const prices = await getHistoricalPrices(shopId, item.name);
+                  const costOpts = prices.costPrices.map(p => ({ id: rstPriceBtnId('COST', String(p)), title: `${symbol}${p.toLocaleString(locale)}` }));
+                  costOpts.push({ id: rstPriceBtnId('COST', 'SKIP'), title: 'Skip / Manual' });
 
-              actor.interactionState = {
-                  type: 'WAITING_FOR_RESTOCK_COST_PRICE',
-                  data: { itemName: item.name, qty: item.qty, unit: item.unit }
-              };
-              await actor.save();
+                  actor.interactionState = {
+                      type: 'WAITING_FOR_RESTOCK_COST_PRICE',
+                      data: { itemName: item.name, qty: item.qty, unit: item.unit }
+                  };
+                  await actor.save();
 
-              await queueOutboundButtons(
-                  from,
-                  `How much did you buy each *${item.name}*?`,
-                  costOpts
-              );
-              break;
+                  await queueOutboundButtons(
+                      from,
+                      `How much did you buy each *${item.name}*?`,
+                      costOpts
+                  );
+                  break;
+              }
+
+              if (!item?.unit_price) {
+                  const prices = await getHistoricalPrices(shopId, item.name);
+                  const sellingOpts = prices.sellingPrices.map(p => ({ id: rstPriceBtnId('SELL', String(p)), title: `${symbol}${p.toLocaleString(locale)}` }));
+                  sellingOpts.push({ id: rstPriceBtnId('SELL', 'SKIP'), title: 'Skip / Manual' });
+
+                  actor.interactionState = {
+                      type: 'WAITING_FOR_RESTOCK_SELLING_PRICE',
+                      data: { itemName: item.name, qty: item.qty, unit: item.unit, costPrice: item.cost_price }
+                  };
+                  await actor.save();
+
+                  await queueOutboundButtons(
+                      from,
+                      `How much is the *selling price* per ${item.name}?`,
+                      sellingOpts
+                  );
+                  break;
+              }
           }
 
           // Standard fast-path (if user provided everything: "Restock 10 rice 50k each selling 60k")
           try {
               await processTransaction(shopId as any, parsed, messageId, actor);
+              actor.messageHistory = [];
+              await actor.save();
               await queueOutboundMessage(from, parsed.reply_text || '✅ Done.');
           } catch (e) {
               console.error('processTransaction error:', e);
@@ -2623,6 +2655,8 @@ Tap a button below to subscribe:`;
 
         try {
     await processTransaction(shopId as any, parsed, messageId, actor);
+    actor.messageHistory = [];
+    await actor.save();
 
     await queueOutboundMessage(from, parsed.reply_text || '✅ Done.');
       } catch (e) {
