@@ -426,24 +426,26 @@ app.get('/', (_req: Request, res: Response) => {
 // ==========================================
 // 🔌 START SERVER
 // ==========================================
-const server = createServer(app);
-initSocket(server);
+if (require.main === module) {
+  const server = createServer(app);
+  initSocket(server);
 
-mongoose
-  .connect(env.mongoUri)
-  .then(() => {
-    console.log('✅ MongoDB Connected (Secured)');
-    startScheduler();
+  mongoose
+    .connect(env.mongoUri)
+    .then(() => {
+      console.log('✅ MongoDB Connected (Secured)');
+      startScheduler();
 
-    const PORT = Number(env.port ?? process.env.PORT ?? 5000);
-    if (!Number.isFinite(PORT)) throw new Error(`Invalid PORT: ${env.port}`);
+      const PORT = Number(env.port ?? process.env.PORT ?? 5000);
+      if (!Number.isFinite(PORT)) throw new Error(`Invalid PORT: ${env.port}`);
 
-    server.listen(PORT, '127.0.0.1', () => {
-      console.log(`🚀 Server running on http://127.0.0.1:${PORT}`);
-    });
+      server.listen(PORT, '127.0.0.1', () => {
+        console.log(`🚀 Server running on http://127.0.0.1:${PORT}`);
+      });
 
-    console.log('✅ Scheduler initialized at', new Date().toISOString());
-  })
-  .catch((err) => console.error('❌ DB Connection Error:', err));
+      console.log('✅ Scheduler initialized at', new Date().toISOString());
+    })
+    .catch((err) => console.error('❌ DB Connection Error:', err));
+}
 
 export default app;
