@@ -18,16 +18,22 @@ const StatCard = ({ title, value, sub, color, icon: Icon }: StatCardProps) => {
         purple: 'text-purple-400 bg-purple-900/30',
         white: 'text-white bg-slate-700'
     };
+    const valueStr = String(value);
+    // Dynamically reduce font size if the exact number is very long
+    const textSize = valueStr.length > 15 ? 'text-lg' : valueStr.length > 10 ? 'text-xl' : 'text-3xl';
+
     return (
-        <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg">
-            <div className="flex justify-between items-start mb-4">
-                <div className={`p-3 rounded-xl ${colorClasses[color] || colorClasses.white}`}>
-                    <Icon size={24} />
+        <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg flex flex-col justify-between">
+            <div>
+                <div className="flex justify-between items-start mb-4">
+                    <div className={`p-3 rounded-xl ${colorClasses[color] || colorClasses.white}`}>
+                        <Icon size={24} />
+                    </div>
                 </div>
+                <p className="text-slate-400 text-sm mb-1">{title}</p>
+                <h3 className={`${textSize} font-bold break-words ${color === 'white' ? 'text-white' : colorClasses[color].split(' ')[0]}`}>{value}</h3>
             </div>
-            <p className="text-slate-400 text-sm mb-1">{title}</p>
-            <h3 className={`text-3xl font-bold ${color === 'white' ? 'text-white' : colorClasses[color].split(' ')[0]}`}>{value}</h3>
-            <p className="text-xs text-slate-500 mt-1">{sub}</p>
+            <p className="text-xs text-slate-500 mt-2">{sub}</p>
         </div>
     );
 };
