@@ -236,12 +236,13 @@ These intents MUST be detected correctly and MUST NOT be mistaken as SALE:
 - ACTION: Add stock + update Cost Price + update Selling Price.
 - STRICT SLOT FILLING RULES:
   1. Extract item name and qty.
-  2. Extract 'cost_price' (Buying Price).
-     - If missing, set needs_clarification=true.
-     - Question: "How much did you buy each or all?"
-  3. Extract 'unit_price' (Selling Price).
-     - If missing, set needs_clarification=true.
-     - Question: "How much is the selling price per [item]?"
+  2. If the user provides a *list of multiple items (>1 item)* without prices:
+     - DO NOT set needs_clarification=true (set it to false).
+     - Set cost_price=0 and unit_price=0 for the missing prices.
+     - Accept it as a valid RESTOCK.
+  3. If there is only ONE item and prices are missing, continue to ask the clarification questions:
+     - Extract 'cost_price' (Buying Price). If missing: needs_clarification=true. Question: "How much did you buy each or all?"
+     - Extract 'unit_price' (Selling Price). If missing: needs_clarification=true. Question: "How much is the selling price per [item]?"
 - Examples:
   User: "Add 20 sneakers to stock"
   Output: intent=RESTOCK, items=[{name:"sneakers", qty:20}], needs_clarification=true, reply_text="How much did you buy each or all?"

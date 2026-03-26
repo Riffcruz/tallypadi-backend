@@ -1550,6 +1550,37 @@ What's included in Oga Boss Plan:
         return;
     }
 
+    // ✅ Handle Bulk Restock Draft Confirmation
+    if (actor.interactionState && actor.interactionState.type === 'WAITING_FOR_BULK_RESTOCK_CONFIRM') {
+        if (btn && btn.id === 'BULK_RST_YES') {
+            const finalParsed = actor.interactionState.data.parsed;
+            // Force 0 for missing prices so processTransaction doesn't crash calculations
+            finalParsed.items = finalParsed.items.map((i: any) => ({
+                ...i,
+                cost_price: i.cost_price || 0,
+                unit_price: i.unit_price || 0
+            }));
+            
+            actor.interactionState = null;
+            await actor.save();
+
+            try {
+                await processTransaction(shopId as any, finalParsed as any, `bulk_restock_${messageId}`, actor);
+                await queueOutboundMessage(from, '✅ Items saved with ₦0 price! You can update their exact prices later.');
+            } catch (e) {
+                console.error('Bulk Restock flow error:', e);
+                await queueOutboundMessage(from, '⚠️ Failed to update stock. Please try again.');
+            }
+        } else if (btn && btn.id === 'BULK_RST_NO') {
+            actor.interactionState = null;
+            await actor.save();
+            await queueOutboundMessage(from, '❌ Cancelled. Please try again and include the prices for each item.');
+        } else {
+            await queueOutboundMessage(from, 'Please tap *Yes* or *No* to confirm your bulk items.');
+        }
+        return;
+    }
+
 
 
     // ✅ Handle Staff Add Flow Response
@@ -2583,8 +2614,30 @@ Tap a button below to subscribe:`;
       }
 
       case 'RESTOCK': {
+          // ✅ Intercept bulk RESTOCK lists with missing prices for Draft confirmation
+          if (parsed.items && parsed.items.length > 1) {
+              const hasMissingPrices = parsed.items.some((i: any) => !i.cost_price || !i.unit_price);
+              if (hasMissingPrices && !parsed.needs_clarification) {
+                  actor.interactionState = {
+                      type: 'WAITING_FOR_BULK_RESTOCK_CONFIRM',
+                      data: { parsed }
+                  };
+                  await actor.save();
+                  await queueSaleResponse(
+                      from,
+                      `I noticed you are adding ${parsed.items.length} items, but some are missing prices.`,
+                      `Would you like me to save them with a ₦0 price for now?`,
+                      [
+                          { id: 'BULK_RST_YES', title: 'Yes' },
+                          { id: 'BULK_RST_NO', title: 'No' },
+                      ]
+                  );
+                  break;
+              }
+          }
+
           const item = parsed.items?.[0];
-          // ✅ Trigger interactive flow if prices missing
+          // ✅ Trigger interactive flow if prices missing (single item or bulk that needs clarification)
           if (parsed.needs_clarification || !item?.cost_price || !item?.unit_price) {
               if (!item?.name) {
                   await queueOutboundMessage(from, "What are you restocking? Reply like: *Add 50 sneakers*");
