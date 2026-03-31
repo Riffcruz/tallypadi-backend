@@ -59,7 +59,8 @@ C. PRICE/MONEY EXTRACTION (POSITION-INDEPENDENT & SMART SCALING)
   - Words like "for", "total", "in total" → total_money
   - Support multipliers: k = thousand, m = million, "thousand", "million".
     Examples: "5k" = 5000, "1.2 million" = 1200000, "10 thousand" = 10000.
-  - Recognize currencies: "naira", "dollars", "cedis", "pounds", "shillings", "rand", etc.
+  - Recognize currencies: "naira", "dollars", "cedis", "ghc", "ghs", "pounds", "shillings", "rand", etc.
+  - ✅ CRITICAL: If currency letters (like "ghc") are attached directly to numbers (e.g. "360ghc"), you MUST strip the letters and extract purely the numeric value (360).
   - Report sales with user's currency symbol in reply_text.
 
   PDF TOGGLE PRIORITY OVERRIDE:
