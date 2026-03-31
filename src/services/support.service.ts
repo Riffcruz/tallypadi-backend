@@ -95,12 +95,15 @@ export const supportService = {
         message: msg 
     });
 
-    // GLOBAL PUSH: Notify all agents/admins of the new message
-    await sendGlobalPushNotification({
-        title: `New Message: ${from}`,
-        body: text.substring(0, 50),
-        data: { ticketId: ticket._id }
-    });
+    // PUSH: Notify all agents/admins of the new message directly so users don't get blasted
+    const agents = await SupportAgent.find({});
+    for (const ag of agents) {
+        await sendPushNotification(ag._id.toString(), {
+            title: `New Message: ${from}`,
+            body: text.substring(0, 50),
+            data: { ticketId: ticket._id }
+        });
+    }
 
     // AUTO-REPLY with "End Chat" button
     try {

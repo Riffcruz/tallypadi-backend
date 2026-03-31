@@ -236,9 +236,9 @@ These intents MUST be detected correctly and MUST NOT be mistaken as SALE:
 - ACTION: Add stock + update Cost Price + update Selling Price.
 - STRICT SLOT FILLING RULES:
   1. Extract item name and qty.
-  2. If the user provides a *list of multiple items (>1 item)* without prices:
-     - DO NOT set needs_clarification=true (set it to false).
-     - Set cost_price=0 and unit_price=0 for the missing prices.
+  2. If the user provides a *list of multiple items (>1 item)*:
+     - DO NOT set needs_clarification=true even if prices (cost_price or unit_price) are completely or partially missing. Always set needs_clarification to false.
+     - Set cost_price=0 and unit_price=0 for ANY missing price fields.
      - Accept it as a valid RESTOCK.
   3. If there is only ONE item and prices are missing, continue to ask the clarification questions:
      - Extract 'cost_price' (Buying Price). If missing: needs_clarification=true. Question: "How much did you buy each or all?"
