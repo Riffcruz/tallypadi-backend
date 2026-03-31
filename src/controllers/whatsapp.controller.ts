@@ -88,7 +88,19 @@ function guessCountryFromPhone(phoneNumber?: string) {
 }
 
 const getUserCurrency = (user: any) => {
-  const cc = String(user?.countryCode || guessCountryFromPhone(user?.phoneNumber) || 'NG').toUpperCase();
+  let cc = String(user?.countryCode || '').toUpperCase();
+  
+  // Mongoose schema defaults everything to 'NG'.
+  // We override this default if the actual phone number obviously belongs to another country.
+  if (!cc || cc === 'NG') {
+      const guessed = guessCountryFromPhone(user?.phoneNumber);
+      if (guessed !== 'NG') {
+          cc = guessed; 
+      } else {
+          cc = 'NG';
+      }
+  }
+
   return COUNTRY_CURRENCIES[cc] || COUNTRY_CURRENCIES.DEFAULT;
 };
 
@@ -2614,10 +2626,13 @@ Tap a button below to subscribe:`;
       }
 
       case 'RESTOCK': {
-          // ✅ Intercept bulk RESTOCK lists with missing prices for Draft confirmation
-          if (parsed.items && parsed.items.length > 1) {
-              const hasMissingPrices = parsed.items.some((i: any) => !i.cost_price || !i.unit_price);
-              if (hasMissingPrices && !parsed.needs_clarification) {
+          const isBulk = parsed.items && parsed.items.length > 1;
+
+          if (isBulk) {
+              // Only trigger Draft if an item is completely missing BOTH prices
+              const hasCompletelyMissingItem = parsed.items.some((i: any) => !i.cost_price && !i.unit_price);
+              
+              if (hasCompletelyMissingItem && !parsed.needs_clarification) {
                   actor.interactionState = {
                       type: 'WAITING_FOR_BULK_RESTOCK_CONFIRM',
                       data: { parsed }
@@ -2625,7 +2640,7 @@ Tap a button below to subscribe:`;
                   await actor.save();
                   await queueSaleResponse(
                       from,
-                      `I noticed you are adding ${parsed.items.length} items, but some are missing prices.`,
+                      `I noticed you are adding ${parsed.items.length} items, but some are completely missing prices.`,
                       `Would you like me to save them with a ${symbol}0 price for now?`,
                       [
                           { id: 'BULK_RST_YES', title: 'Yes' },
@@ -2634,8 +2649,22 @@ Tap a button below to subscribe:`;
                   );
                   break;
               }
+
+              // Fast-path: It's a bulk list, and every item has at least a cost OR selling price.
+              // Bypass single-item checking and directly save!
+              try {
+                  await processTransaction(shopId as any, parsed, messageId, actor);
+                  actor.messageHistory = [];
+                  await actor.save();
+                  await queueOutboundMessage(from, parsed.reply_text || '✅ Bulk stock added successfully!');
+              } catch (e) {
+                  console.error('processTransaction bulk error:', e);
+                  await queueOutboundMessage(from, '⚠️ Sorry—something went wrong. Please try again.');
+              }
+              break;
           }
 
+          // ===== SINGLE ITEM FLOW =====
           const item = parsed.items?.[0];
           // ✅ Trigger interactive flow if prices missing (single item or bulk that needs clarification)
           if (parsed.needs_clarification || !item?.cost_price || !item?.unit_price) {
