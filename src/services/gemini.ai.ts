@@ -80,7 +80,7 @@ INTENT CONTEXT:
 - RECORD_CREDIT: Recording a sale on credit.
 - DELETE_STOCK: Removing an item from the list.
 - SET_STOCK: Correcting the exact quantity of stock.
-- SET_PRICE: Setting how much an item is sold for.
+- SET_PRICE: Setting the selling price and cost price. Instructions must explicitly show how to update Cost Price AND Selling Price separately (e.g. "set [item] selling price to X and cost price to Y").
 - MANAGE_STAFF: Adding a staff member number.
 - CREATE_INVOICE: Generating a PDF invoice.
 - EXPENSE: Recording money spent.

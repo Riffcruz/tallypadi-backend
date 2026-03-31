@@ -1566,11 +1566,11 @@ What's included in Oga Boss Plan:
     if (actor.interactionState && actor.interactionState.type === 'WAITING_FOR_BULK_RESTOCK_CONFIRM') {
         if (btn && btn.id === 'BULK_RST_YES') {
             const finalParsed = actor.interactionState.data.parsed;
-            // Force 0 for missing prices so processTransaction doesn't crash calculations
+            // Mirror the price if one is provided but the other is missing, otherwise default 0
             finalParsed.items = finalParsed.items.map((i: any) => ({
                 ...i,
-                cost_price: i.cost_price || 0,
-                unit_price: i.unit_price || 0
+                cost_price: i.cost_price || i.unit_price || 0,
+                unit_price: i.unit_price || i.cost_price || 0
             }));
             
             actor.interactionState = null;
@@ -2651,12 +2651,25 @@ Tap a button below to subscribe:`;
               }
 
               // Fast-path: It's a bulk list, and every item has at least a cost OR selling price.
+              // We duplicate the price: if one is 0/missing, make it equal the other.
+              parsed.items = parsed.items.map((i: any) => ({
+                  ...i,
+                  cost_price: i.cost_price || i.unit_price || 0,
+                  unit_price: i.unit_price || i.cost_price || 0
+              }));
+
               // Bypass single-item checking and directly save!
               try {
                   await processTransaction(shopId as any, parsed, messageId, actor);
                   actor.messageHistory = [];
                   await actor.save();
-                  await queueOutboundMessage(from, parsed.reply_text || '✅ Bulk stock added successfully!');
+                  
+                  await queueSaleResponse(
+                      from,
+                      `✅ Bulk stock added successfully! (${parsed.items.length} items recorded)`,
+                      'Tap below to update prices:',
+                      [ { id: 'CMD_SET_PRICE', title: 'Set Price' } ]
+                  );
               } catch (e) {
                   console.error('processTransaction bulk error:', e);
                   await queueOutboundMessage(from, '⚠️ Sorry—something went wrong. Please try again.');
