@@ -132,27 +132,21 @@ export const supportService = {
         }
     }
     
-    // B. If Queued -> Notify ALL Active WhatsApp Agents
+    // B. If Queued -> Notify ALL agents that have a registered phone number
     if (ticket.status === 'QUEUED') {
-        // Relaxed query: ONLINE or isWhatsAppActive
+        // Notify every agent with a phone number, regardless of online/active status
         const activeAgents = await SupportAgent.find({ 
-            $or: [{ isWhatsAppActive: true }, { status: 'ONLINE' }],
-            phoneNumber: { $exists: true, $ne: null } 
+            phoneNumber: { $exists: true, $nin: [null, ''] } 
         });
         
-        console.log(`DEBUG: Found ${activeAgents.length} agents for broadcast (Online/Active).`);
+        console.log(`[Support] New ticket ${ticket._id} - broadcasting to ${activeAgents.length} agents.`);
         
         for (const ag of activeAgents) {
             if (!ag.phoneNumber || ag.phoneNumber.length < 5) continue;
             
-            console.log(`DEBUG: Queueing broadcast to agent ${ag.phoneNumber}`);
-            
-            // Use queue for broadcasting to agents
-            // NOTE: This requires the agent to have an open 24h session with the bot, 
-            // OR use a Template Message. For now, we use buttons.
             await queueOutboundButtons(
                 ag.phoneNumber,
-                `🔔 *New Ticket*\nFrom: ${from}\nMsg: "${text.substring(0, 50)}..."`,
+                `🔔 *New Support Ticket*\nFrom: ${from}\nMsg: "${text.substring(0, 80)}"`,
                 [
                     { id: `AGENT_ACCEPT_${ticket._id}`, title: 'Accept' },
                     { id: 'AGENT_BUSY', title: 'Busy' }
