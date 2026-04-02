@@ -80,25 +80,27 @@ export default function RegisterPage() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  const [pendingIdentifier, setPendingIdentifier] = useState('');
 
   const canSubmit = useMemo(() => {
     if (loading) return false;
+    if (otpSent) {
+      if (!otpCode || otpCode.length < 6) return false;
+      return true;
+    }
     if (!password.trim() || password.length < 6) return false;
     if (!shopName.trim()) return false;
     if (!phoneNumber.trim()) return false;
     if (!email.trim()) return false;
     return true;
-  }, [loading, password, shopName, phoneNumber, email]);
+  }, [loading, password, shopName, phoneNumber, email, otpSent, otpCode]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-
-    const pass = password.trim();
-    if (pass.length < 6) {
-      setError('Password must be at least 6 characters');
-      return;
-    }
 
     const phoneId = buildPhoneIdentifier(phoneNumber, countryCode);
     if (!phoneId) {
@@ -109,32 +111,67 @@ export default function RegisterPage() {
     setLoading(true);
 
     try {
-      const res = await axios.post(
-        `${API_URL}/register`,
-        { 
-          phoneNumber: phoneId,
-          email,
-          businessName: shopName,
-          password: pass,
-          closingTime: closingHour,
-          language: language,
-          countryCode: countryCode.replace('+', '')
-        },
-        { timeout: 20000 }
-      );
+      if (otpSent) {
+        // Step 2: VERIFY OTP
+        const res = await axios.post(
+          `${API_URL}/register/verify`,
+          { identifier: pendingIdentifier, otp: otpCode },
+          { timeout: 20000 }
+        );
 
-      if (res.data?.success) {
-        setCookie('tallyToken', res.data.token, 7);
-        const user = res.data.user;
-        sessionStorage.setItem('tallyUser', JSON.stringify(user));
-        router.push('/dashboard');
-        return;
+        if (res.data?.success) {
+          setCookie('tallyToken', res.data.token, 7);
+          const user = res.data.user;
+          sessionStorage.setItem('tallyUser', JSON.stringify(user));
+          router.push('/dashboard');
+          return;
+        }
+      } else {
+        // Step 1: REQUEST RESGISTRATION
+        const pass = password.trim();
+        if (pass.length < 6) {
+          setError('Password must be at least 6 characters');
+          setLoading(false);
+          return;
+        }
+
+        const res = await axios.post(
+          `${API_URL}/register`,
+          { 
+            phoneNumber: phoneId,
+            email,
+            businessName: shopName,
+            password: pass,
+            closingTime: closingHour,
+            language: language,
+            countryCode: countryCode.replace('+', '')
+          },
+          { timeout: 20000 }
+        );
+
+        if (res.data?.requiresOtp) {
+          setOtpSent(true);
+          setPendingIdentifier(phoneId);
+          return; // Stay on page, stop loading
+        }
       }
 
       setError('Registration failed. Please try again.');
     } catch (err: any) {
-      const msg = err?.response?.data?.error || err?.message || 'Registration failed.';
-      setError(msg);
+      console.error(err);
+      
+      const status = err?.response?.status;
+      const apiError = err?.response?.data?.error;
+
+      if (!err?.response && (err?.code === 'ERR_NETWORK' || err?.message === 'Network Error' || err?.message?.includes('status code 429'))) {
+        setError('Network error. Kindly check your internet connection and try again.');
+      } else if (status === 429) {
+        setError('Too many attempts, please wait a few minutes and try again.');
+      } else if (status >= 500) {
+        setError('Server issues. Kindly try again later.');
+      } else {
+        setError(apiError || 'Registration failed. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -174,6 +211,44 @@ export default function RegisterPage() {
           </div>
         )}
 
+        {otpSent ? (
+          <form onSubmit={handleSubmit} className="space-y-5 animate-in fade-in slide-in-from-right-2">
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider ml-1 text-center">
+                Enter Verification Code
+              </label>
+              <p className="text-center text-sm text-slate-500 mb-4 tracking-tight">We just sent a 6-digit code to your email address: <span className="font-bold text-slate-700">{email}</span></p>
+              <input
+                type="text"
+                maxLength={6}
+                className="w-full h-14 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all outline-none text-slate-900 placeholder:text-slate-400 font-bold tracking-[0.5em] text-center text-2xl"
+                placeholder="000000"
+                value={otpCode}
+                onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                autoComplete="one-time-code"
+              />
+            </div>
+            
+            <button
+              disabled={!canSubmit}
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white h-12 rounded-xl font-bold shadow-lg shadow-emerald-600/20 hover:shadow-emerald-600/30 transition-all active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed mt-4"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="animate-spin" size={20} />
+                  <span>Verifying...</span>
+                </>
+              ) : (
+                <span>Complete Registration</span>
+              )}
+            </button>
+            <div className="text-center mt-4">
+               <button type="button" onClick={() => {setOtpSent(false); setError('');}} className="text-sm text-emerald-600 font-medium hover:underline">
+                  Change Phone Number
+               </button>
+            </div>
+          </form>
+        ) : (
         <form onSubmit={handleSubmit} className="space-y-5">
           {/* Phone */}
           <div className="space-y-1.5">
@@ -330,6 +405,7 @@ export default function RegisterPage() {
             )}
           </button>
         </form>
+        )}
 
         <div className="mt-8 text-center pt-6 border-t border-slate-100">
           <p className="text-sm text-slate-500">

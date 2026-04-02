@@ -40,6 +40,7 @@ import customerRouter from './routes/customer.routes';
 import {
   loginUser,
   registerUser,
+  verifyRegistrationOTP,
   requestForgotPasswordOTP,
   resetPassword,
   requestChangePhoneOTP,
@@ -156,11 +157,11 @@ const apiLimiter = rateLimit({
 
 // ✅ Login: IP limiter
 const loginLimiterIp = rateLimit({
-  windowMs: 15 * 60 * 1000,
+  windowMs: 3 * 60 * 1000,
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
-  message: 'Too many login attempts from this IP. Try again in 15 minutes.',
+  message: 'Too many login attempts from this IP. Try again in 3 minutes.',
 });
 
 const normalizeStr = (v: unknown) => String(v || '').trim().toLowerCase();
@@ -170,11 +171,11 @@ const looksLikeEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
 
 // ✅ Login: identifier limiter (email OR phone)
 const loginLimiterIdentity = rateLimit({
-  windowMs: 15 * 60 * 1000,
+  windowMs: 3 * 60 * 1000,
   max: 5,
   standardHeaders: true,
   legacyHeaders: false,
-  message: 'Too many login attempts for this account. Try again in 15 minutes.',
+  message: 'Too many login attempts for this account. Try again in 3 minutes.',
   keyGenerator: (req: Request) => {
     const identifier = normalizeStr(req.body?.identifier || req.body?.email || req.body?.phoneNumber);
 
@@ -188,11 +189,11 @@ const loginLimiterIdentity = rateLimit({
 
 // ✅ Separate EMAIL limiter (extra protection)
 const emailLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
+  windowMs: 3 * 60 * 1000,
   max: 6,
   standardHeaders: true,
   legacyHeaders: false,
-  message: 'Too many login attempts for this email. Try again in 15 minutes.',
+  message: 'Too many login attempts for this email. Try again in 3 minutes.',
   keyGenerator: (req: Request) => {
     const identifier = normalizeStr(req.body?.identifier || req.body?.email);
     if (identifier && looksLikeEmail(identifier)) return `email:${identifier}`;
@@ -203,11 +204,11 @@ const emailLimiter = rateLimit({
 
 // ✅ Separate PHONE limiter (extra protection)
 const phoneLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
+  windowMs: 3 * 60 * 1000,
   max: 6,
   standardHeaders: true,
   legacyHeaders: false,
-  message: 'Too many login attempts for this phone number. Try again in 15 minutes.',
+  message: 'Too many login attempts for this phone number. Try again in 3 minutes.',
   keyGenerator: (req: Request) => {
     const identifier = normalizeStr(req.body?.identifier || req.body?.phoneNumber);
     if (!identifier) return `ip:${ipKeyGenerator(req as any)}`;
@@ -314,6 +315,7 @@ app.post('/api/login', loginLimiterIp, loginLimiterIdentity, emailLimiter, phone
 app.post('/api/login/staff/request-otp', loginLimiterIp, phoneLimiter, requestStaffLoginOTP);
 app.post('/api/login/staff', loginLimiterIp, loginLimiterIdentity, phoneLimiter, loginStaffWithOTP);
 app.post('/api/register', registerLimiter, registerUser);
+app.post('/api/register/verify', verifyRegistrationOTP); // Does not need rate limiting beyond overall API limiter as it requires OTP check
 
 
 // ✅ Forgot Password

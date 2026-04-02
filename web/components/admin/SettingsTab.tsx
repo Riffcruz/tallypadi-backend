@@ -32,6 +32,7 @@ export default function SettingsTab({
         whatsappUrl: '',
         security: { autoSuspendOnJailbreak: false },
         limits: { maxMessageHistory: 5, maxStaffAccounts: 2 },
+        smtp: { host: '', port: 465, user: '', pass: '', fromAddress: '', secure: true },
         ...settings // Overwrite defaults with actual data
     });
     const [saving, setSaving] = useState(false);
@@ -63,6 +64,13 @@ export default function SettingsTab({
         }));
     };
 
+    const handleSmtpChange = (key: string, value: string | number | boolean) => {
+        setLocalSettings((prev) => ({
+            ...prev,
+            smtp: { ...prev.smtp, [key]: value }
+        }));
+    };
+
     const handleSave = async () => {
         setSaving(true);
         try {
@@ -70,7 +78,8 @@ export default function SettingsTab({
                 whatsappUrl: localSettings.whatsappUrl,
                 autoSuspendOnJailbreak: localSettings.security.autoSuspendOnJailbreak,
                 maxMessageHistory: localSettings.limits.maxMessageHistory,
-                maxStaffAccounts: localSettings.limits.maxStaffAccounts
+                maxStaffAccounts: localSettings.limits.maxStaffAccounts,
+                smtp: localSettings.smtp
             }, { headers });
             
             onUpdate();
@@ -162,15 +171,56 @@ export default function SettingsTab({
                 </div>
 
                 {/* 3. Security Toggle */}
-                <h3 className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-3">Security</h3>
-                <div className="flex items-center justify-between p-4 bg-slate-900/50 rounded-xl border border-slate-700">
-                    <div>
-                        <h3 className="font-bold text-white">Auto-Suspend on Jailbreak</h3>
-                        <p className="text-sm text-slate-400 mt-1">Automatically suspend users attempting injection/jailbreak attacks.</p>
+                <div className="space-y-4 mb-8">
+                    <h3 className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-3">Security</h3>
+                    <div className="flex items-center justify-between p-4 bg-slate-900/50 rounded-xl border border-slate-700">
+                        <div>
+                            <h3 className="font-bold text-white">Auto-Suspend on Jailbreak</h3>
+                            <p className="text-sm text-slate-400 mt-1">Automatically suspend users attempting injection/jailbreak attacks.</p>
+                        </div>
+                        <button onClick={() => handleToggle('autoSuspendOnJailbreak')} className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${localSettings.security.autoSuspendOnJailbreak ? 'bg-green-600' : 'bg-gray-600'}`}>
+                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${localSettings.security.autoSuspendOnJailbreak ? 'translate-x-6' : 'translate-x-1'}`} />
+                        </button>
                     </div>
-                    <button onClick={() => handleToggle('autoSuspendOnJailbreak')} className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${localSettings.security.autoSuspendOnJailbreak ? 'bg-green-600' : 'bg-gray-600'}`}>
-                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${localSettings.security.autoSuspendOnJailbreak ? 'translate-x-6' : 'translate-x-1'}`} />
-                    </button>
+                </div>
+
+                {/* 4. SMTP Settings */}
+                <div className="space-y-4 mb-8">
+                    <h3 className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-3">SMTP Mailserver</h3>
+                    <div className="p-5 bg-slate-900/50 rounded-xl border border-slate-700 space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="text-xs text-slate-400 font-bold mb-1 block">SMTP Host</label>
+                                <input type="text" value={localSettings.smtp?.host || ''} onChange={(e) => handleSmtpChange('host', e.target.value)} className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-green-500" placeholder="smtp.gmail.com" />
+                            </div>
+                            <div>
+                                <label className="text-xs text-slate-400 font-bold mb-1 block">SMTP Port</label>
+                                <input type="number" value={localSettings.smtp?.port || ''} onChange={(e) => handleSmtpChange('port', parseInt(e.target.value))} className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-green-500" placeholder="465" />
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="text-xs text-slate-400 font-bold mb-1 block">SMTP User (Email)</label>
+                                <input type="text" value={localSettings.smtp?.user || ''} onChange={(e) => handleSmtpChange('user', e.target.value)} className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-green-500" placeholder="admin@example.com" />
+                            </div>
+                            <div>
+                                <label className="text-xs text-slate-400 font-bold mb-1 block">SMTP Password</label>
+                                <input type="password" value={localSettings.smtp?.pass || ''} onChange={(e) => handleSmtpChange('pass', e.target.value)} className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-green-500" placeholder="••••••••" />
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4 items-end">
+                            <div>
+                                <label className="text-xs text-slate-400 font-bold mb-1 block">Reply-To Address</label>
+                                <input type="text" value={localSettings.smtp?.fromAddress || ''} onChange={(e) => handleSmtpChange('fromAddress', e.target.value)} className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-green-500" placeholder="support@tallypadi.com" />
+                            </div>
+                            <div className="flex items-center justify-between p-2 bg-slate-800 border border-slate-600 rounded-lg h-[38px]">
+                                <span className="text-sm text-slate-300 font-medium">Use TLS/SSL</span>
+                                <button onClick={() => handleSmtpChange('secure', !localSettings.smtp?.secure)} className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${localSettings.smtp?.secure ? 'bg-green-600' : 'bg-gray-600'}`}>
+                                    <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${localSettings.smtp?.secure ? 'translate-x-4' : 'translate-x-[2px]'}`} />
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
                 
                 {/* Save Button */}

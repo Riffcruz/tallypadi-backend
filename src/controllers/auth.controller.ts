@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import { User } from '../models/user.model';
 import { ProcessedMessage } from '../models/processedMessage.model';
 import { sendWhatsAppText, sendWhatsAppTemplate } from '../services/whatsapp.service';
+import { sendRegistrationOTP } from '../services/email.service';
 import { isSubActive, isTycoon } from '../utils/permissions';
 import { PushSubscription } from '../models/pushSubscription.model';
 
@@ -292,77 +293,83 @@ export const registerUser = async (req: Request, res: Response) => {
         return res.status(400).json({ error: 'Invalid phone number' });
     }
 
-    // Check existing phone
-    const existingUserPhone = await User.findOne({ phoneNumber: identifier });
-    if (existingUserPhone) {
-      return res.status(400).json({ error: 'Phone number already registered' });
-    }
-
-    // Check existing email
     const emailLower = email.trim().toLowerCase();
     if (!isValidEmail(emailLower)) {
        return res.status(400).json({ error: 'Invalid email address' });
     }
 
+    // Check existing phone
+    const existingUserPhone = await User.findOne({ phoneNumber: identifier });
+    if (existingUserPhone && existingUserPhone.registrationStage === 'COMPLETED') {
+      return res.status(400).json({ error: 'Phone number already registered' });
+    }
+
+    // Check existing email
     const existingUserEmail = await User.findOne({ email: emailLower });
-    if (existingUserEmail) {
+    if (existingUserEmail && existingUserEmail.registrationStage === 'COMPLETED') {
       return res.status(400).json({ error: 'Email already registered' });
     }
+
+    let user = existingUserPhone || existingUserEmail;
 
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    const newUser = await User.create({
-      phoneNumber: identifier,
-      email: emailLower,
-      businessName: sanitizeString(businessName) || undefined,
-      password: hashedPassword,
-      settings: {
-        closingTime: closingTime || '20:00',
-        language: language || 'English',
-        utcOffsetMinutes: 60, // Default to WAT (Lagos)
-        dailySummaryEnabled: false,
-        pdfReportsEnabled: true
-      },
-      countryCode: countryCode || 'NG',
-      registrationStage: 'COMPLETED',
-      role: 'OWNER',
-      planType: 'TYCOON', 
-    });
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expires = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
 
-    const secret = process.env.JWT_SECRET;
-    if (!secret) {
-        throw new Error('JWT_SECRET not configured');
+    if (user) {
+        // Update unverified user with new attempt
+        user.phoneNumber = identifier;
+        user.email = emailLower;
+        user.businessName = sanitizeString(businessName) || undefined;
+        user.password = hashedPassword;
+        user.settings = { 
+            ...user.settings, 
+            closingTime: closingTime || '20:00', 
+            language: language || 'English',
+            utcOffsetMinutes: user.settings?.utcOffsetMinutes ?? 60,
+            dailySummaryEnabled: user.settings?.dailySummaryEnabled ?? false,
+            pdfReportsEnabled: user.settings?.pdfReportsEnabled ?? true
+        };
+        user.countryCode = countryCode || 'NG';
+        user.otp = otp;
+        user.otpExpires = expires;
+        await user.save();
+    } else {
+        user = await User.create({
+            phoneNumber: identifier,
+            email: emailLower,
+            businessName: sanitizeString(businessName) || undefined,
+            password: hashedPassword,
+            settings: {
+                closingTime: closingTime || '20:00',
+                language: language || 'English',
+                utcOffsetMinutes: 60, // Default to WAT (Lagos)
+                dailySummaryEnabled: false,
+                pdfReportsEnabled: true
+            },
+            countryCode: countryCode || 'NG',
+            registrationStage: 'OTP_PENDING',
+            role: 'OWNER',
+            planType: 'TYCOON', 
+            otp,
+            otpExpires: expires
+        });
     }
 
-    const token = jwt.sign(
-      {
-        id: String(newUser._id),
-        role: newUser.role,
-      },
-      secret,
-      {
-        expiresIn: '1y',
-        algorithm: 'HS256',
-        issuer: process.env.JWT_ISSUER || 'tallypadi',
-        audience: process.env.JWT_AUDIENCE || 'tallypadi-web',
-      }
-    );
+    // Send Email OTP
+    try {
+        await sendRegistrationOTP(emailLower, otp);
+    } catch (e) {
+        console.error('Failed to send Email OTP upon registration:', e);
+        // Do not throw; maybe email is invalid or smtp disabled. Let them know.
+    }
 
     return res.status(201).json({
       success: true,
-      token,
-      user: {
-        id: String(newUser._id),
-        name: newUser.name,
-        phoneNumber: newUser.phoneNumber,
-        email: newUser.email,
-        businessName: newUser.businessName,
-        role: newUser.role,
-        planType: newUser.planType,
-        subscriptionStatus: newUser.subscriptionStatus,
-        trialEndsAt: newUser.trialEndsAt,
-      }
+      requiresOtp: true,
+      message: 'Verification Code sent to your email address.'
     });
 
   } catch (err: unknown) {
@@ -370,6 +377,70 @@ export const registerUser = async (req: Request, res: Response) => {
     if (typeof err === 'object' && err !== null && 'code' in err && (err as { code: number }).code === 11000) {
         return res.status(400).json({ error: 'Phone number or email already registered' });
     }
+    return res.status(500).json({ error: 'Server Error' });
+  }
+};
+
+export const verifyRegistrationOTP = async (req: Request, res: Response) => {
+  try {
+    const { identifier, otp } = req.body;
+    if (!identifier || !otp) {
+      return res.status(400).json({ error: 'Missing phone number or OTP' });
+    }
+    
+    // Normalize to handle formatting
+    const candidates = buildPhoneCandidates(identifier);
+    const user = await User.findOne({ phoneNumber: { $in: candidates } }).select('+otp +otpExpires +password');
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (user.registrationStage === 'COMPLETED') {
+      return res.status(400).json({ error: 'Account is already verified. Please log in.' });
+    }
+
+    if (!user.otp || user.otp !== otp) {
+      return res.status(400).json({ error: 'Invalid verification code' });
+    }
+
+    if (!user.otpExpires || user.otpExpires < new Date()) {
+      return res.status(400).json({ error: 'Code expired. Please register again to get a new code.' });
+    }
+
+    // Success
+    user.registrationStage = 'COMPLETED';
+    user.otp = undefined;
+    user.otpExpires = undefined;
+    await user.save();
+
+    const secret = process.env.JWT_SECRET;
+    if (!secret) throw new Error('JWT_SECRET missing');
+
+    const token = jwt.sign({ id: String(user._id), role: user.role }, secret, {
+      expiresIn: '1y',
+      algorithm: 'HS256',
+      issuer: process.env.JWT_ISSUER || 'tallypadi',
+      audience: process.env.JWT_AUDIENCE || 'tallypadi-web',
+    });
+
+    return res.json({
+      success: true,
+      token,
+      user: {
+        id: String(user._id),
+        name: user.name,
+        phoneNumber: user.phoneNumber,
+        email: user.email,
+        businessName: user.businessName,
+        role: user.role,
+        planType: user.planType,
+        subscriptionStatus: user.subscriptionStatus,
+        trialEndsAt: user.trialEndsAt,
+      }
+    });
+  } catch (err) {
+    console.error('Verify Registration Form Error:', err);
     return res.status(500).json({ error: 'Server Error' });
   }
 };

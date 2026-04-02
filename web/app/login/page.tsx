@@ -203,15 +203,25 @@ export default function LoginPage() {
 
     } catch (err: any) {
       console.error(err);
+      
       const status = err?.response?.status;
-      if (status === 429) {
-        setError('Too many attempts. Please wait a few minutes.');
+      const apiError = err?.response?.data?.error;
+
+      if (!err?.response && (err?.code === 'ERR_NETWORK' || err?.message === 'Network Error' || err?.message?.includes('status code 429'))) {
+        setError('Network error. Kindly check your internet connection and try again.');
+      } else if (status === 429) {
+        setError('Too many attempts, please wait a few minutes and try again.');
+      } else if (status === 401 || status === 404) {
+        setError('Invalid credentials. Please try again.');
+      } else if (status >= 500) {
+        setError('Server issues. Kindly try again later.');
       } else {
-        const msg =
-          err?.response?.data?.error ||
-          err?.message ||
-          'Connection failed. Please try again.';
-        setError(msg);
+        const msg = apiError || 'Connection failed. Please try again.';
+        if (msg.toLowerCase().includes('invalid') || msg.toLowerCase().includes('not found')) {
+            setError('Invalid credentials. Please try again.');
+        } else {
+            setError(msg);
+        }
       }
     } finally {
       setLoading(false);

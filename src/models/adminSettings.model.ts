@@ -19,6 +19,15 @@ export interface IAdminSettings extends Document {
     allowNewRegistrations: boolean;
   };
   
+  smtp?: {
+    host: string;
+    port: number;
+    user: string;
+    pass: string;
+    fromAddress: string;
+    secure: boolean;
+  };
+  
   updatedAt: Date;
 }
 
@@ -40,6 +49,15 @@ const adminSettingsSchema = new Schema<IAdminSettings>(
     system: {
       maintenanceMode: { type: Boolean, default: false },
       allowNewRegistrations: { type: Boolean, default: true }
+    },
+    
+    smtp: {
+      host: { type: String, default: '' },
+      port: { type: Number, default: 465 },
+      user: { type: String, default: '' },
+      pass: { type: String, default: '' },
+      fromAddress: { type: String, default: 'notifications@tallypadi.com' },
+      secure: { type: Boolean, default: true }
     }
   },
   { timestamps: true }
