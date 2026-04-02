@@ -91,6 +91,8 @@ export default function UserDeepDiveModal({
   const [deletingUser, setDeletingUser] = useState(false);
   const [clearingMsgHistory, setClearingMsgHistory] = useState(false);
   const [deletingSales, setDeletingSales] = useState(false);
+  const [deletingInventoryId, setDeletingInventoryId] = useState<string | null>(null);
+  const [clearingInventory, setClearingInventory] = useState(false);
 
   const authHeaders = useMemo(
     () => ({ Authorization: `Bearer ${adminToken}` }),
@@ -124,6 +126,59 @@ export default function UserDeepDiveModal({
       setLoadingDetails(false);
     }
   }, [userId, authHeaders]);
+
+  // ── Admin: Delete one inventory item ────────────────────────────────────────
+  const handleDeleteInventoryItem = async (itemId: string, itemName: string) => {
+    const confirm = await Swal.fire({
+      title: `Delete "${itemName}"?`,
+      text: 'This will permanently remove this product from the user\'s inventory.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#ef4444',
+      confirmButtonText: 'Yes, Delete',
+    });
+    if (!confirm.isConfirmed) return;
+
+    setDeletingInventoryId(itemId);
+    try {
+      await axios.delete(`${API_URL}/admin/users/${userId}/inventory/${itemId}`, { headers: authHeaders });
+      // Optimistic removal
+      setDetails(prev => prev ? {
+        ...prev,
+        inventory: (prev.inventory || []).filter(i => String(i._id) !== itemId)
+      } : prev);
+      Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Deleted', showConfirmButton: false, timer: 1500 });
+    } catch {
+      Swal.fire('Error', 'Failed to delete item.', 'error');
+    } finally {
+      setDeletingInventoryId(null);
+    }
+  };
+
+  // ── Admin: Clear ALL inventory ───────────────────────────────────────────────
+  const handleClearInventory = async () => {
+    const total = (details?.inventory || []).length;
+    const confirm = await Swal.fire({
+      title: 'Clear ALL Inventory?',
+      text: `This will permanently delete all ${total} product(s) from this user's stock. Cannot be undone.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#dc2626',
+      confirmButtonText: 'Yes, Clear All',
+    });
+    if (!confirm.isConfirmed) return;
+
+    setClearingInventory(true);
+    try {
+      const res = await axios.delete(`${API_URL}/admin/users/${userId}/inventory`, { headers: authHeaders });
+      setDetails(prev => prev ? { ...prev, inventory: [] } : prev);
+      Swal.fire('Cleared', `${res.data.deleted} item(s) deleted.`, 'success');
+    } catch {
+      Swal.fire('Error', 'Failed to clear inventory.', 'error');
+    } finally {
+      setClearingInventory(false);
+    }
+  };
 
   useEffect(() => {
     refreshDetails();
@@ -938,27 +993,37 @@ export default function UserDeepDiveModal({
 
           {/* INVENTORY */}
           {view === 'inventory' && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {((details?.inventory as Record<string, unknown>[]) || []).map((item) => (
-                <div
-                  key={String(item._id)}
-                  className="bg-slate-700/50 p-3 rounded-xl border border-slate-600 flex justify-between items-center"
-                >
-                  <div className="min-w-0">
-                    <p className="font-extrabold text-white truncate">{String(item.name)}</p>
-                    <p className="text-xs text-slate-400">
-                      {currencySymbol}
-                      {Number(item.lastUnitPrice ?? 0).toLocaleString()}
-                    </p>
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {((details?.inventory as Record<string, unknown>[]) || []).map((item) => (
+                  <div
+                    key={String(item._id)}
+                    className="bg-slate-700/50 p-3 rounded-xl border border-slate-600 flex justify-between items-center gap-2"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="font-extrabold text-white truncate">{String(item.name)}</p>
+                      <p className="text-xs text-slate-400">
+                        {currencySymbol}
+                        {Number(item.lastUnitPrice ?? 0).toLocaleString()}
+                      </p>
+                    </div>
+                    <span className="bg-slate-800 text-slate-200 px-2 py-1 rounded-lg text-xs whitespace-nowrap font-bold">
+                      x{String(item.quantity)}
+                    </span>
+                    <button
+                      title="Delete this item"
+                      disabled={deletingInventoryId === String(item._id)}
+                      onClick={() => handleDeleteInventoryItem(String(item._id), String(item.name))}
+                      className="p-1.5 rounded-lg hover:bg-red-500/20 text-slate-400 hover:text-red-400 transition shrink-0 disabled:opacity-40"
+                    >
+                      <Trash2 size={14} />
+                    </button>
                   </div>
-                  <span className="bg-slate-800 text-slate-200 px-2 py-1 rounded-lg text-xs whitespace-nowrap font-bold">
-                    x{String(item.quantity)}
-                  </span>
-                </div>
-              ))}
-              {((details?.inventory as unknown[]) || []).length === 0 && (
-                <p className="text-slate-500 p-4">No inventory found for this user.</p>
-              )}
+                ))}
+                {((details?.inventory as unknown[]) || []).length === 0 && (
+                  <p className="text-slate-500 p-4 col-span-3">No inventory found for this user.</p>
+                )}
+              </div>
             </div>
           )}
 
@@ -1079,9 +1144,21 @@ export default function UserDeepDiveModal({
           )}
 
           {(view === 'inventory' || view === 'staff') && (
-            <button onClick={onClose} className="w-full bg-white/10 text-white py-3 rounded-xl text-sm font-extrabold">
-              Close
-            </button>
+            <div className="flex gap-2">
+              {view === 'inventory' && (details?.inventory || []).length > 0 && (
+                <button
+                  disabled={clearingInventory}
+                  onClick={handleClearInventory}
+                  className="flex-1 bg-red-700/80 text-white py-3 rounded-xl text-sm font-extrabold disabled:opacity-60 flex items-center justify-center gap-2"
+                >
+                  <Trash2 size={14} />
+                  {clearingInventory ? 'Clearing…' : 'Clear All Inventory'}
+                </button>
+              )}
+              <button onClick={onClose} className="flex-1 bg-white/10 text-white py-3 rounded-xl text-sm font-extrabold">
+                Close
+              </button>
+            </div>
           )}
         </div>
       </div>

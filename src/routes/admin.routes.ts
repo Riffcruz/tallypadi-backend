@@ -20,7 +20,9 @@ import {
   deleteInvestor,
   getEmailTemplates,
   createEmailTemplate,
-  deleteEmailTemplate
+  deleteEmailTemplate,
+  deleteUserInventoryItem,
+  clearUserInventory
 } from '../controllers/admin.controller';
 
 const router = Router();
@@ -47,6 +49,8 @@ router.delete('/investors/:id', deleteInvestor);
 // suspend | unsuspend | activate | cancel | change_plan | set_expiry
 // send_message | clear_history | delete_user
 router.put('/users/:id', manageUser);
+router.delete('/users/:id/inventory/:itemId', deleteUserInventoryItem);
+router.delete('/users/:id/inventory', clearUserInventory);
 
 // Staff
 router.post('/users/:ownerId/staff', adminAddStaff);

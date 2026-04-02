@@ -397,8 +397,50 @@ export const getUserDeepDive = async (req: Request, res: Response) => {
   }
 };
 
+// DELETE /api/admin/users/:id/inventory/:itemId — Delete one inventory item
+export const deleteUserInventoryItem = async (req: Request, res: Response) => {
+  try {
+    const { id, itemId } = req.params as { id: string; itemId: string };
+    if (!isValidObjectId(id) || !isValidObjectId(itemId)) {
+      return res.status(400).json({ error: 'Invalid ID' });
+    }
+
+    const user = await User.findById(id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const ownerId = user.role === 'OWNER' ? user._id : user.ownerId;
+    const deleted = await Inventory.findOneAndDelete({ _id: itemId, user: ownerId });
+    if (!deleted) return res.status(404).json({ error: 'Item not found' });
+
+    return res.json({ success: true, id: itemId });
+  } catch (error) {
+    console.error('deleteUserInventoryItem error:', error);
+    res.status(500).json({ error: 'Server Error' });
+  }
+};
+
+// DELETE /api/admin/users/:id/inventory — Clear ALL inventory for a user
+export const clearUserInventory = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params as { id: string };
+    if (!isValidObjectId(id)) return res.status(400).json({ error: 'Invalid ID' });
+
+    const user = await User.findById(id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const ownerId = user.role === 'OWNER' ? user._id : user.ownerId;
+    const result = await Inventory.deleteMany({ user: ownerId });
+
+    return res.json({ success: true, deleted: result.deletedCount });
+  } catch (error) {
+    console.error('clearUserInventory error:', error);
+    res.status(500).json({ error: 'Server Error' });
+  }
+};
+
 // PUT /api/admin/users/:id
 export const manageUser = async (req: Request, res: Response) => {
+
   try {
     const { id } = req.params;
     if (typeof id !== 'string' || !isValidObjectId(id)) return res.status(400).json({ error: 'Invalid id' });
