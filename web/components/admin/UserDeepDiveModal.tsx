@@ -994,6 +994,22 @@ export default function UserDeepDiveModal({
           {/* INVENTORY */}
           {view === 'inventory' && (
             <div className="space-y-3">
+              {/* Clear All header row — always visible */}
+              {(details?.inventory || []).length > 0 && (
+                <div className="flex items-center justify-between">
+                  <p className="text-slate-400 text-xs font-extrabold uppercase">
+                    {(details?.inventory || []).length} product(s)
+                  </p>
+                  <button
+                    disabled={clearingInventory}
+                    onClick={handleClearInventory}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-red-600/20 text-red-400 hover:bg-red-600/40 text-xs font-extrabold transition disabled:opacity-50"
+                  >
+                    <Trash2 size={12} />
+                    {clearingInventory ? 'Clearing…' : 'Clear All'}
+                  </button>
+                </div>
+              )}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {((details?.inventory as Record<string, unknown>[]) || []).map((item) => (
                   <div
