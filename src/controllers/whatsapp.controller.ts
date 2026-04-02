@@ -2823,6 +2823,7 @@ Tap a button below to subscribe:`;
           break;
         }
 
+        
         try {
     await processTransaction(shopId as any, parsed, messageId, actor);
     actor.messageHistory = [];
