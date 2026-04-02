@@ -6,6 +6,7 @@ import axios from 'axios';
 import { env } from '../config/env';
 import { User, IUser } from '../models/user.model';
 import { Inventory } from '../models/inventory.model';
+import { fuzzySearchInventory } from './inventory.controller';
 import { Transaction } from '../models/transaction.model';
 import { Debtor } from '../models/debtor.model';
 import { AdminSettings } from '../models/adminSettings.model';
@@ -1562,6 +1563,47 @@ What's included in Oga Boss Plan:
         return;
     }
 
+
+    // ✅ Handle Fuzzy Name Disambiguation (misspelling correction)
+    if (actor.interactionState && actor.interactionState.type === 'WAITING_FOR_FUZZY_CONFIRM') {
+        const data = actor.interactionState.data || {};
+
+        if (btn) {
+            if (btn.id === 'FUZZY_NEW') {
+                // User wants to add as a brand new item
+                actor.interactionState = null;
+                await actor.save();
+                const newParsed = data.parsed;
+                try {
+                    await processTransaction(shopId as any, newParsed, messageId, actor);
+                    await queueOutboundMessage(from, `✅ Added "${data.typedName}" as a new product!`);
+                } catch (e) {
+                    await queueOutboundMessage(from, '⚠️ Failed to add item. Please try again.');
+                }
+            } else if (btn.id?.startsWith('FUZZY_USE_')) {
+                // User chose an existing product — swap the name
+                const chosenName = btn.id.replace('FUZZY_USE_', '').replace(/_/g, ' ');
+                actor.interactionState = null;
+                await actor.save();
+                const fixedParsed = { ...data.parsed };
+                fixedParsed.items = fixedParsed.items.map((i: any) =>
+                    i.name === data.typedName ? { ...i, name: chosenName } : i
+                );
+                try {
+                    await processTransaction(shopId as any, fixedParsed, messageId, actor);
+                    await queueOutboundMessage(from, `✅ Updated stock for "${chosenName}"!`);
+                } catch (e) {
+                    await queueOutboundMessage(from, '⚠️ Failed to update stock. Please try again.');
+                }
+            } else {
+                await queueOutboundMessage(from, 'Please choose one of the options above.');
+            }
+        } else {
+            await queueOutboundMessage(from, 'Please tap one of the options to continue.');
+        }
+        return;
+    }
+
     // ✅ Handle Bulk Restock Draft Confirmation
     if (actor.interactionState && actor.interactionState.type === 'WAITING_FOR_BULK_RESTOCK_CONFIRM') {
         if (btn && btn.id === 'BULK_RST_YES') {
@@ -2679,6 +2721,39 @@ Tap a button below to subscribe:`;
 
           // ===== SINGLE ITEM FLOW =====
           const item = parsed.items?.[0];
+
+          // ─── Fuzzy Match Check ─────────────────────────────────────
+          // Before asking prices, check if the item name matches any existing product
+          if (item?.name) {
+              const exactMatch = await Inventory.findOne({ user: shopId, name: item.name.toLowerCase() }).lean();
+              if (!exactMatch) {
+                  // No exact match → search for similar names
+                  const similar = await fuzzySearchInventory(shopId, item.name);
+                  if (similar.length > 0) {
+                      // Build button options (up to 3 matches + "Add as new")
+                      const buttons = similar.map(s => ({
+                          id: `FUZZY_USE_${s.name.replace(/\s+/g, '_')}`,
+                          title: s.name.substring(0, 20)
+                      }));
+                      buttons.push({ id: 'FUZZY_NEW', title: 'Add as new item' });
+
+                      actor.interactionState = {
+                          type: 'WAITING_FOR_FUZZY_CONFIRM',
+                          data: { typedName: item.name, parsed, shopId }
+                      };
+                      await actor.save();
+
+                      await queueOutboundButtons(
+                          from,
+                          `⚠️ "${item.name}" not found. Did you mean one of these?`,
+                          buttons
+                      );
+                      break;
+                  }
+              }
+          }
+          // ──────────────────────────────────────────────────────────
+
           // ✅ Trigger interactive flow if prices missing (single item or bulk that needs clarification)
           if (parsed.needs_clarification || !item?.cost_price || !item?.unit_price) {
               if (!item?.name) {

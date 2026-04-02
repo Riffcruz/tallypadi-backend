@@ -241,9 +241,20 @@ These intents MUST be detected correctly and MUST NOT be mistaken as SALE:
      - DO NOT set needs_clarification=true even if prices (cost_price or unit_price) are completely or partially missing. Always set needs_clarification to false.
      - Set cost_price=0 and unit_price=0 for ANY missing price fields.
      - Accept it as a valid RESTOCK.
+     - **CRITICAL: You MUST extract EVERY line as a SEPARATE item. Do NOT skip, merge or omit any item from the list.**
+     - **If the user sends 31 lines, the output items array MUST contain exactly 31 items.**
   3. If there is only ONE item and prices are missing, continue to ask the clarification questions:
      - Extract 'cost_price' (Buying Price). If missing: needs_clarification=true. Question: "How much did you buy each or all?"
      - Extract 'unit_price' (Selling Price). If missing: needs_clarification=true. Question: "How much is the selling price per [item]?"
+
+- ITEM NAME PRECISION RULES (CRITICAL - DO NOT VIOLATE):
+  * Extract item names EXACTLY as the user typed them. Do NOT normalize, shorten, expand, or merge similar names.
+  * Treat "Mate 10" and "Mate 10 Lite" as TWO COMPLETELY DIFFERENT products. One is NOT a shorthand for the other.
+  * Treat "P8" and "P8 Lite" as TWO COMPLETELY DIFFERENT products.
+  * Treat "Honor 6x" and "Honor 6a" as TWO COMPLETELY DIFFERENT products.
+  * General rule: If two names differ by even ONE character, word, or suffix, they MUST be separate items in the output.
+  * NEVER collapse a shorter name into a longer similar name. "Mate 10" is NOT part of "Mate 10 Lite".
+
 - Examples:
   User: "Add 20 sneakers to stock"
   Output: intent=RESTOCK, items=[{name:"sneakers", qty:20}], needs_clarification=true, reply_text="How much did you buy each or all?"

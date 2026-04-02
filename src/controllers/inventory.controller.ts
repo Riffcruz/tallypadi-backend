@@ -130,7 +130,52 @@ export const getInventory = async (req: Request, res: Response) => {
   }
 };
 
-// GET distinct categories
+// ─── Fuzzy Name Matching Utility ───────────────────────────────────────────
+// Normalize a product name: lowercase, strip spaces and punctuation
+export const normalizeName = (name: string): string =>
+  String(name).toLowerCase().replace(/[\s\-_.,'"]+/g, '');
+
+// Similarity score: how many characters of `a` appear in `b` in sequence (0-1)
+const similarityScore = (a: string, b: string): number => {
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  if (b.includes(a) || a.includes(b)) return 0.9; // substring match
+  let matches = 0;
+  let bIdx = 0;
+  for (const ch of a) {
+    const found = b.indexOf(ch, bIdx);
+    if (found !== -1) { matches++; bIdx = found + 1; }
+  }
+  return matches / Math.max(a.length, b.length);
+};
+
+// Returns up to 3 closest existing inventory items for a given misspelled name
+export const fuzzySearchInventory = async (
+  userId: string | Record<string, unknown>,
+  inputName: string,
+  threshold = 0.6
+): Promise<{ id: string; name: string; score: number }[]> => {
+  const normalizedInput = normalizeName(inputName);
+  // Broad regex search: items that share the first 3 chars
+  const prefix = normalizedInput.substring(0, 3);
+  const candidates = await Inventory.find({
+    user: userId as any,
+    name: { $regex: prefix.split('').join('.*'), $options: 'i' }
+  }).limit(20).lean();
+
+
+  return candidates
+    .map(item => ({
+      id: String(item._id),
+      name: String(item.name),
+      score: similarityScore(normalizedInput, normalizeName(item.name))
+    }))
+    .filter(r => r.score >= threshold)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
+};
+
+
 export const getCategories = async (req: Request, res: Response) => {
   try {
     const user = await getAuthUser(req);
