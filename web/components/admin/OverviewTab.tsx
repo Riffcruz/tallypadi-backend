@@ -80,7 +80,7 @@ export default function OverviewTab({ stats }: { stats: OverviewStats | null }) 
                         />
                         <Tooltip 
                             contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#fff', borderRadius: '8px' }} 
-                            formatter={(val: number | string | undefined) => [`₦${(Number(val) || 0).toLocaleString()}`, 'Revenue']}
+                            formatter={(val: any) => [`₦${(Number(val) || 0).toLocaleString()}`, 'Revenue']}
                         />
                         <Area type="monotone" dataKey="sales" stroke="#10b981" fillOpacity={1} fill="url(#colorSales)" />
                     </AreaChart>
