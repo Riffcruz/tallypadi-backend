@@ -379,7 +379,7 @@ export const getUserDeepDive = async (req: Request, res: Response) => {
     const allUserIds = [ownerId, ...staffIds];
 
     const [inventory, recentSales, owner] = await Promise.all([
-      Inventory.find({ user: ownerId }).limit(100),
+      Inventory.find({ user: ownerId }).sort({ createdAt: -1 }).lean(),
       Transaction.find({ user: { $in: allUserIds }, type: 'SALE', ...validSaleMatch })
         .sort({ timestamp: -1 })
         .limit(100),
