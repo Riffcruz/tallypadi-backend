@@ -58,7 +58,6 @@ const analyticsQuerySchema = z.object({
 });
 
 const getAllUsersQuerySchema = z.object({
-  limit: z.coerce.number().int().min(1).max(200).optional().default(50),
   search: z.string().trim().max(60).optional(),
 });
 
@@ -302,7 +301,7 @@ export const getAllUsers = async (req: Request, res: Response) => {
     const parsed = getAllUsersQuerySchema.safeParse(req.query);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
-    const { limit, search } = parsed.data;
+    const { search } = parsed.data;
 
     const match: any = { role: 'OWNER' };
     if (search) {
@@ -316,7 +315,6 @@ export const getAllUsers = async (req: Request, res: Response) => {
     const rows = await User.aggregate([
       { $match: match },
       { $sort: { createdAt: -1 } },
-      { $limit: limit },
       {
         $lookup: {
           from: 'transactions',
