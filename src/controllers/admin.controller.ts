@@ -6,6 +6,8 @@ import { User } from '../models/user.model';
 import { Transaction } from '../models/transaction.model';
 import { Inventory } from '../models/inventory.model';
 import { AdminSettings } from '../models/adminSettings.model';
+import { EmailTemplate } from '../models/emailTemplate.model';
+import { sendBroadcastEmail } from '../services/email.service';
 import { DailyStats } from '../models/dailyStats.model';
 import { ProcessedMessage } from '../models/processedMessage.model';
 import { Debtor } from '../models/debtor.model';
@@ -79,12 +81,16 @@ const updateGlobalSettingsSchema = z
 
 const broadcastSchema = z
   .object({
-    target: z.enum(['all', 'tycoon', 'oga_boss', 'active_24h']).default('all'),
-    message: z.string().trim().min(1).max(1500),
+    target: z.enum(['all', 'tycoon', 'oga_boss', 'active_24h', 'trial', 'past_due', 'particular_user']).default('all'),
+    message: z.string().trim().optional(),
     mediaId: z.string().trim().optional(),
     mediaType: z.enum(['image', 'video', 'document', 'audio']).optional(),
     sendPush: z.boolean().optional().default(false),
     sendWhatsapp: z.boolean().optional().default(true),
+    sendEmail: z.boolean().optional().default(false),
+    emailTemplateId: z.string().trim().optional(),
+    emailDelayMs: z.coerce.number().optional().default(150),
+    specificIdentifier: z.string().trim().optional(), // For specific user test
   })
   .strict();
 
@@ -548,56 +554,127 @@ export const broadcastMessage = async (req: Request, res: Response) => {
     const parsed = broadcastSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
-    const { target, message, mediaId, mediaType, sendPush, sendWhatsapp } = parsed.data;
+    const { target, message, mediaId, mediaType, sendPush, sendWhatsapp, sendEmail, emailTemplateId, emailDelayMs, specificIdentifier } = parsed.data;
+
+    // Build the Query
+    const query: any = { role: 'OWNER' };
+    if (target === 'tycoon') query.planType = 'TYCOON';
+    else if (target === 'oga_boss') query.planType = 'OGA_BOSS';
+    else if (target === 'active_24h') query.updatedAt = { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) };
+    else if (target === 'trial') query.subscriptionStatus = 'trial';
+    else if (target === 'past_due') query.subscriptionStatus = 'past_due';
+    else if (target === 'particular_user' && specificIdentifier) {
+       // Search by Phone or Email
+       query.$or = [{ phoneNumber: specificIdentifier }, { email: specificIdentifier }];
+       delete query.role; // allow targeting non-owners just in case
+    }
+
+    const recipients = await User.find(query).select('phoneNumber email businessName name').lean();
+    if (!recipients.length) {
+       return res.status(400).json({ error: 'No recipients matched the targeted filter.' });
+    }
+
+    // Prepare Email Template early to avoid repeated DB lookups
+    let template: any = null;
+    if (sendEmail) {
+       if (!emailTemplateId) return res.status(400).json({ error: 'Email broadcasting requires an emailTemplateId' });
+       template = await EmailTemplate.findById(emailTemplateId).lean();
+       if (!template) return res.status(400).json({ error: 'The selected Email Template was not found.' });
+    }
 
     // 1. Send PWA Push Notification Instantly (If requested)
-    if (sendPush) {
-      // Execute globally without blocking the response
+    if (sendPush && message) {
       executeGlobalPushNotification({
         title: 'TallyPadi Update',
         body: message,
       }).catch(err => console.error('Failed to trigger global PWA broadcast:', err));
     }
 
-    // 2. Prepare WhatsApp Recipients (if requested)
-    if (sendWhatsapp) {
-      const query: any = { role: 'OWNER' };
-      if (target === 'tycoon') query.planType = 'TYCOON';
-      if (target === 'oga_boss') query.planType = 'OGA_BOSS';
-      if (target === 'active_24h') query.updatedAt = { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) };
-
-      const recipients = await User.find(query).select('phoneNumber').lean();
-
-      // 3. Dispatch to WhatsApp in background
-      (async () => {
-        for (const u of recipients) {
-          try {
-            if (!u.phoneNumber) continue;
-
+    // Async Dispatch Loop
+    (async () => {
+      for (const u of recipients) {
+        try {
+          // Send WhatsApp
+          if (sendWhatsapp && u.phoneNumber && message) {
             if (mediaId && mediaType) {
               await sendWhatsAppMediaById({
                 to: u.phoneNumber,
                 mediaId,
                 type: mediaType as any,
-                caption: message // Send text as caption if media is present
+                caption: message
               });
             } else {
               await sendWhatsAppText(u.phoneNumber, message);
             }
-
-            // Throttle to respect Meta API rate limits
-            await new Promise((r) => setTimeout(r, 150));
-          } catch {
-            console.error(`Failed to msg ${u.phoneNumber}`);
           }
-        }
-      })();
-    }
 
-    res.json({ success: true, message: `Broadcast queued.` + (sendWhatsapp ? ' WhatsApp delivery started.' : '') + (sendPush ? ' PWA Push broadcast triggered.' : '') });
+          // Send Email
+          if (sendEmail && u.email && template) {
+             let personalizedSubject = template.subject
+                 .replace(/##usershopname##/g, u.businessName || 'Your Shop')
+                 .replace(/##phonenumber##/g, u.phoneNumber || '')
+                 .replace(/##name##/g, u.name || 'Partner');
+
+             let personalizedHtml = template.htmlBody
+                 .replace(/##usershopname##/g, u.businessName || 'Your Shop')
+                 .replace(/##phonenumber##/g, u.phoneNumber || '')
+                 .replace(/##name##/g, u.name || 'Partner');
+
+             await sendBroadcastEmail(u.email, personalizedSubject, personalizedHtml);
+             
+             // Throttle internally per email strictly
+             if (emailDelayMs > 0) {
+                 await new Promise(r => setTimeout(r, emailDelayMs));
+             }
+          }
+
+          if (sendWhatsapp && !sendEmail) {
+             // Default WhatsApp limit
+             await new Promise((r) => setTimeout(r, 150));
+          }
+
+        } catch (e) {
+          console.error(`Failed executing broadcast slice for ${u.phoneNumber || u.email}`);
+        }
+      }
+    })();
+
+    res.json({ success: true, message: `Broadcast queued to ${recipients.length} recipients.` });
   } catch (error) {
     console.error('Broadcast Error:', error);
     res.status(500).json({ error: 'Broadcast Error' });
+  }
+};
+
+// -------------------------
+// EMAIL TEMPLATES CRUD
+// -------------------------
+export const getEmailTemplates = async (req: Request, res: Response) => {
+  try {
+     const templates = await EmailTemplate.find().sort({ createdAt: -1 });
+     res.json(templates);
+  } catch (err) {
+     res.status(500).json({ error: 'Failed to fetch templates' });
+  }
+};
+
+export const createEmailTemplate = async (req: Request, res: Response) => {
+  try {
+     const { title, subject, htmlBody } = req.body;
+     if (!title || !subject || !htmlBody) return res.status(400).json({ error: 'Title, Subject, and HTML Body are required.' });
+     const template = await EmailTemplate.create({ title, subject, htmlBody });
+     res.status(201).json(template);
+  } catch (err) {
+     res.status(500).json({ error: 'Failed to create template' });
+  }
+};
+
+export const deleteEmailTemplate = async (req: Request, res: Response) => {
+  try {
+     await EmailTemplate.findByIdAndDelete(req.params.id);
+     res.json({ success: true });
+  } catch (err) {
+     res.status(500).json({ error: 'Failed to delete template' });
   }
 };
 

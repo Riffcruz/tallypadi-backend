@@ -49,3 +49,37 @@ export const sendRegistrationOTP = async (email: string, otp: string) => {
         throw error;
     }
 };
+
+export const sendBroadcastEmail = async (email: string, subject: string, htmlBody: string) => {
+    const settings = await AdminSettings.findOne().lean();
+    const smtpConfig = (settings as any)?.smtp;
+
+    if (!smtpConfig || !smtpConfig.host || !smtpConfig.user) {
+        throw new Error('SMTP Configuration is missing or disabled in Admin Settings');
+    }
+
+    const transporter = nodemailer.createTransport({
+        host: smtpConfig.host,
+        port: smtpConfig.port,
+        secure: smtpConfig.secure,
+        auth: {
+            user: smtpConfig.user,
+            pass: smtpConfig.pass,
+        },
+    });
+
+    const mailOptions = {
+        from: `TallyPadi <${smtpConfig.fromAddress || smtpConfig.user}>`,
+        to: email,
+        subject: subject,
+        html: htmlBody
+    };
+
+    try {
+        await transporter.sendMail(mailOptions);
+        return true;
+    } catch (error) {
+        console.error(`Failed to send Broadcast Email to ${email}:`, error);
+        throw error;
+    }
+};

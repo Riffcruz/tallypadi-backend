@@ -18,6 +18,9 @@ import {
   createInvestor,
   getInvestors,
   deleteInvestor,
+  getEmailTemplates,
+  createEmailTemplate,
+  deleteEmailTemplate
 } from '../controllers/admin.controller';
 
 const router = Router();
@@ -56,5 +59,8 @@ router.use('/chat', chatRoutes);   // -> /api/chat/send
 
 // Tools
 router.post('/broadcast', broadcastMessage);
+router.get('/email-templates', getEmailTemplates);
+router.post('/email-templates', createEmailTemplate);
+router.delete('/email-templates/:id', deleteEmailTemplate);
 
 export default router;
