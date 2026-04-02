@@ -2735,7 +2735,7 @@ Tap a button below to subscribe:`;
                           id: `FUZZY_USE_${s.name.replace(/\s+/g, '_')}`,
                           title: s.name.substring(0, 20)
                       }));
-                      buttons.push({ id: 'FUZZY_NEW', title: 'Add as new item' });
+                      buttons.push({ id: 'FUZZY_NEW', title: '➕ Continue as new' });
 
                       actor.interactionState = {
                           type: 'WAITING_FOR_FUZZY_CONFIRM',
