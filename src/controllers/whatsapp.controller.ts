@@ -251,6 +251,7 @@ function isValidDate(d: any) {
   return d instanceof Date && !Number.isNaN(d.getTime());
 }
 
+
 /**
  * Parses: today/yesterday/2025/2025-12-18/18-12-2025/18-12-2025
  * into UTC-ish boundaries matching the user's local day.
