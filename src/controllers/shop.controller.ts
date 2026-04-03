@@ -56,7 +56,7 @@ export const getShopBySlug = async (req: Request, res: Response): Promise<any> =
     if (!slug) return res.status(400).json({ error: 'Shop slug required' });
 
     const shopOwner = await User.findOne({ shopSlug: slug })
-      .select('businessName phoneNumber planType settings _id subscriptionStatus trialEndsAt shopDescription heroImageUrl themeColor');
+      .select('businessName phoneNumber planType settings _id subscriptionStatus trialEndsAt shopDescription heroImageUrl themeColor countryCode');
 
     if (!shopOwner) return res.status(404).json({ error: 'Shop not found' });
 
@@ -71,6 +71,17 @@ export const getShopBySlug = async (req: Request, res: Response): Promise<any> =
     const categories = await Inventory.distinct('category', { user: shopOwner._id });
     const cleanCategories = categories.filter((c) => c && typeof c === 'string' && c.trim() !== '');
 
+    // Derive Currency Map locally (to match dashboard)
+    const getCurrencyCode = (cCode: string = 'NG') => {
+      const map: Record<string, string> = {
+        'NG': 'NGN', 'US': 'USD', 'GB': 'GBP', 'GH': 'GHS',
+        'KE': 'KES', 'ZA': 'ZAR', 'EU': 'EUR'
+      };
+      return map[cCode.toUpperCase()] || 'NGN';
+    };
+
+    const shopCurrency = shopOwner.settings?.currencyCode || getCurrencyCode(shopOwner.countryCode);
+
     return res.json({
       shop: {
         id: shopOwner._id,
@@ -81,6 +92,7 @@ export const getShopBySlug = async (req: Request, res: Response): Promise<any> =
         planExpired,
         categories: cleanCategories.sort(),
         themeColor: shopOwner.themeColor || '#10b981',
+        currencyCode: shopCurrency,
       },
     });
   } catch (error) {

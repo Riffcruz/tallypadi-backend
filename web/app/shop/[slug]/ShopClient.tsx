@@ -32,6 +32,7 @@ type ShopInfo = {
   planExpired?: boolean;
   categories: string[];
   themeColor?: string;
+  currencyCode?: string;
 };
 
 interface ShopClientProps {
@@ -58,6 +59,8 @@ export default function ShopClient({ initialShop, slug }: ShopClientProps) {
 
   // Theme color from shop settings
   const themeColor = initialShop?.themeColor || '#10b981';
+  // Dynamic currency from shop settings
+  const currencyCode = initialShop?.currencyCode || 'NGN';
 
   // Record Visit on Mount
   useEffect(() => {
@@ -119,6 +122,20 @@ export default function ShopClient({ initialShop, slug }: ShopClientProps) {
 
   const removeFromCart = (id: string) => setCart(prev => prev.filter(c => c.product.id !== id));
 
+  const formatMoney = (amount: number) => {
+    // Basic locale mapping based on currency for cleaner output
+    const localeMap: Record<string, string> = {
+      'NGN': 'en-NG', 'USD': 'en-US', 'GBP': 'en-GB',
+      'EUR': 'de-DE', 'GHS': 'en-GH', 'KES': 'en-KE', 'ZAR': 'en-ZA'
+    };
+    const localeToUse = localeMap[currencyCode] || 'en-US';
+    return new Intl.NumberFormat(localeToUse, { 
+      style: 'currency', 
+      currency: currencyCode, 
+      maximumFractionDigits: 0 
+    }).format(amount);
+  };
+
   const buildWhatsAppMessage = () => {
     const lines = cart.map((item, i) =>
       `${i + 1}. ${item.product.name} x${item.qty} — ${formatMoney(item.product.price * item.qty)}`
@@ -133,9 +150,6 @@ export default function ShopClient({ initialShop, slug }: ShopClientProps) {
     const link = `https://wa.me/${initialShop.phone}?text=${encodeURIComponent(msg)}`;
     window.open(link, '_blank');
   };
-
-  const formatMoney = (amount: number) =>
-    new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(amount);
 
   if (!initialShop) {
     return (

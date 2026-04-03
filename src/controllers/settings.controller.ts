@@ -162,6 +162,13 @@ export const updateSettings = async (req: AuthReq, res: Response) => {
           }
         }
 
+        if (inputSettings.currencyCode !== undefined) {
+          const safeCurrencyCode = sanitizeString(inputSettings.currencyCode);
+          if (safeCurrencyCode) {
+            $set['settings.currencyCode'] = safeCurrencyCode.toUpperCase().slice(0, 5);
+          }
+        }
+
         // ✅ Royalty Program Update
         if (inputSettings.royalty && typeof inputSettings.royalty === 'object') {
            const ryl = inputSettings.royalty;

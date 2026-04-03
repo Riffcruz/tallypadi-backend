@@ -60,6 +60,7 @@ export default function SettingsPage() {
 
   const [closingTime, setClosingTime] = useState('');
   const [language, setLanguage] = useState('');
+  const [currencyCode, setCurrencyCode] = useState('NGN'); // ✅ New Explicit Currency
   const [pdfEnabled, setPdfEnabled] = useState(false);
   // ✅ Bank Details State
   const [bankName, setBankName] = useState('');
@@ -118,6 +119,7 @@ export default function SettingsPage() {
     setHeroImageUrl(userData?.heroImageUrl || '');
     setClosingTime(userData?.settings?.closingTime || '20:00');
     setLanguage(userData?.settings?.language || 'English');
+    setCurrencyCode(userData?.settings?.currencyCode || userData?.currencyCode || 'NGN');
 
     // Bank Details
     setBankName(userData?.bankDetails?.bankName || '');
@@ -192,7 +194,8 @@ export default function SettingsPage() {
           shopName: businessName, // backward compatibility
           settings: {
             closingTime,
-            pdfReportsEnabled: pdfEnabled
+            pdfReportsEnabled: pdfEnabled,
+            currencyCode
           },
           bankDetails: {
              bankName,
@@ -467,6 +470,39 @@ export default function SettingsPage() {
                       <option value="Hausa">Hausa</option>
                       <option value="Yoruba">Yoruba</option>
                       <option value="Igbo">Igbo</option>
+                    </select>
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+                      <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path
+                          d="M1 1L5 5L9 1"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Currency Dropdown */}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wider flex items-center gap-1">
+                    Currency
+                  </label>
+                  <div className="relative">
+                    <select
+                      value={currencyCode}
+                      onChange={(e) => setCurrencyCode(e.target.value)}
+                      className="w-full border border-gray-200 bg-slate-50/50 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all text-sm font-medium appearance-none cursor-pointer"
+                    >
+                      <option value="NGN">🇳🇬 NGN - Naira</option>
+                      <option value="USD">🇺🇸 USD - US Dollar</option>
+                      <option value="GBP">🇬🇧 GBP - British Pound</option>
+                      <option value="GHS">🇬🇭 GHS - Cedis</option>
+                      <option value="KES">🇰🇪 KES - Shillings</option>
+                      <option value="ZAR">🇿🇦 ZAR - Rand</option>
+                      <option value="EUR">🇪🇺 EUR - Euro</option>
                     </select>
                     <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
                       <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">

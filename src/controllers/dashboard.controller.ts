@@ -67,7 +67,9 @@ export const getDashboardData = async (req: Request, res: Response) => {
       return res.status(404).json({ error: "User account not found." });
     }
 
-    const { code: currencyCode, locale } = getCurrencyConfig(user.countryCode);
+    const defaultCurrency = getCurrencyConfig(user.countryCode);
+    const currencyCode = user.settings?.currencyCode || defaultCurrency.code;
+    const locale = defaultCurrency.locale;
 
     const scope = user.role === 'OWNER' ? 'SHOP' : 'OWN';
     const relevantIds = await getRelevantUserIds(user, scope);

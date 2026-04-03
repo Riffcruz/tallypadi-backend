@@ -43,6 +43,7 @@ export interface IUser extends Document {
     language: string;
     pdfReportsEnabled: boolean;
     staffTransactionReport?: boolean;
+    currencyCode?: string; // e.g. NGN, USD, GHS
     
     // ✅ Staff Permissions
     staffPermissions?: {
@@ -168,6 +169,7 @@ const userSchema = new Schema<IUser>(
       language: { type: String, default: 'English' },
       pdfReportsEnabled: { type: Boolean, default: true },
       staffTransactionReport: { type: Boolean, default: false },
+      currencyCode: { type: String, trim: true, uppercase: true },
       
       // ✅ Staff Permission Toggles (Controlled by Owner)
       staffPermissions: {
