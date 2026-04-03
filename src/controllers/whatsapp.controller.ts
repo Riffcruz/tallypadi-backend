@@ -2498,6 +2498,19 @@ Tap a button below to subscribe:`;
 
         parsed = allowlistParsed(parsed);
     } else {
+        // ─── Max-20 bulk restock guard ─────────────────────────────────────
+        const restockLineRe = /^[Aa]dd\s+\d+\s+pieces?\s+.+/i;
+        const restockLineCount = rawText.trim().split('\n').filter(l => restockLineRe.test(l.trim())).length;
+
+        if (restockLineCount > 20) {
+            await queueOutboundMessage(
+                from,
+                `⚠️ You can only add up to *20 items* at once.\n\nYou sent *${restockLineCount} items*. Please split your list into batches of 20 and send them one batch at a time.`
+            );
+            return;
+        }
+        // ───────────────────────────────────────────────────────────────────
+
         const { parseMessageWithGemini } = await import('../services/gemini.service');
         parsed = await parseMessageWithGemini(rawText, currentLang, contextHistory, imageBuffer, imageMime);
         parsed = allowlistParsed(parsed);
