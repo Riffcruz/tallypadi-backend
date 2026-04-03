@@ -843,7 +843,8 @@ const SAFE_TEXT_MAX = 1000;
 function cleanTextForSecurity(input: string) {
   let s = String(input || '').slice(0, SAFE_TEXT_MAX);
   s = s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, ' ');
-  return s.replace(/\s+/g, ' ').trim();
+  // Collapse multiple horizontal spaces/tabs, but preserve newlines
+  return s.replace(/[ \t]+/g, ' ').trim();
 }
 
 // =====================================================
