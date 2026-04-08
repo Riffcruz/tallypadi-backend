@@ -69,6 +69,7 @@ export default function UserDeepDiveModal({
   onClose,
   adminToken,
   onAction,
+  role = 'admin',
 }: {
   user: DeepDiveUser;
   onClose: () => void;
