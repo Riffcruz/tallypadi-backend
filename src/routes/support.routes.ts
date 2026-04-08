@@ -25,6 +25,11 @@ router.get('/me', supportAgentAuth, supportController.getMe as unknown as Reques
 router.post('/status', supportAgentAuth, supportController.setStatus as unknown as RequestHandler);
 router.post('/push/subscribe', supportAgentAuth, supportController.subscribePush as unknown as RequestHandler);
 
+// Users Management (Agent restricted)
+router.get('/users', supportAgentAuth, supportController.getUsers as unknown as RequestHandler);
+router.get('/users/:userId/details', supportAgentAuth, supportController.getUserDeepDive as unknown as RequestHandler);
+router.put('/users/:userId', supportAgentAuth, supportController.manageUser as unknown as RequestHandler);
+
 // Tickets
 router.get('/tickets', supportAgentAuth, supportController.getTickets as unknown as RequestHandler);
 router.get('/tickets/:ticketId/messages', supportAgentAuth, supportController.getMessages as unknown as RequestHandler);

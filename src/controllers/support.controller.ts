@@ -1,14 +1,100 @@
 import { Request, Response } from 'express';
+import mongoose from 'mongoose';
+import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { SupportAgent } from '../models/supportAgent.model';
 import { SupportTicket } from '../models/supportTicket.model';
 import { SupportMessage } from '../models/supportMessage.model';
 import { PushSubscription } from '../models/pushSubscription.model';
+import { User } from '../models/user.model';
+import { Transaction } from '../models/transaction.model';
+import { Inventory } from '../models/inventory.model';
 import { supportService } from '../services/support.service';
+import { sendWhatsAppText } from '../services/whatsapp.service';
 import { env } from '../config/env';
 
 const JWT_SECRET = process.env.JWT_SECRET || (env as { jwtSecret?: string }).jwtSecret || 'fallback_secret';
+
+const isValidObjectId = (id: string) => mongoose.Types.ObjectId.isValid(id);
+
+const UNKNOWN_ITEM_NAMES = ['unknown_item', 'unknown', 'item', 'null', 'undefined'];
+const unknownSaleQuery = {
+  $or: [
+    { items: { $exists: false } },
+    { items: { $size: 0 } },
+    {
+      items: {
+        $elemMatch: {
+          $or: [
+            { name: { $exists: false } },
+            { name: null },
+            { name: '' },
+            { name: { $in: UNKNOWN_ITEM_NAMES } },
+          ],
+        },
+      },
+    },
+  ],
+};
+
+const validSaleMatch = {
+  $and: [
+    { $or: [{ isUndone: { $exists: false } }, { isUndone: false }] },
+    { $nor: [unknownSaleQuery] },
+  ],
+};
+
+const getAllUsersQuerySchema = z.object({
+  search: z.string().trim().max(60).optional(),
+});
+
+const phoneSchema = z
+  .string()
+  .trim()
+  .min(7)
+  .max(20)
+  .refine((v) => /^[+]?[\d\s()-]+$/.test(v), 'Invalid phone number format');
+
+const manageUserSchema = z
+  .object({
+    action: z.enum([
+      'send_message',
+      'clear_history', // Agents often are allowed to clear history to relieve chat bounds, but if restricted: we omit it. User asked to "disallowing delete". We'll allow clear_history but no destructives. Wait, plan says "block clear message history". So I will remove clear_history too.
+      'suspend',
+      'unsuspend',
+      'activate',
+      'cancel',
+      'change_plan',
+      'set_expiry',
+      'update_phone',
+      'update_email',
+    ]),
+    payload: z.any().optional(),
+  })
+  .strict();
+
+const changePlanSchema = z.object({
+  planType: z.enum(['TYCOON', 'OGA_BOSS']),
+});
+
+const setExpirySchema = z.object({
+  date: z.string().trim().min(1),
+});
+
+const updatePhoneSchema = z.object({
+  phone: phoneSchema,
+});
+
+const updateEmailSchema = z.object({
+  email: z.string().email(),
+});
+
+const sendMessagePayloadSchema = z.object({
+  to: phoneSchema,
+  message: z.string().trim().min(1).max(1500),
+});
+
 
 export const supportController = {
   // --- ADMIN ---
@@ -300,5 +386,185 @@ export const supportController = {
         userAgent: req.headers['user-agent']
     });
     res.status(201).json({ success: true });
+  },
+
+  // --- USER MANGEMENT (Support Agent Layer) ---
+
+  async getUsers(req: Request & { agent: { id: string } }, res: Response) {
+    try {
+      const parsed = getAllUsersQuerySchema.safeParse(req.query);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+      const { search } = parsed.data;
+
+      const match: any = { role: 'OWNER' };
+      if (search) {
+        match.$or = [
+          { phoneNumber: { $regex: search, $options: 'i' } },
+          { businessName: { $regex: search, $options: 'i' } },
+        ];
+      }
+
+      // Avoid N+1: aggregate sales totals
+      const rows = await User.aggregate([
+        { $match: match },
+        { $sort: { createdAt: -1 } },
+        {
+          $lookup: {
+            from: 'transactions',
+            let: { ownerId: '$_id' },
+            pipeline: [
+              {
+                $match: {
+                  $expr: { $eq: ['$user', '$$ownerId'] },
+                  type: 'SALE',
+                  ...validSaleMatch,
+                },
+              },
+              { $group: { _id: null, total: { $sum: '$totalMoney' } } },
+            ],
+            as: 'salesAgg',
+          },
+        },
+        {
+          $addFields: {
+            lifetimeSales: { $ifNull: [{ $arrayElemAt: ['$salesAgg.total', 0] }, 0] },
+          },
+        },
+        {
+          $project: {
+            id: '$_id',
+            businessName: 1,
+            email: 1,
+            phone: '$phoneNumber',
+            plan: '$planType',
+            status: '$subscriptionStatus',
+            joinedAt: '$createdAt',
+            lifetimeSales: 1,
+            lastMessages: { $slice: ['$messageHistory', -3] },
+          },
+        },
+      ]);
+
+      res.json(rows);
+    } catch (error) {
+      console.error('Fetch Support Users Error:', error);
+      res.status(500).json({ error: 'Fetch Users Error' });
+    }
+  },
+
+  async getUserDeepDive(req: Request & { agent: { id: string } }, res: Response) {
+    try {
+      const { userId } = req.params;
+      if (typeof userId !== 'string' || !isValidObjectId(userId)) return res.status(400).json({ error: 'Invalid id' });
+
+      const user = await User.findById(userId);
+      if (!user) return res.status(404).json({ error: 'User not found' });
+
+      const ownerId = user.role === 'OWNER' ? user._id : user.ownerId;
+      if (!ownerId) return res.status(400).json({ error: 'OwnerId not found' });
+
+      // Find all staff EXCLUDING the owner
+      const staff = await User.find({ ownerId, _id: { $ne: ownerId } });
+      const staffIds = staff.map((s) => s._id);
+      const allUserIds = [ownerId, ...staffIds];
+
+      const [inventory, recentSales, owner] = await Promise.all([
+        Inventory.find({ user: ownerId }).sort({ createdAt: -1 }).lean(),
+        Transaction.find({ user: { $in: allUserIds }, type: 'SALE', ...validSaleMatch })
+          .sort({ timestamp: -1 })
+          .limit(100),
+        User.findById(ownerId),
+      ]);
+
+      res.json({
+        profile: owner,
+        staff,
+        inventory,
+        recentSales,
+        lastMessages: owner?.messageHistory?.slice(-10) || [],
+      });
+    } catch (error) {
+      console.error('Support getUserDeepDive error:', error);
+      res.status(500).json({ error: 'Server Error' });
+    }
+  },
+
+  async manageUser(req: Request & { agent: { id: string } }, res: Response) {
+    try {
+      const { userId } = req.params;
+      if (typeof userId !== 'string' || !isValidObjectId(userId)) return res.status(400).json({ error: 'Invalid id' });
+
+      const parsed = manageUserSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+      const { action, payload } = parsed.data;
+
+      // EXPLICIT GUARD - Security measure beyond Zod
+      if (action === ('delete_user' as any) || action === ('delete_sales_history' as any) || action === ('clear_history' as any)) {
+          return res.status(403).json({ error: 'Support agents are not authorized to perform destructive actions.' });
+      }
+
+      const user = await User.findById(userId);
+      if (!user) return res.status(404).json({ error: 'User not found' });
+
+      const ownerId = user.role === 'OWNER' ? user._id : user.ownerId;
+      if (!ownerId) return res.status(400).json({ error: 'OwnerId not found' });
+
+      if (action === 'send_message') {
+        const p = sendMessagePayloadSchema.safeParse(payload || {});
+        if (!p.success) return res.status(400).json({ error: p.error.flatten() });
+
+        await sendWhatsAppText(p.data.to, p.data.message);
+        return res.json({ success: true, message: `Message sent to ${p.data.to}` });
+      }
+
+      const owner = await User.findById(ownerId);
+      if (!owner) return res.status(404).json({ error: 'Owner not found' });
+
+      if (action === 'suspend') owner.subscriptionStatus = 'suspended';
+      else if (action === 'unsuspend' || action === 'activate') owner.subscriptionStatus = 'active';
+      else if (action === 'cancel') owner.subscriptionStatus = 'cancelled';
+      else if (action === 'change_plan') {
+        const p = changePlanSchema.safeParse(payload || {});
+        if (!p.success) return res.status(400).json({ error: p.error.flatten() });
+        owner.planType = p.data.planType;
+      } else if (action === 'set_expiry') {
+        const p = setExpirySchema.safeParse(payload || {});
+        if (!p.success) return res.status(400).json({ error: p.error.flatten() });
+
+        const newDate = new Date(p.data.date);
+        if (!Number.isFinite(newDate.getTime())) return res.status(400).json({ error: 'Invalid date' });
+
+        owner.trialEndsAt = newDate;
+        owner.nextBillingDate = newDate;
+        if (newDate < new Date()) owner.subscriptionStatus = 'cancelled';
+      } else if (action === 'update_phone') {
+        const p = updatePhoneSchema.safeParse(payload || {});
+        if (!p.success) return res.status(400).json({ error: p.error.flatten() });
+
+        const existing = await User.findOne({ phoneNumber: p.data.phone });
+        if (existing && existing._id.toString() !== ownerId.toString()) {
+          return res.status(409).json({ error: 'Phone number already in use' });
+        }
+        owner.phoneNumber = p.data.phone;
+      } else if (action === 'update_email') {
+        const p = updateEmailSchema.safeParse(payload || {});
+        if (!p.success) return res.status(400).json({ error: p.error.flatten() });
+
+        const newEmail = p.data.email.trim().toLowerCase();
+        const existing = await User.findOne({ email: newEmail });
+        if (existing && existing._id.toString() !== ownerId.toString()) {
+          return res.status(409).json({ error: 'Email already in use' });
+        }
+        owner.email = newEmail;
+      }
+
+      await owner.save();
+      return res.json({ success: true, message: `User updated: ${action}`, user: owner });
+    } catch (error) {
+      console.error('Support Update User Error:', error);
+      res.status(500).json({ error: 'Update User Error' });
+    }
   }
 };

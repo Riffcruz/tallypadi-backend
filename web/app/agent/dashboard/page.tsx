@@ -8,6 +8,7 @@ import {
   Trash2, Hand, Search, ArrowLeft
 } from 'lucide-react';
 import Swal from 'sweetalert2';
+import UsersTab from '../../../components/admin/UsersTab';
 
 // Ensure consistent API URL logic
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
@@ -57,7 +58,10 @@ function AgentDashboardContent() {
   // Ticket State
   const [myTickets, setMyTickets] = useState<Ticket[]>([]);
   const [queueTickets, setQueueTickets] = useState<Ticket[]>([]);
-  const [viewMode, setViewMode] = useState<'MINE' | 'QUEUE'>('MINE');
+  const [viewMode, setViewMode] = useState<'MINE' | 'QUEUE' | 'USERS'>('MINE');
+
+  const [supportUsers, setSupportUsers] = useState<any[]>([]);
+  const [usersLoading, setUsersLoading] = useState(false);
 
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const selectedTicketRef = useRef<Ticket | null>(null);
@@ -228,6 +232,18 @@ function AgentDashboardContent() {
     } catch (e) { console.error(e); }
   };
 
+  const fetchSupportUsers = async () => {
+    setUsersLoading(true);
+    const token = localStorage.getItem('agent_token');
+    try {
+      const res = await fetch(`${API_URL}/support/users`, { 
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) setSupportUsers(await res.json());
+    } catch (e) { console.error(e); }
+    setUsersLoading(false);
+  };
+
   // Join Ticket Room on Selection
   useEffect(() => {
     if (socket && selectedTicket) {
@@ -371,6 +387,37 @@ function AgentDashboardContent() {
       }
   };
 
+  const handleUserAction = async (userId: string, action: string, payload: any = {}) => {
+    const token = localStorage.getItem('agent_token');
+    try {
+      const res = await fetch(`${API_URL}/support/users/${userId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ action, payload })
+      });
+      
+      if (res.ok) {
+          if (!['set_expiry', 'change_plan', 'cancel'].includes(action)) {
+            Swal.fire({
+              title: 'Success',
+              text: 'User updated successfully.',
+              icon: 'success',
+              timer: 1500,
+              showConfirmButton: false,
+            });
+          }
+          await fetchSupportUsers(); 
+          return await res.json();
+      } else {
+          const err = await res.json();
+          Swal.fire('Error', err.error || 'Action failed', 'error');
+          throw new Error(err.error || 'Action failed');
+      }
+    } catch (e: any) {
+      throw e;
+    }
+  };
+
   const activeList = viewMode === 'MINE' ? myTickets : queueTickets;
   const filteredTickets = activeList.filter(t => t.userPhone.includes(searchTerm));
 
@@ -463,6 +510,15 @@ function AgentDashboardContent() {
                        {queueTickets.length}
                    </span>
                </button>
+               <button 
+                onClick={() => { setViewMode('USERS'); fetchSupportUsers(); }}
+                className={`flex-1 pb-2 text-sm font-bold transition-colors relative ${
+                    viewMode === 'USERS' ? 'text-emerald-600' : 'text-slate-400 hover:text-slate-600'
+                }`}
+               >
+                   Users
+                   {viewMode === 'USERS' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-emerald-500" />}
+               </button>
            </div>
         </div>
 
@@ -516,12 +572,25 @@ function AgentDashboardContent() {
         </div>
       </div>
 
-      {/* CHAT AREA */}
+      {/* CHAT OR USERS AREA */}
       <div className={`
         flex-1 flex-col bg-slate-50/50 relative
         ${!showSidebar ? 'flex' : 'hidden md:flex'}
       `}>
-        {selectedTicket ? (
+        {viewMode === 'USERS' ? (
+           <div className="flex-1 overflow-y-auto p-4 md:p-8 bg-slate-900 text-slate-100 h-full w-full">
+              {usersLoading ? (
+                  <div className="text-center text-slate-400 py-20 animate-pulse">Loading Users DB...</div>
+              ) : (
+                  <UsersTab 
+                      users={supportUsers} 
+                      adminToken={localStorage.getItem('agent_token') || ''}
+                      role="agent"
+                      onAction={handleUserAction}
+                  />
+              )}
+           </div>
+        ) : selectedTicket ? (
             <>
                 {/* Chat Header */}
                 <div className="bg-white px-4 py-3 border-b border-slate-200 flex justify-between items-center shadow-sm z-10">

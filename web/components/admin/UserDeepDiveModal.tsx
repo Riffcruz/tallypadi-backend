@@ -74,6 +74,7 @@ export default function UserDeepDiveModal({
   onClose: () => void;
   adminToken: string;
   onAction: (userId: string, action: string, payload?: Record<string, unknown>) => Promise<unknown>;
+  role?: 'admin' | 'agent';
 }) {
   const userId = String(user?.id || user?._id || '').trim();
 
@@ -112,7 +113,8 @@ export default function UserDeepDiveModal({
 
     setLoadingDetails(true);
     try {
-      const res = await axios.get(`${API_URL}/admin/users/${userId}/details`, {
+      const endpoint = role === 'agent' ? '/support/users' : '/admin/users';
+      const res = await axios.get(`${API_URL}${endpoint}/${userId}/details`, {
         headers: authHeaders,
       });
       setDetails(res.data as DeepDiveDetails);
@@ -141,7 +143,8 @@ export default function UserDeepDiveModal({
 
     setDeletingInventoryId(itemId);
     try {
-      await axios.delete(`${API_URL}/admin/users/${userId}/inventory/${itemId}`, { headers: authHeaders });
+      const endpoint = role === 'agent' ? '/support/users' : '/admin/users';
+      await axios.delete(`${API_URL}${endpoint}/${userId}/inventory/${itemId}`, { headers: authHeaders });
       // Optimistic removal
       setDetails(prev => prev ? {
         ...prev,
@@ -170,7 +173,8 @@ export default function UserDeepDiveModal({
 
     setClearingInventory(true);
     try {
-      const res = await axios.delete(`${API_URL}/admin/users/${userId}/inventory`, { headers: authHeaders });
+      const endpoint = role === 'agent' ? '/support/users' : '/admin/users';
+      const res = await axios.delete(`${API_URL}${endpoint}/${userId}/inventory`, { headers: authHeaders });
       setDetails(prev => prev ? { ...prev, inventory: [] } : prev);
       Swal.fire('Cleared', `${res.data.deleted} item(s) deleted.`, 'success');
     } catch {
@@ -489,7 +493,8 @@ export default function UserDeepDiveModal({
     if (!res.isConfirmed) return;
 
     try {
-      await axios.delete(`${API_URL}/admin/staff/${staffId}`, { headers: authHeaders });
+      const endpoint = role === 'agent' ? '/support/staff' : '/admin/staff';
+      await axios.delete(`${API_URL}${endpoint}/${staffId}`, { headers: authHeaders });
       Swal.fire('Deleted', 'Staff member removed.', 'success');
       refreshDetails();
     } catch (e) {
@@ -508,7 +513,8 @@ export default function UserDeepDiveModal({
     if (!res.isConfirmed) return;
 
     try {
-      await axios.put(`${API_URL}/admin/staff/${staffId}/unlink`, {}, { headers: authHeaders });
+      const endpoint = role === 'agent' ? '/support/staff' : '/admin/staff';
+      await axios.put(`${API_URL}${endpoint}/${staffId}/unlink`, {}, { headers: authHeaders });
       Swal.fire('Success', 'Staff promoted to Owner.', 'success');
       refreshDetails();
     } catch (e) {
@@ -725,6 +731,7 @@ export default function UserDeepDiveModal({
                 </div>
 
                 {/* ✅ Danger Zone */}
+                {role !== 'agent' && (
                 <div className="hidden sm:block mt-3 pt-3 border-t border-slate-600/60 space-y-2">
                   <h4 className="text-[11px] text-red-300 font-extrabold uppercase">Danger Zone</h4>
 
@@ -755,6 +762,7 @@ export default function UserDeepDiveModal({
                     Delete User + Everything
                   </button>
                 </div>
+                )}
               </div>
 
               {/* Message panel + last messages */}

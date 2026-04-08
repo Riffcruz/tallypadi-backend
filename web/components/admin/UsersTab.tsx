@@ -18,12 +18,14 @@ interface UsersTabProps {
   users: User[];
   onAction: (userId: string, action: string, payload?: unknown) => Promise<unknown>;
   adminToken: string;
+  role?: 'admin' | 'agent';
 }
 
 export default function UsersTab({
   users,
   onAction,
   adminToken,
+  role = 'admin',
 }: UsersTabProps) {
   const [filterActive, setFilterActive] = useState(true);
   const [search, setSearch] = useState('');
@@ -82,13 +84,15 @@ export default function UsersTab({
             <h2 className="text-lg sm:text-2xl font-extrabold text-white">User Database</h2>
 
             <div className="flex items-center gap-2">
-                <button
-                    onClick={() => setShowCreateInvestor(true)}
-                    className="shrink-0 inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-extrabold transition-all border bg-emerald-600 text-white border-emerald-500/30 hover:bg-emerald-500"
-                    title="Create Investor"
-                >
-                    <UserPlus size={14} /> New Investor
-                </button>
+                {role !== 'agent' && (
+                  <button
+                      onClick={() => setShowCreateInvestor(true)}
+                      className="shrink-0 inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-extrabold transition-all border bg-emerald-600 text-white border-emerald-500/30 hover:bg-emerald-500"
+                      title="Create Investor"
+                  >
+                      <UserPlus size={14} /> New Investor
+                  </button>
+                )}
                 <button
                 onClick={() => setFilterActive(!filterActive)}
                 className={`shrink-0 inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-extrabold transition-all border ${
@@ -262,6 +266,7 @@ export default function UsersTab({
   onClose={() => setSelectedUser(null)}
   adminToken={adminToken}
   onAction={onAction}
+  role={role}
 />
 
 )}
