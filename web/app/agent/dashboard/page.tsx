@@ -184,6 +184,14 @@ function AgentDashboardContent() {
             // 3. Fetch Tickets
             await fetchTickets(token);
 
+            // Fetch users background automatically
+            fetchSupportUsers();
+
+            const savedViewMode = sessionStorage.getItem('agentViewMode') as 'MINE' | 'QUEUE' | 'USERS' | null;
+            if (savedViewMode) {
+                setViewMode(savedViewMode);
+            }
+
         } catch (e) {
             console.error('Init error', e);
         } finally {
@@ -210,6 +218,7 @@ function AgentDashboardContent() {
         const t = myTickets.find(x => x._id === initialTicketId);
         if (t) {
             setViewMode('MINE');
+            sessionStorage.setItem('agentViewMode', 'MINE');
             selectTicket(t);
         }
     }
@@ -379,6 +388,7 @@ function AgentDashboardContent() {
               setMyTickets(prev => [t, ...prev]);
               setQueueTickets(prev => prev.filter(x => x._id !== t._id));
               setViewMode('MINE');
+              sessionStorage.setItem('agentViewMode', 'MINE');
               setSelectedTicket(t); // Update selected ref
               Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Ticket picked up!', timer: 2000, showConfirmButton: false });
           }
@@ -484,10 +494,9 @@ function AgentDashboardContent() {
                ))}
            </div>
 
-           {/* Tabs: MINE vs QUEUE */}
            <div className="flex border-b border-slate-200">
                <button 
-                onClick={() => setViewMode('MINE')}
+                onClick={() => { setViewMode('MINE'); sessionStorage.setItem('agentViewMode', 'MINE'); }}
                 className={`flex-1 pb-2 text-sm font-bold transition-colors relative ${
                     viewMode === 'MINE' ? 'text-emerald-600' : 'text-slate-400 hover:text-slate-600'
                 }`}
@@ -499,7 +508,7 @@ function AgentDashboardContent() {
                    </span>
                </button>
                <button 
-                onClick={() => setViewMode('QUEUE')}
+                onClick={() => { setViewMode('QUEUE'); sessionStorage.setItem('agentViewMode', 'QUEUE'); }}
                 className={`flex-1 pb-2 text-sm font-bold transition-colors relative ${
                     viewMode === 'QUEUE' ? 'text-emerald-600' : 'text-slate-400 hover:text-slate-600'
                 }`}
@@ -511,7 +520,7 @@ function AgentDashboardContent() {
                    </span>
                </button>
                <button 
-                onClick={() => { setViewMode('USERS'); fetchSupportUsers(); }}
+                onClick={() => { setViewMode('USERS'); sessionStorage.setItem('agentViewMode', 'USERS'); fetchSupportUsers(); }}
                 className={`flex-1 pb-2 text-sm font-bold transition-colors relative ${
                     viewMode === 'USERS' ? 'text-emerald-600' : 'text-slate-400 hover:text-slate-600'
                 }`}
