@@ -3,6 +3,7 @@ import { User } from '../models/user.model';
 import { Inventory } from '../models/inventory.model';
 import { Transaction } from '../models/transaction.model';
 import { Types } from 'mongoose';
+import bcrypt from 'bcryptjs';
 
 // --- Helpers ---
 const getAuthUser = async (req: Request) => {
@@ -28,7 +29,7 @@ export const getBranches = async (req: Request, res: Response) => {
         const hqId = (user.role === 'STAFF') ? user.ownerId : user._id;
 
         const branches = await User.find({ hqId: hqId, role: 'OWNER' })
-            .select('businessName name phoneNumber city address shopSlug lastSeen subscriptionStatus')
+            .select('businessName name phoneNumber city address shopSlug lastSeen subscriptionStatus branchType')
             .lean();
 
         return res.json({ branches });
@@ -246,6 +247,83 @@ export const promoteToHqManager = async (req: Request, res: Response) => {
 
     } catch (error) {
         console.error('HQ Promote Staff Error:', error);
+        return res.status(500).json({ error: 'Server Error' });
+    }
+};
+
+// POST /hq/branch
+// Create a new Shop Branch or Warehouse under this HQ
+export const createBranch = async (req: Request, res: Response) => {
+    try {
+        const { businessName, phoneNumber, password, branchType } = req.body;
+        const user = await getAuthUser(req);
+
+        if (!user) return res.status(401).json({ error: 'Unauthorized' });
+
+        const isHq = user.role === 'HQ' || user.role === 'OWNER';
+        const isHqManager = user.role === 'STAFF' && user.isHqManager;
+
+        if (!isHq && !isHqManager) {
+            return res.status(403).json({ error: 'Access denied. HQ privileges required.' });
+        }
+
+        const hqId = (user.role === 'STAFF') ? user.ownerId : user._id;
+
+        if (!businessName) {
+            return res.status(400).json({ error: 'Business name is required' });
+        }
+
+        const type = branchType === 'WAREHOUSE' ? 'WAREHOUSE' : 'SHOP';
+        
+        let finalPhoneNumber = phoneNumber;
+        // If it's a warehouse and phone number is missing, auto-generate one to satisfy the unique/required constraints
+        if (type === 'WAREHOUSE' && !finalPhoneNumber) {
+            finalPhoneNumber = `WH-${hqId}-${Date.now()}`;
+        } else if (!finalPhoneNumber) {
+            return res.status(400).json({ error: 'Phone number is required for Shop Branches' });
+        }
+
+        // Check if phone number already exists
+        const existingUser = await User.findOne({ phoneNumber: finalPhoneNumber });
+        if (existingUser) {
+            return res.status(400).json({ error: 'Phone number is already registered' });
+        }
+
+        let hashedPassword = null;
+        if (password) {
+            const salt = await bcrypt.genSalt(10);
+            hashedPassword = await bcrypt.hash(password, salt);
+        }
+
+        const newBranch = new User({
+            phoneNumber: finalPhoneNumber,
+            password: hashedPassword,
+            businessName,
+            name: `${businessName} Manager`,
+            role: 'OWNER',
+            hqId: hqId,
+            branchType: type,
+            registrationStage: 'COMPLETED',
+            countryCode: user.countryCode || 'NG',
+            currencyCode: user.settings?.currencyCode,
+            settings: user.settings // inherit hq settings broadly
+        });
+
+        await newBranch.save();
+
+        return res.status(201).json({
+            success: true,
+            message: `${type === 'WAREHOUSE' ? 'Warehouse' : 'Shop Branch'} created successfully.`,
+            branch: {
+                id: newBranch._id,
+                businessName: newBranch.businessName,
+                phoneNumber: newBranch.phoneNumber,
+                branchType: newBranch.branchType
+            }
+        });
+
+    } catch (error) {
+        console.error('HQ Create Branch/Warehouse Error:', error);
         return res.status(500).json({ error: 'Server Error' });
     }
 };

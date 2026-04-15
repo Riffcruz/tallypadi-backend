@@ -33,6 +33,7 @@ export interface IUser extends Document {
   isHqManager?: boolean;
   ownerId?: Types.ObjectId;
   hqId?: Types.ObjectId;
+  branchType?: 'SHOP' | 'WAREHOUSE';
 
   messageHistory?: string[];
 
@@ -159,6 +160,11 @@ const userSchema = new Schema<IUser>(
 
     ownerId: { type: Schema.Types.ObjectId, ref: 'User' },
     hqId: { type: Schema.Types.ObjectId, ref: 'User' },
+    branchType: {
+      type: String,
+      enum: ['SHOP', 'WAREHOUSE'],
+      default: 'SHOP'
+    },
 
     messageHistory: { type: [String], default: [] },
 
