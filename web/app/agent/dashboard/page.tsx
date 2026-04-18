@@ -534,7 +534,7 @@ function AgentDashboardContent() {
                    </span>
                </button>
                <button 
-                onClick={() => { setViewMode('USERS'); sessionStorage.setItem('agentViewMode', 'USERS'); fetchSupportUsers(); }}
+                onClick={() => { setViewMode('USERS'); sessionStorage.setItem('agentViewMode', 'USERS'); setShowSidebar(false); fetchSupportUsers(); }}
                 className={`flex-1 pb-2 text-sm font-bold transition-colors relative ${
                     viewMode === 'USERS' ? 'text-emerald-600' : 'text-slate-400 hover:text-slate-600'
                 }`}
@@ -601,9 +601,9 @@ function AgentDashboardContent() {
         ${!showSidebar ? 'flex' : 'hidden md:flex'}
       `}>
         {viewMode === 'USERS' ? (
-           <div className="flex flex-col bg-slate-900 text-slate-100 h-full w-full overflow-hidden">
-              {/* Users Header with Refresh Button */}
-              <div className="flex items-center justify-between px-4 md:px-8 py-4 bg-slate-800 border-b border-slate-700 shrink-0">
+           <div className="flex flex-col bg-slate-900 text-slate-100 h-full w-full overflow-hidden min-h-0">
+              {/* Users Header with Refresh Button - always visible */}
+              <div className="flex items-center justify-between px-4 md:px-8 py-4 bg-slate-800 border-b border-slate-700 flex-shrink-0 z-10">
                 <div>
                   <h2 className="text-sm font-bold text-slate-100">User Database</h2>
                   <p className="text-xs text-slate-400">
@@ -613,16 +613,27 @@ function AgentDashboardContent() {
                 <button
                   onClick={() => fetchSupportUsers()}
                   disabled={usersLoading}
-                  className="flex items-center gap-2 px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl text-xs font-bold transition-all disabled:opacity-50"
+                  className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all disabled:opacity-50 shadow-lg shadow-emerald-900/30"
                   title="Reload users"
                 >
                   <RefreshCw size={14} className={usersLoading ? 'animate-spin' : ''} />
                   Reload
                 </button>
               </div>
-              <div className="flex-1 overflow-y-auto p-4 md:p-8">
+              <div className="flex-1 overflow-y-auto min-h-0 p-4 md:p-8">
                 {usersLoading && supportUsers.length === 0 ? (
                     <div className="text-center text-slate-400 py-20 animate-pulse">Loading Users DB...</div>
+                ) : supportUsers.length === 0 ? (
+                    <div className="text-center py-20">
+                      <p className="text-slate-400 font-bold mb-4">No users loaded yet</p>
+                      <button
+                        onClick={() => fetchSupportUsers()}
+                        className="flex items-center gap-2 mx-auto px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold transition-all shadow-lg"
+                      >
+                        <RefreshCw size={16} />
+                        Load Users
+                      </button>
+                    </div>
                 ) : (
                     <UsersTab 
                         users={supportUsers} 
