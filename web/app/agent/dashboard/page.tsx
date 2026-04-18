@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import io, { Socket } from 'socket.io-client';
 import { 
   Send, User, LogOut, MessageSquare, CheckCircle, Clock, 
-  Trash2, Hand, Search, ArrowLeft
+  Trash2, Hand, Search, ArrowLeft, RefreshCw
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import UsersTab from '../../../components/admin/UsersTab';
@@ -601,17 +601,37 @@ function AgentDashboardContent() {
         ${!showSidebar ? 'flex' : 'hidden md:flex'}
       `}>
         {viewMode === 'USERS' ? (
-           <div className="flex-1 overflow-y-auto p-4 md:p-8 bg-slate-900 text-slate-100 h-full w-full">
-              {usersLoading ? (
-                  <div className="text-center text-slate-400 py-20 animate-pulse">Loading Users DB...</div>
-              ) : (
-                  <UsersTab 
-                      users={supportUsers} 
-                      adminToken={localStorage.getItem('agent_token') || ''}
-                      role="agent"
-                      onAction={handleUserAction}
-                  />
-              )}
+           <div className="flex flex-col bg-slate-900 text-slate-100 h-full w-full overflow-hidden">
+              {/* Users Header with Refresh Button */}
+              <div className="flex items-center justify-between px-4 md:px-8 py-4 bg-slate-800 border-b border-slate-700 shrink-0">
+                <div>
+                  <h2 className="text-sm font-bold text-slate-100">User Database</h2>
+                  <p className="text-xs text-slate-400">
+                    {usersLoading ? 'Fetching...' : `${supportUsers.length} user${supportUsers.length !== 1 ? 's' : ''} loaded`}
+                  </p>
+                </div>
+                <button
+                  onClick={() => fetchSupportUsers()}
+                  disabled={usersLoading}
+                  className="flex items-center gap-2 px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl text-xs font-bold transition-all disabled:opacity-50"
+                  title="Reload users"
+                >
+                  <RefreshCw size={14} className={usersLoading ? 'animate-spin' : ''} />
+                  Reload
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4 md:p-8">
+                {usersLoading && supportUsers.length === 0 ? (
+                    <div className="text-center text-slate-400 py-20 animate-pulse">Loading Users DB...</div>
+                ) : (
+                    <UsersTab 
+                        users={supportUsers} 
+                        adminToken={localStorage.getItem('agent_token') || ''}
+                        role="agent"
+                        onAction={handleUserAction}
+                    />
+                )}
+              </div>
            </div>
         ) : selectedTicket ? (
             <>
