@@ -602,45 +602,50 @@ function AgentDashboardContent() {
       `}>
         {viewMode === 'USERS' ? (
            <div className="flex flex-col bg-slate-900 text-slate-100 h-full w-full overflow-hidden min-h-0">
-              {/* Users Header with Back + Refresh Button - always visible */}
-              <div className="flex items-center justify-between px-4 md:px-8 py-4 bg-slate-800 border-b border-slate-700 flex-shrink-0 z-10">
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => { setViewMode('MINE'); sessionStorage.setItem('agentViewMode', 'MINE'); setShowSidebar(true); }}
-                    className="md:hidden flex items-center justify-center w-8 h-8 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition-all"
-                    title="Back to tickets"
-                  >
-                    <ArrowLeft size={16} />
-                  </button>
-                  <div>
-                    <h2 className="text-sm font-bold text-slate-100">User Database</h2>
-                    <p className="text-xs text-slate-400">
-                      {usersLoading ? 'Fetching...' : `${supportUsers.length} user${supportUsers.length !== 1 ? 's' : ''} loaded`}
-                    </p>
-                  </div>
+
+              {/* Mobile-only: Full-width "Back to Tickets" top bar — easy for agents to find */}
+              <button
+                onClick={() => { setViewMode('MINE'); sessionStorage.setItem('agentViewMode', 'MINE'); setShowSidebar(true); }}
+                className="md:hidden flex items-center gap-3 w-full px-5 py-4 bg-slate-700 hover:bg-slate-600 active:bg-slate-500 border-b border-slate-600 transition-all text-left"
+              >
+                <ArrowLeft size={18} className="text-emerald-400 flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-bold text-white leading-none">Back to My Tickets</p>
+                  <p className="text-xs text-slate-400 mt-0.5">Return to the ticket queue</p>
+                </div>
+              </button>
+
+              {/* Header row: title + reload button */}
+              <div className="flex items-center justify-between px-4 md:px-8 py-4 bg-slate-800 border-b border-slate-700 flex-shrink-0">
+                <div>
+                  <h2 className="text-sm font-bold text-slate-100">All Users</h2>
+                  <p className="text-xs text-slate-400">
+                    {usersLoading ? 'Fetching latest data...' : `${supportUsers.length} user${supportUsers.length !== 1 ? 's' : ''} loaded`}
+                  </p>
                 </div>
                 <button
                   onClick={() => fetchSupportUsers()}
                   disabled={usersLoading}
                   className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all disabled:opacity-50 shadow-lg shadow-emerald-900/30"
-                  title="Reload users"
                 >
                   <RefreshCw size={14} className={usersLoading ? 'animate-spin' : ''} />
-                  Reload
+                  {usersLoading ? 'Loading...' : 'Refresh Users'}
                 </button>
               </div>
+
               <div className="flex-1 overflow-y-auto min-h-0 p-4 md:p-8">
                 {usersLoading && supportUsers.length === 0 ? (
-                    <div className="text-center text-slate-400 py-20 animate-pulse">Loading Users DB...</div>
+                    <div className="text-center text-slate-400 py-20 animate-pulse">Fetching users from database...</div>
                 ) : supportUsers.length === 0 ? (
                     <div className="text-center py-20">
-                      <p className="text-slate-400 font-bold mb-4">No users loaded yet</p>
+                      <p className="text-slate-400 font-bold mb-2">No users loaded</p>
+                      <p className="text-slate-500 text-sm mb-6">Tap the button below to fetch all users</p>
                       <button
                         onClick={() => fetchSupportUsers()}
                         className="flex items-center gap-2 mx-auto px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold transition-all shadow-lg"
                       >
                         <RefreshCw size={16} />
-                        Load Users
+                        Load Users Now
                       </button>
                     </div>
                 ) : (
