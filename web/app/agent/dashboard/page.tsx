@@ -85,6 +85,24 @@ function AgentDashboardContent() {
   // Search state
   const [searchTerm, setSearchTerm] = useState('');
 
+  // fetchSupportUsers defined first so it can be used in init useEffect below
+  const fetchSupportUsers = async () => {
+    setUsersLoading(true);
+    const token = localStorage.getItem('agent_token');
+    try {
+      const res = await fetch(`${API_URL}/support/users`, { 
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSupportUsers(data);
+      } else {
+        console.error('fetchSupportUsers failed:', res.status, await res.text());
+      }
+    } catch (e) { console.error('fetchSupportUsers error:', e); }
+    finally { setUsersLoading(false); }
+  };
+
   // Auth & Init
   useEffect(() => {
     const init = async () => {
@@ -184,9 +202,7 @@ function AgentDashboardContent() {
             // 3. Fetch Tickets
             await fetchTickets(token);
 
-            // Fetch users background automatically
-            fetchSupportUsers();
-
+            // 4. Restore last viewed tab from sessionStorage
             const savedViewMode = sessionStorage.getItem('agentViewMode') as 'MINE' | 'QUEUE' | 'USERS' | null;
             if (savedViewMode) {
                 setViewMode(savedViewMode);
@@ -206,6 +222,14 @@ function AgentDashboardContent() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Run once
+
+  // Auto-fetch users whenever USERS tab becomes active
+  useEffect(() => {
+    if (viewMode === 'USERS') {
+      fetchSupportUsers();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMode]);
 
   // Scroll on new message
   useEffect(() => {
@@ -241,17 +265,7 @@ function AgentDashboardContent() {
     } catch (e) { console.error(e); }
   };
 
-  const fetchSupportUsers = async () => {
-    setUsersLoading(true);
-    const token = localStorage.getItem('agent_token');
-    try {
-      const res = await fetch(`${API_URL}/support/users`, { 
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (res.ok) setSupportUsers(await res.json());
-    } catch (e) { console.error(e); }
-    setUsersLoading(false);
-  };
+  // NOTE: fetchSupportUsers is defined above the init useEffect to avoid hoisting issues with `const`
 
   // Join Ticket Room on Selection
   useEffect(() => {
