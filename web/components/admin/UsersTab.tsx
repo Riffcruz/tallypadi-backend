@@ -102,7 +102,7 @@ export default function UsersTab({
                 }`}
                 title={filterActive ? 'Showing active + trial users' : 'Showing all users'}
                 >
-                <Filter size={14} /> {filterActive ? 'Active Only' : 'Show All'}
+                <Filter size={14} /> {filterActive ? 'Show All Users' : 'Show Active Only'}
                 </button>
             </div>
           </div>
