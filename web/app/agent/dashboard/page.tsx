@@ -602,13 +602,22 @@ function AgentDashboardContent() {
       `}>
         {viewMode === 'USERS' ? (
            <div className="flex flex-col bg-slate-900 text-slate-100 h-full w-full overflow-hidden min-h-0">
-              {/* Users Header with Refresh Button - always visible */}
+              {/* Users Header with Back + Refresh Button - always visible */}
               <div className="flex items-center justify-between px-4 md:px-8 py-4 bg-slate-800 border-b border-slate-700 flex-shrink-0 z-10">
-                <div>
-                  <h2 className="text-sm font-bold text-slate-100">User Database</h2>
-                  <p className="text-xs text-slate-400">
-                    {usersLoading ? 'Fetching...' : `${supportUsers.length} user${supportUsers.length !== 1 ? 's' : ''} loaded`}
-                  </p>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => { setViewMode('MINE'); sessionStorage.setItem('agentViewMode', 'MINE'); setShowSidebar(true); }}
+                    className="md:hidden flex items-center justify-center w-8 h-8 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition-all"
+                    title="Back to tickets"
+                  >
+                    <ArrowLeft size={16} />
+                  </button>
+                  <div>
+                    <h2 className="text-sm font-bold text-slate-100">User Database</h2>
+                    <p className="text-xs text-slate-400">
+                      {usersLoading ? 'Fetching...' : `${supportUsers.length} user${supportUsers.length !== 1 ? 's' : ''} loaded`}
+                    </p>
+                  </div>
                 </div>
                 <button
                   onClick={() => fetchSupportUsers()}
