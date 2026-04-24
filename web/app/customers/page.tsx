@@ -144,6 +144,13 @@ export default function CustomersPage() {
 
   const handleSaveCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const phoneRegex = /^\+?[\d\s\-\(\)]{7,15}$/;
+    if (!phoneRegex.test(formData.phoneNumber)) {
+      Swal.fire('Invalid Input', 'Please enter a valid phone number.', 'error');
+      return;
+    }
+
     setSubmitting(true);
     const token = getCookie('tallyToken');
     try {

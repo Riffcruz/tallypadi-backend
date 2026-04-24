@@ -1,6 +1,11 @@
 import { Request, Response } from 'express';
 import { Customer } from '../models/customer.model';
 
+const isValidPhone = (phone: string) => {
+  const phoneRegex = /^\+?[\d\s\-\(\)]{7,15}$/;
+  return phoneRegex.test(phone);
+};
+
 export const getCustomers = async (req: any, res: Response) => {
   try {
     const shopId = req.user.role === 'OWNER' ? req.user.id : req.user.ownerId;
@@ -38,6 +43,10 @@ export const createCustomer = async (req: any, res: Response) => {
       return res.status(400).json({ error: 'Name and phone number are required' });
     }
 
+    if (!isValidPhone(phoneNumber)) {
+      return res.status(400).json({ error: 'Please enter a valid phone number' });
+    }
+
     // Check if phone already exists for THIS shop
     const existing = await Customer.findOne({ shopId, phoneNumber });
     if (existing) {
@@ -67,6 +76,10 @@ export const updateCustomer = async (req: any, res: Response) => {
 
     // Optional phone validation to ensure they aren't changing it to an existing one
     if (phoneNumber) {
+      if (!isValidPhone(phoneNumber)) {
+        return res.status(400).json({ error: 'Please enter a valid phone number' });
+      }
+
       const existing = await Customer.findOne({ shopId, phoneNumber, _id: { $ne: id } });
       if (existing) return res.status(400).json({ error: 'Phone number already used by another customer' });
     }

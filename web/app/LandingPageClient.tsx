@@ -549,8 +549,7 @@ export default function LandingPage() {
       {/* Left: Copy */}
       <div className="text-white">
         <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold backdrop-blur">
-          <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.85)]" />
-          WhatsApp POS + Web Dashboard
+         
         </div>
 
         <h1 className="mt-6 text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight leading-[1.05]">
