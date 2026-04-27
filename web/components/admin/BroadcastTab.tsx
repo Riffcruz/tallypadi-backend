@@ -20,6 +20,7 @@ export default function BroadcastTab({ headers }: { headers: Record<string, stri
     const [sendEmail, setSendEmail] = useState(false);
     const [emailDelayMs, setEmailDelayMs] = useState(1000);
     const [specificIdentifier, setSpecificIdentifier] = useState('');
+    const [emailSubject, setEmailSubject] = useState('');
     
     const [templates, setTemplates] = useState<any[]>([]);
     const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
@@ -83,8 +84,8 @@ export default function BroadcastTab({ headers }: { headers: Record<string, stri
         if ((sendWhatsapp || sendPush) && !msg) {
              return Swal.fire('Missing Field', 'Please enter a message body for WhatsApp/Push.', 'warning');
         }
-        if (sendEmail && !selectedTemplateId) {
-             return Swal.fire('Missing Template', 'Please select an Email Template to use for broadcasting.', 'warning');
+        if (sendEmail && !selectedTemplateId && (!emailSubject || !msg)) {
+             return Swal.fire('Missing Configuration', 'Please select an Email Template OR provide an Email Subject and Basic Text Body.', 'warning');
         }
         if (target === 'particular_user' && !specificIdentifier) {
              return Swal.fire('Missing', 'Please enter the specific phone number or email of the recipient.', 'warning');
@@ -109,6 +110,10 @@ export default function BroadcastTab({ headers }: { headers: Record<string, stri
                     emailDelayMs,
                     specificIdentifier
                 };
+
+                if (emailSubject) {
+                    payload.emailSubject = emailSubject;
+                }
 
                 if (sendWhatsapp && mediaId.trim()) {
                     payload.mediaId = mediaId.trim();
@@ -238,6 +243,7 @@ export default function BroadcastTab({ headers }: { headers: Record<string, stri
                                             <label className="block text-xs font-bold text-slate-400 mb-2">Select Active Template</label>
                                             <div className="flex items-center gap-3">
                                                 <select value={selectedTemplateId} onChange={e=>setSelectedTemplateId(e.target.value)} className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500">
+                                                    <option value="">-- No Template (Use Basic Subject & Text Body) --</option>
                                                     {templates.map(t => (
                                                         <option key={t._id} value={t._id}>{t.title} [Subject: {t.subject}]</option>
                                                     ))}
@@ -264,12 +270,20 @@ export default function BroadcastTab({ headers }: { headers: Record<string, stri
                         </div>
                     )}
 
-                    {/* WhatsApp/Push Core Message Body */}
-                    {(sendWhatsapp || sendPush) && (
-                        <div className="animate-in slide-in-from-top-2">
-                            <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Basic Text Body (WhatsApp & PWA)</label>
-                            <textarea className="w-full h-32 bg-slate-900 border border-slate-600 rounded-xl p-4 text-white focus:border-green-500 outline-none resize-none transition-colors" placeholder="Type your WhatsApp/Push generic message here..." value={msg} onChange={(e) => setMsg(e.target.value)}></textarea>
-                            <p className="text-xs text-slate-500 mt-2">This will be used as the caption if meta media is attached.</p>
+                    {/* Basic Message Body */}
+                    {(sendWhatsapp || sendPush || sendEmail) && (
+                        <div className="animate-in slide-in-from-top-2 space-y-4">
+                            {sendEmail && (
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Email Subject {selectedTemplateId ? '(Overrides Template Subject)' : ''}</label>
+                                    <input type="text" className="w-full bg-slate-900 border border-slate-600 rounded-xl px-4 py-3 text-white focus:border-indigo-500 outline-none transition-colors" placeholder="e.g. Important Update for ##usershopname##" value={emailSubject} onChange={(e) => setEmailSubject(e.target.value)} />
+                                </div>
+                            )}
+                            <div>
+                                <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Basic Text Body (WhatsApp, PWA, Basic Email)</label>
+                                <textarea className="w-full h-32 bg-slate-900 border border-slate-600 rounded-xl p-4 text-white focus:border-green-500 outline-none resize-none transition-colors" placeholder="Type your generic message here..." value={msg} onChange={(e) => setMsg(e.target.value)}></textarea>
+                                <p className="text-xs text-slate-500 mt-2">Will be used as caption for WhatsApp media, or email body if no template is chosen.</p>
+                            </div>
                         </div>
                     )}
 

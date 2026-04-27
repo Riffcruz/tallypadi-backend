@@ -88,6 +88,7 @@ const broadcastSchema = z
     sendWhatsapp: z.boolean().optional().default(true),
     sendEmail: z.boolean().optional().default(false),
     emailTemplateId: z.string().trim().optional(),
+    emailSubject: z.string().trim().optional(),
     emailDelayMs: z.coerce.number().optional().default(150),
     specificIdentifier: z.string().trim().optional(), // For specific user test
   })
@@ -617,9 +618,12 @@ export const broadcastMessage = async (req: Request, res: Response) => {
     // Prepare Email Template early to avoid repeated DB lookups
     let template: any = null;
     if (sendEmail) {
-       if (!emailTemplateId) return res.status(400).json({ error: 'Email broadcasting requires an emailTemplateId' });
-       template = await EmailTemplate.findById(emailTemplateId).lean();
-       if (!template) return res.status(400).json({ error: 'The selected Email Template was not found.' });
+       if (emailTemplateId) {
+           template = await EmailTemplate.findById(emailTemplateId).lean();
+           if (!template) return res.status(400).json({ error: 'The selected Email Template was not found.' });
+       } else if (!parsed.data.emailSubject || !message) {
+           return res.status(400).json({ error: 'Email broadcasting requires either an Email Template or a Subject and Basic Message body.' });
+       }
     }
 
     // 1. Send PWA Push Notification Instantly (If requested)
@@ -649,22 +653,41 @@ export const broadcastMessage = async (req: Request, res: Response) => {
           }
 
           // Send Email
-          if (sendEmail && u.email && template) {
-             let personalizedSubject = template.subject
-                 .replace(/##usershopname##/g, u.businessName || 'Your Shop')
-                 .replace(/##phonenumber##/g, u.phoneNumber || '')
-                 .replace(/##name##/g, u.name || 'Partner');
+          if (sendEmail && u.email) {
+             let personalizedSubject = '';
+             let personalizedHtml = '';
 
-             let personalizedHtml = template.htmlBody
-                 .replace(/##usershopname##/g, u.businessName || 'Your Shop')
-                 .replace(/##phonenumber##/g, u.phoneNumber || '')
-                 .replace(/##name##/g, u.name || 'Partner');
+             if (template) {
+                 personalizedSubject = (parsed.data.emailSubject || template.subject)
+                     .replace(/##usershopname##/g, u.businessName || 'Your Shop')
+                     .replace(/##phonenumber##/g, u.phoneNumber || '')
+                     .replace(/##name##/g, u.name || 'Partner');
 
-             await sendBroadcastEmail(u.email, personalizedSubject, personalizedHtml);
-             
-             // Throttle internally per email strictly
-             if (emailDelayMs > 0) {
-                 await new Promise(r => setTimeout(r, emailDelayMs));
+                 personalizedHtml = template.htmlBody
+                     .replace(/##usershopname##/g, u.businessName || 'Your Shop')
+                     .replace(/##phonenumber##/g, u.phoneNumber || '')
+                     .replace(/##name##/g, u.name || 'Partner');
+             } else if (parsed.data.emailSubject && message) {
+                 personalizedSubject = parsed.data.emailSubject
+                     .replace(/##usershopname##/g, u.businessName || 'Your Shop')
+                     .replace(/##phonenumber##/g, u.phoneNumber || '')
+                     .replace(/##name##/g, u.name || 'Partner');
+
+                 let pMsg = message
+                     .replace(/##usershopname##/g, u.businessName || 'Your Shop')
+                     .replace(/##phonenumber##/g, u.phoneNumber || '')
+                     .replace(/##name##/g, u.name || 'Partner');
+                 
+                 personalizedHtml = `<div style="font-family: sans-serif; white-space: pre-wrap;">${pMsg}</div>`;
+             }
+
+             if (personalizedSubject && personalizedHtml) {
+                 await sendBroadcastEmail(u.email, personalizedSubject, personalizedHtml);
+                 
+                 // Throttle internally per email strictly
+                 if (emailDelayMs > 0) {
+                     await new Promise(r => setTimeout(r, emailDelayMs));
+                 }
              }
           }
 
