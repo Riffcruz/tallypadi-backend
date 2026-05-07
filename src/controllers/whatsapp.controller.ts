@@ -1608,7 +1608,11 @@ What's included in Oga Boss Plan:
 
     // ✅ Handle Bulk Restock Draft Confirmation
     if (actor.interactionState && actor.interactionState.type === 'WAITING_FOR_BULK_RESTOCK_CONFIRM') {
-        if (btn && btn.id === 'BULK_RST_YES') {
+        const textReply = rawText.toLowerCase().trim();
+        const isYes = (btn && btn.id === 'BULK_RST_YES') || textReply === 'yes';
+        const isNo = (btn && btn.id === 'BULK_RST_NO') || textReply === 'no';
+
+        if (isYes) {
             const finalParsed = actor.interactionState.data.parsed;
             // Mirror the price if one is provided but the other is missing, otherwise default 0
             finalParsed.items = finalParsed.items.map((i: any) => ({
@@ -1627,12 +1631,19 @@ What's included in Oga Boss Plan:
                 console.error('Bulk Restock flow error:', e);
                 await queueOutboundMessage(from, '⚠️ Failed to update stock. Please try again.');
             }
-        } else if (btn && btn.id === 'BULK_RST_NO') {
+        } else if (isNo) {
             actor.interactionState = null;
             await actor.save();
             await queueOutboundMessage(from, '❌ Cancelled. Please try again and include the prices for each item.');
         } else {
-            await queueOutboundMessage(from, 'Please tap *Yes* or *No* to confirm your bulk items.');
+            // Allow user to cancel explicitly or break out of state if they type something else completely
+            if (textReply === 'cancel') {
+                actor.interactionState = null;
+                await actor.save();
+                await queueOutboundMessage(from, '❌ Action cancelled.');
+            } else {
+                await queueOutboundMessage(from, 'Please tap *Yes* or *No* to confirm your bulk items, or reply "Yes" / "No".');
+            }
         }
         return;
     }
