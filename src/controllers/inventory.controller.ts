@@ -67,9 +67,11 @@ export const getInventory = async (req: Request, res: Response) => {
     
     if (search) {
       const q = String(search).trim();
+      // Escape regex special characters to prevent search crashes
+      const escapedQ = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       filter.$or = [
-         { name: { $regex: q, $options: 'i' } },
-         { barcode: { $regex: q, $options: 'i' } }
+         { name: { $regex: escapedQ, $options: 'i' } },
+         { barcode: { $regex: escapedQ, $options: 'i' } }
       ];
     }
 
@@ -82,7 +84,7 @@ export const getInventory = async (req: Request, res: Response) => {
       const skip = (pageNum - 1) * limitNum;
 
       const [items, total] = await Promise.all([
-        Inventory.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limitNum).lean(),
+        Inventory.find(filter).sort({ createdAt: -1, _id: -1 }).skip(skip).limit(limitNum).lean(),
         Inventory.countDocuments(filter)
       ]);
 

@@ -67,7 +67,10 @@ export default function ProductGrid({ user, onAddToCart, currencyCode }: Product
       }));
 
       if (isLoadMore) {
-        setInventory(prev => [...prev, ...clean]);
+        setInventory(prev => {
+          const newItems = clean.filter((c: any) => !prev.some(p => p.id === c.id));
+          return [...prev, ...newItems];
+        });
       } else {
         setInventory(clean);
       }
