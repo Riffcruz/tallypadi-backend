@@ -60,7 +60,9 @@ import {
   addInventoryItem,
   updateInventoryItem,
   getCategories,
-  deleteInventoryItem
+  deleteInventoryItem,
+  bulkParseInventory,
+  bulkSaveInventory
 } from './controllers/inventory.controller';
 import { updateSettings } from './controllers/settings.controller';
 import { getGlobalSettings } from './controllers/admin.controller';
@@ -334,6 +336,8 @@ app.get('/api/inventory', authRequired, getInventory);
 app.get('/api/inventory/categories', authRequired, getCategories);
 app.get('/api/inventory/:id', authRequired, getInventoryItem);
 app.post('/api/inventory', authRequired, addInventoryItem);
+app.post('/api/inventory/bulk-parse', authRequired, bulkParseInventory);
+app.post('/api/inventory/bulk-save', authRequired, bulkSaveInventory);
 app.put('/api/inventory/:id', authRequired, updateInventoryItem);
 app.delete('/api/inventory/:id', authRequired, deleteInventoryItem);
 

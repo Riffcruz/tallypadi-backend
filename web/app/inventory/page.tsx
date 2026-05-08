@@ -23,6 +23,7 @@ import {
   Filter,
   Trash2,
   ScanBarcode, // Import ScanBarcode
+  CheckCircle2,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { getCookie } from '../../utils/cookies';
@@ -113,9 +114,16 @@ export default function InventoryPage() {
   const [editSupplierPhone, setEditSupplierPhone] = useState<string>('');
   const [editImage, setEditImage] = useState<string | null>(null);
 
-  // ✅ Bulk Edit State
+  // ✅ Bulk Edit State (List)
   const [isBulkMode, setIsBulkMode] = useState(false);
   const [bulkEdits, setBulkEdits] = useState<Record<string, number>>({});
+
+  // ✅ Bulk AI Add State (Upload)
+  const [activeAddTab, setActiveAddTab] = useState<'single' | 'bulk'>('single');
+  const [bulkText, setBulkText] = useState('');
+  const [isParsingBulk, setIsParsingBulk] = useState(false);
+  const [isSavingBulk, setIsSavingBulk] = useState(false);
+  const [parsedBulkItems, setParsedBulkItems] = useState<any[] | null>(null);
 
   // ✅ File Input Ref
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -552,6 +560,52 @@ export default function InventoryPage() {
   };
 
   // ✅ Bulk Edit Handlers
+  const handleBulkParse = async () => {
+    if (!bulkText.trim()) return;
+    setIsParsingBulk(true);
+    try {
+      const token = getCookie('tallyToken');
+      const res = await axios.post(
+        `${API_URL}/inventory/bulk-parse`,
+        { text: bulkText },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (res.data.items && res.data.items.length > 0) {
+        setParsedBulkItems(res.data.items);
+      } else {
+        Swal.fire('No items found', 'The AI could not extract any items from your text.', 'info');
+      }
+    } catch (err: any) {
+      console.error('Parse failed', err);
+      Swal.fire('Error', err?.response?.data?.error || 'Failed to parse items.', 'error');
+    } finally {
+      setIsParsingBulk(false);
+    }
+  };
+
+  const handleBulkSave = async () => {
+    if (!parsedBulkItems || parsedBulkItems.length === 0) return;
+    setIsSavingBulk(true);
+    try {
+      const token = getCookie('tallyToken');
+      const res = await axios.post(
+        `${API_URL}/inventory/bulk-save`,
+        { items: parsedBulkItems },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      Swal.fire('Success', `Updated ${res.data.updatedCount} items, Created ${res.data.createdCount} new items.`, 'success');
+      setBulkText('');
+      setParsedBulkItems(null);
+      loadInventory(); // Refresh list
+    } catch (err: any) {
+      console.error('Save failed', err);
+      Swal.fire('Error', err?.response?.data?.error || 'Failed to save items.', 'error');
+    } finally {
+      setIsSavingBulk(false);
+    }
+  };
+
+  // ✅ Legacy Bulk Edit Handlers
   const toggleBulkMode = () => {
     if (isBulkMode) {
       setIsBulkMode(false);
@@ -935,25 +989,49 @@ export default function InventoryPage() {
           <div className="col-span-2 bg-white rounded-3xl border border-slate-200 shadow-sm p-6 relative overflow-hidden group">
             <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-50 rounded-bl-full -mr-10 -mt-10 transition-transform group-hover:scale-110" />
             
-            <div className="flex items-center gap-3 mb-6 relative z-10">
-              <div
-                className={`w-12 h-12 rounded-2xl flex items-center justify-center border shadow-sm transition-colors ${
-                  showLockUI ? 'bg-rose-50 text-rose-600 border-rose-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100'
-                }`}
-              >
-                {showLockUI ? <Lock className="w-6 h-6" /> : <Sparkles className="w-6 h-6" />}
+            <div className="flex items-center justify-between gap-3 mb-6 relative z-10">
+              <div className="flex items-center gap-3">
+                <div
+                  className={`w-12 h-12 rounded-2xl flex items-center justify-center border shadow-sm transition-colors ${
+                    showLockUI ? 'bg-rose-50 text-rose-600 border-rose-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100'
+                  }`}
+                >
+                  {showLockUI ? <Lock className="w-6 h-6" /> : <Sparkles className="w-6 h-6" />}
+                </div>
+                <div>
+                  <p className="font-black text-xl text-slate-900 leading-tight">
+                    {showLockUI ? 'Inventory Locked' : 'Add to Inventory'}
+                  </p>
+                  <p className="text-sm text-slate-500 font-medium">
+                    {showLockUI ? 'Upgrade to manage stock' : 'Create new items or restock'}
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="font-black text-xl text-slate-900 leading-tight">
-                  {showLockUI ? 'Inventory Locked' : 'Add New Product'}
-                </p>
-                <p className="text-sm text-slate-500 font-medium">
-                  {showLockUI ? 'Upgrade to manage stock' : 'Fill in the details below'}
-                </p>
+
+              {/* TABS */}
+              <div className="bg-slate-100 p-1 rounded-xl flex items-center shadow-inner">
+                <button
+                  onClick={() => setActiveAddTab('single')}
+                  className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${
+                    activeAddTab === 'single' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  Single Product
+                </button>
+                <button
+                  onClick={() => setActiveAddTab('bulk')}
+                  className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors flex items-center gap-1.5 ${
+                    activeAddTab === 'bulk' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  Bulk AI Upload
+                </button>
               </div>
             </div>
 
-            <form onSubmit={handleAddItem} className="relative z-10">
+            {activeAddTab === 'single' ? (
+              <form onSubmit={handleAddItem} className="relative z-10">
               <div className="grid grid-cols-12 gap-6">
                 {/* Left: Image Upload */}
                 <div className="col-span-12 md:col-span-4 lg:col-span-3">
@@ -1221,6 +1299,133 @@ export default function InventoryPage() {
                 </div>
               </div>
             </form>
+            ) : (
+              // BULK AI UPLOAD TAB
+              <div className="relative z-10 animate-fade-in">
+                {String(user?.planType || '').toUpperCase() !== 'TYCOON' ? (
+                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-8 flex flex-col items-center justify-center text-center">
+                     <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-sm mb-4">
+                        <Lock className="w-8 h-8 text-slate-400" />
+                     </div>
+                     <h3 className="text-lg font-black text-slate-900">Tycoon Feature</h3>
+                     <p className="text-sm text-slate-500 mt-2 max-w-sm mb-6">
+                        Bulk AI Upload allows you to quickly paste a list of inventory items and have our AI automatically organize and restock them.
+                     </p>
+                     <button onClick={showLockedModal} className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-lg shadow-emerald-600/20 transition-transform active:scale-95">
+                        Upgrade to Tycoon
+                     </button>
+                  </div>
+                ) : parsedBulkItems ? (
+                  // PARSED ITEMS REVIEW TABLE
+                  <div className="flex flex-col h-full space-y-4">
+                     <div className="flex items-center justify-between">
+                        <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                           <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                           Review {parsedBulkItems.length} Extracted Items
+                        </h3>
+                        <button 
+                           onClick={() => setParsedBulkItems(null)} 
+                           className="text-sm font-semibold text-rose-500 hover:text-rose-600"
+                        >
+                           Discard & Start Over
+                        </button>
+                     </div>
+                     <div className="bg-white border border-slate-200 rounded-xl overflow-hidden max-h-[300px] overflow-y-auto">
+                        <table className="w-full text-left text-sm whitespace-nowrap">
+                           <thead className="bg-slate-50 text-slate-500 font-bold sticky top-0 z-10">
+                              <tr>
+                                 <th className="px-4 py-3">Item Name</th>
+                                 <th className="px-4 py-3 w-24">Qty</th>
+                                 <th className="px-4 py-3 w-28">Cost ({currencyCode})</th>
+                                 <th className="px-4 py-3 w-28">Price ({currencyCode})</th>
+                              </tr>
+                           </thead>
+                           <tbody className="divide-y divide-slate-100">
+                              {parsedBulkItems.map((item, idx) => (
+                                 <tr key={idx} className="hover:bg-slate-50/50">
+                                    <td className="px-4 py-2">
+                                       <input 
+                                          type="text" 
+                                          value={item.name} 
+                                          onChange={(e) => {
+                                             const newItems = [...parsedBulkItems];
+                                             newItems[idx].name = e.target.value;
+                                             setParsedBulkItems(newItems);
+                                          }}
+                                          className="w-full bg-transparent outline-none font-semibold text-slate-800"
+                                       />
+                                    </td>
+                                    <td className="px-4 py-2">
+                                       <input 
+                                          type="number" 
+                                          value={item.qty || ''} 
+                                          onChange={(e) => {
+                                             const newItems = [...parsedBulkItems];
+                                             newItems[idx].qty = Number(e.target.value);
+                                             setParsedBulkItems(newItems);
+                                          }}
+                                          className="w-full bg-slate-100 px-2 py-1 rounded outline-none font-mono text-slate-700"
+                                       />
+                                    </td>
+                                    <td className="px-4 py-2">
+                                       <input 
+                                          type="number" 
+                                          value={item.cost_price || ''} 
+                                          onChange={(e) => {
+                                             const newItems = [...parsedBulkItems];
+                                             newItems[idx].cost_price = Number(e.target.value);
+                                             setParsedBulkItems(newItems);
+                                          }}
+                                          className="w-full bg-slate-100 px-2 py-1 rounded outline-none font-mono text-slate-700"
+                                       />
+                                    </td>
+                                    <td className="px-4 py-2">
+                                       <input 
+                                          type="number" 
+                                          value={item.unit_price || ''} 
+                                          onChange={(e) => {
+                                             const newItems = [...parsedBulkItems];
+                                             newItems[idx].unit_price = Number(e.target.value);
+                                             setParsedBulkItems(newItems);
+                                          }}
+                                          className="w-full bg-slate-100 px-2 py-1 rounded outline-none font-mono text-slate-700"
+                                       />
+                                    </td>
+                                 </tr>
+                              ))}
+                           </tbody>
+                        </table>
+                     </div>
+                     <button
+                        onClick={handleBulkSave}
+                        disabled={isSavingBulk}
+                        className="w-full py-4 rounded-2xl font-black text-sm text-white bg-emerald-600 hover:bg-emerald-700 shadow-xl shadow-emerald-200/50 transition-all active:scale-[0.98] flex items-center justify-center gap-3 disabled:opacity-50"
+                     >
+                        {isSavingBulk ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle2 className="w-5 h-5" />}
+                        Confirm & Save Items
+                     </button>
+                  </div>
+                ) : (
+                  // TEXT INPUT
+                  <div className="flex flex-col h-full">
+                     <textarea
+                        value={bulkText}
+                        onChange={(e) => setBulkText(e.target.value)}
+                        placeholder="Paste your items here (e.g. 5 bags of rice at 20k each, 10 cartons of indomie cost 5000 sell 6000...)"
+                        className="w-full h-48 px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 text-slate-700 resize-none font-medium mb-4"
+                     />
+                     <button
+                        onClick={handleBulkParse}
+                        disabled={!bulkText.trim() || isParsingBulk}
+                        className="w-full py-4 rounded-2xl font-black text-sm text-white bg-emerald-600 hover:bg-emerald-700 shadow-xl shadow-emerald-200/50 transition-all active:scale-[0.98] flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                     >
+                        {isParsingBulk ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
+                        Parse Items with AI
+                     </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 flex flex-col justify-between">

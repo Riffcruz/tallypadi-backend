@@ -3,6 +3,7 @@ import { Inventory } from '../models/inventory.model';
 import { User } from '../models/user.model';
 import { saveImageFromBase64 } from '../utils/image';
 import { Types } from 'mongoose';
+import { parseMessageWithGemini } from '../services/gemini.service';
 
 // --- SKU Generator ---
 // Generates a short unique code like "P-4X9M" for a product
@@ -499,6 +500,107 @@ export const deleteInventoryItem = async (req: Request, res: Response) => {
     return res.json({ success: true, id });
   } catch (error) {
     console.error('Delete Item Error:', error);
+    return res.status(500).json({ error: 'Server Error' });
+  }
+};
+
+// =========================================================
+// ✅ BULK AI UPLOAD ENDPOINTS
+// =========================================================
+
+export const bulkParseInventory = async (req: Request, res: Response) => {
+  try {
+    const user = await getAuthUser(req);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+
+    const isTycoon = String(user.planType || '').toUpperCase() === 'TYCOON';
+    if (!isTycoon) {
+      return res.status(403).json({ error: 'Bulk AI Upload is a Tycoon-only feature.' });
+    }
+
+    if (!hasInventoryWriteAccess(user)) {
+      return denySubscription(res, user);
+    }
+
+    const { text } = req.body;
+    if (!text || typeof text !== 'string') {
+      return res.status(400).json({ error: 'Text input is required' });
+    }
+
+    const promptText = `Add these to inventory:\n${text}`;
+    const parsed = await parseMessageWithGemini(promptText, user.settings?.language || 'English');
+
+    let items = parsed.items || [];
+    if (items.length > 20) {
+      items = items.slice(0, 20);
+    }
+
+    return res.json({ success: true, items });
+  } catch (error) {
+    console.error('Bulk Parse Error:', error);
+    return res.status(500).json({ error: 'Server Error' });
+  }
+};
+
+export const bulkSaveInventory = async (req: Request, res: Response) => {
+  try {
+    const user = await getAuthUser(req);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+
+    const isTycoon = String(user.planType || '').toUpperCase() === 'TYCOON';
+    if (!isTycoon) {
+      return res.status(403).json({ error: 'Bulk AI Upload is a Tycoon-only feature.' });
+    }
+
+    if (!hasInventoryWriteAccess(user)) {
+      return denySubscription(res, user);
+    }
+
+    const { items } = req.body;
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'No items provided' });
+    }
+
+    const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    let updatedCount = 0;
+    let createdCount = 0;
+
+    for (const item of items) {
+      const name = String(item.name || '').trim();
+      const qty = Number(item.qty) || 0;
+      const costPrice = Number(item.cost_price) || 0;
+      const sellingPrice = Number(item.unit_price) || 0;
+
+      if (!name) continue;
+
+      const existingItem = await Inventory.findOne({
+        user: user._id,
+        name: { $regex: new RegExp(`^${escapeRegex(name)}$`, 'i') },
+      });
+
+      if (existingItem) {
+        existingItem.quantity = Number(existingItem.quantity || 0) + qty;
+        if (costPrice > 0) existingItem.costPrice = costPrice;
+        if (sellingPrice > 0) existingItem.lastUnitPrice = sellingPrice;
+        await existingItem.save();
+        updatedCount++;
+      } else {
+        const sku = await generateUniqueSku(user._id);
+        await Inventory.create({
+          user: user._id,
+          name,
+          sku,
+          quantity: qty,
+          lastUnitPrice: sellingPrice,
+          costPrice: costPrice,
+        });
+        createdCount++;
+      }
+    }
+
+    return res.json({ success: true, updatedCount, createdCount });
+  } catch (error) {
+    console.error('Bulk Save Error:', error);
     return res.status(500).json({ error: 'Server Error' });
   }
 };
