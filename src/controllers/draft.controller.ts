@@ -31,7 +31,7 @@ export const getDraft = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
-    if (!Types.ObjectId.isValid(id)) {
+    if (!Types.ObjectId.isValid(id as string)) {
       return res.status(404).json({ error: 'Draft not found' });
     }
 
@@ -70,7 +70,7 @@ export const resolveDraft = async (req: Request, res: Response) => {
     const { id } = req.params;
     const { resolutions } = req.body || {};
 
-    if (!Types.ObjectId.isValid(id)) {
+    if (!Types.ObjectId.isValid(id as string)) {
       return res.status(404).json({ error: 'Draft not found' });
     }
 
@@ -143,7 +143,7 @@ export const getDraftInventoryOptions = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
-    if (!Types.ObjectId.isValid(id)) {
+    if (!Types.ObjectId.isValid(id as string)) {
       return res.status(404).json({ error: 'Draft not found' });
     }
 

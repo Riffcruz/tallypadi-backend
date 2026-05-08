@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { Inventory } from '../models/inventory.model';
 import { User } from '../models/user.model';
 import { saveImageFromBase64 } from '../utils/image';
+import { Types } from 'mongoose';
 
 // --- SKU Generator ---
 // Generates a short unique code like "P-4X9M" for a product
@@ -15,7 +16,7 @@ function generateSku(): string {
 }
 
 // Generates a SKU and ensures it's unique for this user
-async function generateUniqueSku(userId: unknown): Promise<string> {
+async function generateUniqueSku(userId: Types.ObjectId | string): Promise<string> {
   let sku: string;
   let attempts = 0;
   do {
