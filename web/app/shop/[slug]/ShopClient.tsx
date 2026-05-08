@@ -165,119 +165,108 @@ export default function ShopClient({ initialShop, slug }: ShopClientProps) {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-900 flex">
-      {/* Sidebar */}
-      <ShopSidebar
-        shopName={initialShop.name}
-        shopPhone={initialShop.phone}
-        categories={initialShop.categories}
-        activeCategory={category}
-        onCategorySelect={setCategory}
-        isOpen={isSidebarOpen}
-        onClose={() => setIsSidebarOpen(false)}
-      />
-
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col md:pl-64 min-w-0">
-        {/* Mobile Navbar */}
-        <header className="md:hidden bg-white border-b border-slate-200 p-4 flex items-center justify-between gap-4 sticky top-0 z-50">
-          <div className="flex items-center gap-3">
-            <button onClick={() => setIsSidebarOpen(true)} className="p-2 -ml-2 text-slate-600 hover:bg-slate-100 rounded-lg transition">
-              <Menu size={24} />
-            </button>
-            <span className="font-bold text-lg text-slate-900 truncate">{initialShop.name}</span>
+    <div className="min-h-screen bg-slate-50 font-sans text-slate-900 flex flex-col">
+      {/* Expired Plan Banner */}
+      {initialShop.planExpired && (
+        <div className="bg-amber-100 border-b border-amber-200 px-4 py-3">
+          <div className="max-w-6xl mx-auto flex items-center gap-2 text-amber-800">
+            <AlertTriangle size={18} />
+            <span className="text-sm font-semibold">This shop is temporarily inactive.</span>
           </div>
-          {/* Cart icon for mobile */}
-          {cartCount > 0 && (
-            <button onClick={() => setIsCartOpen(true)} className="relative p-2 rounded-xl" style={{ backgroundColor: themeColor }}>
-              <ShoppingCart size={20} className="text-white" />
-              <span className="absolute -top-1 -right-1 bg-white text-xs font-black w-5 h-5 rounded-full flex items-center justify-center shadow" style={{ color: themeColor }}>
-                {cartCount}
-              </span>
-            </button>
-          )}
-        </header>
+        </div>
+      )}
 
-        {/* Expired Plan Banner */}
-        {initialShop.planExpired && (
-          <div className="bg-amber-100 border-b border-amber-200 px-4 py-3">
-            <div className="max-w-4xl mx-auto flex items-center gap-2 text-amber-800">
-              <AlertTriangle size={18} />
-              <span className="text-sm font-semibold">This shop is temporarily inactive.</span>
-            </div>
-          </div>
+      {/* JIJI-STYLE HEADER */}
+      <header className="relative w-full pb-8 md:pb-16 pt-4 md:pt-6 px-4 shadow-sm" style={{ backgroundColor: themeColor }}>
+        {initialShop.heroImageUrl && (
+           <img src={initialShop.heroImageUrl} alt="Cover" className="absolute inset-0 w-full h-full object-cover mix-blend-overlay opacity-20 pointer-events-none" />
         )}
-
-        {/* HERO SECTION */}
-        <div className="relative bg-white border-b border-slate-200">
-          <div className="h-48 md:h-64 w-full bg-slate-200 overflow-hidden relative">
-            {initialShop.heroImageUrl ? (
-              <>
-                <img src={initialShop.heroImageUrl} alt="Cover" className="w-full h-full object-cover" />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
-              </>
-            ) : (
-              <div className="w-full h-full flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${themeColor}33, ${themeColor}88)` }}>
-                <ShoppingBag className="text-white/30 w-32 h-32" />
+        <div className="relative z-10 max-w-7xl mx-auto flex flex-col">
+           {/* Top row: Logo/Name and Contact/Cart */}
+           <div className="flex items-center justify-between mb-8 md:mb-12">
+              <div className="flex items-center gap-3">
+                 <button onClick={() => setIsSidebarOpen(true)} className="md:hidden p-2 text-white hover:bg-white/10 rounded-lg transition">
+                    <Menu size={24} />
+                 </button>
+                 <div className="flex items-center gap-2">
+                    <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm" style={{ color: themeColor }}>
+                       <ShoppingBag size={20} />
+                    </div>
+                    <h1 className="text-white text-2xl md:text-3xl font-black tracking-tight drop-shadow-sm">{initialShop.name}</h1>
+                 </div>
               </div>
-            )}
-          </div>
-
-          <div className="max-w-4xl mx-auto px-4 relative -mt-16 mb-6">
-            <div className="bg-white rounded-3xl shadow-xl border border-slate-100 p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-              <div>
-                <h1 className="text-2xl md:text-3xl font-black text-slate-900 mb-2">{initialShop.name}</h1>
-                {initialShop.description ? (
-                  <p className="text-slate-500 text-sm font-medium leading-relaxed max-w-xl">{initialShop.description}</p>
-                ) : (
-                  <p className="text-slate-400 text-sm italic">Verified Tallypadi Merchant</p>
-                )}
+              <div className="flex items-center gap-3 md:gap-4">
+                 {initialShop.phone && (
+                    <a
+                       href={`https://wa.me/${initialShop.phone}`}
+                       target="_blank"
+                       rel="noreferrer"
+                       className="hidden md:flex items-center gap-2 px-5 py-2.5 rounded-full bg-white/20 hover:bg-white/30 text-white font-bold text-sm backdrop-blur-md transition-all border border-white/20"
+                    >
+                       <MessageCircle size={16} />
+                       Chat on WhatsApp
+                    </a>
+                 )}
+                 {cartCount > 0 && (
+                    <button onClick={() => setIsCartOpen(true)} className="relative p-2.5 rounded-full bg-white/20 hover:bg-white/30 backdrop-blur-md transition-all border border-white/20">
+                       <ShoppingCart size={20} className="text-white" />
+                       <span className="absolute -top-1.5 -right-1.5 bg-white text-xs font-black w-5 h-5 rounded-full flex items-center justify-center shadow-md" style={{ color: themeColor }}>
+                          {cartCount}
+                       </span>
+                    </button>
+                 )}
               </div>
+           </div>
 
-              {initialShop.phone && (
-                <a
-                  href={`https://wa.me/${initialShop.phone}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex items-center gap-2 px-5 py-3 rounded-2xl text-white font-bold text-sm shadow-lg whitespace-nowrap transition-all hover:opacity-90 active:scale-95"
-                  style={{ backgroundColor: themeColor }}
-                >
-                  <Phone size={16} />
-                  Chat on WhatsApp
-                </a>
-              )}
-            </div>
-          </div>
+           {/* Search Area */}
+           <div className="max-w-2xl mx-auto w-full text-center">
+              <h2 className="text-white text-2xl md:text-4xl font-bold mb-6 drop-shadow-sm">What are you looking for?</h2>
+              <div className="relative flex items-center shadow-2xl rounded-full">
+                 <Search className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                 <input
+                    type="text"
+                    placeholder="I am looking for..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="w-full pl-14 pr-4 py-4 rounded-full bg-white border-none outline-none text-base md:text-lg font-medium placeholder:text-slate-400"
+                 />
+              </div>
+           </div>
         </div>
+      </header>
 
-        {/* Search & Sort Bar */}
-        <div className="bg-white border-b border-slate-100 sticky top-[57px] md:top-0 z-40">
-          <div className="max-w-4xl mx-auto px-4 py-3 flex items-center gap-3">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search products..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-slate-100 border-none outline-none text-sm font-medium placeholder:text-slate-400 focus:ring-2 transition-all"
-                style={{ '--tw-ring-color': themeColor } as React.CSSProperties}
-              />
-            </div>
-            <select
-              value={sort}
-              onChange={(e) => setSort(e.target.value)}
-              className="bg-slate-100 px-4 py-2.5 rounded-xl text-sm font-bold text-slate-700 border-none outline-none cursor-pointer"
-            >
-              <option value="newest">Newest</option>
-              <option value="price_asc">Price: Low to High</option>
-              <option value="price_desc">Price: High to Low</option>
-            </select>
+      {/* Main Layout Container */}
+      <div className="flex-1 max-w-7xl mx-auto w-full px-4 py-8 flex flex-col md:flex-row gap-8">
+        {/* Sidebar */}
+        <ShopSidebar
+          shopName={initialShop.name}
+          shopPhone={initialShop.phone}
+          categories={initialShop.categories}
+          activeCategory={category}
+          onCategorySelect={setCategory}
+          isOpen={isSidebarOpen}
+          onClose={() => setIsSidebarOpen(false)}
+          themeColor={themeColor}
+        />
+
+        {/* Main Product Area */}
+        <main className="flex-1 min-w-0 flex flex-col">
+          {/* Sorting Header */}
+          <div className="flex items-center justify-between mb-6">
+             <h3 className="font-bold text-slate-800 text-lg md:text-xl">Trending ads</h3>
+             <select
+               value={sort}
+               onChange={(e) => setSort(e.target.value)}
+               className="bg-white border border-slate-200 px-4 py-2 rounded-lg text-sm font-bold text-slate-700 outline-none cursor-pointer hover:bg-slate-50 transition"
+             >
+               <option value="newest">Newest</option>
+               <option value="price_asc">Price: Low to High</option>
+               <option value="price_desc">Price: High to Low</option>
+             </select>
           </div>
-        </div>
 
         {/* PRODUCT GRID */}
-        <main className="flex-1 max-w-4xl mx-auto w-full p-4 pb-32">
+        <div className="pb-32 w-full">
           {products.length === 0 && !loading ? (
             <div className="text-center py-24">
               <div className="bg-slate-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -319,14 +308,14 @@ export default function ShopClient({ initialShop, slug }: ShopClientProps) {
 
                       {/* Card Body */}
                       <div className="p-3 flex flex-col flex-1">
-                        {product.category && (
-                          <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 mb-1 block">{product.category}</span>
-                        )}
-                        <h3 className="font-bold text-slate-900 text-sm line-clamp-2 leading-snug mb-2 group-hover:transition-colors" style={{ '--hover-color': themeColor } as React.CSSProperties}>
+                        <span className="font-black text-lg block mb-1" style={{ color: themeColor }}>{formatMoney(product.price)}</span>
+                        <h3 className="font-medium text-slate-700 text-sm line-clamp-2 leading-snug mb-2 group-hover:transition-colors" style={{ '--hover-color': themeColor } as React.CSSProperties}>
                           {product.name}
                         </h3>
+                        {product.category && (
+                          <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 mb-2 block">{product.category}</span>
+                        )}
                         <div className="mt-auto">
-                          <span className="font-black text-slate-900 text-base block mb-2">{formatMoney(product.price)}</span>
 
                           {/* Add to Cart / Qty Controls */}
                           {product.inStock ? (
@@ -387,21 +376,22 @@ export default function ShopClient({ initialShop, slug }: ShopClientProps) {
               )}
             </>
           )}
-        </main>
+        </div>
 
         {/* Footer */}
-        <footer className="py-8 text-center text-slate-400 bg-slate-50 border-t border-slate-200">
+        <footer className="py-8 text-center text-slate-400 border-t border-slate-200 mt-auto">
           <a href="https://tallypadi.com" target="_blank" className="inline-flex items-center gap-1.5 text-xs font-semibold hover:text-emerald-600 transition">
             <span>Storefront by</span><span className="font-black text-slate-600">tallypadi</span><ExternalLink size={10} />
           </a>
         </footer>
+        </main>
       </div>
 
       {/* ════════════════════════════════════════════
           FLOATING CART BAR (shows when cart has items)
       ════════════════════════════════════════════ */}
       {cartCount > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 z-50 p-4 md:p-6 md:left-64 pointer-events-none">
+        <div className="fixed bottom-0 left-0 right-0 z-50 p-4 md:p-6 pointer-events-none">
           <div className="max-w-4xl mx-auto pointer-events-auto">
             <div className="bg-white rounded-2xl shadow-2xl shadow-slate-900/20 border border-slate-200/80 p-4 flex items-center justify-between gap-4 backdrop-blur-md animate-in slide-in-from-bottom duration-300">
               {/* Cart Summary */}

@@ -1411,7 +1411,7 @@ export default function InventoryPage() {
                      <textarea
                         value={bulkText}
                         onChange={(e) => setBulkText(e.target.value)}
-                        placeholder="Paste your items here (e.g. 5 bags of rice at 20k each, 10 cartons of indomie cost 5000 sell 6000...)"
+                        placeholder="Paste your items here. Max 20 items at a time. (e.g. 5 bags of rice at 20k each, 10 cartons of indomie cost 5000 sell 6000...)"
                         className="w-full h-48 px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 text-slate-700 resize-none font-medium mb-4"
                      />
                      <button

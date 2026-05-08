@@ -11,6 +11,7 @@ interface ShopSidebarProps {
   onCategorySelect: (category: string) => void;
   isOpen: boolean;
   onClose: () => void;
+  themeColor?: string;
 }
 
 export default function ShopSidebar({
@@ -21,6 +22,7 @@ export default function ShopSidebar({
   onCategorySelect,
   isOpen,
   onClose,
+  themeColor = '#10b981',
 }: ShopSidebarProps) {
   return (
     <>
@@ -34,14 +36,14 @@ export default function ShopSidebar({
 
       {/* Sidebar Container */}
       <div
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-slate-200 transform transition-transform duration-300 ease-in-out md:translate-x-0 ${
-          isOpen ? 'translate-x-0' : '-translate-x-full'
-        } flex flex-col`}
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-white md:bg-transparent md:border-none transform transition-transform duration-300 ease-in-out md:static md:translate-x-0 ${
+          isOpen ? 'translate-x-0 shadow-2xl md:shadow-none' : '-translate-x-full'
+        } flex flex-col md:block shrink-0`}
       >
-        {/* Header */}
-        <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+        {/* Mobile Header (Hidden on Desktop) */}
+        <div className="p-6 border-b border-slate-100 flex items-center justify-between md:hidden">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center text-white">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white" style={{ backgroundColor: themeColor }}>
               <ShoppingBag size={18} />
             </div>
             <span className="font-bold text-lg text-slate-900 truncate max-w-[140px]">
@@ -54,17 +56,18 @@ export default function ShopSidebar({
         </div>
 
         {/* Nav Links */}
-        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+        <nav className="flex-1 p-4 md:p-0 md:bg-white md:rounded-2xl md:shadow-sm md:border md:border-slate-200 space-y-1 overflow-y-auto">
           <button
             onClick={() => {
               onCategorySelect('');
               onClose();
             }}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 font-medium text-sm text-left ${
+            className={`w-full flex items-center gap-3 px-4 py-3 md:rounded-t-2xl transition-all duration-200 font-medium text-sm text-left ${
               activeCategory === ''
-                ? 'bg-emerald-50 text-emerald-700 font-bold'
+                ? 'bg-slate-50 font-bold'
                 : 'text-slate-600 hover:bg-slate-50'
             }`}
+            style={activeCategory === '' ? { color: themeColor } : {}}
           >
             <Home size={18} />
             All Products
@@ -82,11 +85,12 @@ export default function ShopSidebar({
                     onCategorySelect(cat.toLowerCase());
                     onClose();
                   }}
-                  className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-200 font-medium text-sm text-left ${
+                  className={`w-full flex items-center gap-3 px-4 py-2.5 transition-all duration-200 font-medium text-sm text-left ${
                     activeCategory === cat.toLowerCase()
-                      ? 'bg-emerald-50 text-emerald-700 font-bold'
+                      ? 'bg-slate-50 font-bold'
                       : 'text-slate-600 hover:bg-slate-50'
                   }`}
+                  style={activeCategory === cat.toLowerCase() ? { color: themeColor } : {}}
                 >
                   <List size={16} className="opacity-50" />
                   <span className="capitalize">{cat}</span>
@@ -134,14 +138,15 @@ export default function ShopSidebar({
           </div>
         </nav>
 
-        {/* Footer Actions */}
+        {/* Footer Actions (Mobile Only) */}
         {shopPhone && (
-          <div className="p-4 border-t border-slate-100 bg-slate-50/50">
+          <div className="p-4 border-t border-slate-100 bg-slate-50/50 md:hidden">
             <a
               href={`https://wa.me/${shopPhone}`}
               target="_blank"
               rel="noreferrer"
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 text-white rounded-xl text-sm font-bold hover:bg-emerald-700 transition shadow-lg shadow-emerald-200"
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 text-white rounded-xl text-sm font-bold transition shadow-lg"
+              style={{ backgroundColor: themeColor }}
             >
               <Phone size={16} />
               Contact Shop
