@@ -152,6 +152,10 @@ export const getInventory = async (req: Request, res: Response) => {
       image: item.image || null,
       category: item.category || null,
       barcode: item.barcode || null,
+      isPublished: item.isPublished !== false,
+      description: item.description || '',
+      colors: item.colors || [],
+      sizes: item.sizes || [],
     }));
 
     return res.json(formattedItems);
@@ -402,6 +406,12 @@ export const updateInventoryItem = async (req: Request, res: Response) => {
     if (safeSupplierName !== undefined) item.supplierName = safeSupplierName;
     if (safeSupplierPhone !== undefined) item.supplierPhone = safeSupplierPhone;
 
+    // ── Marketplace fields ──
+    if (body.isPublished !== undefined) item.isPublished = Boolean(body.isPublished);
+    if (body.description !== undefined) item.description = sanitizeString(body.description);
+    if (Array.isArray(body.colors)) item.colors = body.colors.map(String);
+    if (Array.isArray(body.sizes)) item.sizes = body.sizes.map(String);
+
     await item.save();
 
     return res.json({
@@ -417,6 +427,10 @@ export const updateInventoryItem = async (req: Request, res: Response) => {
       lowStockThreshold: item.lowStockThreshold,
       supplierName: item.supplierName,
       supplierPhone: item.supplierPhone,
+      isPublished: item.isPublished !== false,
+      description: item.description,
+      colors: item.colors,
+      sizes: item.sizes,
     });
   } catch (error) {
     console.error('Update Item Error:', error);

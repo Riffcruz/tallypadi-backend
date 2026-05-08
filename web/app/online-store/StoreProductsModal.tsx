@@ -1,0 +1,187 @@
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import { X, Loader2, Save, Eye, EyeOff } from 'lucide-react';
+import Swal from 'sweetalert2';
+
+interface StoreProductsModalProps {
+  token: string;
+  onClose: () => void;
+}
+
+export default function StoreProductsModal({ token, onClose }: StoreProductsModalProps) {
+  const [products, setProducts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  
+  const [editForm, setEditForm] = useState({
+    isPublished: true,
+    description: '',
+    colors: '',
+    sizes: ''
+  });
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    fetchProducts();
+  }, []);
+
+  const fetchProducts = async () => {
+    try {
+      const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api'}/inventory`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setProducts(res.data);
+    } catch (err) {
+      console.error(err);
+      Swal.fire('Error', 'Failed to fetch products', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEditClick = (product: any) => {
+    if (editingId === product.id) {
+      setEditingId(null);
+      return;
+    }
+    setEditingId(product.id);
+    setEditForm({
+      isPublished: product.isPublished !== false,
+      description: product.description || '',
+      colors: Array.isArray(product.colors) ? product.colors.join(', ') : '',
+      sizes: Array.isArray(product.sizes) ? product.sizes.join(', ') : ''
+    });
+  };
+
+  const handleSave = async (id: string) => {
+    setSaving(true);
+    try {
+      const payload = {
+        isPublished: editForm.isPublished,
+        description: editForm.description,
+        colors: editForm.colors.split(',').map(s => s.trim()).filter(Boolean),
+        sizes: editForm.sizes.split(',').map(s => s.trim()).filter(Boolean),
+      };
+
+      await axios.put(`${process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api'}/inventory/${id}`, payload, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      setProducts(prev => prev.map(p => p.id === id ? { ...p, ...payload } : p));
+      setEditingId(null);
+      Swal.fire({ toast: true, position: 'top', icon: 'success', title: 'Saved!', showConfirmButton: false, timer: 1500 });
+    } catch (err) {
+      console.error(err);
+      Swal.fire('Error', 'Failed to save product details', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
+      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose} />
+      
+      <div className="relative w-full max-w-3xl bg-white rounded-3xl shadow-2xl flex flex-col max-h-full overflow-hidden animate-in zoom-in-95 duration-200">
+        <div className="flex items-center justify-between p-6 border-b border-slate-100">
+          <div>
+            <h2 className="text-xl font-bold text-slate-900">Manage Store Products</h2>
+            <p className="text-xs text-slate-500 mt-1">Select products to show on storefront and edit details</p>
+          </div>
+          <button onClick={onClose} className="p-2 text-slate-400 hover:bg-slate-100 rounded-xl transition">
+            <X size={24} />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 bg-slate-50">
+          {loading ? (
+            <div className="py-20 flex justify-center"><Loader2 className="animate-spin text-slate-400" /></div>
+          ) : products.length === 0 ? (
+            <div className="text-center py-10 text-slate-500 font-medium">No products found in inventory.</div>
+          ) : (
+            products.map(product => (
+              <div key={product.id} className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm transition-all">
+                <div 
+                  className="flex items-center gap-4 p-4 cursor-pointer hover:bg-slate-50"
+                  onClick={() => handleEditClick(product)}
+                >
+                  <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center overflow-hidden shrink-0">
+                    {product.image ? <img src={product.image} className="w-full h-full object-cover" /> : <div className="text-xs text-slate-400">No Img</div>}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-bold text-slate-900 truncate">{product.name}</h3>
+                    <p className="text-xs text-slate-500">Stock: {product.quantity} • ₦{product.price}</p>
+                  </div>
+                  <div className="shrink-0 flex items-center gap-2">
+                     <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${product.isPublished !== false ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
+                       {product.isPublished !== false ? 'Published' : 'Hidden'}
+                     </span>
+                  </div>
+                </div>
+
+                {editingId === product.id && (
+                  <div className="p-4 md:p-6 border-t border-slate-100 bg-slate-50/50 space-y-5 animate-in slide-in-from-top-2">
+                    <div className="flex items-center gap-3">
+                       <button
+                         onClick={() => setEditForm(prev => ({ ...prev, isPublished: !prev.isPublished }))}
+                         className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-colors ${editForm.isPublished ? 'bg-emerald-600 text-white shadow-md' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}
+                       >
+                         {editForm.isPublished ? <Eye size={16} /> : <EyeOff size={16} />}
+                         {editForm.isPublished ? 'Visible on Store' : 'Hidden from Store'}
+                       </button>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wider">Product Description</label>
+                      <textarea
+                        value={editForm.description}
+                        onChange={e => setEditForm({ ...editForm, description: e.target.value })}
+                        placeholder="Detail about this specific product..."
+                        rows={3}
+                        className="w-full border border-slate-200 bg-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all resize-none"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wider">Colors (Comma Separated)</label>
+                        <input
+                          type="text"
+                          value={editForm.colors}
+                          onChange={e => setEditForm({ ...editForm, colors: e.target.value })}
+                          placeholder="e.g. Red, Blue, Black"
+                          className="w-full border border-slate-200 bg-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wider">Sizes (Comma Separated)</label>
+                        <input
+                          type="text"
+                          value={editForm.sizes}
+                          onChange={e => setEditForm({ ...editForm, sizes: e.target.value })}
+                          placeholder="e.g. S, M, L, XL or 42, 43, 44"
+                          className="w-full border border-slate-200 bg-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end pt-2">
+                      <button
+                        onClick={() => handleSave(product.id)}
+                        disabled={saving}
+                        className="flex items-center gap-2 px-6 py-2.5 bg-slate-900 text-white rounded-xl text-sm font-bold shadow-md hover:bg-black active:scale-95 transition-all disabled:opacity-50"
+                      >
+                        {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                        Save Details
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

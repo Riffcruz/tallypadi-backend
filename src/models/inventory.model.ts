@@ -15,6 +15,12 @@ export interface IInventoryItem extends Document {
   lowStockThreshold?: number;  // Alert owner when qty drops below this
   supplierName?: string;       // Pre-fills restock WhatsApp message
   supplierPhone?: string;      // Optional: deep-link to supplier's WhatsApp
+
+  // ── Marketplace/Shop Front ──
+  isPublished?: boolean;
+  description?: string;
+  colors?: string[];
+  sizes?: string[];
 }
   
   const inventorySchema = new Schema<IInventoryItem>(
@@ -34,6 +40,12 @@ export interface IInventoryItem extends Document {
       lowStockThreshold: { type: Number, default: null },
       supplierName: { type: String, trim: true },
       supplierPhone: { type: String, trim: true },
+
+      // ── Marketplace/Shop Front ──
+      isPublished: { type: Boolean, default: true },
+      description: { type: String, trim: true, maxlength: 1000 },
+      colors: [{ type: String, trim: true }],
+      sizes: [{ type: String, trim: true }],
     },  { timestamps: true }
 );
 

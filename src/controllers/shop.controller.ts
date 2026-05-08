@@ -13,6 +13,12 @@ const updateShopSchema = z.object({
   shopDescription: z.string().max(500).optional(),
   heroImageUrl: z.string().url().optional().or(z.literal('')),
   themeColor: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Invalid hex color').optional(),
+  location: z.object({
+    country: z.string().optional(),
+    state: z.string().optional(),
+    city: z.string().optional(),
+    address: z.string().optional(),
+  }).optional(),
 });
 
 /**
@@ -22,7 +28,7 @@ const updateShopSchema = z.object({
 export const getShopMe = async (req: Request, res: Response): Promise<any> => {
   try {
     const userId = req.user?.id;
-    const user = await User.findById(userId).select('businessName shopSlug shopDescription heroImageUrl planType');
+    const user = await User.findById(userId).select('businessName shopSlug shopDescription heroImageUrl planType themeColor settings.location');
 
     if (!user) return res.status(404).json({ error: 'User not found' });
 
@@ -36,6 +42,8 @@ export const getShopMe = async (req: Request, res: Response): Promise<any> => {
       shopSlug: user.shopSlug,
       shopDescription: user.shopDescription,
       heroImageUrl: user.heroImageUrl,
+      themeColor: user.themeColor,
+      location: user.settings?.location,
       publicUrl,
       isTycoon: user.planType === 'TYCOON',
     });
@@ -127,6 +135,7 @@ export const getShopProducts = async (req: Request, res: Response): Promise<any>
     const filter: Record<string, unknown> = {
       user: shopOwner._id,
       quantity: { $gt: 0 }, // Only in-stock
+      isPublished: { $ne: false }, // Only published
     };
 
     if (q) {
@@ -146,7 +155,7 @@ export const getShopProducts = async (req: Request, res: Response): Promise<any>
         .sort(sortOptions)
         .skip(skip)
         .limit(limit)
-        .select('name quantity lastUnitPrice image category'),
+        .select('name quantity lastUnitPrice image category description colors sizes'),
       Inventory.countDocuments(filter),
     ]);
 
@@ -157,6 +166,9 @@ export const getShopProducts = async (req: Request, res: Response): Promise<any>
         price: p.lastUnitPrice,
         image: p.image,
         category: p.category,
+        description: p.description,
+        colors: p.colors,
+        sizes: p.sizes,
         inStock: p.quantity > 0,
       })),
       pagination: {
@@ -210,6 +222,15 @@ export const updateShopSettings = async (req: Request, res: Response): Promise<a
     }
 
     if (body.themeColor !== undefined) user.themeColor = body.themeColor;
+    
+    if (body.location !== undefined) {
+      if (!user.settings) user.settings = {} as any;
+      if (!user.settings!.location) user.settings!.location = { country: 'NG', state: '', city: '', address: '' };
+      if (body.location.country !== undefined) user.settings!.location.country = body.location.country;
+      if (body.location.state !== undefined) user.settings!.location.state = body.location.state;
+      if (body.location.city !== undefined) user.settings!.location.city = body.location.city;
+      if (body.location.address !== undefined) user.settings!.location.address = body.location.address;
+    }
 
     await user.save();
 
@@ -247,7 +268,7 @@ export const getShopProductById = async (req: Request, res: Response): Promise<a
     const product = await Inventory.findOne({ 
       _id: productId, 
       user: shopOwner._id 
-    }).select('name lastUnitPrice image quantity category');
+    }).select('name lastUnitPrice image quantity category description colors sizes');
 
     if (!product) return res.status(404).json({ error: 'Product not found' });
 
@@ -257,6 +278,9 @@ export const getShopProductById = async (req: Request, res: Response): Promise<a
       price: product.lastUnitPrice,
       image: product.image,
       category: product.category,
+      description: product.description,
+      colors: product.colors,
+      sizes: product.sizes,
       inStock: product.quantity > 0,
     });
   } catch (error) {

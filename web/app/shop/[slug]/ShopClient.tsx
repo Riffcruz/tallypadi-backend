@@ -16,6 +16,9 @@ type Product = {
   price: number;
   image?: string;
   category?: string;
+  description?: string;
+  colors?: string[];
+  sizes?: string[];
   inStock: boolean;
 };
 
@@ -47,6 +50,7 @@ export default function ShopClient({ initialShop, slug }: ShopClientProps) {
   const [totalPages, setTotalPages] = useState(1);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
 
   // Cart State
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -103,7 +107,9 @@ export default function ShopClient({ initialShop, slug }: ShopClientProps) {
 
   const getQty = (id: string) => cart.find(c => c.product.id === id)?.qty || 0;
 
-  const addToCart = (product: Product) => {
+  const addToCart = (product: Product, selectedColor?: string, selectedSize?: string) => {
+    // If we want to support unique variants in cart, we'd alter the ID. 
+    // For now, we just add the product directly.
     setCart(prev => {
       const existing = prev.find(c => c.product.id === product.id);
       if (existing) return prev.map(c => c.product.id === product.id ? { ...c, qty: c.qty + 1 } : c);
@@ -291,7 +297,10 @@ export default function ShopClient({ initialShop, slug }: ShopClientProps) {
                       className="group bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-xl hover:shadow-slate-900/5 hover:-translate-y-1 transition-all duration-300 flex flex-col"
                     >
                       {/* Image */}
-                      <div className="aspect-square bg-slate-100 relative overflow-hidden">
+                      <div 
+                        className="aspect-square bg-slate-100 relative overflow-hidden cursor-pointer"
+                        onClick={() => setSelectedProduct(product)}
+                      >
                         {product.image ? (
                           <img src={product.image} alt={product.name} loading="lazy" className="w-full h-full object-cover group-hover:scale-105 transition duration-500" />
                         ) : (
@@ -309,7 +318,11 @@ export default function ShopClient({ initialShop, slug }: ShopClientProps) {
                       {/* Card Body */}
                       <div className="p-3 flex flex-col flex-1">
                         <span className="font-black text-lg block mb-1" style={{ color: themeColor }}>{formatMoney(product.price)}</span>
-                        <h3 className="font-medium text-slate-700 text-sm line-clamp-2 leading-snug mb-2 group-hover:transition-colors" style={{ '--hover-color': themeColor } as React.CSSProperties}>
+                        <h3 
+                          className="font-medium text-slate-700 text-sm line-clamp-2 leading-snug mb-2 group-hover:transition-colors cursor-pointer" 
+                          style={{ '--hover-color': themeColor } as React.CSSProperties}
+                          onClick={() => setSelectedProduct(product)}
+                        >
                           {product.name}
                         </h3>
                         {product.category && (
@@ -500,6 +513,77 @@ export default function ShopClient({ initialShop, slug }: ShopClientProps) {
               <p className="text-center text-[10px] text-slate-400 font-medium">
                 Your order details will be sent directly to {initialShop.name}
               </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ════════════════════════════════════════════
+          PRODUCT DETAILS MODAL
+      ════════════════════════════════════════════ */}
+      {selectedProduct && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 sm:p-6">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setSelectedProduct(null)} />
+          <div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 max-h-full flex flex-col">
+            <button onClick={() => setSelectedProduct(null)} className="absolute top-4 right-4 z-10 w-8 h-8 flex items-center justify-center bg-white/50 backdrop-blur-md rounded-full text-slate-900 hover:bg-white transition">
+              <X size={20} />
+            </button>
+            <div className="w-full aspect-[4/3] bg-slate-100 relative shrink-0">
+               {selectedProduct.image ? (
+                 <img src={selectedProduct.image} alt={selectedProduct.name} className="w-full h-full object-cover" />
+               ) : (
+                 <div className="w-full h-full flex items-center justify-center text-6xl font-black uppercase" style={{ color: themeColor }}>
+                   {selectedProduct.name[0]}
+                 </div>
+               )}
+            </div>
+            <div className="p-6 overflow-y-auto">
+               <h2 className="text-xl md:text-2xl font-bold text-slate-900 leading-tight mb-2">{selectedProduct.name}</h2>
+               <span className="text-2xl font-black block mb-4" style={{ color: themeColor }}>{formatMoney(selectedProduct.price)}</span>
+               
+               {selectedProduct.description && (
+                 <div className="mb-6">
+                   <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Description</h4>
+                   <p className="text-sm text-slate-700 leading-relaxed">{selectedProduct.description}</p>
+                 </div>
+               )}
+
+               <div className="grid grid-cols-2 gap-4 mb-6">
+                 {selectedProduct.colors && selectedProduct.colors.length > 0 && (
+                   <div>
+                     <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Available Colors</h4>
+                     <div className="flex flex-wrap gap-2">
+                       {selectedProduct.colors.map(color => (
+                         <span key={color} className="px-3 py-1 bg-slate-100 rounded-lg text-xs font-semibold text-slate-700 border border-slate-200">{color}</span>
+                       ))}
+                     </div>
+                   </div>
+                 )}
+                 {selectedProduct.sizes && selectedProduct.sizes.length > 0 && (
+                   <div>
+                     <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Available Sizes</h4>
+                     <div className="flex flex-wrap gap-2">
+                       {selectedProduct.sizes.map(size => (
+                         <span key={size} className="px-3 py-1 bg-slate-100 rounded-lg text-xs font-semibold text-slate-700 border border-slate-200">{size}</span>
+                       ))}
+                     </div>
+                   </div>
+                 )}
+               </div>
+
+               <div className="mt-4 pt-4 border-t border-slate-100">
+                  {selectedProduct.inStock ? (
+                     <button
+                       onClick={() => { addToCart(selectedProduct); setSelectedProduct(null); setIsCartOpen(true); }}
+                       className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl text-white text-sm font-bold shadow-lg transition-all hover:opacity-90 active:scale-95"
+                       style={{ backgroundColor: themeColor }}
+                     >
+                       <ShoppingCart size={18} /> Add to Cart
+                     </button>
+                  ) : (
+                    <div className="w-full py-3.5 rounded-2xl bg-slate-100 text-slate-500 text-sm font-bold text-center">Out of Stock</div>
+                  )}
+               </div>
             </div>
           </div>
         </div>
