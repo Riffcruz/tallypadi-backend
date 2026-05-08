@@ -44,7 +44,9 @@ export const updateSettings = async (req: AuthReq, res: Response) => {
       const status = String((user as any)?.subscriptionStatus || '').toLowerCase();
 
       const isTycoon = plan === 'TYCOON';
-      const isActiveLike = status === 'active' || status === 'trial';
+      if (status === 'active') return isTycoon;
+
+      const isActiveLike = status === 'trial';
 
       const endsAtRaw = (user as any)?.trialEndsAt;
       if (!endsAtRaw) return isTycoon && isActiveLike; // if you allow no-expiry admins etc
