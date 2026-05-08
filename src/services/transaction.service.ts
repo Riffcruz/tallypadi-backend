@@ -6,6 +6,7 @@ import { User } from '../models/user.model';
 import { ParsedResult } from './gemini.service';
 import { queueOutboundMessage } from './queue.service';
 import { ProcessedMessage } from '../models/processedMessage.model';
+import { DraftRestock } from '../models/draftRestock.model';
 
 import { applyPaymentToDebts } from './debt.service';
 import { resolveDebtor, normName } from './debtor.service';
@@ -66,13 +67,24 @@ function escapeRegex(str: string) {
  * 3) only auto-merge if EXACTLY ONE match
  * 4) if multiple matches, return { status: 'ambiguous', options: [...] }
  */
-async function findExistingItem(userId: Types.ObjectId, rawName: string) {
+async function findExistingItem(userId: Types.ObjectId, rawName: string, smartMatchingEnabled: boolean = true) {
   const clean = normalizeItemName(rawName);
   const root = rootItemName(rawName) || clean;
 
-  // 1) exact match
-  const exact = await Inventory.findOne({ user: userId, name: clean });
+  // 0) SKU exact match (highest priority — guaranteed unambiguous)
+  if (/^P-[A-Z0-9]{4}$/i.test(rawName.trim())) {
+    const bySku = await Inventory.findOne({ user: userId, sku: rawName.trim().toUpperCase() });
+    if (bySku) return { status: 'found' as const, inv: bySku };
+  }
+
+  // 1) exact match (case-insensitive via regex since name might not be pure lowercase in DB if added via UI)
+  const exactRx = new RegExp(`^${escapeRegex(clean)}$`, 'i');
+  const exact = await Inventory.findOne({ user: userId, name: exactRx });
   if (exact) return { status: 'found' as const, inv: exact };
+
+  if (!smartMatchingEnabled) {
+    return { status: 'none' as const, inv: null, rootName: clean || rawName };
+  }
 
   // If root is empty, stop
   if (!root) return { status: 'none' as const, inv: null };
@@ -150,6 +162,9 @@ export const processTransaction = async (
     const actorRole = String(actor?.role || '').toUpperCase(); // 'OWNER' | 'STAFF' | ''
     const isActorOwner = actorRole === 'OWNER'; // only reliable if you pass actor in
 
+    // ✅ Get user settings
+    const smartMatchingEnabled = user?.settings?.smartMatchingEnabled !== false;
+
     // =========================================================
     // ✅ PRICE CHECK (read-only)
     // =========================================================
@@ -162,7 +177,7 @@ export const processTransaction = async (
       }
 
       const cleanName = normalizeItemName(itemName);
-      const resolved = await findExistingItem(userId, cleanName);
+      const resolved = await findExistingItem(userId, cleanName, smartMatchingEnabled);
 
       if (resolved.status === 'ambiguous') {
         const options = (resolved.options || []).slice(0, 6).map((n, i) => `${i + 1}) ${n}`).join('\n');
@@ -210,7 +225,7 @@ export const processTransaction = async (
       }
 
       const cleanName = normalizeItemName(itemName);
-      const resolved = await findExistingItem(userId, cleanName);
+      const resolved = await findExistingItem(userId, cleanName, smartMatchingEnabled);
 
       if (resolved.status === 'ambiguous') {
         const options = (resolved.options || []).slice(0, 6).map((n, i) => `${i + 1}) ${n}`).join('\n');
@@ -271,7 +286,7 @@ export const processTransaction = async (
       }
 
       const cleanName = normalizeItemName(itemName);
-      const resolved = await findExistingItem(userId, cleanName);
+      const resolved = await findExistingItem(userId, cleanName, smartMatchingEnabled);
 
       if (resolved.status === 'ambiguous') {
         const options = (resolved.options || []).slice(0, 6).map((n, i) => `${i + 1}) ${n}`).join('\n');
@@ -474,10 +489,14 @@ export const processTransaction = async (
       }
     }
 
+
     // =========================================================
-    // INVENTORY UPDATES + PRICE CALCULATIONS
+    // ✅ PASS 1: VALIDATE ALL ITEMS BEFORE DB MUTATIONS
     // =========================================================
     const finalItems: Record<string, unknown>[] = [];
+    const ambiguousDraftItems: Array<{
+      rawName: string; qty: number; cost_price: number; unit_price: number; options: string[];
+    }> = [];
     let calculatedTotal = 0;
 
     for (const item of parsed.items || []) {
@@ -490,21 +509,34 @@ export const processTransaction = async (
       if (!cleanName) continue;
 
       // ✅ SMART RESOLVE (merge common roots, protect specifics)
-      const resolved = await findExistingItem(userId, cleanName);
+      const resolved = await findExistingItem(userId, cleanName, smartMatchingEnabled);
 
       // If ambiguous, stop and ask user (prevents bad merges / dirty inventory)
       if (resolved.status === 'ambiguous') {
         const options = (resolved.options || []).slice(0, 6).map((n, i) => `${i + 1}) ${n}`).join('\n');
-        parsed.reply_text =
-          `I found multiple items that match *"${cleanName}"*.\n` +
-          `Which one did you mean?\n\n${options}\n\n` +
-          `Reply with the full item name (e.g. "used tire" or "new tire").`;
+        
+        if ((parsed.items || []).length === 1) {
+            parsed.reply_text =
+              `I found multiple items that match *"${cleanName}"*.\n` +
+              `Which one did you mean?\n\n${options}\n\n` +
+              `Reply with the full item name (e.g. "used tire" or "new tire").`;
 
-        await ProcessedMessage.updateOne(
-          { user: userId, messageId },
-          { $set: { status: 'DONE' } }
-        );
-        return;
+            await ProcessedMessage.updateOne(
+              { user: userId, messageId },
+              { $set: { status: 'DONE' } }
+            );
+            return;
+        } else {
+            // For bulk: collect for the magic draft link instead of skipping silently
+            ambiguousDraftItems.push({
+              rawName: inputName,
+              qty: toNumber(item.qty),
+              cost_price: toNumber(item.cost_price),
+              unit_price: toNumber(item.unit_price),
+              options: resolved.options || [],
+            });
+            continue;
+        }
       }
 
       let inv = resolved.status === 'found' ? resolved.inv : null;
@@ -694,6 +726,31 @@ export const processTransaction = async (
       );
     }
 
+    // ── Create Magic Draft Link for ambiguous items ──────────────────────────
+    if (ambiguousDraftItems.length > 0) {
+      const draft = await DraftRestock.create({
+        user: userId,
+        messageId,
+        status: 'PENDING',
+        items: ambiguousDraftItems,
+        successCount: finalItems.length,
+      });
+
+      const appUrl = process.env.APP_URL || 'https://tallypadi.com';
+      const draftUrl = `${appUrl}/draft/${draft._id}`;
+
+      const successMsg = finalItems.length > 0
+        ? `✅ *${finalItems.length} item(s)* saved successfully!\n\n`
+        : '';
+
+      const itemNames = ambiguousDraftItems.map(i => `• ${i.rawName} (${i.qty}pcs)`).join('\n');
+      parsed.reply_text =
+        `${successMsg}` +
+        `⚠️ *${ambiguousDraftItems.length} item(s) need clarification* because the names match multiple products in your shop:\n\n` +
+        `${itemNames}\n\n` +
+        `👉 *Tap this link to quickly fix them (expires in 24hrs):*\n${draftUrl}`;
+    }
+
     await ProcessedMessage.updateOne(
       { user: userId, messageId },
       { $set: { status: 'DONE' } }
@@ -723,7 +780,7 @@ export const deductStockForItems = async (userId: Types.ObjectId, items: {name: 
     if (!cleanName) continue;
 
     // Use existing logic to find/resolve item
-    const resolved = await findExistingItem(userId, cleanName);
+    const resolved = await findExistingItem(userId, cleanName, smartMatchingEnabled);
 
     // If ambiguous, we skip to avoid deducting wrong item.
     if (resolved.status === 'ambiguous') {
@@ -762,7 +819,7 @@ export async function getHistoricalPrices(userId: Types.ObjectId, itemName: stri
   // Best to resolve to Inventory ID first if possible?
   // Transaction items store `itemId`.
   
-  const resolved = await findExistingItem(userId, clean);
+  const resolved = await findExistingItem(userId, clean, smartMatchingEnabled);
   let query: Record<string, unknown> = { user: userId, 'items.name': { $regex: new RegExp(escapeRegex(clean), 'i') } };
 
   if (resolved.status === 'found') {

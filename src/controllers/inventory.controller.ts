@@ -3,6 +3,30 @@ import { Inventory } from '../models/inventory.model';
 import { User } from '../models/user.model';
 import { saveImageFromBase64 } from '../utils/image';
 
+// --- SKU Generator ---
+// Generates a short unique code like "P-4X9M" for a product
+function generateSku(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // No 0/O/I/1 to avoid confusion
+  let code = '';
+  for (let i = 0; i < 4; i++) {
+    code += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return `P-${code}`;
+}
+
+// Generates a SKU and ensures it's unique for this user
+async function generateUniqueSku(userId: unknown): Promise<string> {
+  let sku: string;
+  let attempts = 0;
+  do {
+    sku = generateSku();
+    const existing = await Inventory.findOne({ user: userId, sku });
+    if (!existing) break;
+    attempts++;
+  } while (attempts < 10);
+  return sku;
+}
+
 // --- Helpers ---
 const sanitizeString = (input: unknown): string | undefined => {
   if (typeof input !== 'string') return undefined;
@@ -71,7 +95,8 @@ export const getInventory = async (req: Request, res: Response) => {
       const escapedQ = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       filter.$or = [
          { name: { $regex: escapedQ, $options: 'i' } },
-         { barcode: { $regex: escapedQ, $options: 'i' } }
+         { barcode: { $regex: escapedQ, $options: 'i' } },
+         { sku: { $regex: escapedQ, $options: 'i' } },  // ✅ Search by SKU
       ];
     }
 
@@ -91,6 +116,7 @@ export const getInventory = async (req: Request, res: Response) => {
       const formattedItems = items.map((item) => ({
         id: item._id,
         name: item.name,
+        sku: item.sku || null,
         stock: item.quantity,
         price: item.lastUnitPrice || 0,
         costPrice: item.costPrice || 0,
@@ -117,6 +143,7 @@ export const getInventory = async (req: Request, res: Response) => {
     const formattedItems = (items || []).map((item) => ({
       id: item._id,
       name: item.name,
+      sku: item.sku || null,
       stock: item.quantity,
       price: item.lastUnitPrice || 0,
       costPrice: item.costPrice || 0,
@@ -209,6 +236,7 @@ export const getInventoryItem = async (req: Request, res: Response) => {
     return res.json({
       id: item._id,
       name: item.name,
+      sku: item.sku || null,
       stock: item.quantity,
       quantity: item.quantity,
       price: item.lastUnitPrice || 0,
@@ -274,13 +302,20 @@ export const addInventoryItem = async (req: Request, res: Response) => {
       if (safePrice !== undefined) item.lastUnitPrice = safePrice;
       if (safeCostPrice !== undefined) item.costPrice = safeCostPrice;
       if (imageUrl) item.image = imageUrl;
-      if (safeCategory !== undefined) item.category = safeCategory?.toLowerCase(); // Update category if provided
-      if (safeBarcode !== undefined) item.barcode = safeBarcode; // Update barcode if provided
+      if (safeCategory !== undefined) item.category = safeCategory?.toLowerCase();
+      if (safeBarcode !== undefined) item.barcode = safeBarcode;
+      // Allow dashboard SKU override if provided
+      if (body.sku && typeof body.sku === 'string') item.sku = body.sku.toUpperCase().trim();
       await item.save();
     } else {
+      const sku = (body.sku && typeof body.sku === 'string')
+        ? body.sku.toUpperCase().trim()
+        : await generateUniqueSku(user._id);
+
       item = await Inventory.create({
         user: user._id,
         name: safeName.toLowerCase(),
+        sku,
         quantity: safeStock !== undefined ? safeStock : 0,
         lastUnitPrice: safePrice !== undefined ? safePrice : 0,
         costPrice: safeCostPrice !== undefined ? safeCostPrice : 0,
@@ -293,6 +328,7 @@ export const addInventoryItem = async (req: Request, res: Response) => {
     return res.json({
       id: item._id,
       name: item.name,
+      sku: item.sku || null,
       stock: item.quantity,
       price: item.lastUnitPrice,
       costPrice: item.costPrice,
@@ -356,6 +392,8 @@ export const updateInventoryItem = async (req: Request, res: Response) => {
     if (imageUrl) item.image = imageUrl;
     if (safeCategory !== undefined) item.category = safeCategory?.toLowerCase();
     if (safeBarcode !== undefined) item.barcode = safeBarcode;
+    // Allow dashboard SKU editing
+    if (body.sku && typeof body.sku === 'string') item.sku = body.sku.toUpperCase().trim();
 
     // ── Restock Alert fields ──
     if (safeLowStockThreshold !== undefined) item.lowStockThreshold = safeLowStockThreshold ?? undefined;
@@ -367,6 +405,7 @@ export const updateInventoryItem = async (req: Request, res: Response) => {
     return res.json({
       id: item._id,
       name: item.name,
+      sku: item.sku || null,
       stock: item.quantity,
       price: item.lastUnitPrice,
       costPrice: item.costPrice,

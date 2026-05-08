@@ -45,6 +45,7 @@ export interface IUser extends Document {
     pdfReportsEnabled: boolean;
     staffTransactionReport?: boolean;
     currencyCode?: string; // e.g. NGN, USD, GHS
+    smartMatchingEnabled?: boolean;
     
     // ✅ Staff Permissions
     staffPermissions?: {
@@ -176,6 +177,7 @@ const userSchema = new Schema<IUser>(
       pdfReportsEnabled: { type: Boolean, default: true },
       staffTransactionReport: { type: Boolean, default: false },
       currencyCode: { type: String, trim: true, uppercase: true },
+      smartMatchingEnabled: { type: Boolean, default: true },
       
       // ✅ Staff Permission Toggles (Controlled by Owner)
       staffPermissions: {

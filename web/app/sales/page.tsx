@@ -38,6 +38,7 @@ export interface InventoryItem {
   price: number;
   costPrice?: number;
   barcode?: string;
+  sku?: string | null;
 }
 export interface CartItem extends InventoryItem {
   sellQty: number;

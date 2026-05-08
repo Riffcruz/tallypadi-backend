@@ -36,6 +36,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 type InventoryItem = {
   id: string;
   name: string;
+  sku?: string | null;
   stock: number;
   price: number;
   lastUnitPrice?: number;
@@ -77,8 +78,9 @@ export default function InventoryPage() {
   const [newItemStock, setNewItemStock] = useState('');
   const [newItemPrice, setNewItemPrice] = useState('');
   const [newItemCostPrice, setNewItemCostPrice] = useState('');
-  const [newItemCategory, setNewItemCategory] = useState(''); // ✅ New Item Category
-  const [newItemBarcode, setNewItemBarcode] = useState(''); // ✅ New Item Barcode
+  const [newItemCategory, setNewItemCategory] = useState('');
+  const [newItemBarcode, setNewItemBarcode] = useState('');
+  const [newItemSku, setNewItemSku] = useState('');
   const [newItemLowStockThreshold, setNewItemLowStockThreshold] = useState('');
   const [newItemSupplierName, setNewItemSupplierName] = useState('');
   const [newItemSupplierPhone, setNewItemSupplierPhone] = useState('');
@@ -100,11 +102,12 @@ export default function InventoryPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState<string>('');
+  const [editSku, setEditSku] = useState<string>('');
   const [editStock, setEditStock] = useState<number | string>('');
   const [editPrice, setEditPrice] = useState<number | string>('');
   const [editCostPrice, setEditCostPrice] = useState<number | string>('');
-  const [editCategory, setEditCategory] = useState<string>(''); // ✅ Edit Category
-  const [editBarcode, setEditBarcode] = useState<string>(''); // ✅ Edit Barcode
+  const [editCategory, setEditCategory] = useState<string>('');
+  const [editBarcode, setEditBarcode] = useState<string>('');
   const [editLowStockThreshold, setEditLowStockThreshold] = useState<number | string>('');
   const [editSupplierName, setEditSupplierName] = useState<string>('');
   const [editSupplierPhone, setEditSupplierPhone] = useState<string>('');
@@ -176,6 +179,7 @@ export default function InventoryPage() {
       const normalized: InventoryItem[] = raw.map((x: any) => ({
         id: String(x.id || x._id || ''),
         name: String(x.name || '').trim(),
+        sku: x.sku || null,
         stock: Number(x.stock ?? x.quantity ?? 0),
         price: Number(x.price ?? x.unitPrice ?? x.lastUnitPrice ?? 0),
         lastUnitPrice: x.lastUnitPrice !== undefined ? Number(x.lastUnitPrice) : undefined,
@@ -231,7 +235,11 @@ export default function InventoryPage() {
     const q = searchTerm.trim().toLowerCase();
     if (!q) return res;
 
-    return res.filter((item) => String(item.name || '').toLowerCase().includes(q));
+    return res.filter((item) =>
+      String(item.name || '').toLowerCase().includes(q) ||
+      String(item.sku || '').toLowerCase().includes(q) ||
+      String(item.barcode || '').toLowerCase().includes(q)
+    );
   }, [inventory, searchTerm, selectedCategory]);
 
   const handleScan = (code: string) => {
@@ -322,6 +330,7 @@ export default function InventoryPage() {
       image: newItemImage,
       category: newItemCategory,
       barcode: newItemBarcode,
+      sku: newItemSku || undefined,
       lowStockThreshold: newItemLowStockThreshold ? parseInt(newItemLowStockThreshold, 10) : undefined,
       supplierName: newItemSupplierName || undefined,
       supplierPhone: newItemSupplierPhone || undefined,
@@ -340,6 +349,7 @@ export default function InventoryPage() {
       const normalized: InventoryItem[] = raw.map((x: any) => ({
         id: String(x.id || x._id || ''),
         name: String(x.name || '').trim(),
+        sku: x.sku || null,
         stock: Number(x.stock ?? x.quantity ?? 0),
         price: Number(x.price ?? x.unitPrice ?? x.lastUnitPrice ?? 0),
         lastUnitPrice: x.lastUnitPrice !== undefined ? Number(x.lastUnitPrice) : undefined,
@@ -362,6 +372,7 @@ export default function InventoryPage() {
       setNewItemCostPrice('');
       setNewItemCategory('');
       setNewItemBarcode('');
+      setNewItemSku('');
       setNewItemLowStockThreshold('');
       setNewItemSupplierName('');
       setNewItemSupplierPhone('');
@@ -440,6 +451,7 @@ export default function InventoryPage() {
 
     setEditingId(item.id);
     setEditingName(item.name);
+    setEditSku(item.sku || '');
     setEditStock(item.stock);
     setEditPrice(item.price || item.lastUnitPrice || 0);
     setEditCostPrice(item.costPrice || 0);
@@ -456,6 +468,7 @@ export default function InventoryPage() {
     setEditOpen(false);
     setEditingId(null);
     setEditingName('');
+    setEditSku('');
     setEditStock('');
     setEditPrice('');
     setEditCostPrice('');
@@ -486,6 +499,7 @@ export default function InventoryPage() {
           image: editImage,
           category: editCategory,
           barcode: editBarcode,
+          sku: editSku || undefined,
           lowStockThreshold: editLowStockThreshold ? Number(editLowStockThreshold) : null,
           supplierName: editSupplierName || null,
           supplierPhone: editSupplierPhone || null,
@@ -500,6 +514,7 @@ export default function InventoryPage() {
         prev.map((item) => 
           item.id === id ? { 
             ...item, 
+            sku: editSku || item.sku,
             stock: Number(editStock), 
             price: Number(editPrice), 
             costPrice: Number(editCostPrice), 
@@ -1074,6 +1089,23 @@ export default function InventoryPage() {
                       </div>
                    </div>
 
+                   {/* SKU Row */}
+                   <div className="space-y-1.5 mb-5">
+                      <label className="text-xs font-extrabold text-slate-600 uppercase tracking-wider ml-1">
+                        SKU / WhatsApp Code <span className="text-emerald-600">(Auto-generated if blank)</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={newItemSku}
+                        onChange={(e) => setNewItemSku(e.target.value.toUpperCase())}
+                        className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 text-base font-bold text-slate-900 placeholder:text-slate-400 transition-all font-mono tracking-widest uppercase"
+                        placeholder="e.g. P-4X9M"
+                        maxLength={10}
+                        disabled={showLockUI}
+                      />
+                      <p className="text-xs text-slate-400 ml-1">Use this code on WhatsApp to add stock without ambiguity. E.g. "Add 5 P-4X9M"</p>
+                   </div>
+
                    {/* Numbers Row */}
                    <div className="grid grid-cols-3 gap-4">
                       <div className="space-y-1.5">
@@ -1264,7 +1296,13 @@ export default function InventoryPage() {
                           )}
                           <div className="min-w-0">
                             <p className="font-black text-slate-900 capitalize truncate max-w-[360px]">{item.name}</p>
-                            <p className="text-xs text-slate-500 font-semibold">ID: {String(item.id).slice(0, 10)}…</p>
+                            {item.sku ? (
+                              <span className="inline-block mt-0.5 px-2 py-0.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10px] font-black font-mono tracking-widest uppercase">
+                                {item.sku}
+                              </span>
+                            ) : (
+                              <p className="text-xs text-slate-400 font-semibold">ID: {String(item.id).slice(0, 10)}…</p>
+                            )}
                           </div>
                         </div>
                       </td>
@@ -1746,6 +1784,22 @@ export default function InventoryPage() {
                       <ScanBarcode className="w-4 h-4" />
                     </button>
                   </div>
+               </div>
+
+               {/* SKU Row (Edit) */}
+               <div className="mb-3">
+                  <label className="block text-xs font-extrabold text-slate-600 mb-1">
+                    SKU / WhatsApp Code
+                  </label>
+                  <input
+                    type="text"
+                    value={editSku}
+                    onChange={(e) => setEditSku(e.target.value.toUpperCase())}
+                    className="w-full px-4 py-3 bg-emerald-50 border border-emerald-200 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 text-sm font-black font-mono tracking-widest text-emerald-800 uppercase"
+                    placeholder="e.g. P-4X9M"
+                    maxLength={10}
+                  />
+                  <p className="text-xs text-slate-400 mt-1">Send this code on WhatsApp to update stock unambiguously.</p>
                </div>
 
               <div className="grid grid-cols-3 gap-3">

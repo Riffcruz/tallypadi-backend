@@ -367,6 +367,12 @@ export default function ProductGrid({ user, onAddToCart, currencyCode }: Product
                     <h3 className="font-extrabold text-slate-900 capitalize truncate w-full mb-1 group-hover:text-emerald-700 transition-colors">
                       {item.name}
                     </h3>
+                    
+                    {item.sku && (
+                      <p className="text-[10px] font-black font-mono tracking-widest text-emerald-600 uppercase mb-2">
+                        {item.sku}
+                      </p>
+                    )}
 
                     <p className="text-xs font-semibold text-slate-500">
                       Price

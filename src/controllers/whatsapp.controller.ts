@@ -1626,7 +1626,11 @@ What's included in Oga Boss Plan:
 
             try {
                 await processTransaction(shopId as any, finalParsed as any, `bulk_restock_${messageId}`, actor);
-                await queueOutboundMessage(from, `✅ Items saved with ${symbol}0 price!\n\nYou can update their exact prices later via your dashboard: https://tallypadi.com/login`);
+                // Use reply_text from processTransaction (may contain magic draft link if ambiguous items exist)
+                let replyMsg = finalParsed.reply_text && finalParsed.reply_text.includes('tallypadi.com/draft')
+                  ? finalParsed.reply_text
+                  : `✅ Items saved with ${symbol}0 price!\n\nYou can update their exact prices later via your dashboard: https://tallypadi.com/login`;
+                await queueOutboundMessage(from, replyMsg);
             } catch (e) {
                 console.error('Bulk Restock flow error:', e);
                 await queueOutboundMessage(from, '⚠️ Failed to update stock. Please try again.');

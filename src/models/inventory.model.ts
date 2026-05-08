@@ -3,6 +3,7 @@ import { Schema, model, Document, Types } from 'mongoose';
 export interface IInventoryItem extends Document {
   user: Types.ObjectId;
   name: string;
+  sku?: string;          // Auto-generated short code e.g. "P-4X9M" for WhatsApp
   quantity: number;
   lastUnitPrice: number; // Selling price
   costPrice: number;     // Cost price
@@ -20,6 +21,7 @@ export interface IInventoryItem extends Document {
     {
       user: { type: Schema.Types.ObjectId, ref: 'User', required: true },
       name: { type: String, required: true },
+      sku: { type: String, trim: true, uppercase: true },
       quantity: { type: Number, required: true, default: 0 },
       // Default to 0 if unknown
       lastUnitPrice: { type: Number, default: 0 },
@@ -36,5 +38,6 @@ export interface IInventoryItem extends Document {
 );
 
 inventorySchema.index({ user: 1, name: 1, isDeleted: 1 }, { unique: true });
+inventorySchema.index({ user: 1, sku: 1 }, { sparse: true }); // Fast SKU lookups
 
 export const Inventory = model<IInventoryItem>('Inventory', inventorySchema);

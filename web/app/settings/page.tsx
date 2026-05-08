@@ -62,6 +62,7 @@ export default function SettingsPage() {
   const [language, setLanguage] = useState('');
   const [currencyCode, setCurrencyCode] = useState('NGN'); // ✅ New Explicit Currency
   const [pdfEnabled, setPdfEnabled] = useState(false);
+  const [smartMatchingEnabled, setSmartMatchingEnabled] = useState(true);
   // ✅ Bank Details State
   const [bankName, setBankName] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
@@ -132,6 +133,7 @@ export default function SettingsPage() {
         userData?.settings?.pdfEnabled ??
         false
     );
+    setSmartMatchingEnabled(userData?.settings?.smartMatchingEnabled ?? true);
     
   };
 
@@ -195,7 +197,8 @@ export default function SettingsPage() {
           settings: {
             closingTime,
             pdfReportsEnabled: pdfEnabled,
-            currencyCode
+            currencyCode,
+            smartMatchingEnabled,
           },
           bankDetails: {
              bankName,
@@ -675,6 +678,37 @@ export default function SettingsPage() {
                 <span
                   className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform ${
                     pdfEnabled ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+
+            <div
+              className={`flex items-center justify-between p-4 rounded-xl border transition-colors mt-4 ${
+                smartMatchingEnabled ? 'bg-emerald-50/30 border-emerald-100' : 'bg-slate-50 border-slate-100'
+              }`}
+            >
+              <div className="flex items-start gap-3">
+                <div className={`mt-1 p-1 rounded-full ${smartMatchingEnabled ? 'bg-emerald-100 text-emerald-600' : 'bg-gray-200 text-gray-400'}`}>
+                  {smartMatchingEnabled ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900 text-sm">Smart Item Matching</h3>
+                  <p className="text-xs text-gray-500 mt-0.5 max-w-md">
+                    Automatically resolve typos and plural/singular item names. <b>When disabled</b>, WhatsApp will require exact name matches.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setSmartMatchingEnabled((v) => !v)}
+                className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors focus:outline-none cursor-pointer ${
+                  smartMatchingEnabled ? 'bg-emerald-600' : 'bg-gray-300'
+                }`}
+              >
+                <span
+                  className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform ${
+                    smartMatchingEnabled ? 'translate-x-6' : 'translate-x-1'
                   }`}
                 />
               </button>

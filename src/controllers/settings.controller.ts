@@ -129,6 +129,13 @@ export const updateSettings = async (req: AuthReq, res: Response) => {
           }
         }
 
+        if (inputSettings.smartMatchingEnabled !== undefined) {
+          const isEnabled = validateBoolean(inputSettings.smartMatchingEnabled);
+          if (isEnabled !== undefined) {
+            $set['settings.smartMatchingEnabled'] = isEnabled;
+          }
+        }
+
         // ✅ Staff Permissions Update
         if (inputSettings.staffPermissions && typeof inputSettings.staffPermissions === 'object') {
            const sp = inputSettings.staffPermissions;
