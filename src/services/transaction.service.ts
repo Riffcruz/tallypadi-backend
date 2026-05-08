@@ -771,6 +771,9 @@ export const processTransaction = async (
 // ✅ STOCK DEDUCTION HELPER (Exported)
 // =========================================================
 export const deductStockForItems = async (userId: Types.ObjectId, items: {name: string, qty: number}[]) => {
+  const user = await User.findById(userId).select('settings.smartMatchingEnabled').lean();
+  const smartMatchingEnabled = user?.settings?.smartMatchingEnabled !== false;
+
   for (const item of items) {
     const qty = Number(item.qty);
     if (qty <= 0) continue;
@@ -813,6 +816,10 @@ export const deductStockForItems = async (userId: Types.ObjectId, items: {name: 
  */
 export async function getHistoricalPrices(userId: Types.ObjectId, itemName: string) {
   const clean = normalizeItemName(itemName);
+  
+  const user = await User.findById(userId).select('settings.smartMatchingEnabled').lean();
+  const smartMatchingEnabled = user?.settings?.smartMatchingEnabled !== false;
+
   // Find candidates (using root name logic or broad search)
   // Actually, we can just search transactions with regex on item name.
   // But transactions store the *snapshot* name.
