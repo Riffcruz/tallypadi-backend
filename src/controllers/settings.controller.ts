@@ -138,6 +138,15 @@ export const updateSettings = async (req: AuthReq, res: Response) => {
           }
         }
 
+        // ✅ Location Settings Update
+        if (inputSettings.location && typeof inputSettings.location === 'object') {
+          const loc = inputSettings.location;
+          if (loc.country !== undefined) $set['settings.location.country'] = String(loc.country).slice(0, 100);
+          if (loc.state !== undefined) $set['settings.location.state'] = String(loc.state).slice(0, 100);
+          if (loc.city !== undefined) $set['settings.location.city'] = String(loc.city).slice(0, 100);
+          if (loc.address !== undefined) $set['settings.location.address'] = String(loc.address).slice(0, 300);
+        }
+
         // ✅ Staff Permissions Update
         if (inputSettings.staffPermissions && typeof inputSettings.staffPermissions === 'object') {
            const sp = inputSettings.staffPermissions;

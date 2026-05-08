@@ -46,6 +46,12 @@ export interface IUser extends Document {
     staffTransactionReport?: boolean;
     currencyCode?: string; // e.g. NGN, USD, GHS
     smartMatchingEnabled?: boolean;
+    location?: {
+      country: string;
+      state: string;
+      city: string;
+      address: string;
+    };
     
     // ✅ Staff Permissions
     staffPermissions?: {
@@ -175,9 +181,16 @@ const userSchema = new Schema<IUser>(
       dailySummaryEnabled: { type: Boolean, default: false },
       language: { type: String, default: 'English' },
       pdfReportsEnabled: { type: Boolean, default: true },
-      staffTransactionReport: { type: Boolean, default: false },
-      currencyCode: { type: String, trim: true, uppercase: true },
+      staffTransactionReport: { type: Boolean, default: true },
+      currencyCode: { type: String, default: 'NGN' },
       smartMatchingEnabled: { type: Boolean, default: true },
+
+      location: {
+        country: { type: String, default: 'NG' },
+        state: { type: String, default: '' },
+        city: { type: String, default: '' },
+        address: { type: String, default: '' },
+      },
       
       // ✅ Staff Permission Toggles (Controlled by Owner)
       staffPermissions: {

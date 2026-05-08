@@ -33,6 +33,7 @@ import {
 import Swal from 'sweetalert2';
 import { getCookie } from '../../utils/cookies';
 import { uploadToR2 } from '../../src/utils/uploadToR2';
+import { Country, State, City } from 'country-state-city';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 
@@ -67,6 +68,12 @@ export default function SettingsPage() {
   const [bankName, setBankName] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
   const [accountName, setAccountName] = useState('');
+
+  // ✅ Location State
+  const [countryCode, setCountryCode] = useState('NG'); // defaults to Nigeria
+  const [stateCode, setStateCode] = useState('');
+  const [cityName, setCityName] = useState('');
+  const [addressLine, setAddressLine] = useState('');
 
   // Phone Change State
   const [changePhoneModalOpen, setChangePhoneModalOpen] = useState(false);
@@ -135,6 +142,13 @@ export default function SettingsPage() {
     );
     setSmartMatchingEnabled(userData?.settings?.smartMatchingEnabled ?? true);
     
+    // Location Settings
+    if (userData?.settings?.location) {
+       setCountryCode(userData.settings.location.country || 'NG');
+       setStateCode(userData.settings.location.state || '');
+       setCityName(userData.settings.location.city || '');
+       setAddressLine(userData.settings.location.address || '');
+    }
   };
 
   useEffect(() => {
@@ -194,11 +208,20 @@ export default function SettingsPage() {
         {
           businessName,
           shopName: businessName, // backward compatibility
+          shopDescription,
+          heroImageUrl,
           settings: {
             closingTime,
-            pdfReportsEnabled: pdfEnabled,
+            language,
             currencyCode,
+            pdfReportsEnabled: pdfEnabled,
             smartMatchingEnabled,
+            location: {
+               country: countryCode,
+               state: stateCode,
+               city: cityName,
+               address: addressLine
+            }
           },
           bankDetails: {
              bankName,
@@ -617,6 +640,89 @@ export default function SettingsPage() {
                </div>
             </div>
           </div>
+
+          {/* Location Details Card */}
+          <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-gray-100">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-2 bg-emerald-50 rounded-xl text-emerald-600">
+                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">Shop Location</h2>
+                <p className="text-xs text-gray-400">Increase visibility on the marketplace</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+               <div>
+                  <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wider">
+                    Country
+                  </label>
+                  <select
+                    value={countryCode}
+                    onChange={(e) => {
+                       setCountryCode(e.target.value);
+                       setStateCode('');
+                       setCityName('');
+                    }}
+                    className="w-full border border-gray-200 bg-slate-50/50 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-sm font-medium"
+                  >
+                    <option value="">Select Country</option>
+                    {Country.getAllCountries().map(c => (
+                       <option key={c.isoCode} value={c.isoCode}>{c.name}</option>
+                    ))}
+                  </select>
+               </div>
+               <div>
+                  <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wider">
+                    State / Region
+                  </label>
+                  <select
+                    value={stateCode}
+                    onChange={(e) => {
+                       setStateCode(e.target.value);
+                       setCityName('');
+                    }}
+                    disabled={!countryCode}
+                    className="w-full border border-gray-200 bg-slate-50/50 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-sm font-medium disabled:opacity-50"
+                  >
+                    <option value="">Select State</option>
+                    {countryCode && State.getStatesOfCountry(countryCode).map(s => (
+                       <option key={s.isoCode} value={s.isoCode}>{s.name}</option>
+                    ))}
+                  </select>
+               </div>
+               <div>
+                  <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wider">
+                    City / Local Govt
+                  </label>
+                  <select
+                    value={cityName}
+                    onChange={(e) => setCityName(e.target.value)}
+                    disabled={!stateCode}
+                    className="w-full border border-gray-200 bg-slate-50/50 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-sm font-medium disabled:opacity-50"
+                  >
+                    <option value="">Select City</option>
+                    {stateCode && City.getCitiesOfState(countryCode, stateCode).map(c => (
+                       <option key={c.name} value={c.name}>{c.name}</option>
+                    ))}
+                  </select>
+               </div>
+               <div>
+                  <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wider">
+                    Town / Street Address
+                  </label>
+                  <input
+                    type="text"
+                    value={addressLine}
+                    onChange={(e) => setAddressLine(e.target.value)}
+                    placeholder="e.g. Ikeja, 12 Broad St"
+                    className="w-full border border-gray-200 bg-slate-50/50 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-sm font-medium"
+                  />
+               </div>
+            </div>
+          </div>
+
 
           {/* Reports & Automation */}
           <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-gray-100">
