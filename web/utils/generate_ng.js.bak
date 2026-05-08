@@ -1,0 +1,51 @@
+const fs = require('fs');
+
+const stateMap = {
+  "Abia": "AB", "Adamawa": "AD", "Akwa Ibom": "AK", "Anambra": "AN", "Bauchi": "BA",
+  "Bayelsa": "BY", "Benue": "BE", "Borno": "BO", "Cross River": "CR", "Delta": "DE",
+  "Ebonyi": "EB", "Edo": "ED", "Ekiti": "EK", "Enugu": "EN", "Federal Capital Territory": "FC", "FCT": "FC", "Abuja": "FC",
+  "Gombe": "GO", "Imo": "IM", "Jigawa": "JI", "Kaduna": "KD", "Kano": "KN",
+  "Katsina": "KT", "Kebbi": "KE", "Kogi": "KO", "Kwara": "KW", "Lagos": "LA",
+  "Nasarawa": "NA", "Niger": "NI", "Ogun": "OG", "Ondo": "ON", "Osun": "OS",
+  "Oyo": "OY", "Plateau": "PL", "Rivers": "RI", "Sokoto": "SO", "Taraba": "TA",
+  "Yobe": "YO", "Zamfara": "ZA"
+};
+
+async function main() {
+  console.log("Fetching JSON...");
+  const res = await fetch("https://raw.githubusercontent.com/temikeezy/nigeria-geojson-data/main/data/full.json");
+  const data = await res.json();
+  
+  const result = {};
+  
+  for (const stateObj of data) {
+    let stateName = stateObj.state;
+    // Fix any name mismatches
+    if (stateName === 'FCT') stateName = 'Federal Capital Territory';
+    
+    const isoCode = stateMap[stateName];
+    if (!isoCode) {
+      console.warn("Unknown state:", stateName);
+      continue;
+    }
+    
+    const locations = new Set();
+    
+    for (const lga of stateObj.lgas) {
+      locations.add(lga.name);
+      if (lga.wards) {
+        for (const ward of lga.wards) {
+          locations.add(ward.name);
+        }
+      }
+    }
+    
+    result[isoCode] = Array.from(locations).sort();
+  }
+  
+  const outPath = __dirname + '/nigeriaLocations.ts';
+  fs.writeFileSync(outPath, `export const NIGERIA_CUSTOM_CITIES: Record<string, string[]> = ${JSON.stringify(result, null, 2)};\n`);
+  console.log("Written to", outPath);
+}
+
+main().catch(console.error);

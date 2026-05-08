@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { X, Loader2, Save, Eye, EyeOff } from 'lucide-react';
+import { X, Loader2, Save, Eye, EyeOff, Search } from 'lucide-react';
 import Swal from 'sweetalert2';
 
 interface StoreProductsModalProps {
@@ -12,6 +12,7 @@ export default function StoreProductsModal({ token, onClose }: StoreProductsModa
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
   
   const [editForm, setEditForm] = useState({
     isPublished: true,
@@ -96,10 +97,25 @@ export default function StoreProductsModal({ token, onClose }: StoreProductsModa
         <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 bg-slate-50">
           {loading ? (
             <div className="py-20 flex justify-center"><Loader2 className="animate-spin text-slate-400" /></div>
-          ) : products.length === 0 ? (
-            <div className="text-center py-10 text-slate-500 font-medium">No products found in inventory.</div>
           ) : (
-            products.map(product => (
+            <>
+              <div className="relative mb-4">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
+                <input
+                  type="text"
+                  placeholder="Search products by name..."
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-sm font-medium"
+                />
+              </div>
+
+              {products.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 ? (
+                <div className="text-center py-10 text-slate-500 font-medium">No products found.</div>
+              ) : (
+                products
+                  .filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()))
+                  .map(product => (
               <div key={product.id} className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm transition-all">
                 <div 
                   className="flex items-center gap-4 p-4 cursor-pointer hover:bg-slate-50"
@@ -179,6 +195,8 @@ export default function StoreProductsModal({ token, onClose }: StoreProductsModa
                 )}
               </div>
             ))
+          )}
+            </>
           )}
         </div>
       </div>

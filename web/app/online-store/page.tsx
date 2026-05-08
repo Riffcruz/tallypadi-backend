@@ -23,6 +23,7 @@ import { getCookie } from '../../utils/cookies';
 import { uploadToR2 } from '../../src/utils/uploadToR2';
 import { Country, State, City } from 'country-state-city';
 import StoreProductsModal from './StoreProductsModal';
+import { NIGERIA_CUSTOM_CITIES } from '../../utils/nigeriaLocations';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 
@@ -331,15 +332,26 @@ export default function OnlineStorePage() {
                    </div>
                    <div>
                       <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wider">City / Local Govt</label>
-                      <select
+                      <input
+                        type="text"
+                        list="city-list"
                         value={cityName}
                         onChange={(e) => setCityName(e.target.value)}
                         disabled={!stateCode}
+                        placeholder="Type or select city..."
                         className="w-full border border-gray-200 bg-slate-50/50 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-sm font-medium disabled:opacity-50"
-                      >
-                        <option value="">Select City</option>
-                        {stateCode && City.getCitiesOfState(countryCode, stateCode).map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
-                      </select>
+                      />
+                      <datalist id="city-list">
+                        {stateCode && (
+                          // Merge custom cities (if Nigeria) with the standard cities, removing duplicates
+                          Array.from(new Set([
+                            ...(countryCode === 'NG' && NIGERIA_CUSTOM_CITIES[stateCode] ? NIGERIA_CUSTOM_CITIES[stateCode] : []),
+                            ...City.getCitiesOfState(countryCode, stateCode).map(c => c.name)
+                          ])).sort().map(cityName => (
+                            <option key={cityName} value={cityName} />
+                          ))
+                        )}
+                      </datalist>
                    </div>
                    <div>
                       <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wider">Town / Street Address</label>
