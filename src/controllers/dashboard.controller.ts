@@ -327,6 +327,7 @@ export const getDashboardData = async (req: Request, res: Response) => {
         shopName: user.businessName || 'My Store',
         initials: user.businessName ? user.businessName.slice(0, 2).toUpperCase() : 'IO',
         planType: user.planType,
+        walletBalance: user.walletBalance || 0,
         subscriptionStatus: user.subscriptionStatus,
         trialEndsAt: user.trialEndsAt,
         nextBillingDate: user.nextBillingDate || null,

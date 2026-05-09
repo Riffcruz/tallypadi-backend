@@ -76,6 +76,7 @@ interface DashboardResponse {
     shopName?: string;
     shopSlug?: string;
     initials?: string;
+    walletBalance?: number;
     currencyCode?: string; // e.g. NGN, USD, GHS
     locale?: string; // e.g. en-NG
     countryCode?: string; // optional
