@@ -11,6 +11,7 @@ export default function robots(): MetadataRoute.Robots {
           "/sales-tracking-ledger",
           "/inventory-stock-management",
           "/best-way-to-grow-business",
+          "/marketplace",
           "/whatsapp-receipt-generator",
           "/product-catalog-shop-link-generator",
           "/accounts-receivable-debtors-tracking"

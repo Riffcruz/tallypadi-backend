@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import Link from 'next/link';
 import { Menu, X, ArrowRight } from 'lucide-react';
 import Image from 'next/image';
 
@@ -36,6 +37,12 @@ export default function MarketingNavbar({ whatsappLink = 'https://wa.me/23490356
             >
               Home
             </a>
+            <Link
+              href="/marketplace"
+              className="text-sm font-medium text-slate-300 hover:text-emerald-400 transition"
+            >
+              Marketplace
+            </Link>
             <a
               href="/#features"
               className="text-sm font-medium text-slate-300 hover:text-emerald-400 transition"
@@ -103,6 +110,13 @@ export default function MarketingNavbar({ whatsappLink = 'https://wa.me/23490356
           >
             How it Works
           </a>
+          <Link
+            href="/marketplace"
+            onClick={() => setMobileMenuOpen(false)}
+            className="block text-slate-300 hover:text-white font-medium p-2 hover:bg-slate-800 rounded"
+          >
+            Marketplace
+          </Link>
           <a
             href="/#features"
             onClick={() => setMobileMenuOpen(false)}

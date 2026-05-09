@@ -253,6 +253,8 @@ const userSchema = new Schema<IUser>(
 
 // Helpful index for summary workers
 userSchema.index({ 'settings.dailySummaryEnabled': 1, nextSummaryAt: 1 });
+userSchema.index({ planType: 1, subscriptionStatus: 1, shopSlug: 1 });
+userSchema.index({ 'settings.location.state': 1, 'settings.location.city': 1 });
 
 // Optional: find staff by owner quickly
 userSchema.index({ ownerId: 1, role: 1 });

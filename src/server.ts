@@ -38,6 +38,7 @@ import draftRouter from './routes/draft.routes';
 import customerRouter from './routes/customer.routes';
 import adsRouter from './routes/ads.routes';
 import activityRouter from './routes/activity.routes';
+import marketplaceRouter from './routes/marketplace.routes';
 
 // --- SERVICES & CONFIG ---
 import {
@@ -379,6 +380,7 @@ app.use('/api/payment', paymentRouter);
 app.use('/api/health', healthRouter);
 app.use('/api/orders', authRequired, orderRouter);
 app.use('/api/shop', shopRouter);
+app.use('/api/marketplace', marketplaceRouter);
 app.use('/api/hq', hqRouter);
 app.use('/api/invoices', invoiceRouter);
 app.use('/api/expenses', authRequired, expenseRouter);

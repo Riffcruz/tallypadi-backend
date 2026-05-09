@@ -1,5 +1,6 @@
 import React from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { ArrowRight, TrendingUp } from 'lucide-react';
 
 export default function MarketingFooter() {
@@ -64,6 +65,7 @@ export default function MarketingFooter() {
                        <TrendingUp size={14} /> Scale in 2026
                    </a>
                </li>
+               <li><Link href="/marketplace" className="hover:text-emerald-400 transition-colors flex items-center gap-2"><ArrowRight size={12} className="opacity-0 hover:opacity-100 transition-opacity" />Marketplace</Link></li>
                <li><a href="/#pricing" className="hover:text-emerald-400 transition-colors flex items-center gap-2"><ArrowRight size={12} className="opacity-0 hover:opacity-100 transition-opacity" />Pricing</a></li>
                <li><a href="/login" className="hover:text-emerald-400 transition-colors flex items-center gap-2"><ArrowRight size={12} className="opacity-0 hover:opacity-100 transition-opacity" />Login</a></li>
                <li><a href="/help" className="hover:text-emerald-400 transition-colors flex items-center gap-2"><ArrowRight size={12} className="opacity-0 hover:opacity-100 transition-opacity" />Help Center</a></li>
