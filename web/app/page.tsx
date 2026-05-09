@@ -3,18 +3,18 @@ import Script from 'next/script';
 import LandingPageClient from './LandingPageClient';
 
 export const metadata: Metadata = {
-  title: 'TallyPadi — The Smartest WhatsApp POS & Inventory Software',
+  title: 'TallyPadi — WhatsApp POS, Marketplace & Ads for Growing Shops',
   description:
-    "Record sales, generate instant WhatsApp receipts, and track your shop's inventory automatically. The easiest accounting tool designed for African businesses. Start your free trial today.",
+    "Record sales, generate receipts, track inventory, publish products to a marketplace, and boost ads across TallyPadi, Google-ready search pages, Meta, and TikTok.",
   alternates: {
     canonical: 'https://tallypadi.com/',
   },
   openGraph: {
     type: 'website',
     url: 'https://tallypadi.com/',
-    title: 'TallyPadi — The Smartest WhatsApp POS & Inventory Software',
+    title: 'TallyPadi — WhatsApp POS, Marketplace & Ads for Growing Shops',
     description:
-      'Turn your WhatsApp into a professional POS. Auto-sync sales, manage multiple branches, and recover debts instantly.',
+      'Run sales on WhatsApp, publish products to a shop front, and request product boosts across marketplace, search, Meta, and TikTok channels.',
     siteName: 'Tallypadi',
     images: [
       {
@@ -27,9 +27,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'TallyPadi — The Smartest WhatsApp POS & Inventory Software',
+    title: 'TallyPadi — WhatsApp POS, Marketplace & Ads for Growing Shops',
     description:
-      'Turn your WhatsApp into a professional POS. Auto-sync sales, manage multiple branches, and recover debts instantly.',
+      'Run sales on WhatsApp, publish products to a shop front, and request product boosts across marketplace, search, Meta, and TikTok channels.',
     images: ['https://tallypadi.com/og.png'],
   },
 };
@@ -42,7 +42,7 @@ export default function Page() {
     applicationCategory: 'BusinessApplication',
     operatingSystem: 'Web',
     description:
-      'Track sales, stock, and profit directly on WhatsApp. Generate receipts and invoices instantly. Built for businesses of all sizes.',
+      'Track sales, stock, and profit directly on WhatsApp. Generate receipts, publish products to a marketplace, and run product boosts across multiple ad channels.',
     offers: {
       '@type': 'Offer',
       price: '0',

@@ -5,7 +5,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Phone,
   ArrowRight,
-  Wand2,
   Users,
   FileText,
   BarChart3,
@@ -20,14 +19,15 @@ import {
   Gift,
   Shield,
   Crown,
-  Quote,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   HelpCircle,
   Store,
-  Smartphone,
-  LayoutDashboard
+  Megaphone,
+  MapPin,
+  Search,
+  Smartphone
 } from 'lucide-react';
 import Image from 'next/image';
 import StepShotWhatsAppLight from "../components/StepShot";
@@ -236,6 +236,118 @@ const ComparisonSection = () => {
               </tr>
             </tbody>
           </table>
+        </AnimatedSection>
+      </div>
+    </section>
+  );
+};
+
+const MarketplaceAdsSection = () => {
+  const marketplacePoints = [
+    'Publish products from your inventory to a public shop front',
+    'Customers can search by product, category, state, and city',
+    'Every product has a details page for price, color, size, description, and advertiser contact',
+  ];
+
+  const adsPoints = [
+    'Boost products so they rank ahead of regular listings on TallyPadi',
+    'Request ads for TallyPadi SEO & Google, Meta, TikTok, or all platforms',
+    'Admin-approved boosts get SEO-ready titles, descriptions, tags, and automatic expiry cleanup',
+  ];
+
+  return (
+    <section id="marketplace-ads" className="py-24 bg-white border-y border-stone-100">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <AnimatedSection className="grid lg:grid-cols-[0.95fr_1.05fr] gap-12 items-center">
+          <div>
+            <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-black uppercase tracking-[0.16em] text-emerald-700">
+              <Store size={14} />
+              New selling channels
+            </span>
+            <h2 className="mt-4 text-3xl md:text-5xl font-extrabold tracking-tight text-stone-950">
+              Your products can now be found outside your counter.
+            </h2>
+            <p className="mt-5 text-lg leading-8 text-stone-600">
+              TallyPadi now gives Tycoon shops a public marketplace listing, a branded shop front,
+              product detail pages, and an ads manager for boosting products across search and social channels.
+            </p>
+
+            <div className="mt-8 grid sm:grid-cols-2 gap-4">
+              <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-5">
+                <div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-700 text-white">
+                  <Search size={20} />
+                </div>
+                <h3 className="font-black text-stone-950">Marketplace discovery</h3>
+                <ul className="mt-4 space-y-3">
+                  {marketplacePoints.map((point) => (
+                    <li key={point} className="flex gap-2 text-sm leading-6 text-stone-700">
+                      <CheckCircle2 size={16} className="mt-1 shrink-0 text-emerald-700" />
+                      <span>{point}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="rounded-2xl border border-amber-100 bg-amber-50/70 p-5">
+                <div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-xl bg-amber-400 text-stone-950">
+                  <Megaphone size={20} />
+                </div>
+                <h3 className="font-black text-stone-950">Ads and boosts</h3>
+                <ul className="mt-4 space-y-3">
+                  {adsPoints.map((point) => (
+                    <li key={point} className="flex gap-2 text-sm leading-6 text-stone-700">
+                      <CheckCircle2 size={16} className="mt-1 shrink-0 text-amber-700" />
+                      <span>{point}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div className="relative overflow-hidden rounded-[2rem] border border-stone-200 bg-stone-950 p-5 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-white/10 pb-4">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.16em] text-emerald-300">Marketplace</p>
+                <h3 className="mt-1 text-xl font-black text-white">Products near Lagos</h3>
+              </div>
+              <span className="rounded-full bg-amber-400 px-3 py-1 text-xs font-black text-stone-950">Boosted first</span>
+            </div>
+
+            <div className="mt-5 grid gap-4 sm:grid-cols-2">
+              {[
+                { name: 'Samsung 43" Smart TV', price: '₦185,000', tag: 'Boosted', area: 'Ikeja' },
+                { name: 'Office swivel chair', price: '₦42,000', tag: 'Furniture', area: 'Yaba' },
+                { name: 'Phone repair service', price: 'From ₦8,000', tag: 'Jobs & Services', area: 'Lekki' },
+                { name: 'Ladies leather bag', price: '₦28,500', tag: 'Fashion', area: 'Surulere' },
+              ].map((item, index) => (
+                <div key={item.name} className="rounded-2xl border border-white/10 bg-white/[0.06] p-4">
+                  <div className="mb-4 flex aspect-[4/3] items-center justify-center rounded-xl bg-emerald-500/10 text-3xl font-black text-emerald-300">
+                    {item.name.slice(0, 1)}
+                  </div>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-black text-white">{item.price}</p>
+                      <p className="mt-1 line-clamp-2 text-sm font-semibold text-stone-300">{item.name}</p>
+                    </div>
+                    <span className={`rounded-full px-2 py-1 text-[10px] font-black ${index === 0 ? 'bg-amber-400 text-stone-950' : 'bg-white/10 text-stone-300'}`}>
+                      {item.tag}
+                    </span>
+                  </div>
+                  <p className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-stone-400">
+                    <MapPin size={12} />
+                    {item.area}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-5 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4">
+              <p className="text-sm font-bold text-emerald-100">
+                Ads Manager: fund wallet, choose a product, select TallyPadi SEO & Google, Meta, TikTok, or all platforms, then submit for admin review.
+              </p>
+            </div>
+          </div>
         </AnimatedSection>
       </div>
     </section>
@@ -499,7 +611,7 @@ export default function LandingPage() {
             setWhatsappLink(data.whatsappUrl);
           }
         }
-      } catch (error) {
+      } catch {
         console.error('Failed to fetch settings, using default');
       }
     };
@@ -553,22 +665,23 @@ export default function LandingPage() {
         </div>
 
         <h1 className="mt-6 text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight leading-[1.05]">
-          Your complete shop on{" "}
+          Run your shop on{" "}
           <span className="text-emerald-400">WhatsApp</span>.
           <br className="hidden sm:block" />
-          No POS machine needed.
+          Get discovered online.
         </h1>
 
         <p className="mt-5 text-base sm:text-lg text-stone-300 max-w-xl leading-relaxed">
-          Record sales by chatting, generate instant PDF receipts, and track your inventory on autopilot. The smartest business app for retailers, wholesalers, and growing teams.
+          Record sales by chatting, generate receipts, track inventory, publish products to your shop front, and boost listings across TallyPadi, Google-ready search pages, Meta, and TikTok.
         </p>
 
         {/* Proof chips */}
         <div className="mt-6 flex flex-wrap gap-2">
           {[
             { icon: <CheckCircle2 size={16} className="text-emerald-400" />, text: "Free to start" },
-            { icon: <CheckCircle2 size={16} className="text-emerald-400" />, text: "Automated Debt Tracking" },
-            { icon: <CheckCircle2 size={16} className="text-emerald-400" />, text: "Web Dashboard Included" },
+            { icon: <CheckCircle2 size={16} className="text-emerald-400" />, text: "Marketplace shop fronts" },
+            { icon: <CheckCircle2 size={16} className="text-emerald-400" />, text: "Ads wallet & boosts" },
+            { icon: <CheckCircle2 size={16} className="text-emerald-400" />, text: "Web dashboard included" },
           ].map((p, i) => (
             <span
               key={i}
@@ -593,10 +706,10 @@ export default function LandingPage() {
           </a>
 
           <a
-            href="#how-it-works"
+            href="#marketplace-ads"
             className="inline-flex items-center justify-center px-7 py-4 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 transition font-bold text-white"
           >
-            See how it works <ArrowRight size={16} className="ml-2" />
+            See what is new <ArrowRight size={16} className="ml-2" />
           </a>
         </div>
 
@@ -677,7 +790,7 @@ export default function LandingPage() {
 
           <h3 className="text-xl font-bold text-white mb-3 group-hover:text-emerald-300 transition-colors">Start Chatting</h3>
           <p className="text-stone-400 leading-relaxed group-hover:text-stone-300 transition-colors">
-            Just say "Hello" on WhatsApp. Our AI will guide you through a quick signup. No forms to fill.
+            Just say Hello on WhatsApp. TallyPadi guides you through quick signup with no long forms to fill.
           </p>
         </div>
       </AnimatedSection>
@@ -699,7 +812,7 @@ export default function LandingPage() {
 
           <h3 className="text-xl font-bold text-white mb-3 group-hover:text-emerald-300 transition-colors">Set Shop Details</h3>
           <p className="text-stone-400 leading-relaxed group-hover:text-stone-300 transition-colors">
-            Tell the bot your shop name and preferences. It configures your currency and settings instantly.
+            Add your shop name, currency, location, and preferences so your dashboard and public shop front are ready.
           </p>
         </div>
       </AnimatedSection>
@@ -729,7 +842,9 @@ export default function LandingPage() {
       </AnimatedSection>
     </div>
   </div>
-</section>
+      </section>
+
+      <MarketplaceAdsSection />
 
       {/* --- Pricing Section (Moved Up) --- */}
       <section id="pricing" className="py-24 bg-stone-100 relative">
@@ -837,7 +952,8 @@ export default function LandingPage() {
                 <PricingItem text="Everything in Oga Boss" light />
                 <PricingItem text="Full POS Terminal Mode" light />
                 <PricingItem text="Staff Login (Up to 10)" light />
-                <PricingItem text="Online Shop Link" light />
+                <PricingItem text="Online Shop Link + Marketplace Listing" light />
+                <PricingItem text="Ads Wallet & Product Boosts" light />
                 <PricingItem text="Branded PDF Invoices & Export" light />
                 <PricingItem text="Advanced Analytics Suite" light />
               </ul>
@@ -857,15 +973,15 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           <AnimatedSection className="text-center mb-16">
             <span className="text-emerald-600 font-bold tracking-wider uppercase text-xs">Powerful Features</span>
-            <h2 className="text-3xl md:text-5xl font-bold text-stone-900 mt-2">Everything a modern business needs.</h2>
+            <h2 className="text-3xl md:text-5xl font-bold text-stone-900 mt-2">From stock room to storefront.</h2>
           </AnimatedSection>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             <FeatureCard
-              icon={<Wand2 size={24} />}
+              icon={<Smartphone size={24} />}
               color="orange"
-              title="AI WhatsApp Assistant"
-              desc="Just type 'Sold 2 bags of rice'. TallyPadi instantly reduces your stock, calculates profit, and logs the sale."
+              title="WhatsApp Sales Assistant"
+              desc="Type 'Sold 2 bags of rice'. TallyPadi reduces your stock, calculates profit, and logs the sale without opening a spreadsheet."
             />
             <FeatureCard
               icon={<FileText size={24} />}
@@ -897,6 +1013,26 @@ export default function LandingPage() {
               color="orange"
               title="Debtors & Payment Follow-ups"
               desc="Track customers who bought on credit. Keep clear ledgers and know exactly who owes your business money."
+            />
+            <FeatureCard
+              icon={<Store size={24} />}
+              color="emerald"
+              title="Marketplace & Shop Front"
+              badge="TYCOON PLAN"
+              desc="Publish products with photos, descriptions, colors, sizes, and advertiser details so customers can browse before they chat."
+            />
+            <FeatureCard
+              icon={<Megaphone size={24} />}
+              color="blue"
+              title="Cross-Platform Ads Manager"
+              badge="TYCOON PLAN"
+              desc="Fund your ads wallet, choose TallyPadi SEO & Google, Meta, TikTok, or all platforms, then submit products for admin review."
+            />
+            <FeatureCard
+              icon={<TrendingUp size={24} />}
+              color="teal"
+              title="Boosted Product Ranking"
+              desc="Approved boosts rank first in the marketplace, get SEO-ready product pages, and automatically deactivate when the boost expires."
             />
           </div>
         </div>
@@ -1038,7 +1174,7 @@ export default function LandingPage() {
 
             <div className="grid sm:grid-cols-2 gap-5">
               <AnimatedSection animation="zoom-in">
-                <GlowStat label="Setup Time" value="~3 mins" sub="Add the bot + start chatting" icon={<Zap size={20} />} />
+                <GlowStat label="Setup Time" value="~3 mins" sub="Add TallyPadi + start chatting" icon={<Zap size={20} />} />
               </AnimatedSection>
 
               <AnimatedSection animation="zoom-in" className="delay-100">
