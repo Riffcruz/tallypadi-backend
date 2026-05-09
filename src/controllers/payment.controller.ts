@@ -13,6 +13,19 @@ type PlanType = 'OGA_BOSS' | 'TYCOON';
 const ALLOWED_PLANS: PlanType[] = ['OGA_BOSS', 'TYCOON'];
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+function parsePaystackMetadata(raw: unknown): Record<string, any> {
+  if (!raw) return {};
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  return typeof raw === 'object' ? raw as Record<string, any> : {};
+}
+
 function normalizePhone(raw: string) {
   let p = String(raw || '').trim();
   // keep + and digits only
@@ -139,7 +152,7 @@ export const verifyPayment = async (req: Request, res: Response) => {
       return res.status(400).json({ status: 'failed', message: 'Transaction not successful' });
     }
 
-    const metadata = data.metadata || {};
+    const metadata = parsePaystackMetadata(data.metadata);
     const userId = metadata.userId ? String(metadata.userId) : null;
     const planType = safePlan(metadata.planType) || null;
     const metaPhone = metadata.phoneNumber ? String(metadata.phoneNumber) : null;
@@ -245,7 +258,7 @@ export const handlePaystackWebhook = async (req: any, res: Response) => {
     const event = req.body;
     const ev = String(event?.event || '');
     const data = event?.data || {};
-    const metadata = data?.metadata || {};
+    const metadata = parsePaystackMetadata(data?.metadata);
     const userId = metadata?.userId ? String(metadata.userId) : null;
     const planType = safePlan(metadata?.planType) || null;
 

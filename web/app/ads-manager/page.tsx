@@ -1,6 +1,6 @@
 'use client';
 
-import React, { Suspense, useEffect, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
 import Sidebar from '../../components/Sidebar';
 import Preloader from '../../components/Preloader';
@@ -19,21 +19,42 @@ import { getCookie } from '../../utils/cookies';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 
+interface AdsUser {
+  planType?: string;
+  walletBalance?: number;
+  [key: string]: unknown;
+}
+
+interface AdsPlan {
+  id: string;
+  durationDays: number;
+  price: number;
+  label: string;
+}
+
+const getAxiosMessage = (err: unknown) => {
+  if (axios.isAxiosError(err)) {
+    const data = err.response?.data as { message?: string; error?: string } | undefined;
+    return data?.message || data?.error || '';
+  }
+  return '';
+};
+
 function AdsManagerContent() {
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<AdsUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [fundingAmount, setFundingAmount] = useState('');
   const [funding, setFunding] = useState(false);
-  const [adsPlans, setAdsPlans] = useState<any[]>([]);
+  const [adsPlans, setAdsPlans] = useState<AdsPlan[]>([]);
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const getTokenOrRedirect = () => {
+  const getTokenOrRedirect = useCallback(() => {
     const token = getCookie('tallyToken');
     if (!token) router.push('/login');
     return token;
-  };
+  }, [router]);
 
   const isTycoon = String(user?.planType || '').toUpperCase() === 'TYCOON';
 
@@ -43,18 +64,26 @@ function AdsManagerContent() {
 
     const fetchData = async () => {
       try {
-        const reference = searchParams.get('reference');
+        const reference = searchParams.get('reference') || searchParams.get('trxref');
         
         if (reference) {
           // Verify payment first before fetching dashboard data
           try {
-            await axios.post(`${API_URL}/ads/wallet/verify/${reference}`, {}, {
+            const verifyRes = await axios.post(`${API_URL}/ads/wallet/verify/${encodeURIComponent(reference)}`, {}, {
               headers: { Authorization: `Bearer ${token}` }
             });
+            if (typeof verifyRes.data?.walletBalance === 'number') {
+              setUser((prev) => ({ ...(prev || {}), walletBalance: verifyRes.data.walletBalance }));
+            }
             Swal.fire('Success', 'Wallet funded successfully!', 'success');
             router.replace('/ads-manager'); // Clear URL
-          } catch (verifyErr) {
+          } catch (verifyErr: unknown) {
             console.error('Verify error:', verifyErr);
+            Swal.fire(
+              'Payment verification failed',
+              getAxiosMessage(verifyErr) || 'Paystack completed the payment, but TallyPadi could not verify it yet. Please refresh this page or contact support with your Paystack reference.',
+              'warning'
+            );
           }
         }
 
@@ -73,7 +102,7 @@ function AdsManagerContent() {
     };
 
     fetchData();
-  }, [searchParams, router]);
+  }, [getTokenOrRedirect, searchParams, router]);
 
   const handleFundWallet = async () => {
     const amount = Number(fundingAmount);
@@ -94,9 +123,9 @@ function AdsManagerContent() {
       } else {
         Swal.fire('Error', 'Failed to initialize payment', 'error');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      Swal.fire('Error', err.response?.data?.message || 'Failed to fund wallet', 'error');
+      Swal.fire('Error', getAxiosMessage(err) || 'Failed to fund wallet', 'error');
     } finally {
       setFunding(false);
     }
@@ -204,7 +233,7 @@ function AdsManagerContent() {
                 <p className="text-sm text-slate-500 mb-6">Use your wallet balance to promote your products on the marketplace.</p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {adsPlans.map((plan: any) => (
+                  {adsPlans.map((plan) => (
                     <div key={plan.id} className="border border-slate-100 bg-slate-50 rounded-2xl p-5 hover:border-emerald-200 hover:bg-emerald-50/50 transition-colors">
                       <div className="flex justify-between items-start mb-2">
                         <h3 className="font-bold text-slate-900">{plan.label}</h3>
@@ -227,7 +256,7 @@ function AdsManagerContent() {
                     <div>
                       <h4 className="text-sm font-bold text-blue-900">How Boosting Works</h4>
                       <p className="text-xs text-blue-700 mt-1 leading-relaxed">
-                        Boosted products appear at the very top of marketplace search results and category pages, and they will also be highly prioritized for indexing on search engines like <strong>Google</strong>. We also dynamically syndicate boosted listings to our external ad networks (including <strong>Meta Ads</strong> and <strong>TikTok</strong>). To boost a product, go to your <strong>Online Store</strong> settings, select a product, and click "Boost Product". The cost will be deducted from your Ads Wallet.
+                        Boosted products appear at the very top of marketplace search results and category pages, and they will also be highly prioritized for indexing on search engines like <strong>Google</strong>. We also dynamically syndicate boosted listings to our external ad networks (including <strong>Meta Ads</strong> and <strong>TikTok</strong>). To boost a product, go to your <strong>Online Store</strong> settings, select a product, and click &quot;Boost Product&quot;. The cost will be deducted from your Ads Wallet.
                       </p>
                     </div>
                   </div>
