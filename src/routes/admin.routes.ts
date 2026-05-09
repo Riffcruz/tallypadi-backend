@@ -24,6 +24,12 @@ import {
   deleteUserInventoryItem,
   clearUserInventory
 } from '../controllers/admin.controller';
+import {
+  approveAdminAdCampaign,
+  completeAdminAdCampaign,
+  getAdminAdCampaigns,
+  rejectAdminAdCampaign,
+} from '../controllers/admin.ads.controller';
 
 const router = Router();
 
@@ -31,6 +37,12 @@ router.use(verifyAdmin);
 
 // Dashboard
 router.get('/analytics', getSystemAnalytics);
+
+// Ads Review
+router.get('/ads', getAdminAdCampaigns);
+router.patch('/ads/:id/approve', approveAdminAdCampaign);
+router.patch('/ads/:id/reject', rejectAdminAdCampaign);
+router.patch('/ads/:id/complete', completeAdminAdCampaign);
 
 // Global Settings
 router.get('/settings', getGlobalSettings);

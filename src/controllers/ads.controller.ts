@@ -1,11 +1,19 @@
 import { Request, Response } from 'express';
 import axios from 'axios';
 import { User } from '../models/user.model';
-import { Inventory } from '../models/inventory.model';
 import { AdminSettings } from '../models/adminSettings.model';
 import { env } from '../config/env';
-import { activityService } from '../services/activity.service';
 import { walletService } from '../services/wallet.service';
+import { AdCampaign } from '../models/adCampaign.model';
+import {
+  AdCampaignError,
+  createPendingAdCampaign,
+  DEFAULT_ADS_PLANS,
+  getConfiguredAdsPlans,
+  markExpiredCampaignsCompleted,
+  normalizeCampaignStatus,
+  serializeAdCampaign,
+} from '../services/adCampaign.service';
 
 const MAX_WALLET_FUNDING_NAIRA = Number(process.env.MAX_WALLET_FUNDING_NAIRA || 5_000_000);
 const PAYSTACK_REFERENCE_PATTERN = /^[A-Za-z0-9._=-]{4,120}$/;
@@ -147,20 +155,7 @@ export const verifyWalletFunding = async (req: Request, res: Response) => {
 // 3. Get Ads Plans
 export const getAdsPlans = async (req: Request, res: Response) => {
   try {
-    let settings = await AdminSettings.findOne();
-    if (!settings) {
-      settings = await AdminSettings.create({});
-    }
-
-    // Return default plans if none configured
-    const plans = settings.adsPlans && settings.adsPlans.length > 0 
-      ? settings.adsPlans 
-      : [
-          { id: '1_day', durationDays: 1, price: 500, label: '1 Day Boost' },
-          { id: '5_days', durationDays: 5, price: 2000, label: '5 Days Boost' },
-          { id: '7_days', durationDays: 7, price: 2500, label: '1 Week Boost' },
-          { id: '30_days', durationDays: 30, price: 8000, label: '1 Month Boost' }
-        ];
+    const plans = await getConfiguredAdsPlans();
 
     return res.status(200).json({ plans });
   } catch (error) {
@@ -172,10 +167,36 @@ export const getAdsPlans = async (req: Request, res: Response) => {
 // 4. Update Ads Plans (Admin only)
 export const updateAdsPlans = async (req: Request, res: Response) => {
   try {
+    const adminUser = await User.findById(req.user?.id).select('role').lean();
+    const role = String(adminUser?.role || '').toUpperCase();
+    if (!['ADMIN', 'SUPER_ADMIN'].includes(role)) {
+      return res.status(403).json({ message: 'Admin access required' });
+    }
+
     const { plans } = req.body;
     
     if (!Array.isArray(plans)) {
       return res.status(400).json({ message: 'Plans must be an array' });
+    }
+
+    const cleanPlans = plans.map((plan) => ({
+      id: String(plan?.id || '').trim(),
+      durationDays: Number(plan?.durationDays),
+      price: Number(plan?.price),
+      label: String(plan?.label || '').trim(),
+    }));
+
+    const invalidPlan = cleanPlans.find((plan) => (
+      !plan.id ||
+      !plan.label ||
+      !Number.isInteger(plan.durationDays) ||
+      plan.durationDays < 1 ||
+      !Number.isFinite(plan.price) ||
+      plan.price < 0
+    ));
+
+    if (invalidPlan) {
+      return res.status(400).json({ message: 'Each plan must have a valid id, label, durationDays, and price' });
     }
 
     let settings = await AdminSettings.findOne();
@@ -183,7 +204,7 @@ export const updateAdsPlans = async (req: Request, res: Response) => {
       settings = await AdminSettings.create({});
     }
 
-    settings.adsPlans = plans;
+    settings.adsPlans = cleanPlans.length > 0 ? cleanPlans : DEFAULT_ADS_PLANS;
     await settings.save();
 
     return res.status(200).json({ message: 'Ads plans updated', plans: settings.adsPlans });
@@ -197,95 +218,72 @@ export const updateAdsPlans = async (req: Request, res: Response) => {
 export const boostProduct = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
-    const { productId } = req.params;
-    const { planId, platform } = req.body;
+    const productId = String(req.params.productId || '');
+    const { planId, platform, budget } = req.body;
 
     if (!planId || !platform) {
       return res.status(400).json({ message: 'Plan ID and Platform are required' });
     }
 
-    const validPlatforms = ['TALLYPADI_SEO', 'TIKTOK', 'META'];
-    if (!validPlatforms.includes(platform)) {
-      return res.status(400).json({ message: 'Invalid platform selected' });
-    }
+    if (!userId) return res.status(401).json({ message: 'Unauthorized' });
 
-    const user = await User.findById(userId);
-    if (!user) return res.status(404).json({ message: 'User not found' });
-
-    if (user.planType !== 'TYCOON') {
-      return res.status(403).json({ message: 'Boosting is an exclusive feature for Tycoon plan users' });
-    }
-
-    const product = await Inventory.findOne({ _id: productId, user: userId });
-    if (!product) return res.status(404).json({ message: 'Product not found' });
-
-    let settings = await AdminSettings.findOne();
-    const plans = settings?.adsPlans && settings.adsPlans.length > 0 ? settings.adsPlans : [
-      { id: '1_day', durationDays: 1, price: 500, label: '1 Day Boost' },
-      { id: '5_days', durationDays: 5, price: 2000, label: '5 Days Boost' },
-      { id: '7_days', durationDays: 7, price: 2500, label: '1 Week Boost' },
-      { id: '30_days', durationDays: 30, price: 8000, label: '1 Month Boost' }
-    ];
-
-    const selectedPlan = plans.find((p: any) => p.id === planId);
-    if (!selectedPlan) {
-      return res.status(400).json({ message: 'Invalid plan selected' });
-    }
-
-    if ((user.walletBalance || 0) < selectedPlan.price) {
-      return res.status(400).json({ message: 'Insufficient wallet balance' });
-    }
-
-    // Deduct wallet balance
-    user.walletBalance = (user.walletBalance || 0) - selectedPlan.price;
-    await user.save();
-
-    // Add boost
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + selectedPlan.durationDays);
-
-    if (!product.boosts) {
-      product.boosts = [];
-    }
-
-    // Remove old active boost for same platform if exists to extend it instead of duplicates
-    product.boosts = product.boosts.filter(b => b.platform !== platform || b.expiresAt < new Date());
-
-    product.boosts.push({
-      platform,
-      planId,
-      expiresAt
-    });
-
-    await product.save();
-
-    await activityService.recordActivitySafely({
-      user: user._id as any,
-      actor: user._id as any,
-      type: 'AD_BOOST',
-      title: 'Ads boost purchased',
-      message: `${product.name} was boosted on ${String(platform).replace(/_/g, ' ')} for ₦${selectedPlan.price.toLocaleString()}.`,
-      amount: selectedPlan.price,
-      metadata: {
-        productId: product._id.toString(),
-        productName: product.name,
-        planId,
-        planLabel: selectedPlan.label,
-        platform,
-        durationDays: selectedPlan.durationDays,
-        walletBalance: user.walletBalance || 0,
-        expiresAt: expiresAt.toISOString(),
-      },
+    const result = await createPendingAdCampaign({
+      userId,
+      productId,
+      planId: String(planId),
+      platform: String(platform),
+      budget: budget === undefined || budget === null ? undefined : Number(budget),
     });
 
     return res.status(200).json({ 
-      message: 'Product boosted successfully', 
-      walletBalance: user.walletBalance,
-      boosts: product.boosts 
+      message: 'Boost request submitted for admin review',
+      walletBalance: result.walletBalance,
+      campaign: serializeAdCampaign(result.campaign),
     });
 
   } catch (error) {
+    if (error instanceof AdCampaignError) {
+      return res.status(error.statusCode).json({ message: error.message });
+    }
     console.error('Boost Product Error:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+export const getMyAdCampaigns = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+
+    await markExpiredCampaignsCompleted();
+
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 50));
+    const status = normalizeCampaignStatus(req.query.status);
+    const query: Record<string, unknown> = { user: userId };
+    if (status) query.status = status;
+
+    const [campaigns, total] = await Promise.all([
+      AdCampaign.find(query)
+        .sort({ createdAt: -1, _id: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
+      AdCampaign.countDocuments(query),
+    ]);
+
+    return res.status(200).json({
+      campaigns: campaigns.map(serializeAdCampaign),
+      pagination: {
+        page,
+        limit,
+        totalItems: total,
+        totalPages: Math.ceil(total / limit),
+        hasMore: page * limit < total,
+      },
+    });
+  } catch (error) {
+    console.error('Get My Ads Error:', error);
     return res.status(500).json({ message: 'Internal server error' });
   }
 };

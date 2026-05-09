@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authRequired } from '../middleware/authRequired';
-import { fundWallet, verifyWalletFunding, getAdsPlans, updateAdsPlans, boostProduct } from '../controllers/ads.controller';
+import { fundWallet, verifyWalletFunding, getAdsPlans, updateAdsPlans, boostProduct, getMyAdCampaigns } from '../controllers/ads.controller';
 
 const router = Router();
 
@@ -14,6 +14,7 @@ router.get('/plans', authRequired, getAdsPlans);
 router.put('/plans', authRequired, updateAdsPlans);
 
 // Product Boosting
+router.get('/campaigns', authRequired, getMyAdCampaigns);
 router.post('/boost/:productId', authRequired, boostProduct);
 
 export default router;

@@ -8,26 +8,29 @@ import Swal from 'sweetalert2';
 import LoginScreen from '../../components/admin/LoginScreen';
 import Sidebar from '../../components/admin/Sidebar';
 import OverviewTab from '../../components/admin/OverviewTab';
-import UsersTab from '../../components/admin/UsersTab';
-import SettingsTab from '../../components/admin/SettingsTab';
+import UsersTab, { User as AdminUser } from '../../components/admin/UsersTab';
+import SettingsTab, { SettingsProfile } from '../../components/admin/SettingsTab';
 import BroadcastTab from '../../components/admin/BroadcastTab';
 import InvestorsTab from '../../components/admin/InvestorsTab';
 import SupportTab from '../../components/admin/SupportTab';
+import AdsTab from '../../components/admin/AdsTab';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 const TOKEN_KEY = 'adminToken';
+type AdminTab = 'overview' | 'users' | 'settings' | 'broadcast' | 'investors' | 'support' | 'ads';
+type OverviewStats = React.ComponentProps<typeof OverviewTab>['stats'];
 
 export default function AdminDashboard() {
   const [token, setToken] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
 
-  const [stats, setStats] = useState<any>(null);
-  const [users, setUsers] = useState<any[]>([]);
-  const [globalSettings, setGlobalSettings] = useState<any>(null);
+  const [stats, setStats] = useState<OverviewStats>(null);
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [globalSettings, setGlobalSettings] = useState<Partial<SettingsProfile> | undefined>(undefined);
 
   const [loading, setLoading] = useState(false);
-  const [tab, setTab] = useState<'overview' | 'users' | 'settings' | 'broadcast' | 'investors' | 'support'>('overview');
+  const [tab, setTab] = useState<AdminTab>('overview');
 
   // Mobile sidebar
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -54,7 +57,7 @@ export default function AdminDashboard() {
     setIsAuthenticated(false);
     setStats(null);
     setUsers([]);
-    setGlobalSettings(null);
+    setGlobalSettings(undefined);
     Swal.fire({ title: 'Logged out', icon: 'success', timer: 900, showConfirmButton: false });
   };
 
@@ -66,15 +69,17 @@ export default function AdminDashboard() {
       setToken(tkn);
       sessionStorage.setItem(TOKEN_KEY, tkn);
       await loadData(tkn);
-    } catch (err: any) {
-      console.error('Admin auth failed:', err?.response?.data || err?.message || err);
+    } catch (err: unknown) {
+      const status = axios.isAxiosError(err) ? err.response?.status : undefined;
+      const data = axios.isAxiosError(err) ? err.response?.data : err;
+      console.error('Admin auth failed:', data);
       setIsAuthenticated(false);
       sessionStorage.removeItem(TOKEN_KEY);
 
       const msg =
-        err?.response?.status === 401
+        status === 401
           ? 'Session expired. Please login again.'
-          : err?.response?.status === 403
+          : status === 403
             ? 'Access denied. Admin account required.'
             : 'Authentication failed. Please login again.';
       Swal.fire('Auth Error', msg, 'error');
@@ -94,13 +99,13 @@ export default function AdminDashboard() {
         axios.get(`${API_URL}/admin/settings`, { headers }),
       ]);
 
-      setStats(statsRes.data);
-      setUsers(usersRes.data);
-      setGlobalSettings(settingsRes.data);
-    } catch (e: any) {
-      console.error('Data load error:', e?.response?.data || e?.message || e);
+      setStats(statsRes.data as OverviewStats);
+      setUsers(usersRes.data as AdminUser[]);
+      setGlobalSettings(settingsRes.data as Partial<SettingsProfile>);
+    } catch (e: unknown) {
+      const status = axios.isAxiosError(e) ? e.response?.status : undefined;
+      console.error('Data load error:', axios.isAxiosError(e) ? e.response?.data || e.message : e);
 
-      const status = e?.response?.status;
       if (status === 401) {
         // token invalid/expired
         logout();
@@ -113,7 +118,7 @@ export default function AdminDashboard() {
     }
   };
 
- const handleUserAction = async (userId: string, action: string, payload: any = {}) => {
+ const handleUserAction = async (userId: string, action: string, payload: unknown = {}) => {
   try {
     const res = await axios.put(
       `${API_URL}/admin/users/${userId}`,
@@ -133,14 +138,15 @@ export default function AdminDashboard() {
 
     await loadData(token);
     return res.data; // ✅ res exists here
-  } catch (e: any) {
-    const status = e?.response?.status;
+  } catch (e: unknown) {
+    const status = axios.isAxiosError(e) ? e.response?.status : undefined;
     if (status === 401) {
       logout();
       return;
     }
 
-    const msg = e?.response?.data?.error || 'Action failed';
+    const data = axios.isAxiosError(e) ? e.response?.data as { error?: string } | undefined : undefined;
+    const msg = data?.error || 'Action failed';
     Swal.fire('Error', msg, 'error');
     throw e; // ✅ lets modal catch it if needed
   }
@@ -186,8 +192,8 @@ export default function AdminDashboard() {
         <div className="h-full overflow-y-auto">
           <Sidebar
             tab={tab}
-            setTab={(t: any) => {
-              setTab(t);
+            setTab={(t: string) => {
+              setTab(t as AdminTab);
               setIsSidebarOpen(false);
             }}
           />
@@ -255,6 +261,8 @@ export default function AdminDashboard() {
       adminToken={token}
     />
   )}
+
+  {tab === 'ads' && <AdsTab adminToken={token} />}
 
   {tab === 'settings' && (
     <SettingsTab

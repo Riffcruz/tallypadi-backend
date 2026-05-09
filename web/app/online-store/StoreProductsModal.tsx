@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { X, Loader2, Save, Eye, EyeOff, Search, TrendingUp } from 'lucide-react';
+import { X, Loader2, Save, Eye, EyeOff, Search, TrendingUp, Clock3 } from 'lucide-react';
 import Swal from 'sweetalert2';
 
 interface StoreProductsModalProps {
@@ -8,8 +8,35 @@ interface StoreProductsModalProps {
   onClose: () => void;
 }
 
+interface StoreProduct {
+  id: string;
+  name: string;
+  stock?: number;
+  quantity?: number;
+  price?: number;
+  image?: string | null;
+  isPublished?: boolean;
+  description?: string;
+  colors?: string[];
+  sizes?: string[];
+  boosts?: { platform: string; expiresAt: string; planId: string }[];
+}
+
+interface AdsPlan {
+  id: string;
+  durationDays: number;
+  price: number;
+  label: string;
+}
+
+interface StoreCampaign {
+  id: string;
+  status: string;
+  product: string;
+}
+
 export default function StoreProductsModal({ token, onClose }: StoreProductsModalProps) {
-  const [products, setProducts] = useState<any[]>([]);
+  const [products, setProducts] = useState<StoreProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -23,27 +50,32 @@ export default function StoreProductsModal({ token, onClose }: StoreProductsModa
   const [saving, setSaving] = useState(false);
 
   // Boosting States
-  const [adsPlans, setAdsPlans] = useState<any[]>([]);
+  const [adsPlans, setAdsPlans] = useState<AdsPlan[]>([]);
   const [walletBalance, setWalletBalance] = useState(0);
+  const [campaigns, setCampaigns] = useState<StoreCampaign[]>([]);
   const [boostingProductId, setBoostingProductId] = useState<string | null>(null);
-  const [boostForm, setBoostForm] = useState({ planId: '', platform: 'TALLYPADI_SEO' });
+  const [boostForm, setBoostForm] = useState({ planId: '', platform: 'ALL', budget: '' });
   const [boosting, setBoosting] = useState(false);
+  const selectedBoostPlan = adsPlans.find(plan => plan.id === boostForm.planId);
 
   useEffect(() => {
     fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [invRes, plansRes, dashRes] = await Promise.all([
+      const [invRes, plansRes, dashRes, campaignsRes] = await Promise.all([
         axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api'}/inventory`, { headers: { Authorization: `Bearer ${token}` } }),
         axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api'}/ads/plans`, { headers: { Authorization: `Bearer ${token}` } }),
-        axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api'}/dashboard`, { headers: { Authorization: `Bearer ${token}` } })
+        axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api'}/dashboard`, { headers: { Authorization: `Bearer ${token}` } }),
+        axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api'}/ads/campaigns?limit=100`, { headers: { Authorization: `Bearer ${token}` } })
       ]);
-      setProducts(invRes.data);
+      setProducts(Array.isArray(invRes.data) ? invRes.data : invRes.data?.data || []);
       setAdsPlans(plansRes.data?.plans || []);
       setWalletBalance(dashRes.data?.user?.walletBalance || 0);
+      setCampaigns(campaignsRes.data?.campaigns || []);
     } catch (err) {
       console.error(err);
       Swal.fire('Error', 'Failed to fetch data', 'error');
@@ -52,7 +84,7 @@ export default function StoreProductsModal({ token, onClose }: StoreProductsModa
     }
   };
 
-  const handleEditClick = (product: any) => {
+  const handleEditClick = (product: StoreProduct) => {
     if (editingId === product.id) {
       setEditingId(null);
       return;
@@ -96,8 +128,16 @@ export default function StoreProductsModal({ token, onClose }: StoreProductsModa
     
     const selectedPlan = adsPlans.find(p => p.id === boostForm.planId);
     if (!selectedPlan) return;
+
+    const budget = Number(boostForm.budget || selectedPlan.price);
+    if (!Number.isFinite(budget) || budget <= 0) {
+      return Swal.fire('Invalid Budget', 'Please enter a valid boost budget.', 'warning');
+    }
+    if (budget < selectedPlan.price) {
+      return Swal.fire('Budget Too Low', `Budget must be at least ₦${selectedPlan.price.toLocaleString()} for this plan.`, 'warning');
+    }
     
-    if (walletBalance < selectedPlan.price) {
+    if (walletBalance < budget) {
       return Swal.fire('Insufficient Balance', 'Please fund your Ads Wallet to boost this product.', 'warning');
     }
 
@@ -105,18 +145,23 @@ export default function StoreProductsModal({ token, onClose }: StoreProductsModa
     try {
       const res = await axios.post(`${process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api'}/ads/boost/${productId}`, {
         planId: boostForm.planId,
-        platform: boostForm.platform
+        platform: boostForm.platform,
+        budget
       }, {
         headers: { Authorization: `Bearer ${token}` }
       });
       
       setWalletBalance(res.data.walletBalance);
-      setProducts(prev => prev.map(p => p.id === productId ? { ...p, boosts: res.data.boosts } : p));
+      if (res.data?.campaign) {
+        setCampaigns(prev => [res.data.campaign, ...prev.filter(c => c.id !== res.data.campaign.id)]);
+      }
       setBoostingProductId(null);
-      Swal.fire('Success', 'Product boosted successfully!', 'success');
-    } catch (err: any) {
+      setBoostForm({ planId: '', platform: 'ALL', budget: '' });
+      Swal.fire('Submitted', 'Boost request is pending admin review.', 'success');
+    } catch (err: unknown) {
       console.error(err);
-      Swal.fire('Error', err?.response?.data?.message || 'Failed to boost product', 'error');
+      const data = axios.isAxiosError(err) ? err.response?.data as { message?: string } | undefined : undefined;
+      Swal.fire('Error', data?.message || 'Failed to boost product', 'error');
     } finally {
       setBoosting(false);
     }
@@ -158,18 +203,20 @@ export default function StoreProductsModal({ token, onClose }: StoreProductsModa
               ) : (
                 products
                   .filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()))
-                  .map(product => (
+                  .map(product => {
+                    const pendingBoost = campaigns.some(c => c.status === 'PENDING' && String(c.product) === String(product.id));
+                    return (
               <div key={product.id} className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm transition-all">
                 <div 
                   className="flex items-center gap-4 p-4 cursor-pointer hover:bg-slate-50"
                   onClick={() => handleEditClick(product)}
                 >
                   <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center overflow-hidden shrink-0">
-                    {product.image ? <img src={product.image} className="w-full h-full object-cover" /> : <div className="text-xs text-slate-400">No Img</div>}
+                    {product.image ? <img src={product.image} alt="" className="w-full h-full object-cover" /> : <div className="text-xs text-slate-400">No Img</div>}
                   </div>
                   <div className="flex-1 min-w-0">
                     <h3 className="font-bold text-slate-900 truncate">{product.name}</h3>
-                    <p className="text-xs text-slate-500">Stock: {product.quantity} • ₦{product.price}</p>
+                    <p className="text-xs text-slate-500">Stock: {product.stock ?? product.quantity ?? 0} • ₦{product.price}</p>
                   </div>
                   <div className="shrink-0 flex flex-col items-end gap-1">
                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${product.isPublished !== false ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
@@ -178,6 +225,11 @@ export default function StoreProductsModal({ token, onClose }: StoreProductsModa
                      {product.boosts && product.boosts.length > 0 && (
                        <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700 flex items-center gap-1">
                          <TrendingUp size={10} /> Active Boost
+                       </span>
+                     )}
+                     {pendingBoost && (
+                       <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700 flex items-center gap-1">
+                         <Clock3 size={10} /> Pending Review
                        </span>
                      )}
                   </div>
@@ -218,6 +270,7 @@ export default function StoreProductsModal({ token, onClose }: StoreProductsModa
                               onChange={e => setBoostForm({ ...boostForm, platform: e.target.value })}
                               className="w-full border border-blue-200 bg-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                             >
+                              <option value="ALL">All Platforms</option>
                               <option value="TALLYPADI_SEO">TallyPadi SEO & Google</option>
                               <option value="META">Meta Ads (Facebook/IG)</option>
                               <option value="TIKTOK">TikTok Ads</option>
@@ -227,7 +280,15 @@ export default function StoreProductsModal({ token, onClose }: StoreProductsModa
                             <label className="block text-xs font-semibold text-blue-800 mb-1.5 uppercase tracking-wider">Select Duration</label>
                             <select
                               value={boostForm.planId}
-                              onChange={e => setBoostForm({ ...boostForm, planId: e.target.value })}
+                              onChange={e => {
+                                const plan = adsPlans.find(item => item.id === e.target.value);
+                                const currentBudget = Number(boostForm.budget);
+                                setBoostForm({
+                                  ...boostForm,
+                                  planId: e.target.value,
+                                  budget: plan && (!currentBudget || currentBudget < plan.price) ? String(plan.price) : boostForm.budget
+                                });
+                              }}
                               className="w-full border border-blue-200 bg-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                             >
                               <option value="">-- Choose a Plan --</option>
@@ -238,6 +299,20 @@ export default function StoreProductsModal({ token, onClose }: StoreProductsModa
                           </div>
                         </div>
 
+                        <div>
+                          <label className="block text-xs font-semibold text-blue-800 mb-1.5 uppercase tracking-wider">Boost Budget</label>
+                          <div className="relative">
+                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-medium">₦</span>
+                            <input
+                              type="number"
+                              value={boostForm.budget}
+                              onChange={e => setBoostForm({ ...boostForm, budget: e.target.value })}
+                              placeholder={selectedBoostPlan ? String(selectedBoostPlan.price) : 'Minimum budget'}
+                              className="w-full border border-blue-200 bg-white rounded-xl pl-9 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                            />
+                          </div>
+                        </div>
+
                         <div className="flex justify-end pt-2">
                           <button
                             onClick={() => handleBoostSubmit(product.id)}
@@ -245,7 +320,7 @@ export default function StoreProductsModal({ token, onClose }: StoreProductsModa
                             className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold shadow-md hover:bg-blue-700 active:scale-95 transition-all disabled:opacity-50"
                           >
                             {boosting ? <Loader2 size={16} className="animate-spin" /> : <TrendingUp size={16} />}
-                            Pay & Launch Campaign
+                            Submit for Review
                           </button>
                         </div>
                       </div>
@@ -298,7 +373,8 @@ export default function StoreProductsModal({ token, onClose }: StoreProductsModa
                   </div>
                 )}
               </div>
-            ))
+            );
+                  })
           )}
             </>
           )}

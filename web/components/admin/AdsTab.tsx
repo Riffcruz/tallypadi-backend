@@ -1,0 +1,391 @@
+'use client';
+
+import React, { useEffect, useMemo, useState } from 'react';
+import axios from 'axios';
+import { CheckCircle2, Clock3, Loader2, Megaphone, Phone, PlayCircle, RefreshCcw, Search, StopCircle, Wallet, XCircle } from 'lucide-react';
+import Swal from 'sweetalert2';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
+
+type CampaignStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'REJECTED';
+
+interface Advertiser {
+  _id?: string;
+  businessName?: string;
+  name?: string;
+  email?: string;
+  phoneNumber?: string;
+  planType?: string;
+  walletBalance?: number;
+  shopSlug?: string;
+}
+
+interface AdminProduct {
+  _id?: string;
+  name?: string;
+  quantity?: number;
+  lastUnitPrice?: number;
+  image?: string | null;
+  category?: string | null;
+  isPublished?: boolean;
+}
+
+interface Reviewer {
+  _id?: string;
+  businessName?: string;
+  name?: string;
+  email?: string;
+  phoneNumber?: string;
+  role?: string;
+}
+
+interface AdminAdCampaign {
+  id: string;
+  user: Advertiser | string | null;
+  product: AdminProduct | string | null;
+  status: CampaignStatus;
+  platforms: string[];
+  planLabel: string;
+  durationDays: number;
+  basePrice: number;
+  budget: number;
+  walletCharged: boolean;
+  refundAmount?: number | null;
+  requestedAt: string;
+  reviewedAt?: string | null;
+  reviewedBy?: Reviewer | string | null;
+  startedAt?: string | null;
+  expiresAt?: string | null;
+  completedAt?: string | null;
+  rejectionReason?: string | null;
+  productSnapshot: {
+    name: string;
+    description?: string;
+    image?: string | null;
+    price?: number;
+    category?: string | null;
+  };
+}
+
+const statuses: CampaignStatus[] = ['PENDING', 'RUNNING', 'COMPLETED', 'REJECTED'];
+
+const statusMeta: Record<CampaignStatus, { label: string; icon: React.ElementType; className: string }> = {
+  PENDING: { label: 'Pending', icon: Clock3, className: 'border-amber-500/30 bg-amber-500/10 text-amber-300' },
+  RUNNING: { label: 'Running', icon: PlayCircle, className: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' },
+  COMPLETED: { label: 'Completed', icon: CheckCircle2, className: 'border-slate-500/30 bg-slate-500/10 text-slate-300' },
+  REJECTED: { label: 'Rejected', icon: XCircle, className: 'border-red-500/30 bg-red-500/10 text-red-300' },
+};
+
+const formatCurrency = (amount?: number | null) => `₦${Number(amount || 0).toLocaleString()}`;
+
+const formatDate = (value?: string | null) => {
+  if (!value) return 'Not set';
+  return new Intl.DateTimeFormat('en-NG', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date(value));
+};
+
+const platformLabel = (platform: string) => {
+  if (platform === 'TALLYPADI_SEO') return 'TallyPadi SEO';
+  if (platform === 'META') return 'Meta';
+  if (platform === 'TIKTOK') return 'TikTok';
+  return platform;
+};
+
+const getAdvertiser = (value: AdminAdCampaign['user']): Advertiser => (
+  value && typeof value === 'object' ? value : {}
+);
+
+const getProduct = (value: AdminAdCampaign['product']): AdminProduct => (
+  value && typeof value === 'object' ? value : {}
+);
+
+export default function AdsTab({ adminToken }: { adminToken: string }) {
+  const [campaigns, setCampaigns] = useState<AdminAdCampaign[]>([]);
+  const [counts, setCounts] = useState<Record<string, number>>({});
+  const [status, setStatus] = useState<CampaignStatus>('PENDING');
+  const [query, setQuery] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [actionId, setActionId] = useState<string | null>(null);
+
+  const headers = useMemo(() => ({
+    Authorization: `Bearer ${adminToken}`,
+    'Content-Type': 'application/json',
+  }), [adminToken]);
+
+  useEffect(() => {
+    fetchAds(status);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status]);
+
+  const fetchAds = async (nextStatus = status) => {
+    setLoading(true);
+    try {
+      const res = await axios.get(`${API_URL}/admin/ads?status=${nextStatus}&limit=100`, { headers });
+      setCampaigns(res.data?.campaigns || []);
+      setCounts(res.data?.counts || {});
+    } catch (error: unknown) {
+      const data = axios.isAxiosError(error) ? error.response?.data as { message?: string } | undefined : undefined;
+      console.error('Fetch admin ads error:', data || error);
+      Swal.fire('Error', data?.message || 'Failed to load ads campaigns.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const runAction = async (campaignId: string, action: 'approve' | 'complete' | 'reject') => {
+    let body: Record<string, string> = {};
+    if (action === 'reject') {
+      const result = await Swal.fire({
+        title: 'Reject Boost Request',
+        input: 'textarea',
+        inputLabel: 'Reason',
+        inputPlaceholder: 'Tell the user why this boost was rejected',
+        showCancelButton: true,
+        confirmButtonText: 'Reject & Refund',
+        confirmButtonColor: '#ef4444',
+      });
+      if (!result.isConfirmed) return;
+      body = { reason: String(result.value || '').trim() || 'Rejected by admin' };
+    }
+
+    setActionId(campaignId);
+    try {
+      const res = await axios.patch(`${API_URL}/admin/ads/${campaignId}/${action}`, body, { headers });
+      setCampaigns((prev) => prev.map((campaign) => (
+        campaign.id === campaignId ? res.data.campaign : campaign
+      )));
+      await fetchAds(status);
+      Swal.fire('Done', res.data?.message || 'Ad campaign updated.', 'success');
+    } catch (error: unknown) {
+      const data = axios.isAxiosError(error) ? error.response?.data as { message?: string } | undefined : undefined;
+      console.error('Admin ads action error:', data || error);
+      Swal.fire('Error', data?.message || 'Action failed.', 'error');
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  const filteredCampaigns = campaigns.filter((campaign) => {
+    const advertiser = getAdvertiser(campaign.user);
+    const text = [
+      campaign.productSnapshot?.name,
+      campaign.planLabel,
+      advertiser.businessName,
+      advertiser.name,
+      advertiser.email,
+      advertiser.phoneNumber,
+      campaign.id,
+    ].join(' ').toLowerCase();
+    return text.includes(query.trim().toLowerCase());
+  });
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-300">
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-black text-white flex items-center gap-2">
+            <Megaphone className="text-emerald-400" />
+            Ads Review
+          </h2>
+          <p className="text-sm text-slate-400 mt-1">Review pending boosts, monitor running ads, and audit completed campaigns.</p>
+        </div>
+        <button
+          onClick={() => fetchAds(status)}
+          className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-800 border border-slate-700 px-4 py-2 text-sm font-bold text-slate-200 hover:bg-slate-700"
+        >
+          <RefreshCcw size={16} />
+          Refresh
+        </button>
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {statuses.map((item) => {
+          const meta = statusMeta[item];
+          const Icon = meta.icon;
+          return (
+            <button
+              key={item}
+              onClick={() => setStatus(item)}
+              className={`rounded-xl border p-4 text-left transition-colors ${status === item ? meta.className : 'border-slate-700 bg-slate-800 text-slate-400 hover:bg-slate-700/70'}`}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <Icon size={20} />
+                <span className="text-2xl font-black">{counts[item] || 0}</span>
+              </div>
+              <p className="mt-3 text-sm font-bold">{meta.label}</p>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="bg-slate-800 rounded-2xl border border-slate-700 shadow-xl overflow-hidden">
+        <div className="p-4 border-b border-slate-700 flex flex-col lg:flex-row gap-3 lg:items-center lg:justify-between">
+          <div className="relative w-full lg:max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={17} />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search ads, product, user, phone"
+              className="w-full rounded-lg border border-slate-700 bg-slate-900 pl-9 pr-4 py-2.5 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
+            />
+          </div>
+          <p className="text-xs font-bold uppercase tracking-wider text-slate-500">{filteredCampaigns.length} records</p>
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-20 text-slate-400">
+            <Loader2 className="animate-spin w-8 h-8" />
+          </div>
+        ) : filteredCampaigns.length === 0 ? (
+          <div className="py-16 text-center text-slate-400">No {statusMeta[status].label.toLowerCase()} ads found.</div>
+        ) : (
+          <div className="divide-y divide-slate-700">
+            {filteredCampaigns.map((campaign) => {
+              const advertiser = getAdvertiser(campaign.user);
+              const product = getProduct(campaign.product);
+              const meta = statusMeta[campaign.status];
+              const Icon = meta.icon;
+
+              return (
+                <article key={campaign.id} className="p-5 hover:bg-slate-700/20 transition-colors">
+                  <div className="flex flex-col 2xl:flex-row gap-5 2xl:items-start 2xl:justify-between">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2 mb-3">
+                        <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold ${meta.className}`}>
+                          <Icon size={13} />
+                          {meta.label}
+                        </span>
+                        {campaign.platforms.map((platform) => (
+                          <span key={platform} className="rounded-full bg-slate-900 px-2.5 py-1 text-xs font-bold text-slate-300 border border-slate-700">
+                            {platformLabel(platform)}
+                          </span>
+                        ))}
+                        <span className="rounded-full bg-blue-500/10 px-2.5 py-1 text-xs font-bold text-blue-300 border border-blue-500/20">
+                          {campaign.planLabel}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 xl:grid-cols-[1.2fr_1fr] gap-5">
+                        <div className="flex gap-4 min-w-0">
+                          <div className="w-16 h-16 rounded-lg bg-slate-900 border border-slate-700 overflow-hidden flex items-center justify-center shrink-0">
+                            {campaign.productSnapshot?.image ? (
+                              <img src={campaign.productSnapshot.image} alt="" className="w-full h-full object-cover" />
+                            ) : (
+                              <Megaphone size={22} className="text-slate-500" />
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <h3 className="text-lg font-black text-white truncate">{campaign.productSnapshot?.name || product.name || 'Product boost'}</h3>
+                            <p className="text-sm text-slate-400 mt-1 line-clamp-2">{campaign.productSnapshot?.description || 'No product description supplied.'}</p>
+                            <div className="flex flex-wrap gap-2 mt-3 text-xs text-slate-400">
+                              <span>Product price: {formatCurrency(campaign.productSnapshot?.price || product.lastUnitPrice || 0)}</span>
+                              <span>Stock: {product.quantity ?? 'Unknown'}</span>
+                              <span>Category: {campaign.productSnapshot?.category || product.category || 'None'}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="rounded-xl border border-slate-700 bg-slate-900/60 p-4">
+                          <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">Advertiser</p>
+                          <h4 className="font-black text-white">{advertiser.businessName || advertiser.name || 'Unknown user'}</h4>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3 text-xs text-slate-400">
+                            <span className="inline-flex items-center gap-1.5"><Phone size={13} /> {advertiser.phoneNumber || 'No phone'}</span>
+                            <span>{advertiser.email || 'No email'}</span>
+                            <span>Plan: {advertiser.planType || 'Unknown'}</span>
+                            <span className="inline-flex items-center gap-1.5"><Wallet size={13} /> {formatCurrency(advertiser.walletBalance || 0)}</span>
+                            <span>Shop: {advertiser.shopSlug || 'No slug'}</span>
+                            <span>User ID: {String(advertiser._id || (typeof campaign.user === 'string' ? campaign.user : '')).slice(-8)}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {campaign.rejectionReason && (
+                        <p className="mt-3 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+                          Rejection reason: {campaign.rejectionReason}
+                        </p>
+                      )}
+
+                      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mt-4">
+                        <Detail label="Budget" value={formatCurrency(campaign.budget)} />
+                        <Detail label="Minimum" value={formatCurrency(campaign.basePrice)} />
+                        <Detail label="Requested" value={formatDate(campaign.requestedAt)} />
+                        <Detail label="Started" value={formatDate(campaign.startedAt)} />
+                        <Detail label={campaign.status === 'REJECTED' ? 'Refund' : 'Ends'} value={campaign.status === 'REJECTED' ? formatCurrency(campaign.refundAmount || 0) : formatDate(campaign.expiresAt || campaign.completedAt)} />
+                      </div>
+                    </div>
+
+                    <div className="flex 2xl:flex-col gap-2 2xl:w-40 shrink-0">
+                      {campaign.status === 'PENDING' && (
+                        <>
+                          <ActionButton
+                            label="Approve"
+                            icon={CheckCircle2}
+                            loading={actionId === campaign.id}
+                            className="bg-emerald-600 hover:bg-emerald-500 text-white"
+                            onClick={() => runAction(campaign.id, 'approve')}
+                          />
+                          <ActionButton
+                            label="Reject"
+                            icon={XCircle}
+                            loading={actionId === campaign.id}
+                            className="bg-red-600 hover:bg-red-500 text-white"
+                            onClick={() => runAction(campaign.id, 'reject')}
+                          />
+                        </>
+                      )}
+                      {campaign.status === 'RUNNING' && (
+                        <ActionButton
+                          label="Complete"
+                          icon={StopCircle}
+                          loading={actionId === campaign.id}
+                          className="bg-slate-700 hover:bg-slate-600 text-white border border-slate-600"
+                          onClick={() => runAction(campaign.id, 'complete')}
+                        />
+                      )}
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Detail({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-slate-700 bg-slate-900/50 p-3 min-w-0">
+      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</p>
+      <p className="mt-1 text-xs font-bold text-slate-200 break-words">{value}</p>
+    </div>
+  );
+}
+
+function ActionButton({
+  label,
+  icon: Icon,
+  loading,
+  className,
+  onClick,
+}: {
+  label: string;
+  icon: React.ElementType;
+  loading: boolean;
+  className: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={loading}
+      className={`inline-flex flex-1 2xl:flex-none items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-bold transition-colors disabled:opacity-60 ${className}`}
+    >
+      {loading ? <Loader2 size={16} className="animate-spin" /> : <Icon size={16} />}
+      {label}
+    </button>
+  );
+}

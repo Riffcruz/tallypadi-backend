@@ -41,6 +41,22 @@ const validateNumber = (input: unknown): number | undefined => {
   return typeof n === 'number' && Number.isFinite(n) ? n : undefined;
 };
 
+const sanitizeStringArray = (input: unknown): string[] | undefined => {
+  if (!Array.isArray(input)) return undefined;
+  return input.map(String).map((value) => value.trim()).filter(Boolean).slice(0, 30);
+};
+
+const formatActiveBoosts = (boosts?: { platform: string; expiresAt: Date; planId: string }[]) => {
+  const now = Date.now();
+  return (boosts || [])
+    .filter((boost) => new Date(boost.expiresAt).getTime() > now)
+    .map((boost) => ({
+      platform: boost.platform,
+      planId: boost.planId,
+      expiresAt: boost.expiresAt,
+    }));
+};
+
 // --- Subscription Guard ---
 const hasInventoryWriteAccess = (user: { subscriptionStatus?: string, trialEndsAt?: Date | string | null } | null): boolean => {
   if (!user) return false;
@@ -125,6 +141,11 @@ export const getInventory = async (req: Request, res: Response) => {
         image: item.image || null,
         category: item.category || null,
         barcode: item.barcode || null,
+        isPublished: item.isPublished !== false,
+        description: item.description || '',
+        colors: item.colors || [],
+        sizes: item.sizes || [],
+        boosts: formatActiveBoosts(item.boosts),
       }));
 
       return res.json({
@@ -156,6 +177,7 @@ export const getInventory = async (req: Request, res: Response) => {
       description: item.description || '',
       colors: item.colors || [],
       sizes: item.sizes || [],
+      boosts: formatActiveBoosts(item.boosts),
     }));
 
     return res.json(formattedItems);
@@ -287,6 +309,9 @@ export const addInventoryItem = async (req: Request, res: Response) => {
     const safeName = sanitizeString(body.name);
     const safeCategory = sanitizeString(body.category); // Sanitize category
     const safeBarcode = sanitizeString(body.barcode); // Sanitize barcode
+    const safeDescription = body.description !== undefined ? sanitizeString(body.description) : undefined;
+    const safeColors = sanitizeStringArray(body.colors);
+    const safeSizes = sanitizeStringArray(body.sizes);
 
     const user = await getAuthUser(req);
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
@@ -310,6 +335,10 @@ export const addInventoryItem = async (req: Request, res: Response) => {
       if (imageUrl) item.image = imageUrl;
       if (safeCategory !== undefined) item.category = safeCategory?.toLowerCase();
       if (safeBarcode !== undefined) item.barcode = safeBarcode;
+      if (body.isPublished !== undefined) item.isPublished = Boolean(body.isPublished);
+      if (safeDescription !== undefined) item.description = safeDescription;
+      if (safeColors !== undefined) item.colors = safeColors;
+      if (safeSizes !== undefined) item.sizes = safeSizes;
       // Allow dashboard SKU override if provided
       if (body.sku && typeof body.sku === 'string') item.sku = body.sku.toUpperCase().trim();
       await item.save();
@@ -328,6 +357,10 @@ export const addInventoryItem = async (req: Request, res: Response) => {
         image: imageUrl || undefined,
         category: safeCategory?.toLowerCase(),
         barcode: safeBarcode,
+        isPublished: body.isPublished !== undefined ? Boolean(body.isPublished) : true,
+        description: safeDescription,
+        colors: safeColors || [],
+        sizes: safeSizes || [],
       });
     }
 
@@ -341,6 +374,11 @@ export const addInventoryItem = async (req: Request, res: Response) => {
       image: item.image,
       category: item.category,
       barcode: item.barcode,
+      isPublished: item.isPublished !== false,
+      description: item.description || '',
+      colors: item.colors || [],
+      sizes: item.sizes || [],
+      boosts: formatActiveBoosts(item.boosts),
     });
   } catch (error) {
     console.error('Add Item Error:', error);
@@ -409,8 +447,8 @@ export const updateInventoryItem = async (req: Request, res: Response) => {
     // ── Marketplace fields ──
     if (body.isPublished !== undefined) item.isPublished = Boolean(body.isPublished);
     if (body.description !== undefined) item.description = sanitizeString(body.description);
-    if (Array.isArray(body.colors)) item.colors = body.colors.map(String);
-    if (Array.isArray(body.sizes)) item.sizes = body.sizes.map(String);
+    if (Array.isArray(body.colors)) item.colors = sanitizeStringArray(body.colors) || [];
+    if (Array.isArray(body.sizes)) item.sizes = sanitizeStringArray(body.sizes) || [];
 
     await item.save();
 
@@ -431,6 +469,7 @@ export const updateInventoryItem = async (req: Request, res: Response) => {
       description: item.description,
       colors: item.colors,
       sizes: item.sizes,
+      boosts: formatActiveBoosts(item.boosts),
     });
   } catch (error) {
     console.error('Update Item Error:', error);

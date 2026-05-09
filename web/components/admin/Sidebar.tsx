@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { LayoutDashboard, Users, Settings as SettingsIcon, Send, ShieldAlert, Briefcase, Headphones, MessageSquare } from 'lucide-react';
+import { LayoutDashboard, Users, Settings as SettingsIcon, Send, ShieldAlert, Briefcase, Headphones, MessageSquare, Megaphone } from 'lucide-react';
 
 export default function Sidebar({ tab, setTab }: { tab: string, setTab: (t: string) => void }) {
     // 🔴 Removed: isOpen state and setIsOpen setter
@@ -8,6 +8,7 @@ export default function Sidebar({ tab, setTab }: { tab: string, setTab: (t: stri
     const menu = [
         { id: 'overview', icon: LayoutDashboard, label: 'Overview' },
         { id: 'users', icon: Users, label: 'User Management' },
+        { id: 'ads', icon: Megaphone, label: 'Ads Review' },
         { id: 'investors', icon: Briefcase, label: 'Investors' },
         { id: 'support', icon: Headphones, label: 'Customer Care' },
         { id: 'live_support', icon: MessageSquare, label: 'Live Support', href: '/admin/support' },
