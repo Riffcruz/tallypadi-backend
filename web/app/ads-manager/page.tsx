@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { Suspense, useEffect, useState } from 'react';
 import axios from 'axios';
 import Sidebar from '../../components/Sidebar';
 import Preloader from '../../components/Preloader';
@@ -19,7 +19,7 @@ import { getCookie } from '../../utils/cookies';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 
-export default function AdsManagerPage() {
+function AdsManagerContent() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -239,5 +239,13 @@ export default function AdsManagerPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function AdsManagerPage() {
+  return (
+    <Suspense fallback={<Preloader />}>
+      <AdsManagerContent />
+    </Suspense>
   );
 }
