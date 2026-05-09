@@ -13,10 +13,17 @@ export interface SettingsLimits {
 export interface SettingsSecurity {
   autoSuspendOnJailbreak: boolean;
 }
+export interface AdsPlan {
+  id: string;
+  durationDays: number;
+  price: number;
+  label: string;
+}
 export interface SettingsProfile {
   whatsappUrl: string;
   security: SettingsSecurity;
   limits: SettingsLimits;
+  adsPlans?: AdsPlan[];
 }
 export default function SettingsTab({ 
   settings, 
@@ -33,6 +40,7 @@ export default function SettingsTab({
         security: { autoSuspendOnJailbreak: false },
         limits: { maxMessageHistory: 5, maxStaffAccounts: 2 },
         smtp: { host: '', port: 465, user: '', pass: '', fromAddress: '', secure: true },
+        adsPlans: [] as AdsPlan[],
         ...settings // Overwrite defaults with actual data
     });
     const [saving, setSaving] = useState(false);
@@ -79,7 +87,8 @@ export default function SettingsTab({
                 autoSuspendOnJailbreak: localSettings.security.autoSuspendOnJailbreak,
                 maxMessageHistory: localSettings.limits.maxMessageHistory,
                 maxStaffAccounts: localSettings.limits.maxStaffAccounts,
-                smtp: localSettings.smtp
+                smtp: localSettings.smtp,
+                adsPlans: localSettings.adsPlans
             }, { headers });
             
             onUpdate();
@@ -220,6 +229,85 @@ export default function SettingsTab({
                                 </button>
                             </div>
                         </div>
+                    </div>
+                </div>
+
+                {/* 5. Ads Pricing Plans */}
+                <div className="space-y-4 mb-8">
+                    <div className="flex justify-between items-center mb-3">
+                      <h3 className="text-slate-400 text-xs font-bold uppercase tracking-wider">Ads & Boost Pricing Plans</h3>
+                      <button 
+                        onClick={() => {
+                          const newPlan = { id: Date.now().toString(), durationDays: 1, price: 500, label: '1 Day Boost' };
+                          setLocalSettings(prev => ({ ...prev, adsPlans: [...(prev.adsPlans || []), newPlan] }));
+                        }}
+                        className="text-xs bg-green-500/20 text-green-400 px-3 py-1.5 rounded-lg font-bold hover:bg-green-500/30 transition"
+                      >
+                        + Add Plan
+                      </button>
+                    </div>
+                    
+                    <div className="space-y-3">
+                      {(localSettings.adsPlans || []).length === 0 && (
+                        <div className="p-4 bg-slate-900/50 rounded-xl border border-slate-700 text-center text-slate-500 text-sm">
+                          No ads plans configured. Users will see default pricing.
+                        </div>
+                      )}
+                      
+                      {(localSettings.adsPlans || []).map((plan, index) => (
+                        <div key={plan.id} className="p-4 bg-slate-900/50 rounded-xl border border-slate-700 grid grid-cols-12 gap-3 items-end">
+                          <div className="col-span-12 md:col-span-4">
+                            <label className="text-xs text-slate-400 font-bold mb-1 block">Plan Label</label>
+                            <input 
+                              type="text" 
+                              value={plan.label} 
+                              onChange={(e) => {
+                                const newPlans = [...(localSettings.adsPlans || [])];
+                                newPlans[index].label = e.target.value;
+                                setLocalSettings(prev => ({ ...prev, adsPlans: newPlans }));
+                              }}
+                              className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-green-500" 
+                            />
+                          </div>
+                          <div className="col-span-6 md:col-span-3">
+                            <label className="text-xs text-slate-400 font-bold mb-1 block">Duration (Days)</label>
+                            <input 
+                              type="number" 
+                              value={plan.durationDays} 
+                              onChange={(e) => {
+                                const newPlans = [...(localSettings.adsPlans || [])];
+                                newPlans[index].durationDays = parseInt(e.target.value) || 0;
+                                setLocalSettings(prev => ({ ...prev, adsPlans: newPlans }));
+                              }}
+                              className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-green-500" 
+                            />
+                          </div>
+                          <div className="col-span-6 md:col-span-3">
+                            <label className="text-xs text-slate-400 font-bold mb-1 block">Price (₦)</label>
+                            <input 
+                              type="number" 
+                              value={plan.price} 
+                              onChange={(e) => {
+                                const newPlans = [...(localSettings.adsPlans || [])];
+                                newPlans[index].price = parseInt(e.target.value) || 0;
+                                setLocalSettings(prev => ({ ...prev, adsPlans: newPlans }));
+                              }}
+                              className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-green-500" 
+                            />
+                          </div>
+                          <div className="col-span-12 md:col-span-2">
+                            <button 
+                              onClick={() => {
+                                const newPlans = (localSettings.adsPlans || []).filter((_, i) => i !== index);
+                                setLocalSettings(prev => ({ ...prev, adsPlans: newPlans }));
+                              }}
+                              className="w-full bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/50 rounded-lg px-3 py-2 text-sm font-bold transition"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                 </div>
                 

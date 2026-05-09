@@ -21,6 +21,13 @@ export interface IInventoryItem extends Document {
   description?: string;
   colors?: string[];
   sizes?: string[];
+
+  // ── Paid Ads & Boosts ──
+  boosts?: {
+    platform: string; // 'TALLYPADI_SEO', 'TIKTOK', 'META'
+    expiresAt: Date;
+    planId: string;
+  }[];
 }
   
   const inventorySchema = new Schema<IInventoryItem>(
@@ -46,6 +53,13 @@ export interface IInventoryItem extends Document {
       description: { type: String, trim: true, maxlength: 1000 },
       colors: [{ type: String, trim: true }],
       sizes: [{ type: String, trim: true }],
+
+      // ── Paid Ads & Boosts ──
+      boosts: [{
+        platform: { type: String, required: true },
+        expiresAt: { type: Date, required: true },
+        planId: { type: String, required: true }
+      }]
     },  { timestamps: true }
 );
 

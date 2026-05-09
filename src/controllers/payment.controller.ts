@@ -243,36 +243,53 @@ export const handlePaystackWebhook = async (req: any, res: Response) => {
       const existingEvent = await BillingEvent.findOne({ reference, event: 'charge.success' });
 
       if (!existingEvent && reference) {
-        if (planType) user.planType = planType;
-
-        user.subscriptionStatus = 'active';
-        user.paystackCustomerCode = data.customer?.customer_code || user.paystackCustomerCode;
-        user.paystackPlanCode = data.plan_object?.plan_code || user.paystackPlanCode;
         
-        // ✅ Use duration from metadata (default 1 month)
-        const monthsToAdd = Number(metadata.durationMonths || 1);
-        const daysToAdd = monthsToAdd * 30; // approx
-        const msToAdd = daysToAdd * 24 * 60 * 60 * 1000;
+        // 🟢 WALLET FUNDING LOGIC
+        if (metadata?.type === 'WALLET_FUNDING') {
+          const amountInNaira = data.amount / 100;
+          user.walletBalance = (user.walletBalance || 0) + amountInNaira;
+          await user.save();
+          
+          await BillingEvent.create({
+            reference,
+            event: 'charge.success',
+            user: user._id,
+            payload: data
+          });
+        } 
+        // 🟢 SUBSCRIPTION PAYMENT LOGIC
+        else {
+          if (planType) user.planType = planType;
 
-        // ✅ Calculate new expiry: if already valid in future, add to it. Else start now.
-        const now = new Date();
-        const currentExpiry = user.nextBillingDate ? new Date(user.nextBillingDate) : null;
-        const baseDate = (currentExpiry && currentExpiry > now) ? currentExpiry : now;
+          user.subscriptionStatus = 'active';
+          user.paystackCustomerCode = data.customer?.customer_code || user.paystackCustomerCode;
+          user.paystackPlanCode = data.plan_object?.plan_code || user.paystackPlanCode;
+          
+          // ✅ Use duration from metadata (default 1 month)
+          const monthsToAdd = Number(metadata.durationMonths || 1);
+          const daysToAdd = monthsToAdd * 30; // approx
+          const msToAdd = daysToAdd * 24 * 60 * 60 * 1000;
 
-        user.nextBillingDate = new Date(baseDate.getTime() + msToAdd);
-        await user.save();
+          // ✅ Calculate new expiry: if already valid in future, add to it. Else start now.
+          const now = new Date();
+          const currentExpiry = user.nextBillingDate ? new Date(user.nextBillingDate) : null;
+          const baseDate = (currentExpiry && currentExpiry > now) ? currentExpiry : now;
 
-        // ✅ Record the billing event
-        await BillingEvent.create({
-          reference,
-          event: 'charge.success',
-          user: user._id,
-          payload: data
-        });
+          user.nextBillingDate = new Date(baseDate.getTime() + msToAdd);
+          await user.save();
 
-        if (user.phoneNumber) {
-          const planName = String(user.planType || '').replace(/_/g, ' ');
-          // await sendWhatsAppText(user.phoneNumber, `✅ Payment received! Your *${planName}* subscription is ACTIVE.`);
+          // ✅ Record the billing event
+          await BillingEvent.create({
+            reference,
+            event: 'charge.success',
+            user: user._id,
+            payload: data
+          });
+
+          if (user.phoneNumber) {
+            const planName = String(user.planType || '').replace(/_/g, ' ');
+            // await sendWhatsAppText(user.phoneNumber, `✅ Payment received! Your *${planName}* subscription is ACTIVE.`);
+          }
         }
       } else {
         console.log(`Payment webhook skipped for ${reference} - already processed`);

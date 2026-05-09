@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import Sidebar from '../../components/Sidebar';
 import Preloader from '../../components/Preloader';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Wallet,
   Loader2,
@@ -27,6 +27,7 @@ export default function AdsManagerPage() {
   const [funding, setFunding] = useState(false);
   const [adsPlans, setAdsPlans] = useState<any[]>([]);
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const getTokenOrRedirect = () => {
     const token = getCookie('tallyToken');
@@ -42,6 +43,21 @@ export default function AdsManagerPage() {
 
     const fetchData = async () => {
       try {
+        const reference = searchParams.get('reference');
+        
+        if (reference) {
+          // Verify payment first before fetching dashboard data
+          try {
+            await axios.post(`${API_URL}/ads/wallet/verify/${reference}`, {}, {
+              headers: { Authorization: `Bearer ${token}` }
+            });
+            Swal.fire('Success', 'Wallet funded successfully!', 'success');
+            router.replace('/ads-manager'); // Clear URL
+          } catch (verifyErr) {
+            console.error('Verify error:', verifyErr);
+          }
+        }
+
         const [dashRes, plansRes] = await Promise.all([
           axios.get(`${API_URL}/dashboard`, { headers: { Authorization: `Bearer ${token}` } }),
           axios.get(`${API_URL}/ads/plans`, { headers: { Authorization: `Bearer ${token}` } })
@@ -57,7 +73,7 @@ export default function AdsManagerPage() {
     };
 
     fetchData();
-  }, []);
+  }, [searchParams, router]);
 
   const handleFundWallet = async () => {
     const amount = Number(fundingAmount);
@@ -211,7 +227,7 @@ export default function AdsManagerPage() {
                     <div>
                       <h4 className="text-sm font-bold text-blue-900">How Boosting Works</h4>
                       <p className="text-xs text-blue-700 mt-1 leading-relaxed">
-                        Boosted products appear at the very top of marketplace search results and category pages. To boost a product, go to your <strong>Online Store</strong> settings, select a product, and click "Boost Product". The cost will be deducted from your Ads Wallet.
+                        Boosted products appear at the very top of marketplace search results and category pages, and they will also be highly prioritized for indexing on search engines like <strong>Google</strong>. We also dynamically syndicate boosted listings to our external ad networks (including <strong>Meta Ads</strong> and <strong>TikTok</strong>). To boost a product, go to your <strong>Online Store</strong> settings, select a product, and click "Boost Product". The cost will be deducted from your Ads Wallet.
                       </p>
                     </div>
                   </div>

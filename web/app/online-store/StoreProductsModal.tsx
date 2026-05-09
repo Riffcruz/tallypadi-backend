@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { X, Loader2, Save, Eye, EyeOff, Search } from 'lucide-react';
+import { X, Loader2, Save, Eye, EyeOff, Search, TrendingUp } from 'lucide-react';
 import Swal from 'sweetalert2';
 
 interface StoreProductsModalProps {
@@ -22,19 +22,31 @@ export default function StoreProductsModal({ token, onClose }: StoreProductsModa
   });
   const [saving, setSaving] = useState(false);
 
+  // Boosting States
+  const [adsPlans, setAdsPlans] = useState<any[]>([]);
+  const [walletBalance, setWalletBalance] = useState(0);
+  const [boostingProductId, setBoostingProductId] = useState<string | null>(null);
+  const [boostForm, setBoostForm] = useState({ planId: '', platform: 'TALLYPADI_SEO' });
+  const [boosting, setBoosting] = useState(false);
+
   useEffect(() => {
-    fetchProducts();
+    fetchData();
   }, []);
 
-  const fetchProducts = async () => {
+  const fetchData = async () => {
     try {
-      const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api'}/inventory`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setProducts(res.data);
+      setLoading(true);
+      const [invRes, plansRes, dashRes] = await Promise.all([
+        axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api'}/inventory`, { headers: { Authorization: `Bearer ${token}` } }),
+        axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api'}/ads/plans`, { headers: { Authorization: `Bearer ${token}` } }),
+        axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api'}/dashboard`, { headers: { Authorization: `Bearer ${token}` } })
+      ]);
+      setProducts(invRes.data);
+      setAdsPlans(plansRes.data?.plans || []);
+      setWalletBalance(dashRes.data?.user?.walletBalance || 0);
     } catch (err) {
       console.error(err);
-      Swal.fire('Error', 'Failed to fetch products', 'error');
+      Swal.fire('Error', 'Failed to fetch data', 'error');
     } finally {
       setLoading(false);
     }
@@ -76,6 +88,37 @@ export default function StoreProductsModal({ token, onClose }: StoreProductsModa
       Swal.fire('Error', 'Failed to save product details', 'error');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleBoostSubmit = async (productId: string) => {
+    if (!boostForm.planId) return Swal.fire('Error', 'Please select a duration', 'error');
+    
+    const selectedPlan = adsPlans.find(p => p.id === boostForm.planId);
+    if (!selectedPlan) return;
+    
+    if (walletBalance < selectedPlan.price) {
+      return Swal.fire('Insufficient Balance', 'Please fund your Ads Wallet to boost this product.', 'warning');
+    }
+
+    setBoosting(true);
+    try {
+      const res = await axios.post(`${process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api'}/ads/boost/${productId}`, {
+        planId: boostForm.planId,
+        platform: boostForm.platform
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      setWalletBalance(res.data.walletBalance);
+      setProducts(prev => prev.map(p => p.id === productId ? { ...p, boosts: res.data.boosts } : p));
+      setBoostingProductId(null);
+      Swal.fire('Success', 'Product boosted successfully!', 'success');
+    } catch (err: any) {
+      console.error(err);
+      Swal.fire('Error', err?.response?.data?.message || 'Failed to boost product', 'error');
+    } finally {
+      setBoosting(false);
     }
   };
 
@@ -128,16 +171,21 @@ export default function StoreProductsModal({ token, onClose }: StoreProductsModa
                     <h3 className="font-bold text-slate-900 truncate">{product.name}</h3>
                     <p className="text-xs text-slate-500">Stock: {product.quantity} • ₦{product.price}</p>
                   </div>
-                  <div className="shrink-0 flex items-center gap-2">
+                  <div className="shrink-0 flex flex-col items-end gap-1">
                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${product.isPublished !== false ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
                        {product.isPublished !== false ? 'Published' : 'Hidden'}
                      </span>
+                     {product.boosts && product.boosts.length > 0 && (
+                       <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700 flex items-center gap-1">
+                         <TrendingUp size={10} /> Active Boost
+                       </span>
+                     )}
                   </div>
                 </div>
 
                 {editingId === product.id && (
                   <div className="p-4 md:p-6 border-t border-slate-100 bg-slate-50/50 space-y-5 animate-in slide-in-from-top-2">
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-3">
                        <button
                          onClick={() => setEditForm(prev => ({ ...prev, isPublished: !prev.isPublished }))}
                          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-colors ${editForm.isPublished ? 'bg-emerald-600 text-white shadow-md' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}
@@ -145,7 +193,63 @@ export default function StoreProductsModal({ token, onClose }: StoreProductsModa
                          {editForm.isPublished ? <Eye size={16} /> : <EyeOff size={16} />}
                          {editForm.isPublished ? 'Visible on Store' : 'Hidden from Store'}
                        </button>
+
+                       <button
+                         onClick={() => setBoostingProductId(boostingProductId === product.id ? null : product.id)}
+                         className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-colors ${boostingProductId === product.id ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}`}
+                       >
+                         <TrendingUp size={16} />
+                         Boost Product
+                       </button>
                     </div>
+
+                    {boostingProductId === product.id && (
+                      <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-xl space-y-4 animate-in slide-in-from-top-2">
+                        <div className="flex justify-between items-center">
+                          <h4 className="font-bold text-blue-900 text-sm">Configure Ad Campaign</h4>
+                          <span className="text-xs font-bold text-blue-700 bg-blue-100 px-2 py-1 rounded-md">Wallet Balance: ₦{walletBalance.toLocaleString()}</span>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-xs font-semibold text-blue-800 mb-1.5 uppercase tracking-wider">Select Platform</label>
+                            <select
+                              value={boostForm.platform}
+                              onChange={e => setBoostForm({ ...boostForm, platform: e.target.value })}
+                              className="w-full border border-blue-200 bg-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                            >
+                              <option value="TALLYPADI_SEO">TallyPadi SEO & Google</option>
+                              <option value="META">Meta Ads (Facebook/IG)</option>
+                              <option value="TIKTOK">TikTok Ads</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-semibold text-blue-800 mb-1.5 uppercase tracking-wider">Select Duration</label>
+                            <select
+                              value={boostForm.planId}
+                              onChange={e => setBoostForm({ ...boostForm, planId: e.target.value })}
+                              className="w-full border border-blue-200 bg-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                            >
+                              <option value="">-- Choose a Plan --</option>
+                              {adsPlans.map(plan => (
+                                <option key={plan.id} value={plan.id}>{plan.label} - ₦{plan.price.toLocaleString()}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="flex justify-end pt-2">
+                          <button
+                            onClick={() => handleBoostSubmit(product.id)}
+                            disabled={boosting || !boostForm.planId}
+                            className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold shadow-md hover:bg-blue-700 active:scale-95 transition-all disabled:opacity-50"
+                          >
+                            {boosting ? <Loader2 size={16} className="animate-spin" /> : <TrendingUp size={16} />}
+                            Pay & Launch Campaign
+                          </button>
+                        </div>
+                      </div>
+                    )}
 
                     <div>
                       <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wider">Product Description</label>

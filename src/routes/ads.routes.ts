@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authRequired } from '../middleware/authRequired';
-import { fundWallet, verifyWalletFunding, getAdsPlans, updateAdsPlans } from '../controllers/ads.controller';
+import { fundWallet, verifyWalletFunding, getAdsPlans, updateAdsPlans, boostProduct } from '../controllers/ads.controller';
 
 const router = Router();
 
@@ -12,5 +12,8 @@ router.post('/wallet/verify/:reference', authRequired, verifyWalletFunding);
 router.get('/plans', authRequired, getAdsPlans);
 // TODO: Add admin middleware for updateAdsPlans
 router.put('/plans', authRequired, updateAdsPlans);
+
+// Product Boosting
+router.post('/boost/:productId', authRequired, boostProduct);
 
 export default router;

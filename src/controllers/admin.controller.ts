@@ -74,7 +74,13 @@ const updateGlobalSettingsSchema = z
         pass: z.string().trim().optional().default(''),
         fromAddress: z.string().trim().optional().default('notifications@tallypadi.com'),
         secure: z.boolean().optional().default(true)
-    }).optional()
+    }).optional(),
+    adsPlans: z.array(z.object({
+      id: z.string(),
+      durationDays: z.coerce.number().int().min(1),
+      price: z.coerce.number().min(0),
+      label: z.string().trim().min(1)
+    })).optional()
   })
   .strict();
 
@@ -569,7 +575,7 @@ export const updateGlobalSettings = async (req: Request, res: Response) => {
     const parsed = updateGlobalSettingsSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
-    const { autoSuspendOnJailbreak, maxMessageHistory, maxStaffAccounts, whatsappUrl, smtp } = parsed.data;
+    const { autoSuspendOnJailbreak, maxMessageHistory, maxStaffAccounts, whatsappUrl, smtp, adsPlans } = parsed.data;
 
     const updatePayload: any = {};
     if (whatsappUrl !== undefined) updatePayload.whatsappUrl = whatsappUrl;
@@ -577,6 +583,7 @@ export const updateGlobalSettings = async (req: Request, res: Response) => {
     if (maxMessageHistory !== undefined) updatePayload['limits.maxMessageHistory'] = maxMessageHistory;
     if (maxStaffAccounts !== undefined) updatePayload['limits.maxStaffAccounts'] = maxStaffAccounts;
     if (smtp !== undefined) updatePayload.smtp = smtp;
+    if (adsPlans !== undefined) updatePayload.adsPlans = adsPlans;
 
     const settings = await AdminSettings.findOneAndUpdate({}, { $set: updatePayload }, { new: true, upsert: true });
     res.json({ success: true, settings });
