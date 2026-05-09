@@ -3,11 +3,14 @@ import axios from 'axios';
 import { User } from '../models/user.model';
 import { Inventory } from '../models/inventory.model';
 import { AdminSettings } from '../models/adminSettings.model';
-import { BillingEvent } from '../models/billingEvent.model';
 import { env } from '../config/env';
 import { activityService } from '../services/activity.service';
+import { walletService } from '../services/wallet.service';
 
-const parsePaystackMetadata = (raw: unknown): Record<string, any> => {
+const MAX_WALLET_FUNDING_NAIRA = Number(process.env.MAX_WALLET_FUNDING_NAIRA || 5_000_000);
+const PAYSTACK_REFERENCE_PATTERN = /^[A-Za-z0-9._=-]{4,120}$/;
+
+const parsePaystackMetadata = (raw: unknown): Record<string, unknown> => {
   if (!raw) return {};
   if (typeof raw === 'string') {
     try {
@@ -17,21 +20,31 @@ const parsePaystackMetadata = (raw: unknown): Record<string, any> => {
       return {};
     }
   }
-  return typeof raw === 'object' ? raw as Record<string, any> : {};
+  return typeof raw === 'object' ? raw as Record<string, unknown> : {};
+};
+
+const getWalletFundingAmount = (raw: unknown) => {
+  const amount = Number(raw);
+  if (!Number.isFinite(amount)) return null;
+  if (amount < 100 || amount > MAX_WALLET_FUNDING_NAIRA) return null;
+  return Math.round(amount * 100) / 100;
 };
 
 // 1. Initialize Wallet Funding
 export const fundWallet = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
-    const { amount } = req.body; // Amount in Naira
+    const amount = getWalletFundingAmount(req.body?.amount); // Amount in Naira
 
-    if (!amount || amount < 100) {
-      return res.status(400).json({ message: 'Minimum funding amount is ₦100' });
+    if (!amount) {
+      return res.status(400).json({ message: `Funding amount must be between ₦100 and ₦${MAX_WALLET_FUNDING_NAIRA.toLocaleString()}` });
     }
 
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ message: 'User not found' });
+    if (user.role !== 'OWNER') {
+      return res.status(403).json({ message: 'Only the shop owner can fund the ads wallet' });
+    }
 
     const amountInKobo = Math.round(amount * 100);
 
@@ -42,7 +55,9 @@ export const fundWallet = async (req: Request, res: Response) => {
         amount: amountInKobo,
         metadata: {
           userId: user._id.toString(),
-          type: 'WALLET_FUNDING'
+          type: 'WALLET_FUNDING',
+          amountInKobo,
+          amountInNaira: amount,
         },
         callback_url: 'https://tallypadi.com/ads-manager'
       },
@@ -68,6 +83,9 @@ export const verifyWalletFunding = async (req: Request, res: Response) => {
     const reference = String(req.params.reference || '').trim();
 
     if (!reference) return res.status(400).json({ message: 'No reference provided' });
+    if (!PAYSTACK_REFERENCE_PATTERN.test(reference)) {
+      return res.status(400).json({ message: 'Invalid payment reference' });
+    }
 
     const paystackRes = await axios.get(
       `https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`,
@@ -81,55 +99,44 @@ export const verifyWalletFunding = async (req: Request, res: Response) => {
       return res.status(400).json({ status: 'failed', message: 'Transaction not successful' });
     }
 
+    const providerReference = String(data.reference || '').trim();
+    if (!providerReference || providerReference !== reference) {
+      console.warn('Wallet funding reference mismatch:', { requested: reference, providerReference });
+      return res.status(400).json({ message: 'Payment reference mismatch' });
+    }
+
     const metadata = parsePaystackMetadata(data.metadata);
     if (String(metadata.type || '') !== 'WALLET_FUNDING' || String(metadata.userId || '') !== String(userId || '')) {
       console.warn('Invalid wallet funding metadata:', { reference, metadata, userId });
       return res.status(400).json({ message: 'Invalid transaction metadata' });
     }
 
+    const amountInKobo = Number(data.amount);
+    const expectedAmountInKobo = metadata.amountInKobo !== undefined ? Number(metadata.amountInKobo) : null;
+    if (!Number.isInteger(amountInKobo) || amountInKobo <= 0) {
+      return res.status(400).json({ message: 'Invalid payment amount' });
+    }
+    if (expectedAmountInKobo !== null && expectedAmountInKobo !== amountInKobo) {
+      console.warn('Wallet funding amount mismatch:', { reference, expectedAmountInKobo, amountInKobo });
+      return res.status(400).json({ message: 'Payment amount mismatch' });
+    }
+
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ message: 'User not found' });
-
-    // Deduplication check: to avoid crediting twice, enterprise-grade check using BillingEvent
-    const existingEvent = await BillingEvent.findOne({ reference, event: 'charge.success' });
-    if (existingEvent) {
-      return res.status(200).json({
-        status: 'success',
-        message: 'Wallet funded successfully (already processed)',
-        walletBalance: user.walletBalance
-      });
+    if (user.role !== 'OWNER') {
+      return res.status(403).json({ message: 'Only the shop owner can verify ads wallet funding' });
     }
-    
-    // Add to wallet balance (convert from kobo to Naira)
-    const amountInNaira = data.amount / 100;
-    user.walletBalance = (user.walletBalance || 0) + amountInNaira;
-    await user.save();
 
-    await BillingEvent.create({
+    const creditResult = await walletService.creditWalletFromPaystack({
+      userId: user._id as any,
       reference,
-      event: 'charge.success',
-      user: user._id,
-      payload: data
-    });
-
-    await activityService.recordActivitySafely({
-      user: user._id as any,
-      actor: user._id as any,
-      type: 'WALLET_FUNDING',
-      title: 'Wallet funded successfully',
-      message: `Your ads wallet was funded with ₦${amountInNaira.toLocaleString()}.`,
-      amount: amountInNaira,
-      metadata: {
-        reference,
-        provider: 'paystack',
-        walletBalance: user.walletBalance || 0,
-      },
+      paystackData: data,
     });
 
     return res.status(200).json({
       status: 'success',
-      message: 'Wallet funded successfully',
-      walletBalance: user.walletBalance
+      message: creditResult.credited ? 'Wallet funded successfully' : 'Wallet funded successfully (already processed)',
+      walletBalance: creditResult.walletBalance
     });
   } catch (error: any) {
     console.error('Verification Error:', error?.response?.data || error?.message || error);

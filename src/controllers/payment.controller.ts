@@ -8,6 +8,7 @@ import { initializePayment } from '../services/billing.service';
 import { env } from '../config/env';
 import { sendWhatsAppText } from '../services/whatsapp.service';
 import { activityService } from '../services/activity.service';
+import { walletService } from '../services/wallet.service';
 
 type PlanType = 'OGA_BOSS' | 'TYCOON';
 const ALLOWED_PLANS: PlanType[] = ['OGA_BOSS', 'TYCOON'];
@@ -276,29 +277,17 @@ export const handlePaystackWebhook = async (req: any, res: Response) => {
         
         // 🟢 WALLET FUNDING LOGIC
         if (metadata?.type === 'WALLET_FUNDING') {
-          const amountInNaira = data.amount / 100;
-          user.walletBalance = (user.walletBalance || 0) + amountInNaira;
-          await user.save();
-          
-          await BillingEvent.create({
-            reference,
-            event: 'charge.success',
-            user: user._id,
-            payload: data
-          });
+          const expectedAmountInKobo = metadata.amountInKobo !== undefined ? Number(metadata.amountInKobo) : null;
+          const amountInKobo = Number(data.amount);
+          if (expectedAmountInKobo !== null && expectedAmountInKobo !== amountInKobo) {
+            console.warn('Wallet webhook amount mismatch:', { reference, expectedAmountInKobo, amountInKobo });
+            return res.sendStatus(200);
+          }
 
-          await activityService.recordActivitySafely({
-            user: user._id,
-            actor: user._id,
-            type: 'WALLET_FUNDING',
-            title: 'Wallet funded successfully',
-            message: `Your ads wallet was funded with ₦${amountInNaira.toLocaleString()}.`,
-            amount: amountInNaira,
-            metadata: {
-              reference,
-              provider: 'paystack',
-              walletBalance: user.walletBalance || 0,
-            },
+          await walletService.creditWalletFromPaystack({
+            userId: user._id,
+            reference,
+            paystackData: data,
           });
         } 
         // 🟢 SUBSCRIPTION PAYMENT LOGIC
