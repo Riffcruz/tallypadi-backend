@@ -40,6 +40,16 @@ function safePlan(input: any): PlanType | null {
   return ALLOWED_PLANS.includes(p as PlanType) ? (p as PlanType) : null;
 }
 
+function safeCompareHex(a: string, b: string) {
+  try {
+    const left = Buffer.from(a, 'hex');
+    const right = Buffer.from(b, 'hex');
+    return left.length === right.length && crypto.timingSafeEqual(left, right);
+  } catch {
+    return false;
+  }
+}
+
 /**
  * ✅ POST /api/payment/initialize
  * Guest payment init (NOT logged in) but MUST provide phoneNumber + email.
@@ -254,7 +264,7 @@ export const handlePaystackWebhook = async (req: any, res: Response) => {
     }
 
     const expected = crypto.createHmac('sha512', env.paystackSecretKey).update(rawBody).digest('hex');
-    if (!signature || expected !== signature) return res.sendStatus(400);
+    if (!signature || !safeCompareHex(signature, expected)) return res.sendStatus(400);
 
     const event = req.body;
     const ev = String(event?.event || '');
@@ -270,28 +280,28 @@ export const handlePaystackWebhook = async (req: any, res: Response) => {
 
     if (ev === 'charge.success') {
       const reference = String(data.reference || '');
-      // ✅ Deduplication Check using BillingEvent
-      const existingEvent = await BillingEvent.findOne({ reference, event: 'charge.success' });
+      if (!reference) return res.sendStatus(200);
 
-      if (!existingEvent && reference) {
-        
-        // 🟢 WALLET FUNDING LOGIC
-        if (metadata?.type === 'WALLET_FUNDING') {
-          const expectedAmountInKobo = metadata.amountInKobo !== undefined ? Number(metadata.amountInKobo) : null;
-          const amountInKobo = Number(data.amount);
-          if (expectedAmountInKobo !== null && expectedAmountInKobo !== amountInKobo) {
-            console.warn('Wallet webhook amount mismatch:', { reference, expectedAmountInKobo, amountInKobo });
-            return res.sendStatus(200);
-          }
+      // 🟢 WALLET FUNDING LOGIC
+      if (metadata?.type === 'WALLET_FUNDING') {
+        const expectedAmountInKobo = metadata.amountInKobo !== undefined ? Number(metadata.amountInKobo) : null;
+        const amountInKobo = Number(data.amount);
+        if (expectedAmountInKobo !== null && expectedAmountInKobo !== amountInKobo) {
+          console.warn('Wallet webhook amount mismatch:', { reference, expectedAmountInKobo, amountInKobo });
+          return res.sendStatus(200);
+        }
 
-          await walletService.creditWalletFromPaystack({
-            userId: user._id,
-            reference,
-            paystackData: data,
-          });
-        } 
-        // 🟢 SUBSCRIPTION PAYMENT LOGIC
-        else {
+        await walletService.creditWalletFromPaystack({
+          userId: user._id,
+          reference,
+          paystackData: data,
+        });
+      } 
+      // 🟢 SUBSCRIPTION PAYMENT LOGIC
+      else {
+        // ✅ Deduplication Check using BillingEvent
+        const existingEvent = await BillingEvent.findOne({ reference, event: 'charge.success' });
+        if (!existingEvent) {
           if (planType) user.planType = planType;
 
           user.subscriptionStatus = 'active';
@@ -339,9 +349,9 @@ export const handlePaystackWebhook = async (req: any, res: Response) => {
           if (user.phoneNumber) {
             // await sendWhatsAppText(user.phoneNumber, `✅ Payment received! Your *${planName}* subscription is ACTIVE.`);
           }
+        } else {
+          console.log(`Payment webhook skipped for ${reference} - already processed`);
         }
-      } else {
-        console.log(`Payment webhook skipped for ${reference} - already processed`);
       }
     }
 
