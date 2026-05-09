@@ -36,6 +36,7 @@ import supportWebhookRouter from './routes/support.webhook.routes';
 import expenseRouter from './routes/expense.routes';
 import draftRouter from './routes/draft.routes';
 import customerRouter from './routes/customer.routes';
+import adsRouter from './routes/ads.routes';
 
 // --- SERVICES & CONFIG ---
 import {
@@ -381,6 +382,7 @@ app.use('/api/hq', hqRouter);
 app.use('/api/invoices', invoiceRouter);
 app.use('/api/expenses', authRequired, expenseRouter);
 app.use('/api/draft', draftRouter); // Magic Draft Link (no auth required)
+app.use('/api/ads', adsRouter);
 
 // --- LIVE SUPPORT ---
 app.use('/api/support', supportRouter);

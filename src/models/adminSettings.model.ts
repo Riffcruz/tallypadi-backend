@@ -4,6 +4,14 @@ export interface IAdminSettings extends Document {
   // 🟢 NEW: Public Contact Config
   whatsappUrl?: string; 
 
+  // Ads & Boosts Config
+  adsPlans?: {
+    id: string;
+    durationDays: number;
+    price: number; // NGN
+    label: string; // e.g. "5 Days Boost"
+  }[];
+
   security: {
     autoSuspendOnJailbreak: boolean;
     maxLoginAttempts: number;
@@ -35,6 +43,13 @@ const adminSettingsSchema = new Schema<IAdminSettings>(
   {
     // 🟢 ADDING WHATSAPP URL (Root Level)
     whatsappUrl: { type: String, default: '' },
+
+    adsPlans: [{
+      id: { type: String, required: true },
+      durationDays: { type: Number, required: true },
+      price: { type: Number, required: true },
+      label: { type: String, required: true }
+    }],
 
     security: {
       autoSuspendOnJailbreak: { type: Boolean, default: true },

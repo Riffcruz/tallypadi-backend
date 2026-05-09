@@ -26,6 +26,9 @@ export interface IUser extends Document {
   nextSummaryAt?: Date | null;        // UTC date when next summary should run
   lastSummaryDateKey?: string | null; // YYYY-MM-DD for last summary sent (user-local day)
 
+  // Wallet for Ads & Marketplace
+  walletBalance?: number; // In smallest unit (e.g. kobo or cents) or base currency (Naira)
+
   // Plan & Staff Fields
   planType?: 'OGA_BOSS' | 'TYCOON';
   // interface
@@ -149,6 +152,7 @@ const userSchema = new Schema<IUser>(
     shopDescription: { type: String, maxLength: 500 },
     heroImageUrl: { type: String },
     themeColor: { type: String, default: '#10b981' },
+    walletBalance: { type: Number, default: 0 },
 
     planType: {
       type: String,

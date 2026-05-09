@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard, ShoppingCart, Package, Settings, LogOut, Users,
   BookOpen, ClipboardList, FileText, Banknote, UserPlus, Users2,
-  Store, CreditCard, Globe,
+  Store, CreditCard, Globe, Megaphone
 } from 'lucide-react';
 import { removeCookie } from '../utils/cookies';
 
@@ -121,6 +121,12 @@ export default function Sidebar() {
             <Link href="/online-store" className={linkClass('/online-store')}>
               <Globe size={18} className={iconClass('/online-store')} />
               <span>Online Store</span>
+            </Link>
+
+            {/* Ads Manager */}
+            <Link href="/ads-manager" className={linkClass('/ads-manager')}>
+              <Megaphone size={18} className={iconClass('/ads-manager')} />
+              <span>Ads Manager</span>
             </Link>
 
             {/* Subscription */}
