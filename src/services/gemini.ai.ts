@@ -137,6 +137,111 @@ Output: Return ONLY the message text.
   }
 };
 
+export interface AdSeoMetadataInput {
+  productName: string;
+  productDescription?: string;
+  productCategory?: string | null;
+  price?: number;
+  businessName?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  adBrief?: string;
+  adAudience?: string;
+  adKeywords?: string[];
+}
+
+export interface AdSeoMetadata {
+  title: string;
+  metaDescription: string;
+  adDescription: string;
+  keywords: string[];
+  source?: 'AI' | 'FALLBACK';
+}
+
+const cleanSeoText = (value: unknown, maxLength: number) =>
+  sanitizeInput(String(value || '')).slice(0, maxLength).trim();
+
+const fallbackAdSeoMetadata = (input: AdSeoMetadataInput): AdSeoMetadata => {
+  const location = [input.city, input.state].filter(Boolean).join(', ');
+  const category = input.productCategory ? ` ${input.productCategory}` : '';
+  const priceText = input.price ? ` from ₦${Number(input.price).toLocaleString()}` : '';
+  const locationText = location ? ` in ${location}` : '';
+  const shopText = input.businessName ? ` from ${input.businessName}` : '';
+  const base = `${input.productName}${category}${priceText}${locationText}${shopText}`;
+
+  return {
+    title: cleanSeoText(`${input.productName}${locationText} | TallyPadi Marketplace`, 65),
+    metaDescription: cleanSeoText(`${base}. View product details, availability, seller location, and contact the advertiser directly on TallyPadi.`, 160),
+    adDescription: cleanSeoText(`${base}. Check the product details, available options, and seller information before contacting the advertiser.`, 500),
+    keywords: Array.from(new Set([
+      input.productName,
+      input.productCategory || '',
+      ...(input.adKeywords || []),
+      input.city || '',
+      input.state || '',
+      input.businessName || '',
+      'TallyPadi marketplace',
+    ].map((item) => cleanSeoText(item, 60).toLowerCase()).filter(Boolean))).slice(0, 12),
+    source: 'FALLBACK',
+  };
+};
+
+export const generateAdSeoMetadata = async (input: AdSeoMetadataInput): Promise<AdSeoMetadata> => {
+  const fallback = fallbackAdSeoMetadata(input);
+  const prompt = `
+You are TallyPadi's marketplace SEO assistant.
+
+Create honest, high-click product SEO copy for a single product landing page.
+Use only the supplied facts. Do not invent discounts, ratings, stock promises, or guarantees.
+Avoid keyword stuffing. Make it natural for Nigerian shoppers and useful for Google Ads landing pages.
+
+Return JSON only with:
+{
+  "title": "55-65 character page title",
+  "metaDescription": "140-160 character search description",
+  "adDescription": "60-90 word visible product ad description",
+  "keywords": ["max 12 focused search phrases"]
+}
+
+Facts:
+Product: ${input.productName}
+Category: ${input.productCategory || 'Not supplied'}
+Price: ${input.price ? `₦${Number(input.price).toLocaleString()}` : 'Not supplied'}
+Shop: ${input.businessName || 'Not supplied'}
+Location: ${[input.city, input.state, input.country].filter(Boolean).join(', ') || 'Not supplied'}
+Product description: ${input.productDescription || 'Not supplied'}
+Advertiser brief: ${input.adBrief || 'Not supplied'}
+Target audience: ${input.adAudience || 'Not supplied'}
+Advertiser keywords: ${(input.adKeywords || []).join(', ') || 'Not supplied'}
+`;
+
+  try {
+    const result = await model.generateContent({
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig: { responseMimeType: 'application/json' },
+    });
+    const parsed = JSON.parse(extractJsonObject(result.response.text()));
+
+    const keywords: string[] = Array.isArray(parsed?.keywords)
+      ? parsed.keywords
+        .map((item: unknown) => cleanSeoText(item, 60))
+        .filter((item: string) => Boolean(item))
+      : fallback.keywords;
+
+    return {
+      title: cleanSeoText(parsed?.title, 65) || fallback.title,
+      metaDescription: cleanSeoText(parsed?.metaDescription, 170) || fallback.metaDescription,
+      adDescription: cleanSeoText(parsed?.adDescription, 700) || fallback.adDescription,
+      keywords: Array.from(new Set<string>(keywords.map((item) => item.toLowerCase()))).slice(0, 12),
+      source: 'AI',
+    };
+  } catch (error) {
+    console.error('Gemini Ad SEO Error:', error);
+    return fallback;
+  }
+};
+
 // ─── Build inventory context snippet ────────────────────────
 // Caps at 50 items to prevent massive token usage.
 // Items are expected pre-sorted by recency (most recent first).

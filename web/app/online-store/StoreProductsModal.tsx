@@ -54,7 +54,7 @@ export default function StoreProductsModal({ token, onClose }: StoreProductsModa
   const [walletBalance, setWalletBalance] = useState(0);
   const [campaigns, setCampaigns] = useState<StoreCampaign[]>([]);
   const [boostingProductId, setBoostingProductId] = useState<string | null>(null);
-  const [boostForm, setBoostForm] = useState({ planId: '', platform: 'ALL', budget: '' });
+  const [boostForm, setBoostForm] = useState({ planId: '', platform: 'ALL', budget: '', brief: '', keywords: '' });
   const [boosting, setBoosting] = useState(false);
   const selectedBoostPlan = adsPlans.find(plan => plan.id === boostForm.planId);
 
@@ -141,12 +141,22 @@ export default function StoreProductsModal({ token, onClose }: StoreProductsModa
       return Swal.fire('Insufficient Balance', 'Please fund your Ads Wallet to boost this product.', 'warning');
     }
 
+    const keywords = boostForm.keywords
+      .split(',')
+      .map(item => item.trim())
+      .filter(Boolean)
+      .slice(0, 12);
+
     setBoosting(true);
     try {
       const res = await axios.post(`${process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api'}/ads/boost/${productId}`, {
         planId: boostForm.planId,
         platform: boostForm.platform,
-        budget
+        budget,
+        adDetails: {
+          brief: boostForm.brief.trim(),
+          keywords,
+        },
       }, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -156,7 +166,7 @@ export default function StoreProductsModal({ token, onClose }: StoreProductsModa
         setCampaigns(prev => [res.data.campaign, ...prev.filter(c => c.id !== res.data.campaign.id)]);
       }
       setBoostingProductId(null);
-      setBoostForm({ planId: '', platform: 'ALL', budget: '' });
+      setBoostForm({ planId: '', platform: 'ALL', budget: '', brief: '', keywords: '' });
       Swal.fire('Submitted', 'Boost request is pending admin review.', 'success');
     } catch (err: unknown) {
       console.error(err);
@@ -311,6 +321,28 @@ export default function StoreProductsModal({ token, onClose }: StoreProductsModa
                               className="w-full border border-blue-200 bg-white rounded-xl pl-9 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                             />
                           </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-semibold text-blue-800 mb-1.5 uppercase tracking-wider">Ad Search Notes</label>
+                          <textarea
+                            value={boostForm.brief}
+                            onChange={e => setBoostForm({ ...boostForm, brief: e.target.value })}
+                            placeholder="Mention what buyers should know, target area, condition, model, delivery, or special selling points."
+                            rows={3}
+                            className="w-full border border-blue-200 bg-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all resize-none"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-semibold text-blue-800 mb-1.5 uppercase tracking-wider">Search Keywords</label>
+                          <input
+                            type="text"
+                            value={boostForm.keywords}
+                            onChange={e => setBoostForm({ ...boostForm, keywords: e.target.value })}
+                            placeholder="e.g. smart tv, samsung tv, ikeja electronics"
+                            className="w-full border border-blue-200 bg-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                          />
                         </div>
 
                         <div className="flex justify-end pt-2">

@@ -30,6 +30,19 @@ export interface IAdCampaign extends Document {
     price?: number;
     category?: string | null;
   };
+  adDetails?: {
+    brief?: string;
+    audience?: string;
+    keywords?: string[];
+  };
+  seo?: {
+    title?: string;
+    metaDescription?: string;
+    adDescription?: string;
+    keywords?: string[];
+    generatedAt?: Date | null;
+    source?: 'AI' | 'FALLBACK' | null;
+  };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -72,12 +85,26 @@ const adCampaignSchema = new Schema<IAdCampaign>(
       price: { type: Number, default: 0 },
       category: { type: String, default: null },
     },
+    adDetails: {
+      brief: { type: String, default: '', trim: true, maxlength: 1000 },
+      audience: { type: String, default: '', trim: true, maxlength: 300 },
+      keywords: [{ type: String, trim: true, maxlength: 60 }],
+    },
+    seo: {
+      title: { type: String, default: '', trim: true, maxlength: 120 },
+      metaDescription: { type: String, default: '', trim: true, maxlength: 220 },
+      adDescription: { type: String, default: '', trim: true, maxlength: 1000 },
+      keywords: [{ type: String, trim: true, maxlength: 60 }],
+      generatedAt: { type: Date, default: null },
+      source: { type: String, enum: ['AI', 'FALLBACK', null], default: null },
+    },
   },
   { timestamps: true }
 );
 
 adCampaignSchema.index({ user: 1, status: 1, createdAt: -1 });
 adCampaignSchema.index({ status: 1, createdAt: -1 });
+adCampaignSchema.index({ status: 1, expiresAt: 1 });
 adCampaignSchema.index({ product: 1, status: 1 });
 
 export const AdCampaign = model<IAdCampaign>('AdCampaign', adCampaignSchema);

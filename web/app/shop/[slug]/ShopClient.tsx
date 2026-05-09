@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
+import Link from 'next/link';
 import axios from 'axios';
 import {
-  ShoppingBag, Phone, Loader2, PackageX, ExternalLink, AlertTriangle,
+  ShoppingBag, Loader2, PackageX, ExternalLink, AlertTriangle,
   Search, Menu, Plus, Minus, ShoppingCart, X, MessageCircle,
 } from 'lucide-react';
 import ShopSidebar from './ShopSidebar';
@@ -50,7 +51,7 @@ export default function ShopClient({ initialShop, slug }: ShopClientProps) {
   const [totalPages, setTotalPages] = useState(1);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   // Cart State
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -101,13 +102,27 @@ export default function ShopClient({ initialShop, slug }: ShopClientProps) {
   useEffect(() => { setPage(1); fetchProducts(true); }, [debouncedSearch, category, sort]); // eslint-disable-line
   useEffect(() => { if (page > 1) fetchProducts(false); }, [page]); // eslint-disable-line
 
+  useEffect(() => {
+    const node = loadMoreRef.current;
+    if (!node) return;
+
+    const observer = new IntersectionObserver((entries) => {
+      const entry = entries[0];
+      if (!entry.isIntersecting || loading || page >= totalPages) return;
+      setPage(prev => Math.min(prev + 1, totalPages));
+    }, { rootMargin: '450px 0px' });
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [loading, page, totalPages]);
+
   // ─── Cart Helpers ───
   const cartTotal = cart.reduce((sum, item) => sum + item.product.price * item.qty, 0);
   const cartCount = cart.reduce((sum, item) => sum + item.qty, 0);
 
   const getQty = (id: string) => cart.find(c => c.product.id === id)?.qty || 0;
 
-  const addToCart = (product: Product, selectedColor?: string, selectedSize?: string) => {
+  const addToCart = (product: Product) => {
     // If we want to support unique variants in cart, we'd alter the ID. 
     // For now, we just add the product directly.
     setCart(prev => {
@@ -165,7 +180,7 @@ export default function ShopClient({ initialShop, slug }: ShopClientProps) {
         </div>
         <h1 className="text-xl font-bold text-slate-900 mb-2">Shop unavailable</h1>
         <p className="text-slate-500 text-sm mb-6">The shop you are looking for does not exist or is currently closed.</p>
-        <a href="/" className="px-6 py-3 rounded-xl bg-slate-900 text-white font-bold text-sm hover:bg-black transition">Go to Tallypadi</a>
+        <Link href="/" className="px-6 py-3 rounded-xl bg-slate-900 text-white font-bold text-sm hover:bg-black transition">Go to Tallypadi</Link>
       </div>
     );
   }
@@ -297,9 +312,9 @@ export default function ShopClient({ initialShop, slug }: ShopClientProps) {
                       className="group bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-xl hover:shadow-slate-900/5 hover:-translate-y-1 transition-all duration-300 flex flex-col"
                     >
                       {/* Image */}
-                      <div 
+                      <Link
+                        href={`/shop/${slug}/product/${product.id}`}
                         className="aspect-square bg-slate-100 relative overflow-hidden cursor-pointer"
-                        onClick={() => setSelectedProduct(product)}
                       >
                         {product.image ? (
                           <img src={product.image} alt={product.name} loading="lazy" className="w-full h-full object-cover group-hover:scale-105 transition duration-500" />
@@ -313,18 +328,18 @@ export default function ShopClient({ initialShop, slug }: ShopClientProps) {
                             <span className="px-3 py-1 bg-slate-900 text-white text-[10px] font-bold rounded-full">SOLD OUT</span>
                           </div>
                         )}
-                      </div>
+                      </Link>
 
                       {/* Card Body */}
                       <div className="p-3 flex flex-col flex-1">
                         <span className="font-black text-lg block mb-1" style={{ color: themeColor }}>{formatMoney(product.price)}</span>
-                        <h3 
-                          className="font-medium text-slate-700 text-sm line-clamp-2 leading-snug mb-2 group-hover:transition-colors cursor-pointer" 
+                        <Link
+                          href={`/shop/${slug}/product/${product.id}`}
+                          className="font-medium text-slate-700 text-sm line-clamp-2 leading-snug mb-2 group-hover:transition-colors cursor-pointer hover:underline"
                           style={{ '--hover-color': themeColor } as React.CSSProperties}
-                          onClick={() => setSelectedProduct(product)}
                         >
                           {product.name}
-                        </h3>
+                        </Link>
                         {product.category && (
                           <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 mb-2 block">{product.category}</span>
                         )}
@@ -369,18 +384,14 @@ export default function ShopClient({ initialShop, slug }: ShopClientProps) {
                 })}
               </div>
 
-              {/* Load More */}
-              {page < totalPages && (
-                <div className="mt-10 text-center">
-                  <button
-                    onClick={() => setPage(prev => prev + 1)}
-                    disabled={loading}
-                    className="px-8 py-3 rounded-full bg-white border border-slate-200 text-slate-700 font-bold text-sm hover:bg-slate-50 transition shadow-sm disabled:opacity-50"
-                  >
-                    {loading ? 'Loading...' : 'Load More Products'}
-                  </button>
-                </div>
-              )}
+              <div ref={loadMoreRef} className="h-14">
+                {loading && page > 1 && (
+                  <div className="flex items-center justify-center gap-2 py-8 text-sm font-black" style={{ color: themeColor }}>
+                    <Loader2 className="animate-spin w-5 h-5" />
+                    Loading more products
+                  </div>
+                )}
+              </div>
 
               {loading && page === 1 && (
                 <div className="py-20 flex justify-center">
@@ -518,76 +529,6 @@ export default function ShopClient({ initialShop, slug }: ShopClientProps) {
         </div>
       )}
 
-      {/* ════════════════════════════════════════════
-          PRODUCT DETAILS MODAL
-      ════════════════════════════════════════════ */}
-      {selectedProduct && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 sm:p-6">
-          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setSelectedProduct(null)} />
-          <div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 max-h-full flex flex-col">
-            <button onClick={() => setSelectedProduct(null)} className="absolute top-4 right-4 z-10 w-8 h-8 flex items-center justify-center bg-white/50 backdrop-blur-md rounded-full text-slate-900 hover:bg-white transition">
-              <X size={20} />
-            </button>
-            <div className="w-full aspect-[4/3] bg-slate-100 relative shrink-0">
-               {selectedProduct.image ? (
-                 <img src={selectedProduct.image} alt={selectedProduct.name} className="w-full h-full object-cover" />
-               ) : (
-                 <div className="w-full h-full flex items-center justify-center text-6xl font-black uppercase" style={{ color: themeColor }}>
-                   {selectedProduct.name[0]}
-                 </div>
-               )}
-            </div>
-            <div className="p-6 overflow-y-auto">
-               <h2 className="text-xl md:text-2xl font-bold text-slate-900 leading-tight mb-2">{selectedProduct.name}</h2>
-               <span className="text-2xl font-black block mb-4" style={{ color: themeColor }}>{formatMoney(selectedProduct.price)}</span>
-               
-               {selectedProduct.description && (
-                 <div className="mb-6">
-                   <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Description</h4>
-                   <p className="text-sm text-slate-700 leading-relaxed">{selectedProduct.description}</p>
-                 </div>
-               )}
-
-               <div className="grid grid-cols-2 gap-4 mb-6">
-                 {selectedProduct.colors && selectedProduct.colors.length > 0 && (
-                   <div>
-                     <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Available Colors</h4>
-                     <div className="flex flex-wrap gap-2">
-                       {selectedProduct.colors.map(color => (
-                         <span key={color} className="px-3 py-1 bg-slate-100 rounded-lg text-xs font-semibold text-slate-700 border border-slate-200">{color}</span>
-                       ))}
-                     </div>
-                   </div>
-                 )}
-                 {selectedProduct.sizes && selectedProduct.sizes.length > 0 && (
-                   <div>
-                     <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Available Sizes</h4>
-                     <div className="flex flex-wrap gap-2">
-                       {selectedProduct.sizes.map(size => (
-                         <span key={size} className="px-3 py-1 bg-slate-100 rounded-lg text-xs font-semibold text-slate-700 border border-slate-200">{size}</span>
-                       ))}
-                     </div>
-                   </div>
-                 )}
-               </div>
-
-               <div className="mt-4 pt-4 border-t border-slate-100">
-                  {selectedProduct.inStock ? (
-                     <button
-                       onClick={() => { addToCart(selectedProduct); setSelectedProduct(null); setIsCartOpen(true); }}
-                       className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl text-white text-sm font-bold shadow-lg transition-all hover:opacity-90 active:scale-95"
-                       style={{ backgroundColor: themeColor }}
-                     >
-                       <ShoppingCart size={18} /> Add to Cart
-                     </button>
-                  ) : (
-                    <div className="w-full py-3.5 rounded-2xl bg-slate-100 text-slate-500 text-sm font-bold text-center">Out of Stock</div>
-                  )}
-               </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

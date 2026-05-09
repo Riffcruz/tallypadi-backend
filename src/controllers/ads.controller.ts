@@ -219,7 +219,7 @@ export const boostProduct = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     const productId = String(req.params.productId || '');
-    const { planId, platform, budget } = req.body;
+    const { planId, platform, budget, adDetails } = req.body;
 
     if (!planId || !platform) {
       return res.status(400).json({ message: 'Plan ID and Platform are required' });
@@ -233,6 +233,11 @@ export const boostProduct = async (req: Request, res: Response) => {
       planId: String(planId),
       platform: String(platform),
       budget: budget === undefined || budget === null ? undefined : Number(budget),
+      adDetails: {
+        brief: String(adDetails?.brief || '').trim(),
+        audience: String(adDetails?.audience || '').trim(),
+        keywords: Array.isArray(adDetails?.keywords) ? adDetails.keywords : [],
+      },
     });
 
     return res.status(200).json({ 

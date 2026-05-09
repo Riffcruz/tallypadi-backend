@@ -1,8 +1,9 @@
 import { Router } from 'express';
-import { getMarketplaceListings } from '../controllers/marketplace.controller';
+import { getMarketplaceListings, getMarketplaceProductById } from '../controllers/marketplace.controller';
 
 const router = Router();
 
+router.get('/products/:productId', getMarketplaceProductById);
 router.get('/', getMarketplaceListings);
 
 export default router;

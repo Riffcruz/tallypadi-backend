@@ -83,6 +83,8 @@ interface BoostForm {
   planId: string;
   platform: PlatformOption;
   budget: string;
+  brief: string;
+  keywords: string;
 }
 
 interface NewProductForm {
@@ -97,6 +99,8 @@ const defaultBoostForm: BoostForm = {
   planId: '',
   platform: 'ALL',
   budget: '',
+  brief: '',
+  keywords: '',
 };
 
 const defaultNewProductForm: NewProductForm = {
@@ -124,6 +128,13 @@ const formatDate = (value?: string | null) => {
     timeStyle: 'short',
   }).format(new Date(value));
 };
+
+const parseKeywords = (value: string) =>
+  value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 12);
 
 const platformLabel = (platform: string) => {
   if (platform === 'TALLYPADI_SEO') return 'TallyPadi SEO';
@@ -325,6 +336,10 @@ function AdsManagerContent() {
       planId: form.planId,
       platform: form.platform,
       budget,
+      adDetails: {
+        brief: form.brief.trim(),
+        keywords: parseKeywords(form.keywords),
+      },
     }, {
       headers: { Authorization: `Bearer ${token}` }
     });
@@ -723,48 +738,71 @@ function BoostControls({
   onChange: React.Dispatch<React.SetStateAction<BoostForm>>;
 }) {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+    <div className="space-y-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <label className="block">
+          <span className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">Platform</span>
+          <select
+            value={form.platform}
+            onChange={(e) => onChange((prev) => ({ ...prev, platform: e.target.value as PlatformOption }))}
+            className="w-full border border-slate-200 bg-slate-50 rounded-lg px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+          >
+            <option value="ALL">All Platforms</option>
+            <option value="TALLYPADI_SEO">TallyPadi SEO</option>
+            <option value="META">Meta</option>
+            <option value="TIKTOK">TikTok</option>
+          </select>
+        </label>
+
+        <label className="block">
+          <span className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">Duration</span>
+          <select
+            value={form.planId}
+            onChange={(e) => onPlanChange(e.target.value)}
+            className="w-full border border-slate-200 bg-slate-50 rounded-lg px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+          >
+            <option value="">Choose plan</option>
+            {plans.map((plan) => (
+              <option key={plan.id} value={plan.id}>{plan.label}</option>
+            ))}
+          </select>
+        </label>
+
+        <label className="block">
+          <span className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">Budget</span>
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">₦</span>
+            <input
+              type="number"
+              min={selectedPlan?.price || 0}
+              value={form.budget}
+              onChange={(e) => onChange((prev) => ({ ...prev, budget: e.target.value }))}
+              placeholder={selectedPlan ? String(selectedPlan.price) : '0'}
+              className="w-full border border-slate-200 bg-slate-50 rounded-lg pl-8 pr-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+            />
+          </div>
+        </label>
+      </div>
+
       <label className="block">
-        <span className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">Platform</span>
-        <select
-          value={form.platform}
-          onChange={(e) => onChange((prev) => ({ ...prev, platform: e.target.value as PlatformOption }))}
-          className="w-full border border-slate-200 bg-slate-50 rounded-lg px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-        >
-          <option value="ALL">All Platforms</option>
-          <option value="TALLYPADI_SEO">TallyPadi SEO</option>
-          <option value="META">Meta</option>
-          <option value="TIKTOK">TikTok</option>
-        </select>
+        <span className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">Ad Search Notes</span>
+        <textarea
+          value={form.brief}
+          onChange={(e) => onChange((prev) => ({ ...prev, brief: e.target.value }))}
+          placeholder="What should the ad emphasize? Include model, condition, delivery, target area, or buyer questions."
+          rows={3}
+          className="w-full border border-slate-200 bg-slate-50 rounded-lg px-3 py-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+        />
       </label>
 
       <label className="block">
-        <span className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">Duration</span>
-        <select
-          value={form.planId}
-          onChange={(e) => onPlanChange(e.target.value)}
+        <span className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">Search Keywords</span>
+        <input
+          value={form.keywords}
+          onChange={(e) => onChange((prev) => ({ ...prev, keywords: e.target.value }))}
+          placeholder="e.g. smart tv, used fridge, lekki phone shop"
           className="w-full border border-slate-200 bg-slate-50 rounded-lg px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-        >
-          <option value="">Choose plan</option>
-          {plans.map((plan) => (
-            <option key={plan.id} value={plan.id}>{plan.label}</option>
-          ))}
-        </select>
-      </label>
-
-      <label className="block">
-        <span className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">Budget</span>
-        <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">₦</span>
-          <input
-            type="number"
-            min={selectedPlan?.price || 0}
-            value={form.budget}
-            onChange={(e) => onChange((prev) => ({ ...prev, budget: e.target.value }))}
-            placeholder={selectedPlan ? String(selectedPlan.price) : '0'}
-            className="w-full border border-slate-200 bg-slate-50 rounded-lg pl-8 pr-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-          />
-        </div>
+        />
       </label>
     </div>
   );

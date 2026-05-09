@@ -4,11 +4,14 @@ import { AdCampaign, AdCampaignStatus, AdPlatform, IAdCampaign } from '../models
 import { Inventory } from '../models/inventory.model';
 import { User } from '../models/user.model';
 import { activityService } from './activity.service';
+import { generateAdSeoMetadata } from './gemini.service';
 
 export const AD_PLATFORMS: AdPlatform[] = ['TALLYPADI_SEO', 'META', 'TIKTOK'];
 export const ALL_AD_PLATFORMS = 'ALL';
 
 const MAX_AD_BOOST_BUDGET_NAIRA = Number(process.env.MAX_AD_BOOST_BUDGET_NAIRA || 50_000_000);
+const AD_CAMPAIGN_EXPIRY_BATCH_SIZE = Number(process.env.AD_CAMPAIGN_EXPIRY_BATCH_SIZE || 500);
+const AD_BOOST_METADATA_RETENTION_DAYS = Number(process.env.AD_BOOST_METADATA_RETENTION_DAYS || 15);
 
 export const DEFAULT_ADS_PLANS = [
   { id: '1_day', durationDays: 1, price: 500, label: '1 Day Boost' },
@@ -80,21 +83,25 @@ export const serializeAdCampaign = (campaign: IAdCampaign | any) => ({
   completedAt: campaign.completedAt ?? null,
   rejectionReason: campaign.rejectionReason ?? null,
   productSnapshot: campaign.productSnapshot,
+  adDetails: campaign.adDetails || {},
+  seo: campaign.seo || {},
   createdAt: campaign.createdAt,
   updatedAt: campaign.updatedAt,
 });
 
-export const markExpiredCampaignsCompleted = async () => {
+export const markExpiredCampaignsCompleted = async (limit = AD_CAMPAIGN_EXPIRY_BATCH_SIZE) => {
   const now = new Date();
   const expiredCampaigns = await AdCampaign.find({
     status: 'RUNNING',
     expiresAt: { $ne: null, $lte: now },
-  }).limit(100);
+  }).limit(Math.max(1, Math.min(2000, limit)));
 
+  let completedCount = 0;
   for (const campaign of expiredCampaigns) {
     campaign.status = 'COMPLETED';
     campaign.completedAt = campaign.expiresAt || now;
     await campaign.save();
+    completedCount += 1;
 
     await activityService.recordActivitySafely({
       user: campaign.user,
@@ -111,6 +118,58 @@ export const markExpiredCampaignsCompleted = async () => {
       },
     });
   }
+
+  return { completedCount };
+};
+
+export const purgeExpiredBoostMetadata = async (retentionDays = AD_BOOST_METADATA_RETENTION_DAYS) => {
+  const safeRetentionDays = Math.max(1, Math.min(365, Number(retentionDays) || 15));
+  const cutoff = new Date(Date.now() - safeRetentionDays * 24 * 60 * 60 * 1000);
+
+  const [campaignResult, productResult] = await Promise.all([
+    AdCampaign.updateMany(
+      {
+        status: 'COMPLETED',
+        expiresAt: { $ne: null, $lte: cutoff },
+        $or: [
+          { 'seo.title': { $exists: true, $ne: '' } },
+          { 'seo.metaDescription': { $exists: true, $ne: '' } },
+          { 'seo.adDescription': { $exists: true, $ne: '' } },
+          { 'seo.keywords.0': { $exists: true } },
+        ],
+      },
+      {
+        $set: {
+          'seo.title': '',
+          'seo.metaDescription': '',
+          'seo.adDescription': '',
+          'seo.keywords': [],
+          'seo.generatedAt': null,
+          'seo.source': null,
+        },
+      }
+    ),
+    Inventory.updateMany(
+      { 'boosts.expiresAt': { $lte: cutoff } },
+      { $pull: { boosts: { expiresAt: { $lte: cutoff } } } }
+    ),
+  ]);
+
+  return {
+    cutoff,
+    campaignMetadataPurged: campaignResult.modifiedCount || 0,
+    productBoostsRemoved: productResult.modifiedCount || 0,
+  };
+};
+
+export const runAdBoostMaintenance = async () => {
+  const expiry = await markExpiredCampaignsCompleted();
+  const cleanup = await purgeExpiredBoostMetadata();
+
+  return {
+    ...expiry,
+    ...cleanup,
+  };
 };
 
 interface CreatePendingCampaignInput {
@@ -119,7 +178,28 @@ interface CreatePendingCampaignInput {
   planId: string;
   platform: string;
   budget?: number;
+  adDetails?: {
+    brief?: string;
+    audience?: string;
+    keywords?: string[];
+  };
 }
+
+const cleanText = (value: unknown, maxLength: number) =>
+  String(value || '')
+    .replace(/[\u0000-\u001F\u007F-\u009F]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, maxLength);
+
+const cleanKeywords = (value: unknown) => {
+  if (!Array.isArray(value)) return [];
+  return Array.from(new Set(
+    value
+      .map((item) => cleanText(item, 60).toLowerCase())
+      .filter(Boolean)
+  )).slice(0, 12);
+};
 
 export const createPendingAdCampaign = async (input: CreatePendingCampaignInput) => {
   const userObjectId = toObjectId(input.userId);
@@ -190,6 +270,11 @@ export const createPendingAdCampaign = async (input: CreatePendingCampaignInput)
         price: product.lastUnitPrice || 0,
         category: product.category || null,
       },
+      adDetails: {
+        brief: cleanText(input.adDetails?.brief, 1000),
+        audience: cleanText(input.adDetails?.audience, 300),
+        keywords: cleanKeywords(input.adDetails?.keywords),
+      },
     });
 
     await activityService.recordActivitySafely({
@@ -231,6 +316,22 @@ export const approveAdCampaign = async (campaignId: string, adminId: string) => 
   const product = await Inventory.findOne({ _id: campaign.product, user: campaign.user, isDeleted: { $ne: true } });
   if (!product) throw new AdCampaignError('Product not found', 404);
 
+  const owner = await User.findById(campaign.user).select('businessName settings.location countryCode').lean();
+  const location = owner?.settings?.location;
+  const seo = await generateAdSeoMetadata({
+    productName: product.name,
+    productDescription: product.description || campaign.productSnapshot.description || '',
+    productCategory: product.category || campaign.productSnapshot.category || '',
+    price: product.lastUnitPrice || campaign.productSnapshot.price || 0,
+    businessName: owner?.businessName || '',
+    city: location?.city || '',
+    state: location?.state || '',
+    country: location?.country || owner?.countryCode || 'NG',
+    adBrief: campaign.adDetails?.brief || '',
+    adAudience: campaign.adDetails?.audience || '',
+    adKeywords: campaign.adDetails?.keywords || [],
+  });
+
   product.boosts = (product.boosts || []).filter((boost) => {
     const isSamePlatform = campaign.platforms.includes(boost.platform as AdPlatform);
     const isExpired = new Date(boost.expiresAt).getTime() <= now.getTime();
@@ -242,9 +343,22 @@ export const approveAdCampaign = async (campaignId: string, adminId: string) => 
       platform,
       planId: campaign.planId,
       expiresAt,
+      campaignId: campaign._id as any,
+      seoTitle: seo.title,
+      seoDescription: seo.metaDescription,
+      seoKeywords: seo.keywords,
+      adDescription: seo.adDescription,
     });
   }
 
+  campaign.seo = {
+    title: seo.title,
+    metaDescription: seo.metaDescription,
+    adDescription: seo.adDescription,
+    keywords: seo.keywords,
+    generatedAt: now,
+    source: seo.source || 'AI',
+  };
   campaign.status = 'RUNNING';
   campaign.reviewedAt = now;
   campaign.reviewedBy = toObjectId(adminId);

@@ -65,6 +65,18 @@ interface AdminAdCampaign {
     price?: number;
     category?: string | null;
   };
+  adDetails?: {
+    brief?: string;
+    audience?: string;
+    keywords?: string[];
+  };
+  seo?: {
+    title?: string;
+    metaDescription?: string;
+    adDescription?: string;
+    keywords?: string[];
+    source?: 'AI' | 'FALLBACK' | null;
+  };
 }
 
 const statuses: CampaignStatus[] = ['PENDING', 'RUNNING', 'COMPLETED', 'REJECTED'];
@@ -305,6 +317,34 @@ export default function AdsTab({ adminToken }: { adminToken: string }) {
                         <p className="mt-3 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-200">
                           Rejection reason: {campaign.rejectionReason}
                         </p>
+                      )}
+
+                      {(campaign.adDetails?.brief || (campaign.adDetails?.keywords || []).length > 0) && (
+                        <div className="mt-3 rounded-lg border border-blue-500/20 bg-blue-500/10 px-3 py-3">
+                          <p className="text-xs font-bold uppercase tracking-wider text-blue-300">Submitted ad details</p>
+                          {campaign.adDetails?.brief && (
+                            <p className="mt-2 text-sm leading-6 text-blue-100">{campaign.adDetails.brief}</p>
+                          )}
+                          {(campaign.adDetails?.keywords || []).length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {campaign.adDetails?.keywords?.map((keyword) => (
+                                <span key={keyword} className="rounded-full bg-slate-950/60 px-2.5 py-1 text-xs font-bold text-blue-100">
+                                  {keyword}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {campaign.seo?.title && (
+                        <div className="mt-3 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-3">
+                          <p className="text-xs font-bold uppercase tracking-wider text-emerald-300">Generated SEO</p>
+                          <p className="mt-2 text-sm font-bold text-emerald-50">{campaign.seo.title}</p>
+                          {campaign.seo.metaDescription && (
+                            <p className="mt-1 text-sm leading-6 text-emerald-100">{campaign.seo.metaDescription}</p>
+                          )}
+                        </div>
                       )}
 
                       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mt-4">

@@ -30,6 +30,11 @@ type Boost = {
   platform: string;
   expiresAt: Date;
   planId: string;
+  campaignId?: Types.ObjectId;
+  seoTitle?: string;
+  seoDescription?: string;
+  seoKeywords?: string[];
+  adDescription?: string;
 };
 
 type MarketplaceProduct = {
@@ -40,6 +45,8 @@ type MarketplaceProduct = {
   image?: string;
   category?: string;
   description?: string;
+  colors?: string[];
+  sizes?: string[];
   quantity?: number;
   createdAt?: Date;
   activeBoosts?: Boost[];
@@ -48,6 +55,7 @@ type MarketplaceProduct = {
 
 const DEFAULT_LIMIT = 24;
 const MAX_LIMIT = 48;
+const PUBLIC_MARKETPLACE_CACHE = 'public, max-age=30, s-maxage=120, stale-while-revalidate=300';
 
 const MARKETPLACE_CATEGORY_GROUPS = [
   {
@@ -92,8 +100,8 @@ const MARKETPLACE_CATEGORY_GROUPS = [
   },
   {
     id: 'services',
-    label: 'Services',
-    terms: ['service', 'repair', 'installation', 'training', 'design', 'consulting', 'cleaning', 'delivery'],
+    label: 'Jobs & Services',
+    terms: ['service', 'repair', 'installation', 'training', 'design', 'consulting', 'cleaning', 'delivery', 'job', 'jobs', 'hiring', 'vacancy'],
   },
 ];
 
@@ -241,6 +249,7 @@ const serializeProduct = (product: MarketplaceProduct, owner: MarketplaceOwner) 
   const smartCategory = inferMarketplaceCategory(product.category, product.name);
   const location = owner.settings?.location || {};
   const activeBoosts = product.activeBoosts || [];
+  const primaryBoost = activeBoosts[0];
 
   return {
     id: String(product._id),
@@ -250,6 +259,8 @@ const serializeProduct = (product: MarketplaceProduct, owner: MarketplaceOwner) 
     category: product.category || smartCategory.label,
     smartCategory,
     description: product.description || '',
+    colors: product.colors || [],
+    sizes: product.sizes || [],
     inStock: (product.quantity || 0) > 0,
     isBoosted: activeBoosts.length > 0,
     boosts: activeBoosts.map((boost) => ({
@@ -257,6 +268,12 @@ const serializeProduct = (product: MarketplaceProduct, owner: MarketplaceOwner) 
       planId: boost.planId,
       expiresAt: boost.expiresAt,
     })),
+    seo: {
+      title: primaryBoost?.seoTitle || '',
+      metaDescription: primaryBoost?.seoDescription || '',
+      adDescription: primaryBoost?.adDescription || '',
+      keywords: primaryBoost?.seoKeywords || [],
+    },
     createdAt: product.createdAt,
     shop: {
       id: String(owner._id),
@@ -277,6 +294,8 @@ const serializeProduct = (product: MarketplaceProduct, owner: MarketplaceOwner) 
 
 export const getMarketplaceListings = async (req: Request, res: Response): Promise<any> => {
   try {
+    res.set('Cache-Control', PUBLIC_MARKETPLACE_CACHE);
+
     const page = Math.max(1, Number(req.query.page) || 1);
     const limit = Math.min(MAX_LIMIT, Math.max(1, Number(req.query.limit) || DEFAULT_LIMIT));
     const skip = (page - 1) * limit;
@@ -372,6 +391,8 @@ export const getMarketplaceListings = async (req: Request, res: Response): Promi
             image: 1,
             category: 1,
             description: 1,
+            colors: 1,
+            sizes: 1,
             quantity: 1,
             createdAt: 1,
             activeBoosts: 1,
@@ -412,6 +433,72 @@ export const getMarketplaceListings = async (req: Request, res: Response): Promi
     });
   } catch (error) {
     console.error('Marketplace listings error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const getMarketplaceProductById = async (req: Request, res: Response): Promise<any> => {
+  try {
+    res.set('Cache-Control', PUBLIC_MARKETPLACE_CACHE);
+
+    const productId = String(req.params.productId || '');
+    if (!Types.ObjectId.isValid(productId)) {
+      return res.status(400).json({ error: 'Invalid product ID' });
+    }
+
+    const now = new Date();
+    const product = await Inventory.aggregate<MarketplaceProduct>([
+      {
+        $match: {
+          _id: new Types.ObjectId(productId),
+          quantity: { $gt: 0 },
+          isPublished: { $ne: false },
+          isDeleted: { $ne: true },
+        },
+      },
+      {
+        $addFields: {
+          activeBoosts: {
+            $filter: {
+              input: { $ifNull: ['$boosts', []] },
+              as: 'boost',
+              cond: { $gt: ['$$boost.expiresAt', now] },
+            },
+          },
+        },
+      },
+      { $addFields: { boostScore: { $size: '$activeBoosts' } } },
+      {
+        $project: {
+          name: 1,
+          user: 1,
+          lastUnitPrice: 1,
+          image: 1,
+          category: 1,
+          description: 1,
+          colors: 1,
+          sizes: 1,
+          quantity: 1,
+          createdAt: 1,
+          activeBoosts: 1,
+          boostScore: 1,
+        },
+      },
+    ]);
+
+    if (!product[0]) return res.status(404).json({ error: 'Product not found' });
+
+    const owner = await User.findById(product[0].user)
+      .select('businessName phoneNumber shopSlug themeColor heroImageUrl countryCode planType subscriptionStatus trialEndsAt settings.location settings.currencyCode')
+      .lean<MarketplaceOwner | null>();
+
+    if (!owner || !owner.shopSlug || String(owner.planType).toUpperCase() !== 'TYCOON' || !isSubActive(owner as any)) {
+      return res.status(404).json({ error: 'Product not found' });
+    }
+
+    return res.json({ product: serializeProduct(product[0], owner) });
+  } catch (error) {
+    console.error('Marketplace product error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 };

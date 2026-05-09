@@ -1,8 +1,64 @@
 import { MetadataRoute } from 'next';
 
-export default function sitemap(): MetadataRoute.Sitemap {
-  const baseUrl = 'https://tallypadi.com';
-  
+const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://tallypadi.com';
+const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
+
+type MarketplaceSitemapProduct = {
+  id: string;
+  isBoosted?: boolean;
+  createdAt?: string;
+  shop?: {
+    slug?: string;
+  };
+};
+
+type MarketplaceSitemapResponse = {
+  products?: MarketplaceSitemapProduct[];
+};
+
+const fetchMarketplaceUrls = async (): Promise<MetadataRoute.Sitemap> => {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 2500);
+
+  try {
+    const res = await fetch(`${apiUrl}/marketplace?limit=48&sort=recommended`, {
+      next: { revalidate: 3600 },
+      signal: controller.signal,
+    });
+    if (!res.ok) return [];
+
+    const data = (await res.json()) as MarketplaceSitemapResponse;
+    const products = Array.isArray(data.products) ? data.products : [];
+    const shopSlugs = Array.from(new Set(
+      products
+        .map((product) => product.shop?.slug)
+        .filter((slug): slug is string => Boolean(slug))
+    ));
+
+    return [
+      ...products.map((product) => ({
+        url: `${baseUrl}/marketplace/product/${product.id}`,
+        lastModified: product.createdAt ? new Date(product.createdAt) : new Date(),
+        changeFrequency: 'daily' as const,
+        priority: product.isBoosted ? 0.95 : 0.75,
+      })),
+      ...shopSlugs.map((slug) => ({
+        url: `${baseUrl}/shop/${slug}`,
+        lastModified: new Date(),
+        changeFrequency: 'daily' as const,
+        priority: 0.7,
+      })),
+    ];
+  } catch {
+    return [];
+  } finally {
+    clearTimeout(timeout);
+  }
+};
+
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const marketplaceUrls = await fetchMarketplaceUrls();
+
   return [
     {
       url: baseUrl,
@@ -102,5 +158,6 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: 'weekly',
       priority: 1.0, 
     },
+    ...marketplaceUrls,
   ];
 }

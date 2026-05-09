@@ -7,6 +7,7 @@ import { Inventory } from '../models/inventory.model';
 import { queueOutboundMessage } from './queue.service';
 import { cleanupPdfReports } from './pdf.service';
 import { orderService } from './order.service';
+import { runAdBoostMaintenance } from './adCampaign.service';
 
 const BATCH_SIZE = 2000;
 const SPREAD_MINUTES = 10; // spread sending load (0..9 min) per user deterministically
@@ -315,6 +316,21 @@ export function startScheduler() {
   });
 
   // 5) Auto-expire subscriptions (Every 10 minutes)
+  cron.schedule('*/15 * * * *', async () => {
+    try {
+      const result = await runAdBoostMaintenance();
+      const changed = result.completedCount + result.campaignMetadataPurged + result.productBoostsRemoved;
+      if (changed > 0) {
+        console.log(
+          `📣 Ads maintenance: completed ${result.completedCount}, purged SEO metadata from ${result.campaignMetadataPurged} campaign(s), removed expired boosts from ${result.productBoostsRemoved} product(s).`
+        );
+      }
+    } catch (err) {
+      console.error('❌ Ads boost maintenance scheduler error:', err);
+    }
+  });
+
+  // 6) Auto-expire subscriptions (Every 10 minutes)
   cron.schedule('*/10 * * * *', async () => {
     try {
       const now = new Date();
@@ -360,7 +376,7 @@ export function startScheduler() {
     }
   });
 
-  // 6) 💰 Debt Due-Date Reminders (Daily at 9 AM UTC)
+  // 7) 💰 Debt Due-Date Reminders (Daily at 9 AM UTC)
   //    - Finds debtors whose dueDate is TODAY and haven't been reminded yet
   //    - WhatsApps the DEBTOR directly if their phone is recorded
   //    - WhatsApps the OWNER if debtor has no phone
@@ -421,7 +437,7 @@ export function startScheduler() {
     }
   });
 
-  // 7) 📦 Low Stock Restock Alerts (Daily at 7 AM UTC)
+  // 8) 📦 Low Stock Restock Alerts (Daily at 7 AM UTC)
   //    - Finds items where quantity <= lowStockThreshold
   //    - WhatsApps the OWNER with a pre-formatted supplier message
   //    - Groups all low-stock items per owner in ONE message (not per item)

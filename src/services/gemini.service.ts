@@ -29,7 +29,10 @@ export {
 export { default as getSystemPrompt } from './gemini.prompt';
 
 export {
+  generateAdSeoMetadata,
   generateGuidanceMessage,
   generateWelcomeMessage,
   parseMessageWithGemini,
 } from './gemini.ai';
+
+export type { AdSeoMetadata, AdSeoMetadataInput } from './gemini.ai';

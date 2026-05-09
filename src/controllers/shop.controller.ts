@@ -6,6 +6,8 @@ import { z } from 'zod';
 import { r2Service } from '../services/r2.service';
 import { isSubActive, isTycoon } from '../utils/permissions';
 
+const PUBLIC_SHOP_CACHE = 'public, max-age=30, s-maxage=120, stale-while-revalidate=300';
+
 // Schema for updating shop settings
 const updateShopSchema = z.object({
   shopSlug: z.string().min(3).max(30).regex(/^[a-z0-9-]+$/, 'Slug must only contain lowercase letters, numbers, and hyphens').optional(),
@@ -59,6 +61,8 @@ export const getShopMe = async (req: Request, res: Response): Promise<any> => {
  */
 export const getShopBySlug = async (req: Request, res: Response): Promise<any> => {
   try {
+    res.set('Cache-Control', PUBLIC_SHOP_CACHE);
+
     const { slug } = req.params;
 
     if (!slug) return res.status(400).json({ error: 'Shop slug required' });
@@ -101,6 +105,12 @@ export const getShopBySlug = async (req: Request, res: Response): Promise<any> =
         categories: cleanCategories.sort(),
         themeColor: shopOwner.themeColor || '#10b981',
         currencyCode: shopCurrency,
+        location: {
+          country: shopOwner.settings?.location?.country || 'NG',
+          state: shopOwner.settings?.location?.state || '',
+          city: shopOwner.settings?.location?.city || '',
+          address: shopOwner.settings?.location?.address || '',
+        },
       },
     });
   } catch (error) {
@@ -115,6 +125,8 @@ export const getShopBySlug = async (req: Request, res: Response): Promise<any> =
  */
 export const getShopProducts = async (req: Request, res: Response): Promise<any> => {
   try {
+    res.set('Cache-Control', PUBLIC_SHOP_CACHE);
+
     const { slug } = req.params;
     const { page = '1', q, category, sort } = req.query;
 
@@ -256,6 +268,8 @@ export const updateShopSettings = async (req: Request, res: Response): Promise<a
  */
 export const getShopProductById = async (req: Request, res: Response): Promise<any> => {
   try {
+    res.set('Cache-Control', PUBLIC_SHOP_CACHE);
+
     const { slug, productId } = req.params;
 
     const shopOwner = await User.findOne({ shopSlug: slug }).select('_id planType subscriptionStatus trialEndsAt');
@@ -267,10 +281,15 @@ export const getShopProductById = async (req: Request, res: Response): Promise<a
 
     const product = await Inventory.findOne({ 
       _id: productId, 
-      user: shopOwner._id 
-    }).select('name lastUnitPrice image quantity category description colors sizes');
+      user: shopOwner._id,
+      quantity: { $gt: 0 },
+      isPublished: { $ne: false },
+      isDeleted: { $ne: true },
+    }).select('name lastUnitPrice image quantity category description colors sizes boosts');
 
     if (!product) return res.status(404).json({ error: 'Product not found' });
+
+    const activeBoost = (product.boosts || []).find((boost) => new Date(boost.expiresAt).getTime() > Date.now());
 
     return res.json({
       id: product._id,
@@ -282,6 +301,13 @@ export const getShopProductById = async (req: Request, res: Response): Promise<a
       colors: product.colors,
       sizes: product.sizes,
       inStock: product.quantity > 0,
+      isBoosted: Boolean(activeBoost),
+      seo: {
+        title: activeBoost?.seoTitle || '',
+        metaDescription: activeBoost?.seoDescription || '',
+        adDescription: activeBoost?.adDescription || '',
+        keywords: activeBoost?.seoKeywords || [],
+      },
     });
   } catch (error) {
     console.error('Error fetching product:', error);

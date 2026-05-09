@@ -27,6 +27,11 @@ export interface IInventoryItem extends Document {
     platform: string; // 'TALLYPADI_SEO', 'TIKTOK', 'META'
     expiresAt: Date;
     planId: string;
+    campaignId?: Types.ObjectId;
+    seoTitle?: string;
+    seoDescription?: string;
+    seoKeywords?: string[];
+    adDescription?: string;
   }[];
 }
   
@@ -58,7 +63,12 @@ export interface IInventoryItem extends Document {
       boosts: [{
         platform: { type: String, required: true },
         expiresAt: { type: Date, required: true },
-        planId: { type: String, required: true }
+        planId: { type: String, required: true },
+        campaignId: { type: Schema.Types.ObjectId, ref: 'AdCampaign' },
+        seoTitle: { type: String, trim: true, maxlength: 120 },
+        seoDescription: { type: String, trim: true, maxlength: 220 },
+        seoKeywords: [{ type: String, trim: true }],
+        adDescription: { type: String, trim: true, maxlength: 1000 },
       }]
     },  { timestamps: true }
 );
@@ -67,5 +77,6 @@ inventorySchema.index({ user: 1, name: 1, isDeleted: 1 }, { unique: true });
 inventorySchema.index({ user: 1, sku: 1 }, { sparse: true }); // Fast SKU lookups
 inventorySchema.index({ user: 1, isPublished: 1, quantity: 1, createdAt: -1 });
 inventorySchema.index({ isPublished: 1, quantity: 1, category: 1, createdAt: -1 });
+inventorySchema.index({ 'boosts.expiresAt': 1 });
 
 export const Inventory = model<IInventoryItem>('Inventory', inventorySchema);

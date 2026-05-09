@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { State } from 'country-state-city';
 import {
@@ -11,7 +11,6 @@ import {
   MapPin,
   MessageCircle,
   Search,
-  ShieldCheck,
   SlidersHorizontal,
   Sparkles,
   Store,
@@ -41,6 +40,9 @@ type MarketplaceProduct = {
   category?: string;
   smartCategory: SmartCategory;
   description?: string;
+  seo?: {
+    adDescription?: string;
+  };
   inStock: boolean;
   isBoosted: boolean;
   shop: {
@@ -79,7 +81,7 @@ const FALLBACK_CATEGORIES: SmartCategory[] = [
   { id: 'food-farming', label: 'Food & Farming' },
   { id: 'tools-equipment', label: 'Tools & Equipment' },
   { id: 'babies-kids', label: 'Babies & Kids' },
-  { id: 'services', label: 'Services' },
+  { id: 'services', label: 'Jobs & Services' },
 ];
 
 const formatMoney = (amount: number, currencyCode = 'NGN') => {
@@ -118,7 +120,7 @@ const buildWhatsAppLink = (product: MarketplaceProduct) => {
   if (!phone) return null;
 
   const shopUrl = product.shop.slug
-    ? `https://tallypadi.com/shop/${product.shop.slug}?productId=${product.id}`
+    ? `https://tallypadi.com/marketplace/product/${product.id}`
     : 'https://tallypadi.com/marketplace';
   const message = `Hello ${product.shop.name}, I saw ${product.name} on TallyPadi Marketplace. Is it available?\n\n${shopUrl}`;
 
@@ -242,11 +244,12 @@ function FilterPanel({
 }
 
 function ProductCard({ product }: { product: MarketplaceProduct }) {
-  const shopUrl = product.shop.slug ? `/shop/${product.shop.slug}?productId=${product.id}` : '/marketplace';
+  const productUrl = `/marketplace/product/${product.id}`;
   const locationText = [product.shop.location?.city, getStateLabel(product.shop.location?.state, product.shop.location?.country || 'NG')]
     .filter(Boolean)
     .join(', ');
   const whatsappLink = buildWhatsAppLink(product);
+  const previewDescription = product.seo?.adDescription || product.description;
 
   return (
     <article
@@ -254,7 +257,7 @@ function ProductCard({ product }: { product: MarketplaceProduct }) {
         product.isBoosted ? 'border-amber-300 shadow-amber-100' : 'border-stone-200'
       }`}
     >
-      <Link href={shopUrl} className="relative block aspect-[4/3] overflow-hidden bg-emerald-50">
+      <Link href={productUrl} className="relative block aspect-[4/3] overflow-hidden bg-emerald-50">
         {product.image ? (
           <img
             src={product.image}
@@ -286,15 +289,15 @@ function ProductCard({ product }: { product: MarketplaceProduct }) {
             <p className="text-lg font-black text-emerald-700">
               {formatMoney(product.price, product.shop.currencyCode)}
             </p>
-            <Link href={shopUrl} className="mt-1 block text-sm font-black leading-snug text-stone-950 line-clamp-2 hover:text-emerald-700">
+            <Link href={productUrl} className="mt-1 block text-sm font-black leading-snug text-stone-950 line-clamp-2 hover:text-emerald-700">
               {titleCase(product.name)}
             </Link>
           </div>
         </div>
 
-        {product.description && (
+        {previewDescription && (
           <p className="mb-3 text-xs leading-relaxed text-stone-500 line-clamp-2">
-            {product.description}
+            {previewDescription}
           </p>
         )}
 
@@ -314,10 +317,10 @@ function ProductCard({ product }: { product: MarketplaceProduct }) {
 
           <div className="grid grid-cols-2 gap-2">
             <Link
-              href={shopUrl}
+              href={productUrl}
               className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-stone-200 px-3 py-2 text-xs font-black text-stone-700 transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-800"
             >
-              View shop
+              Details
               <ExternalLink size={13} />
             </Link>
             {whatsappLink ? (
@@ -332,7 +335,7 @@ function ProductCard({ product }: { product: MarketplaceProduct }) {
               </a>
             ) : (
               <Link
-                href={shopUrl}
+                href={productUrl}
                 className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-black text-white transition hover:bg-emerald-700"
               >
                 <MessageCircle size={13} />
@@ -356,13 +359,14 @@ export default function MarketplaceClient() {
   const [selectedState, setSelectedState] = useState('');
   const [selectedCity, setSelectedCity] = useState('');
   const [sort, setSort] = useState('recommended');
-  const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const [totalItems, setTotalItems] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const pageRef = useRef(1);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(search), 450);
@@ -423,7 +427,7 @@ export default function MarketplaceClient() {
   }, [debouncedSearch, selectedCategory, selectedCity, selectedState, sort]);
 
   useEffect(() => {
-    setPage(1);
+    pageRef.current = 1;
     fetchListings(1, true);
   }, [fetchListings]);
 
@@ -441,11 +445,22 @@ export default function MarketplaceClient() {
     setSort('recommended');
   };
 
-  const loadMore = () => {
-    const nextPage = page + 1;
-    setPage(nextPage);
-    fetchListings(nextPage, false);
-  };
+  useEffect(() => {
+    const node = loadMoreRef.current;
+    if (!node) return;
+
+    const observer = new IntersectionObserver((entries) => {
+      const entry = entries[0];
+      if (!entry.isIntersecting || !hasMore || loading || loadingMore) return;
+      const nextPage = pageRef.current + 1;
+      pageRef.current = nextPage;
+      fetchListings(nextPage, false);
+    }, { rootMargin: '500px 0px' });
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [fetchListings, hasMore, loading, loadingMore]);
+
 
   return (
     <div className="min-h-screen bg-[#f7fbf8] text-stone-950">
@@ -481,7 +496,7 @@ export default function MarketplaceClient() {
       </header>
 
       <section className="border-b border-emerald-100 bg-emerald-950 text-white">
-        <div className="mx-auto grid max-w-7xl gap-8 px-4 py-8 sm:px-6 lg:grid-cols-[1fr_360px] lg:px-8 lg:py-10">
+        <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
           <div className="flex flex-col justify-center">
             <div className="mb-4 inline-flex w-fit items-center gap-2 rounded-lg border border-emerald-300/30 bg-emerald-800/70 px-3 py-1.5 text-xs font-black uppercase tracking-[0.16em] text-emerald-100">
               <Sparkles size={14} />
@@ -560,24 +575,6 @@ export default function MarketplaceClient() {
                 Search
               </a>
             </form>
-          </div>
-
-          <div className="grid content-end gap-3 sm:grid-cols-3 lg:grid-cols-1">
-            <div className="rounded-lg border border-emerald-300/30 bg-white/10 p-4 backdrop-blur">
-              <ShieldCheck className="mb-3 h-6 w-6 text-amber-300" />
-              <p className="text-2xl font-black">{totalItems.toLocaleString()}</p>
-              <p className="text-xs font-bold uppercase tracking-wide text-emerald-100">Published products</p>
-            </div>
-            <div className="rounded-lg border border-emerald-300/30 bg-white/10 p-4 backdrop-blur">
-              <MapPin className="mb-3 h-6 w-6 text-amber-300" />
-              <p className="text-2xl font-black">{locations.length.toLocaleString()}</p>
-              <p className="text-xs font-bold uppercase tracking-wide text-emerald-100">States with shops</p>
-            </div>
-            <div className="rounded-lg border border-emerald-300/30 bg-white/10 p-4 backdrop-blur">
-              <TrendingUp className="mb-3 h-6 w-6 text-amber-300" />
-              <p className="text-2xl font-black">Boosted</p>
-              <p className="text-xs font-bold uppercase tracking-wide text-emerald-100">Products rank first</p>
-            </div>
           </div>
         </div>
       </section>
@@ -667,19 +664,14 @@ export default function MarketplaceClient() {
                 ))}
               </div>
 
-              {hasMore && (
-                <div className="mt-8 flex justify-center">
-                  <button
-                    type="button"
-                    onClick={loadMore}
-                    disabled={loadingMore}
-                    className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-white px-6 py-3 text-sm font-black text-emerald-800 shadow-sm transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {loadingMore && <Loader2 size={16} className="animate-spin" />}
-                    Load more products
-                  </button>
-                </div>
-              )}
+              <div ref={loadMoreRef} className="h-12">
+                {loadingMore && (
+                  <div className="flex items-center justify-center gap-2 py-8 text-sm font-black text-emerald-800">
+                    <Loader2 size={18} className="animate-spin" />
+                    Loading more products
+                  </div>
+                )}
+              </div>
             </>
           ) : (
             <div className="rounded-lg border border-stone-200 bg-white px-6 py-16 text-center shadow-sm">
