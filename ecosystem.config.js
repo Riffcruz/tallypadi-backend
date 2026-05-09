@@ -15,7 +15,7 @@ module.exports = {
     {
       name: 'tallypadi-api',
       script: 'dist/server.js',
-      instances: 1,             // Scale to 2+ with 'cluster' mode when needed
+      instances: 2,             // Scale to 2+ with 'cluster' mode when needed
       exec_mode: 'fork',
       watch: false,
       autorestart: true,
@@ -42,7 +42,7 @@ module.exports = {
     {
       name: 'tallypadi-worker',
       script: 'dist/worker.js',
-      instances: 1,             // Run 2 for higher throughput at 50K+ users
+      instances: 2,             // Run 2 for higher throughput at 50K+ users
       exec_mode: 'fork',
       watch: false,
       autorestart: true,

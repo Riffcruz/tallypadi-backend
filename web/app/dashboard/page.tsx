@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
 import Sidebar from '../../components/Sidebar';
@@ -30,6 +30,9 @@ import {
   Copy,
   ExternalLink,
   TrendingDown,
+  CheckCheck,
+  Megaphone,
+  AlertCircle,
 } from 'lucide-react';
 import {
   BarChart,
@@ -107,6 +110,22 @@ interface FxRatesResponse {
   updatedAt?: string;
 }
 
+type ActivityType = 'WALLET_FUNDING' | 'AD_BOOST' | 'SUBSCRIPTION' | 'LOW_STOCK' | 'EXPENSE' | 'OTHER';
+
+interface ActivityItem {
+  id: string;
+  type: ActivityType;
+  title: string;
+  message: string;
+  amount?: number | null;
+  isRead: boolean;
+  createdAt: string;
+  actor?: {
+    name?: string;
+    role?: string | null;
+  } | null;
+}
+
 // --- CURRENCY FORMATTER ---
 const formatCurrency = (amount: number, currencyCode = 'NGN', locale = 'en-NG') => {
   const safe = Number(amount) || 0;
@@ -122,6 +141,24 @@ const getGreeting = () => {
   if (hour < 12) return 'Good Morning';
   if (hour < 18) return 'Good Afternoon';
   return 'Good Evening';
+};
+
+const getActivityIcon = (type: ActivityType) => {
+  if (type === 'WALLET_FUNDING') return Wallet;
+  if (type === 'AD_BOOST') return Megaphone;
+  if (type === 'SUBSCRIPTION') return CreditCard;
+  if (type === 'LOW_STOCK') return AlertCircle;
+  if (type === 'EXPENSE') return TrendingDown;
+  return Bell;
+};
+
+const getActivityAccent = (type: ActivityType) => {
+  if (type === 'WALLET_FUNDING') return 'bg-emerald-50 text-emerald-700 border-emerald-100';
+  if (type === 'AD_BOOST') return 'bg-indigo-50 text-indigo-700 border-indigo-100';
+  if (type === 'SUBSCRIPTION') return 'bg-purple-50 text-purple-700 border-purple-100';
+  if (type === 'LOW_STOCK') return 'bg-red-50 text-red-700 border-red-100';
+  if (type === 'EXPENSE') return 'bg-orange-50 text-orange-700 border-orange-100';
+  return 'bg-slate-50 text-slate-700 border-slate-100';
 };
 
 const clamp = (n: number, a: number, b: number) => Math.min(b, Math.max(a, n));
@@ -190,6 +227,11 @@ export default function DashboardPage() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [visitDuration, setVisitDuration] = useState<'today' | 'week' | 'month' | 'year'>('today');
   const [copied, setCopied] = useState(false); // New state for copy feedback
+  const [notificationOpen, setNotificationOpen] = useState(false);
+  const [notificationLoading, setNotificationLoading] = useState(false);
+  const [activities, setActivities] = useState<ActivityItem[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const notificationRef = useRef<HTMLDivElement | null>(null);
 
   // Chat dock
   const [chatOpen, setChatOpen] = useState(false);
@@ -197,6 +239,62 @@ export default function DashboardPage() {
   const [showExpiredModal, setShowExpiredModal] = useState(false);
 
   const router = useRouter();
+
+  const authHeaders = () => {
+    const token = getCookie('tallyToken');
+    return token ? { Authorization: `Bearer ${token}` } : null;
+  };
+
+  const fetchRecentActivities = async () => {
+    const headers = authHeaders();
+    if (!headers) return;
+
+    try {
+      setNotificationLoading(true);
+      const res = await axios.get(`${API_URL}/activities?limit=6`, { headers });
+      setActivities(res.data?.activities || []);
+      setUnreadCount(Number(res.data?.unreadCount || 0));
+    } catch (err) {
+      console.error('Recent activities fetch failed:', err);
+    } finally {
+      setNotificationLoading(false);
+    }
+  };
+
+  const handleBellClick = async () => {
+    const nextOpen = !notificationOpen;
+    setNotificationOpen(nextOpen);
+    if (nextOpen) await fetchRecentActivities();
+  };
+
+  const handleMarkActivityRead = async (activityId: string) => {
+    const headers = authHeaders();
+    if (!headers) return;
+
+    const current = activities.find((activity) => activity.id === activityId);
+    try {
+      await axios.patch(`${API_URL}/activities/${activityId}/read`, {}, { headers });
+      setActivities((prev) => prev.map((activity) => (
+        activity.id === activityId ? { ...activity, isRead: true } : activity
+      )));
+      if (current && !current.isRead) setUnreadCount((count) => Math.max(0, count - 1));
+    } catch (err) {
+      console.error('Mark activity read failed:', err);
+    }
+  };
+
+  const handleMarkAllRead = async () => {
+    const headers = authHeaders();
+    if (!headers) return;
+
+    try {
+      await axios.patch(`${API_URL}/activities/read-all`, {}, { headers });
+      setUnreadCount(0);
+      setActivities((prev) => prev.map((activity) => ({ ...activity, isRead: true })));
+    } catch (err) {
+      console.error('Mark all activities read failed:', err);
+    }
+  };
 
   useEffect(() => {
     if (data?.user) {
@@ -219,6 +317,19 @@ export default function DashboardPage() {
   }, [data]);
 
   useEffect(() => {
+    if (!notificationOpen) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
+        setNotificationOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [notificationOpen]);
+
+  useEffect(() => {
     const token = getCookie('tallyToken');
     if (!token) {
       router.push('/login');
@@ -235,6 +346,13 @@ export default function DashboardPage() {
 
         setData(dashRes.data as DashboardResponse);
         if (fxRes?.data) setFx(fxRes.data as FxRatesResponse);
+        axios.get(`${API_URL}/activities/unread-count`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }).then((res) => {
+          setUnreadCount(Number(res.data?.count || 0));
+        }).catch((err) => {
+          console.error('Unread count fetch failed:', err);
+        });
 
         // ✅ Staff Permission Check
         const u = dashRes.data.user as any;
@@ -447,10 +565,97 @@ const topTransactions = filteredTransactions.slice(0, 6);
           </div>
 
           <div className="flex items-center gap-3 self-end lg:self-auto shrink-0">
-            <button className="p-3 bg-white rounded-2xl border border-slate-200 text-slate-400 hover:text-emerald-600 hover:border-emerald-200 transition-all relative shadow-sm">
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-3 right-3 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white" />
-            </button>
+            <div ref={notificationRef} className="relative">
+              <button
+                onClick={handleBellClick}
+                className="p-3 bg-white rounded-2xl border border-slate-200 text-slate-400 hover:text-emerald-600 hover:border-emerald-200 transition-all relative shadow-sm"
+                aria-label="Notifications"
+              >
+                <Bell className="w-5 h-5" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 bg-red-500 text-white rounded-full border-2 border-white text-[10px] font-black flex items-center justify-center leading-none">
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </span>
+                )}
+              </button>
+
+              {notificationOpen && (
+                <div className="absolute right-0 mt-3 w-[min(92vw,420px)] bg-white border border-slate-200 rounded-3xl shadow-2xl shadow-slate-900/10 z-50 overflow-hidden">
+                  <div className="p-4 border-b border-slate-100 flex items-center justify-between gap-3 bg-slate-50/70">
+                    <div>
+                      <h3 className="text-sm font-black text-slate-900">Notifications</h3>
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                        {unreadCount} unread
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleMarkAllRead}
+                      disabled={unreadCount === 0}
+                      className="h-9 w-9 rounded-2xl border border-slate-200 bg-white text-slate-400 hover:text-emerald-600 hover:border-emerald-200 disabled:opacity-40 disabled:hover:text-slate-400 disabled:hover:border-slate-200 transition-all flex items-center justify-center"
+                      aria-label="Mark all notifications as read"
+                    >
+                      <CheckCheck className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <div className="max-h-[430px] overflow-y-auto">
+                    {notificationLoading ? (
+                      <div className="px-5 py-12 text-center text-xs font-black uppercase tracking-widest text-slate-300">
+                        Loading
+                      </div>
+                    ) : activities.length ? (
+                      <div className="divide-y divide-slate-100">
+                        {activities.map((activity) => {
+                          const ActivityIcon = getActivityIcon(activity.type);
+                          return (
+                            <button
+                              key={activity.id}
+                              onClick={() => handleMarkActivityRead(activity.id)}
+                              className="w-full text-left p-4 hover:bg-slate-50 transition-colors flex gap-3"
+                            >
+                              <div className={`mt-0.5 h-10 w-10 rounded-2xl border flex items-center justify-center shrink-0 ${getActivityAccent(activity.type)}`}>
+                                <ActivityIcon className="w-5 h-5" />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-start justify-between gap-3">
+                                  <p className="text-sm font-black text-slate-900 truncate">{activity.title}</p>
+                                  {!activity.isRead && <span className="mt-1.5 h-2 w-2 rounded-full bg-emerald-500 shrink-0" />}
+                                </div>
+                                <p className="text-xs font-semibold text-slate-500 mt-1 line-clamp-2">{activity.message}</p>
+                                <div className="mt-2 flex items-center justify-between gap-3">
+                                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                    {new Date(activity.createdAt).toLocaleDateString(userLocale, { month: 'short', day: 'numeric' })} · {new Date(activity.createdAt).toLocaleTimeString(userLocale, { hour: '2-digit', minute: '2-digit' })}
+                                  </span>
+                                  {typeof activity.amount === 'number' && (
+                                    <span className="text-xs font-black text-slate-700 tabular-nums">
+                                      {formatCurrency(activity.amount, currencyCode, userLocale)}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="px-5 py-12 text-center text-xs font-black uppercase tracking-widest text-slate-300">
+                        No notifications yet
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      setNotificationOpen(false);
+                      router.push('/activity');
+                    }}
+                    className="w-full p-4 border-t border-slate-100 bg-white hover:bg-emerald-50 text-emerald-700 text-xs font-black uppercase tracking-widest transition-colors"
+                  >
+                    View all activity
+                  </button>
+                </div>
+              )}
+            </div>
             <div className="h-12 w-12 bg-emerald-100 text-emerald-800 rounded-2xl border border-emerald-50 flex items-center justify-center font-black text-lg shadow-sm">
               {data?.user?.initials || 'TP'}
             </div>
@@ -770,5 +975,3 @@ const topTransactions = filteredTransactions.slice(0, 6);
     </div>
   );
 }
-
-

@@ -7,6 +7,7 @@ import { getRelevantUserIds } from './report.service';
 
 import { queuePushNotification } from './queue.service';
 import { Customer } from '../models/customer.model';
+import { activityService } from './activity.service';
 
 export class SalesService {
 
@@ -83,6 +84,7 @@ export class SalesService {
     // 4. Validate Stock & Prepare Bulk Operations
     const bulkOps: mongoose.AnyBulkWriteOperation<any>[] = [];
     const txItems: Record<string, unknown>[] = [];
+    const lowStockAlerts: Array<{ itemId: string; name: string; previousStock: number; currentStock: number }> = [];
     let totalMoney = 0;
 
     for (const it of finalItems) {
@@ -106,13 +108,12 @@ export class SalesService {
       // Low Stock Alert Logic
       const newStock = (invItem.quantity || 0) - it.quantity;
       if (invItem.quantity >= 5 && newStock < 5) {
-         // Fire Push Notification asynchronously
-         queuePushNotification({
-            type: 'SINGLE',
-            agentId: ownerForSub._id.toString(), // Send to shop owner
-            title: '⚠️ Low Stock Alert',
-            body: `${invItem.name} is running low (${newStock} left in stock)`,
-         }).catch(console.error);
+         lowStockAlerts.push({
+           itemId: invItem._id.toString(),
+           name: invItem.name,
+           previousStock: invItem.quantity || 0,
+           currentStock: newStock,
+         });
       }
 
       const lineTotal = it.quantity * it.price;
@@ -204,6 +205,31 @@ export class SalesService {
         },
         { session }
       );
+    }
+
+    for (const alert of lowStockAlerts) {
+      await queuePushNotification({
+        type: 'SINGLE',
+        agentId: ownerForSub._id.toString(), // Send to shop owner
+        title: 'Low Stock Alert',
+        body: `${alert.name} is running low (${alert.currentStock} left in stock)`,
+      }).catch(console.error);
+
+      await activityService.recordActivitySafely({
+        user: ownerForSub._id as any,
+        actor: user._id as any,
+        type: 'LOW_STOCK',
+        title: 'Low stock alert',
+        message: `${alert.name} is running low with ${alert.currentStock} left in stock.`,
+        metadata: {
+          itemId: alert.itemId,
+          productName: alert.name,
+          previousStock: alert.previousStock,
+          currentStock: alert.currentStock,
+          threshold: 5,
+          saleId: createdTx[0]._id.toString(),
+        },
+      });
     }
 
     return createdTx[0];

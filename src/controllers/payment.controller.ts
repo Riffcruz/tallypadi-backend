@@ -7,6 +7,7 @@ import { BillingEvent } from '../models/billingEvent.model';
 import { initializePayment } from '../services/billing.service';
 import { env } from '../config/env';
 import { sendWhatsAppText } from '../services/whatsapp.service';
+import { activityService } from '../services/activity.service';
 
 type PlanType = 'OGA_BOSS' | 'TYCOON';
 const ALLOWED_PLANS: PlanType[] = ['OGA_BOSS', 'TYCOON'];
@@ -184,8 +185,24 @@ export const verifyPayment = async (req: Request, res: Response) => {
         payload: data
       });
 
+      const planName = String(user.planType || '').replace(/_/g, ' ');
+      await activityService.recordActivitySafely({
+        user: user._id,
+        actor: user._id,
+        type: 'SUBSCRIPTION',
+        title: 'Subscription payment confirmed',
+        message: `Your ${planName} subscription is active until ${user.nextBillingDate ? new Date(user.nextBillingDate).toLocaleDateString('en-NG') : 'your next billing date'}.`,
+        amount: Number(data.amount || 0) / 100,
+        metadata: {
+          reference,
+          provider: 'paystack',
+          planType: user.planType,
+          durationMonths: monthsToAdd,
+          nextBillingDate: user.nextBillingDate ? new Date(user.nextBillingDate).toISOString() : null,
+        },
+      });
+
       if (user.phoneNumber) {
-        const planName = String(user.planType || '').replace(/_/g, ' ');
         await sendWhatsAppText(user.phoneNumber, `✅ Payment confirmed! Your *${planName}* subscription is ACTIVE.`);
       }
     } else {
@@ -256,6 +273,20 @@ export const handlePaystackWebhook = async (req: any, res: Response) => {
             user: user._id,
             payload: data
           });
+
+          await activityService.recordActivitySafely({
+            user: user._id,
+            actor: user._id,
+            type: 'WALLET_FUNDING',
+            title: 'Wallet funded successfully',
+            message: `Your ads wallet was funded with ₦${amountInNaira.toLocaleString()}.`,
+            amount: amountInNaira,
+            metadata: {
+              reference,
+              provider: 'paystack',
+              walletBalance: user.walletBalance || 0,
+            },
+          });
         } 
         // 🟢 SUBSCRIPTION PAYMENT LOGIC
         else {
@@ -286,8 +317,24 @@ export const handlePaystackWebhook = async (req: any, res: Response) => {
             payload: data
           });
 
+          const planName = String(user.planType || '').replace(/_/g, ' ');
+          await activityService.recordActivitySafely({
+            user: user._id,
+            actor: user._id,
+            type: 'SUBSCRIPTION',
+            title: 'Subscription payment confirmed',
+            message: `Your ${planName} subscription is active until ${user.nextBillingDate ? new Date(user.nextBillingDate).toLocaleDateString('en-NG') : 'your next billing date'}.`,
+            amount: Number(data.amount || 0) / 100,
+            metadata: {
+              reference,
+              provider: 'paystack',
+              planType: user.planType,
+              durationMonths: monthsToAdd,
+              nextBillingDate: user.nextBillingDate ? new Date(user.nextBillingDate).toISOString() : null,
+            },
+          });
+
           if (user.phoneNumber) {
-            const planName = String(user.planType || '').replace(/_/g, ' ');
             // await sendWhatsAppText(user.phoneNumber, `✅ Payment received! Your *${planName}* subscription is ACTIVE.`);
           }
         }

@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { expenseService } from '../services/expense.service';
 import { IUser, User } from '../models/user.model';
 import { getRelevantUserIds } from '../services/report.service';
+import { activityService } from '../services/activity.service';
 
 // Helper to get user from request (assuming auth middleware populates req.user)
 const getUser = (req: Request) => (req as any).user as IUser;
@@ -35,6 +36,21 @@ export const createExpense = async (req: Request, res: Response) => {
       description,
       category,
       date
+    });
+
+    const activityUserId = user.role === 'STAFF' && user.ownerId ? user.ownerId : user._id;
+    await activityService.recordActivitySafely({
+      user: activityUserId as any,
+      actor: user._id as any,
+      type: 'EXPENSE',
+      title: 'Expense recorded',
+      message: `${description} was recorded under ${category || 'General'}.`,
+      amount: Number(amount) || 0,
+      metadata: {
+        expenseId: expense._id.toString(),
+        category: category || 'General',
+        date: expense.date,
+      },
     });
 
     res.status(201).json(expense);

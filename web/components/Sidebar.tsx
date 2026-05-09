@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard, ShoppingCart, Package, Settings, LogOut, Users,
   BookOpen, ClipboardList, FileText, Banknote, UserPlus, Users2,
-  Store, CreditCard, Globe, Megaphone
+  Store, CreditCard, Globe, Megaphone, Bell
 } from 'lucide-react';
 import { removeCookie } from '../utils/cookies';
 
@@ -34,6 +34,7 @@ export default function Sidebar() {
   const getMenuItems = () => {
     const baseItems = [
       { href: '/dashboard',          icon: LayoutDashboard, label: 'Dashboard',      key: 'canViewDashboard' },
+      { href: '/activity',           icon: Bell,            label: 'Activity',       key: 'canViewDashboard' },
       { href: '/sales',              icon: ShoppingCart,    label: 'Sales'                                    },
       { href: '/orders',             icon: ClipboardList,   label: 'Orders'                                   },
       { href: '/dashboard/expenses', icon: Banknote,        label: 'Expenses'                                 },

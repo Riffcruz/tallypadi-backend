@@ -5,6 +5,7 @@ import { Inventory } from '../models/inventory.model';
 import { AdminSettings } from '../models/adminSettings.model';
 import { BillingEvent } from '../models/billingEvent.model';
 import { env } from '../config/env';
+import { activityService } from '../services/activity.service';
 
 // 1. Initialize Wallet Funding
 export const fundWallet = async (req: Request, res: Response) => {
@@ -95,6 +96,20 @@ export const verifyWalletFunding = async (req: Request, res: Response) => {
       event: 'charge.success',
       user: user._id,
       payload: data
+    });
+
+    await activityService.recordActivitySafely({
+      user: user._id as any,
+      actor: user._id as any,
+      type: 'WALLET_FUNDING',
+      title: 'Wallet funded successfully',
+      message: `Your ads wallet was funded with ₦${amountInNaira.toLocaleString()}.`,
+      amount: amountInNaira,
+      metadata: {
+        reference,
+        provider: 'paystack',
+        walletBalance: user.walletBalance || 0,
+      },
     });
 
     return res.status(200).json({
@@ -222,6 +237,25 @@ export const boostProduct = async (req: Request, res: Response) => {
     });
 
     await product.save();
+
+    await activityService.recordActivitySafely({
+      user: user._id as any,
+      actor: user._id as any,
+      type: 'AD_BOOST',
+      title: 'Ads boost purchased',
+      message: `${product.name} was boosted on ${String(platform).replace(/_/g, ' ')} for ₦${selectedPlan.price.toLocaleString()}.`,
+      amount: selectedPlan.price,
+      metadata: {
+        productId: product._id.toString(),
+        productName: product.name,
+        planId,
+        planLabel: selectedPlan.label,
+        platform,
+        durationDays: selectedPlan.durationDays,
+        walletBalance: user.walletBalance || 0,
+        expiresAt: expiresAt.toISOString(),
+      },
+    });
 
     return res.status(200).json({ 
       message: 'Product boosted successfully', 
