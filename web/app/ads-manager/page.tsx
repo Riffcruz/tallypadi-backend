@@ -59,6 +59,8 @@ const ALL_PROMOTION_PLATFORMS = PROMOTION_PLATFORM_OPTIONS.map((option) => optio
 interface AdsUser {
   planType?: string;
   walletBalance?: number;
+  currencyCode?: string;
+  settings?: { currencyCode?: string };
   [key: string]: unknown;
 }
 
@@ -147,7 +149,17 @@ const getAxiosMessage = (err: unknown) => {
   return '';
 };
 
-const formatCurrency = (amount?: number | null) => `₦${Number(amount || 0).toLocaleString()}`;
+const formatCurrency = (amount?: number | null, currencyCode = 'NGN') => {
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: 'currency',
+      currency: String(currencyCode || 'NGN').toUpperCase(),
+      maximumFractionDigits: 2,
+    }).format(Number(amount || 0));
+  } catch {
+    return `${String(currencyCode || 'NGN').toUpperCase()} ${Number(amount || 0).toLocaleString()}`;
+  }
+};
 
 const formatDate = (value?: string | null) => {
   if (!value) return 'Not set';
@@ -229,6 +241,7 @@ function AdsManagerContent() {
   }, [router]);
 
   const isTycoon = String(user?.planType || '').toUpperCase() === 'TYCOON';
+  const userCurrencyCode = String(user?.currencyCode || user?.settings?.currencyCode || 'NGN').toUpperCase();
 
   const normalizeProducts = (payload: unknown): InventoryProduct[] => {
     if (Array.isArray(payload)) return payload as InventoryProduct[];
@@ -351,7 +364,7 @@ function AdsManagerContent() {
     }
 
     if (budget < plan.price) {
-      Swal.fire('Budget too low', `Budget must be at least ${formatCurrency(plan.price)} for this plan.`, 'warning');
+      Swal.fire('Budget too low', `Budget must be at least ${formatCurrency(plan.price, userCurrencyCode)} for this plan.`, 'warning');
       return null;
     }
 
@@ -366,7 +379,7 @@ function AdsManagerContent() {
   const handleFundWallet = async () => {
     const amount = Number(fundingAmount);
     if (!amount || amount < 100) {
-      return Swal.fire('Error', 'Minimum funding amount is ₦100', 'error');
+      return Swal.fire('Error', `Minimum funding amount is ${formatCurrency(100, userCurrencyCode)}`, 'error');
     }
 
     setFunding(true);
@@ -539,20 +552,20 @@ function AdsManagerContent() {
                 </div>
 
                 <h3 className="text-4xl font-black text-slate-900 mb-6">
-                  {formatCurrency(user?.walletBalance || 0)}
+                  {formatCurrency(user?.walletBalance || 0, userCurrencyCode)}
                 </h3>
 
                 <div className="space-y-4">
                   <div>
                     <label className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">Amount to Fund</label>
                     <div className="relative">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-medium">₦</span>
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-black">{userCurrencyCode}</span>
                       <input
                         type="number"
                         value={fundingAmount}
                         onChange={(e) => setFundingAmount(e.target.value)}
                         placeholder="e.g. 5000"
-                        className="w-full border border-slate-200 bg-slate-50 rounded-lg pl-9 pr-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all font-medium"
+                        className="w-full border border-slate-200 bg-slate-50 rounded-lg pl-16 pr-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all font-medium"
                       />
                     </div>
                   </div>
@@ -576,7 +589,7 @@ function AdsManagerContent() {
                         <p className="text-sm font-bold text-slate-900">{plan.label}</p>
                         <p className="text-xs text-slate-500">{plan.durationDays} day{plan.durationDays > 1 ? 's' : ''}</p>
                       </div>
-                      <p className="font-black text-slate-900">{formatCurrency(plan.price)}</p>
+                      <p className="font-black text-slate-900">{formatCurrency(plan.price, userCurrencyCode)}</p>
                     </div>
                   ))}
                 </div>
@@ -681,6 +694,7 @@ function AdsManagerContent() {
                       form={newBoost}
                       plans={adsPlans}
                       selectedPlan={selectedNewPlan}
+                      currencyCode={userCurrencyCode}
                       onPlanChange={(planId) => setBoostPlan(planId, newBoost, setNewBoost)}
                       onChange={setNewBoost}
                     />
@@ -740,7 +754,7 @@ function AdsManagerContent() {
                           </div>
                           <div className="min-w-0 flex-1">
                             <p className="font-bold text-sm text-slate-900 truncate">{product.name}</p>
-                            <p className="text-xs text-slate-500">Stock {product.stock ?? product.quantity ?? 0} · {formatCurrency(product.price || 0)}</p>
+                            <p className="text-xs text-slate-500">Stock {product.stock ?? product.quantity ?? 0} · {formatCurrency(product.price || 0, userCurrencyCode)}</p>
                           </div>
                           {(product.boosts || []).length > 0 && (
                             <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 rounded-full px-2 py-1">Active</span>
@@ -754,6 +768,7 @@ function AdsManagerContent() {
                     form={existingBoost}
                     plans={adsPlans}
                     selectedPlan={selectedExistingPlan}
+                    currencyCode={userCurrencyCode}
                     onPlanChange={(planId) => setBoostPlan(planId, existingBoost, setExistingBoost)}
                     onChange={setExistingBoost}
                   />
@@ -828,7 +843,7 @@ function AdsManagerContent() {
                             )}
                           </div>
                           <div className="md:text-right shrink-0">
-                            <p className="text-2xl font-black text-slate-900">{formatCurrency(campaign.budget)}</p>
+                            <p className="text-2xl font-black text-slate-900">{formatCurrency(campaign.budget, userCurrencyCode)}</p>
                             <p className="text-xs text-slate-500">{campaign.planLabel}</p>
                           </div>
                         </div>
@@ -836,7 +851,7 @@ function AdsManagerContent() {
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4 text-xs">
                           <InfoLine label="Requested" value={formatDate(campaign.requestedAt)} />
                           <InfoLine label="Started" value={formatDate(campaign.startedAt)} />
-                          <InfoLine label={campaign.status === 'REJECTED' ? 'Refunded' : 'Ends'} value={campaign.status === 'REJECTED' ? formatCurrency(campaign.refundAmount || 0) : formatDate(campaign.expiresAt || campaign.completedAt)} />
+                          <InfoLine label={campaign.status === 'REJECTED' ? 'Refunded' : 'Ends'} value={campaign.status === 'REJECTED' ? formatCurrency(campaign.refundAmount || 0, userCurrencyCode) : formatDate(campaign.expiresAt || campaign.completedAt)} />
                         </div>
                       </article>
                     );
@@ -855,12 +870,14 @@ function BoostControls({
   form,
   plans,
   selectedPlan,
+  currencyCode,
   onPlanChange,
   onChange,
 }: {
   form: BoostForm;
   plans: AdsPlan[];
   selectedPlan?: AdsPlan;
+  currencyCode: string;
   onPlanChange: (planId: string) => void;
   onChange: React.Dispatch<React.SetStateAction<BoostForm>>;
 }) {
@@ -912,14 +929,14 @@ function BoostControls({
         <label className="block">
           <span className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">Budget</span>
           <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">₦</span>
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[11px] font-black">{currencyCode}</span>
             <input
               type="number"
               min={selectedPlan?.price || 0}
               value={form.budget}
               onChange={(e) => onChange((prev) => ({ ...prev, budget: e.target.value }))}
               placeholder={selectedPlan ? String(selectedPlan.price) : '0'}
-              className="w-full border border-slate-200 bg-slate-50 rounded-lg pl-8 pr-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+              className="w-full border border-slate-200 bg-slate-50 rounded-lg pl-14 pr-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
             />
           </div>
         </label>

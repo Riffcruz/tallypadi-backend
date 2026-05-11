@@ -45,6 +45,18 @@ const PROMOTION_PLATFORM_OPTIONS: { value: PlatformOption; label: string }[] = [
 ];
 const ALL_PROMOTION_PLATFORMS = PROMOTION_PLATFORM_OPTIONS.map((option) => option.value);
 
+const formatCurrency = (amount?: number | null, currencyCode = 'NGN') => {
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: 'currency',
+      currency: String(currencyCode || 'NGN').toUpperCase(),
+      maximumFractionDigits: 2,
+    }).format(Number(amount || 0));
+  } catch {
+    return `${String(currencyCode || 'NGN').toUpperCase()} ${Number(amount || 0).toLocaleString()}`;
+  }
+};
+
 const platformLabel = (platform: string) => {
   if (platform === 'TALLYPADI_MARKETPLACE_BOOST' || platform === 'TALLYPADI_SEO') return 'TallyPadi Marketplace Boost';
   if (platform === 'META_ADS' || platform === 'META') return 'Meta Ads';
@@ -70,6 +82,7 @@ export default function StoreProductsModal({ token, onClose }: StoreProductsModa
   // Boosting States
   const [adsPlans, setAdsPlans] = useState<AdsPlan[]>([]);
   const [walletBalance, setWalletBalance] = useState(0);
+  const [currencyCode, setCurrencyCode] = useState('NGN');
   const [campaigns, setCampaigns] = useState<StoreCampaign[]>([]);
   const [boostingProductId, setBoostingProductId] = useState<string | null>(null);
   const [boostForm, setBoostForm] = useState({ planId: '', platforms: [...ALL_PROMOTION_PLATFORMS], budget: '', brief: '', keywords: '' });
@@ -93,6 +106,7 @@ export default function StoreProductsModal({ token, onClose }: StoreProductsModa
       setProducts(Array.isArray(invRes.data) ? invRes.data : invRes.data?.data || []);
       setAdsPlans(plansRes.data?.plans || []);
       setWalletBalance(dashRes.data?.user?.walletBalance || 0);
+      setCurrencyCode(String(dashRes.data?.user?.currencyCode || dashRes.data?.user?.settings?.currencyCode || 'NGN').toUpperCase());
       setCampaigns(campaignsRes.data?.campaigns || []);
     } catch (err) {
       console.error(err);
@@ -153,7 +167,7 @@ export default function StoreProductsModal({ token, onClose }: StoreProductsModa
       return Swal.fire('Invalid Budget', 'Please enter a valid boost budget.', 'warning');
     }
     if (budget < selectedPlan.price) {
-      return Swal.fire('Budget Too Low', `Budget must be at least ₦${selectedPlan.price.toLocaleString()} for this plan.`, 'warning');
+      return Swal.fire('Budget Too Low', `Budget must be at least ${formatCurrency(selectedPlan.price, currencyCode)} for this plan.`, 'warning');
     }
     
     if (walletBalance < budget) {
@@ -245,7 +259,7 @@ export default function StoreProductsModal({ token, onClose }: StoreProductsModa
                   </div>
                   <div className="flex-1 min-w-0">
                     <h3 className="font-bold text-slate-900 truncate">{product.name}</h3>
-                    <p className="text-xs text-slate-500">Stock: {product.stock ?? product.quantity ?? 0} • ₦{product.price}</p>
+                    <p className="text-xs text-slate-500">Stock: {product.stock ?? product.quantity ?? 0} • {formatCurrency(product.price || 0, currencyCode)}</p>
                   </div>
                   <div className="shrink-0 flex flex-col items-end gap-1">
                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${product.isPublished !== false ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
@@ -288,7 +302,7 @@ export default function StoreProductsModal({ token, onClose }: StoreProductsModa
                       <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-xl space-y-4 animate-in slide-in-from-top-2">
                         <div className="flex justify-between items-center">
                           <h4 className="font-bold text-blue-900 text-sm">Configure Ad Campaign</h4>
-                          <span className="text-xs font-bold text-blue-700 bg-blue-100 px-2 py-1 rounded-md">Wallet Balance: ₦{walletBalance.toLocaleString()}</span>
+                          <span className="text-xs font-bold text-blue-700 bg-blue-100 px-2 py-1 rounded-md">Wallet Balance: {formatCurrency(walletBalance, currencyCode)}</span>
                         </div>
                         
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -336,7 +350,7 @@ export default function StoreProductsModal({ token, onClose }: StoreProductsModa
                             >
                               <option value="">-- Choose a Plan --</option>
                               {adsPlans.map(plan => (
-                                <option key={plan.id} value={plan.id}>{plan.label} - ₦{plan.price.toLocaleString()}</option>
+                                <option key={plan.id} value={plan.id}>{plan.label} - {formatCurrency(plan.price, currencyCode)}</option>
                               ))}
                             </select>
                           </div>
@@ -345,13 +359,13 @@ export default function StoreProductsModal({ token, onClose }: StoreProductsModa
                         <div>
                           <label className="block text-xs font-semibold text-blue-800 mb-1.5 uppercase tracking-wider">Boost Budget</label>
                           <div className="relative">
-                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-medium">₦</span>
+                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-black">{currencyCode}</span>
                             <input
                               type="number"
                               value={boostForm.budget}
                               onChange={e => setBoostForm({ ...boostForm, budget: e.target.value })}
                               placeholder={selectedBoostPlan ? String(selectedBoostPlan.price) : 'Minimum budget'}
-                              className="w-full border border-blue-200 bg-white rounded-xl pl-9 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                              className="w-full border border-blue-200 bg-white rounded-xl pl-16 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                             />
                           </div>
                         </div>

@@ -16,6 +16,7 @@ export interface User {
   status: string;
   plan: string;
   walletBalance?: number;
+  currencyCode?: string;
   joinedAt?: string;
 }
 
@@ -38,6 +39,19 @@ export default function UsersTab({
   const [search, setSearch] = useState('');
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [showCreateInvestor, setShowCreateInvestor] = useState(false);
+
+  const getUserCurrency = (user?: User | null) => String(user?.currencyCode || 'NGN').toUpperCase();
+  const formatCurrency = (amount?: number | null, currencyCode = 'NGN') => {
+    try {
+      return new Intl.NumberFormat(undefined, {
+        style: 'currency',
+        currency: String(currencyCode || 'NGN').toUpperCase(),
+        maximumFractionDigits: 2,
+      }).format(Number(amount || 0));
+    } catch {
+      return `${String(currencyCode || 'NGN').toUpperCase()} ${Number(amount || 0).toLocaleString()}`;
+    }
+  };
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -83,12 +97,13 @@ export default function UsersTab({
   };
 
   const handleWalletTopUp = async (user: User) => {
+    const currencyCode = getUserCurrency(user);
     const result = await Swal.fire({
       title: 'Ads Wallet Top-Up',
       html: `
         <div style="text-align:left">
-          <p style="margin:0 0 12px;color:#64748b;font-size:13px">Super-admin only. This creates a wallet ledger transaction and audit log.</p>
-          <label style="font-size:12px;font-weight:700;color:#334155">Amount (NGN)</label>
+          <p style="margin:0 0 12px;color:#64748b;font-size:13px">Admin-only and audited. This creates a wallet ledger transaction.</p>
+          <label style="font-size:12px;font-weight:700;color:#334155">Amount (${currencyCode})</label>
           <input id="wallet-topup-amount" type="number" min="100" max="5000000" class="swal2-input" placeholder="50000" style="margin:6px 0 12px;width:100%" />
           <label style="font-size:12px;font-weight:700;color:#334155">Reason</label>
           <textarea id="wallet-topup-reason" class="swal2-textarea" placeholder="Why is this manual top-up needed?" style="margin:6px 0 12px;width:100%;height:88px"></textarea>
@@ -106,7 +121,7 @@ export default function UsersTab({
         const reason = (popup?.querySelector('#wallet-topup-reason') as HTMLTextAreaElement | null)?.value || '';
         const confirmation = (popup?.querySelector('#wallet-topup-confirmation') as HTMLInputElement | null)?.value || '';
         if (!amount || Number(amount) < 100) {
-          Swal.showValidationMessage('Enter an amount of at least ₦100');
+          Swal.showValidationMessage(`Enter an amount of at least ${formatCurrency(100, currencyCode)}`);
           return false;
         }
         if (reason.trim().length < 10) {
@@ -217,7 +232,7 @@ export default function UsersTab({
               </div>
               <div className="mt-2 flex items-center justify-between text-xs text-slate-400">
                 <span>Ads wallet</span>
-                <span className="text-emerald-200 font-bold">₦{Number(u.walletBalance || 0).toLocaleString()}</span>
+                <span className="text-emerald-200 font-bold">{formatCurrency(u.walletBalance || 0, getUserCurrency(u))}</span>
               </div>
 
               <div className="mt-4 grid grid-cols-2 gap-2">
@@ -297,7 +312,7 @@ export default function UsersTab({
                     </td>
 
                     <td className="px-6 py-4 font-bold text-emerald-200">
-                      ₦{Number(u.walletBalance || 0).toLocaleString()}
+                      {formatCurrency(u.walletBalance || 0, getUserCurrency(u))}
                     </td>
 
                     <td className="px-6 py-4">

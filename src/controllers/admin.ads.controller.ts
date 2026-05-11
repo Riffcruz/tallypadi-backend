@@ -44,7 +44,7 @@ const listAdminCampaigns = async (req: Request, res: Response) => {
 
   const [campaigns, total, statusCounts] = await Promise.all([
     AdCampaign.find(query)
-      .populate('user', 'businessName name email phoneNumber planType walletBalance shopSlug')
+      .populate('user', 'businessName name email phoneNumber planType walletBalance shopSlug settings.currencyCode countryCode')
       .populate('product', 'name quantity lastUnitPrice image category isPublished')
       .populate('reviewedBy', 'businessName name email phoneNumber role')
       .sort({ createdAt: -1, _id: -1 })

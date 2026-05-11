@@ -35,6 +35,8 @@ interface Advertiser {
   phoneNumber?: string;
   planType?: string;
   walletBalance?: number;
+  currencyCode?: string;
+  settings?: { currencyCode?: string };
   shopSlug?: string;
 }
 
@@ -128,7 +130,17 @@ const statusGroups: Record<StatusFilter, CampaignStatus[]> = {
   REJECTED: ['REJECTED', 'REJECTED_BY_TALLYPADI', 'PARTIALLY_REJECTED', 'FAILED', 'CANCELLED'],
 };
 
-const formatCurrency = (amount?: number | null) => `₦${Number(amount || 0).toLocaleString()}`;
+const formatCurrency = (amount?: number | null, currencyCode = 'NGN') => {
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: 'currency',
+      currency: String(currencyCode || 'NGN').toUpperCase(),
+      maximumFractionDigits: 2,
+    }).format(Number(amount || 0));
+  } catch {
+    return `${String(currencyCode || 'NGN').toUpperCase()} ${Number(amount || 0).toLocaleString()}`;
+  }
+};
 
 const formatDate = (value?: string | null) => {
   if (!value) return 'Not set';
@@ -303,6 +315,7 @@ export default function AdsTab({ adminToken }: { adminToken: string }) {
             {filteredCampaigns.map((campaign) => {
               const advertiser = getAdvertiser(campaign.user);
               const product = getProduct(campaign.product);
+              const currencyCode = String(advertiser.currencyCode || advertiser.settings?.currencyCode || 'NGN').toUpperCase();
               const meta = statusMeta[campaign.status] || statusMeta.RUNNING;
               const Icon = meta.icon;
 
@@ -338,7 +351,7 @@ export default function AdsTab({ adminToken }: { adminToken: string }) {
                             <h3 className="text-lg font-black text-white truncate">{campaign.productSnapshot?.name || product.name || 'Product boost'}</h3>
                             <p className="text-sm text-slate-400 mt-1 line-clamp-2">{campaign.productSnapshot?.description || 'No product description supplied.'}</p>
                             <div className="flex flex-wrap gap-2 mt-3 text-xs text-slate-400">
-                              <span>Product price: {formatCurrency(campaign.productSnapshot?.price || product.lastUnitPrice || 0)}</span>
+                              <span>Product price: {formatCurrency(campaign.productSnapshot?.price || product.lastUnitPrice || 0, currencyCode)}</span>
                               <span>Stock: {product.quantity ?? 'Unknown'}</span>
                               <span>Category: {campaign.productSnapshot?.category || product.category || 'None'}</span>
                             </div>
@@ -352,7 +365,7 @@ export default function AdsTab({ adminToken }: { adminToken: string }) {
                             <span className="inline-flex items-center gap-1.5"><Phone size={13} /> {advertiser.phoneNumber || 'No phone'}</span>
                             <span>{advertiser.email || 'No email'}</span>
                             <span>Plan: {advertiser.planType || 'Unknown'}</span>
-                            <span className="inline-flex items-center gap-1.5"><Wallet size={13} /> {formatCurrency(advertiser.walletBalance || 0)}</span>
+                            <span className="inline-flex items-center gap-1.5"><Wallet size={13} /> {formatCurrency(advertiser.walletBalance || 0, currencyCode)}</span>
                             <span>Shop: {advertiser.shopSlug || 'No slug'}</span>
                             <span>User ID: {String(advertiser._id || (typeof campaign.user === 'string' ? campaign.user : '')).slice(-8)}</span>
                           </div>
@@ -394,11 +407,11 @@ export default function AdsTab({ adminToken }: { adminToken: string }) {
                       )}
 
                       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mt-4">
-                        <Detail label="Budget" value={formatCurrency(campaign.budget)} />
-                        <Detail label="Minimum" value={formatCurrency(campaign.basePrice)} />
+                        <Detail label="Budget" value={formatCurrency(campaign.budget, currencyCode)} />
+                        <Detail label="Minimum" value={formatCurrency(campaign.basePrice, currencyCode)} />
                         <Detail label="Requested" value={formatDate(campaign.requestedAt)} />
                         <Detail label="Started" value={formatDate(campaign.startedAt)} />
-                        <Detail label={campaign.status === 'REJECTED' ? 'Refund' : 'Ends'} value={campaign.status === 'REJECTED' ? formatCurrency(campaign.refundAmount || 0) : formatDate(campaign.expiresAt || campaign.completedAt)} />
+                        <Detail label={campaign.status === 'REJECTED' ? 'Refund' : 'Ends'} value={campaign.status === 'REJECTED' ? formatCurrency(campaign.refundAmount || 0, currencyCode) : formatDate(campaign.expiresAt || campaign.completedAt)} />
                       </div>
                     </div>
 

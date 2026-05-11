@@ -268,7 +268,7 @@ export const walletService = {
           return;
         }
 
-        const wallet = await this.getOrCreateWallet(userId, 'NGN', session);
+        const wallet = await this.getOrCreateWallet(userId, undefined, session);
         const beforeAvailable = wallet.availableBalanceMinor;
         const beforeReserved = wallet.reservedBalanceMinor;
 

@@ -53,6 +53,9 @@ const validSaleMatch = {
   ],
 };
 
+const normalizeRoleKey = (role: unknown) => String(role || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+const isWalletTopUpAdminRole = (role: unknown) => ['ADMIN', 'SUPERADMIN'].includes(normalizeRoleKey(role));
+
 // -------------------------
 // Zod Schemas
 // -------------------------
@@ -365,6 +368,7 @@ export const getAllUsers = async (req: Request, res: Response) => {
           plan: '$planType',
           status: '$subscriptionStatus',
           walletBalance: 1,
+          currencyCode: { $ifNull: ['$settings.currencyCode', 'NGN'] },
           joinedAt: '$createdAt',
           lifetimeSales: 1,
           lastMessages: { $slice: ['$messageHistory', -3] },
@@ -382,8 +386,8 @@ export const getAllUsers = async (req: Request, res: Response) => {
 export const adminTopUpUserAdsWallet = async (req: Request, res: Response) => {
   try {
     const admin = req.admin as any;
-    if (String(admin?.role || '').toUpperCase() !== 'SUPER_ADMIN') {
-      return res.status(403).json({ error: 'Only super admins can top up ads wallets manually' });
+    if (!isWalletTopUpAdminRole(admin?.role)) {
+      return res.status(403).json({ error: 'Admin access required for manual ads wallet top-up' });
     }
 
     const { id } = req.params;
@@ -397,10 +401,11 @@ export const adminTopUpUserAdsWallet = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Confirmation text must be TOPUP ADS WALLET' });
     }
 
-    const owner = await User.findOne({ _id: id, role: 'OWNER' }).select('businessName email phoneNumber walletBalance role');
+    const owner = await User.findOne({ _id: id, role: 'OWNER' }).select('businessName email phoneNumber walletBalance role settings.currencyCode countryCode');
     if (!owner) return res.status(404).json({ error: 'Owner account not found' });
 
     const beforeWalletBalance = Number(owner.walletBalance || 0);
+    const currencyCode = String(owner.settings?.currencyCode || 'NGN').toUpperCase();
     const amountMinor = toMinorUnits(amount);
     const idempotencyKey = parsed.data.idempotencyKey || `admin-wallet-topup:${admin._id}:${owner._id}:${Date.now()}`;
 
@@ -434,7 +439,8 @@ export const adminTopUpUserAdsWallet = async (req: Request, res: Response) => {
 
     return res.json({
       success: true,
-      message: `Ads wallet topped up with ₦${amount.toLocaleString()}`,
+      message: `Ads wallet topped up with ${currencyCode} ${amount.toLocaleString()}`,
+      currencyCode,
       walletBalance: result.walletBalance,
       walletBalanceMinor: result.walletBalanceMinor,
       transactionId: result.transaction?._id || null,
