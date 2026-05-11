@@ -12,6 +12,7 @@ import {
   Crown,
   Loader2,
   Menu,
+  Megaphone,
   PackagePlus,
   Plus,
   Search,
@@ -28,10 +29,13 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 
 type CampaignStatus =
   | 'PENDING_ADMIN_REVIEW'
+  | 'APPROVED_BY_TALLYPADI'
+  | 'SUBMITTING_TO_PROVIDERS'
   | 'STARTING_SOON'
   | 'ACTIVE'
   | 'PARTIALLY_ACTIVE'
   | 'ACTIVE_WITH_PENDING_CHANGES'
+  | 'REQUIRES_REVIEW_AFTER_EDIT'
   | 'PAUSED'
   | 'COMPLETED'
   | 'REJECTED_BY_TALLYPADI'
@@ -41,8 +45,16 @@ type CampaignStatus =
   | 'PENDING'
   | 'RUNNING'
   | 'REJECTED';
-type StatusFilter = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'REJECTED';
-type PlatformOption = 'ALL' | 'TALLYPADI_MARKETPLACE_BOOST' | 'META_ADS' | 'TIKTOK_ADS' | 'GOOGLE_ADS';
+type StatusFilter = 'ALL' | 'PENDING' | 'RUNNING' | 'COMPLETED' | 'REJECTED';
+type PlatformOption = 'TALLYPADI_MARKETPLACE_BOOST' | 'META_ADS' | 'TIKTOK_ADS' | 'GOOGLE_ADS';
+
+const PROMOTION_PLATFORM_OPTIONS: { value: PlatformOption; label: string }[] = [
+  { value: 'TALLYPADI_MARKETPLACE_BOOST', label: 'TallyPadi Marketplace Boost' },
+  { value: 'META_ADS', label: 'Meta Ads' },
+  { value: 'TIKTOK_ADS', label: 'TikTok Ads' },
+  { value: 'GOOGLE_ADS', label: 'Google Ads' },
+];
+const ALL_PROMOTION_PLATFORMS = PROMOTION_PLATFORM_OPTIONS.map((option) => option.value);
 
 interface AdsUser {
   planType?: string;
@@ -97,7 +109,7 @@ interface AdCampaign {
 
 interface BoostForm {
   planId: string;
-  platform: PlatformOption;
+  platforms: PlatformOption[];
   budget: string;
   brief: string;
   keywords: string;
@@ -113,7 +125,7 @@ interface NewProductForm {
 
 const defaultBoostForm: BoostForm = {
   planId: '',
-  platform: 'ALL',
+  platforms: [...ALL_PROMOTION_PLATFORMS],
   budget: '',
   brief: '',
   keywords: '',
@@ -161,13 +173,17 @@ const platformLabel = (platform: string) => {
 };
 
 const statusCopy: Record<string, { label: string; icon: React.ElementType; className: string }> = {
+  ALL: { label: 'All Boosts', icon: Megaphone, className: 'bg-slate-100 text-slate-700 border-slate-200' },
   PENDING: { label: 'Pending Review', icon: Clock3, className: 'bg-amber-50 text-amber-700 border-amber-200' },
   PENDING_ADMIN_REVIEW: { label: 'Pending Review', icon: Clock3, className: 'bg-amber-50 text-amber-700 border-amber-200' },
+  APPROVED_BY_TALLYPADI: { label: 'Approved', icon: CheckCircle2, className: 'bg-blue-50 text-blue-700 border-blue-200' },
+  SUBMITTING_TO_PROVIDERS: { label: 'Submitting', icon: Clock3, className: 'bg-blue-50 text-blue-700 border-blue-200' },
   STARTING_SOON: { label: 'Starting Soon', icon: Clock3, className: 'bg-blue-50 text-blue-700 border-blue-200' },
   RUNNING: { label: 'Active', icon: TrendingUp, className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
   ACTIVE: { label: 'Active', icon: TrendingUp, className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
   PARTIALLY_ACTIVE: { label: 'Partially Active', icon: TrendingUp, className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
   ACTIVE_WITH_PENDING_CHANGES: { label: 'Active + Pending Edits', icon: TrendingUp, className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  REQUIRES_REVIEW_AFTER_EDIT: { label: 'Pending Edit Review', icon: Clock3, className: 'bg-amber-50 text-amber-700 border-amber-200' },
   PAUSED: { label: 'Paused', icon: Clock3, className: 'bg-slate-100 text-slate-700 border-slate-200' },
   COMPLETED: { label: 'Completed', icon: CheckCircle2, className: 'bg-slate-100 text-slate-700 border-slate-200' },
   REJECTED: { label: 'Rejected', icon: XCircle, className: 'bg-red-50 text-red-700 border-red-200' },
@@ -178,8 +194,9 @@ const statusCopy: Record<string, { label: string; icon: React.ElementType; class
 };
 
 const statusGroups: Record<StatusFilter, CampaignStatus[]> = {
+  ALL: [],
   PENDING: ['PENDING', 'PENDING_ADMIN_REVIEW'],
-  RUNNING: ['RUNNING', 'ACTIVE', 'PARTIALLY_ACTIVE', 'STARTING_SOON', 'ACTIVE_WITH_PENDING_CHANGES', 'PAUSED'],
+  RUNNING: ['RUNNING', 'APPROVED_BY_TALLYPADI', 'SUBMITTING_TO_PROVIDERS', 'ACTIVE', 'PARTIALLY_ACTIVE', 'STARTING_SOON', 'ACTIVE_WITH_PENDING_CHANGES', 'REQUIRES_REVIEW_AFTER_EDIT', 'PAUSED'],
   COMPLETED: ['COMPLETED'],
   REJECTED: ['REJECTED', 'REJECTED_BY_TALLYPADI', 'PARTIALLY_REJECTED', 'FAILED', 'CANCELLED'],
 };
@@ -195,7 +212,7 @@ function AdsManagerContent() {
   const [products, setProducts] = useState<InventoryProduct[]>([]);
   const [selectedProductId, setSelectedProductId] = useState('');
   const [productSearch, setProductSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('PENDING');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
   const [existingBoost, setExistingBoost] = useState<BoostForm>(defaultBoostForm);
   const [newBoost, setNewBoost] = useState<BoostForm>(defaultBoostForm);
   const [newProduct, setNewProduct] = useState<NewProductForm>(defaultNewProductForm);
@@ -298,9 +315,14 @@ function AdsManagerContent() {
     return acc;
   }, {} as Record<CampaignStatus, number>), [campaigns]);
 
-  const getStatusCount = (filter: StatusFilter) => statusGroups[filter].reduce((sum, status) => sum + (campaignCounts[status] || 0), 0);
+  const getStatusCount = (filter: StatusFilter) => {
+    if (filter === 'ALL') return campaigns.length;
+    return statusGroups[filter].reduce((sum, status) => sum + (campaignCounts[status] || 0), 0);
+  };
 
-  const visibleCampaigns = campaigns.filter((campaign) => statusGroups[statusFilter].includes(campaign.status));
+  const visibleCampaigns = statusFilter === 'ALL'
+    ? campaigns
+    : campaigns.filter((campaign) => statusGroups[statusFilter].includes(campaign.status));
 
   const setBoostPlan = (planId: string, form: BoostForm, setter: React.Dispatch<React.SetStateAction<BoostForm>>) => {
     const plan = adsPlans.find((item) => item.id === planId);
@@ -315,6 +337,10 @@ function AdsManagerContent() {
   const validateBoost = (form: BoostForm, plan?: AdsPlan) => {
     if (!plan) {
       Swal.fire('Select a duration', 'Choose an ads plan before submitting.', 'warning');
+      return null;
+    }
+    if (!form.platforms.length) {
+      Swal.fire('Select a platform', 'Choose at least one promotion platform.', 'warning');
       return null;
     }
 
@@ -371,7 +397,7 @@ function AdsManagerContent() {
     const token = getTokenOrRedirect();
     const res = await axios.post(`${API_URL}/ads/boost/${productId}`, {
       planId: form.planId,
-      platform: form.platform,
+      providers: form.platforms,
       budget,
       adDetails: {
         brief: form.brief.trim(),
@@ -386,7 +412,7 @@ function AdsManagerContent() {
     }
     if (res.data?.campaign) {
       setCampaigns((prev) => [res.data.campaign, ...prev.filter((item) => item.id !== res.data.campaign.id)]);
-      setStatusFilter('PENDING');
+      setStatusFilter('ALL');
     }
     return res.data;
   };
@@ -753,7 +779,7 @@ function AdsManagerContent() {
                     <p className="text-xs text-slate-500 mt-1">Pending, active, completed, and rejected ads boosts</p>
                   </div>
                   <div className="grid grid-cols-2 sm:flex gap-2">
-                    {(['PENDING', 'RUNNING', 'COMPLETED', 'REJECTED'] as StatusFilter[]).map((status) => {
+                    {(['ALL', 'PENDING', 'RUNNING', 'COMPLETED', 'REJECTED'] as StatusFilter[]).map((status) => {
                       const config = statusCopy[status];
                       const Icon = config.icon;
                       return (
@@ -840,22 +866,35 @@ function BoostControls({
 }) {
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <label className="block">
-          <span className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">Platform</span>
-          <select
-            value={form.platform}
-            onChange={(e) => onChange((prev) => ({ ...prev, platform: e.target.value as PlatformOption }))}
-            className="w-full border border-slate-200 bg-slate-50 rounded-lg px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-          >
-            <option value="ALL">All Platforms</option>
-            <option value="TALLYPADI_MARKETPLACE_BOOST">TallyPadi Marketplace Boost</option>
-            <option value="META_ADS">Meta Ads</option>
-            <option value="TIKTOK_ADS">TikTok Ads</option>
-            <option value="GOOGLE_ADS">Google Ads</option>
-          </select>
-        </label>
+      <div>
+        <span className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">Platforms</span>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
+          {PROMOTION_PLATFORM_OPTIONS.map((option) => {
+            const checked = form.platforms.includes(option.value);
+            return (
+              <label
+                key={option.value}
+                className={`flex items-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-bold transition-colors ${checked ? 'border-emerald-300 bg-white text-emerald-700 shadow-sm' : 'border-transparent text-slate-600 hover:bg-white'}`}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => onChange((prev) => ({
+                    ...prev,
+                    platforms: checked
+                      ? prev.platforms.filter((platform) => platform !== option.value)
+                      : [...prev.platforms, option.value],
+                  }))}
+                  className="h-4 w-4 accent-emerald-600"
+                />
+                {option.label}
+              </label>
+            );
+          })}
+        </div>
+      </div>
 
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <label className="block">
           <span className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">Duration</span>
           <select

@@ -163,3 +163,70 @@ export const sendSellerVerificationAdminNotification = async ({
 
     return true;
 };
+
+const createSmtpTransport = async () => {
+    const settings = await AdminSettings.findOne().lean();
+    const smtpConfig = (settings as any)?.smtp;
+
+    if (!smtpConfig || !smtpConfig.host || !smtpConfig.user) {
+        throw new Error('SMTP Configuration is missing or disabled in Admin Settings');
+    }
+
+    const transporter = nodemailer.createTransport({
+        host: smtpConfig.host,
+        port: smtpConfig.port,
+        secure: smtpConfig.secure,
+        auth: {
+            user: smtpConfig.user,
+            pass: smtpConfig.pass,
+        },
+    });
+
+    return { transporter, smtpConfig };
+};
+
+export const sendSellerVerificationApprovedEmail = async (email: string, fullName: string) => {
+    const { transporter, smtpConfig } = await createSmtpTransport();
+    const safeName = escapeHtml(fullName || 'Seller');
+
+    await transporter.sendMail({
+        from: `TallyPadi <${smtpConfig.fromAddress || smtpConfig.user}>`,
+        to: email,
+        subject: 'Your TallyPadi seller verification is complete',
+        html: `
+            <div style="font-family: Arial, sans-serif; max-width: 620px; margin: 0 auto; color: #0f172a;">
+                <h2 style="margin: 0 0 12px; color: #0284c7;">Verification complete</h2>
+                <p>Hello ${safeName},</p>
+                <p>Your seller identity has been verified. Your marketplace profile and storefront can now show the <strong>Verified ID</strong> badge.</p>
+                <p style="color: #64748b; font-size: 13px;">Thank you for helping keep TallyPadi marketplace trusted.</p>
+            </div>
+        `,
+    });
+
+    return true;
+};
+
+export const sendSellerReverificationRequestedEmail = async (email: string, fullName: string, reason: string) => {
+    const { transporter, smtpConfig } = await createSmtpTransport();
+    const safeName = escapeHtml(fullName || 'Seller');
+    const safeReason = escapeHtml(reason || 'TallyPadi needs you to complete seller verification again.');
+
+    await transporter.sendMail({
+        from: `TallyPadi <${smtpConfig.fromAddress || smtpConfig.user}>`,
+        to: email,
+        subject: 'Please reverify your TallyPadi seller account',
+        html: `
+            <div style="font-family: Arial, sans-serif; max-width: 620px; margin: 0 auto; color: #0f172a;">
+                <h2 style="margin: 0 0 12px; color: #0284c7;">Seller reverification required</h2>
+                <p>Hello ${safeName},</p>
+                <p>TallyPadi admin has requested that you complete seller verification again.</p>
+                <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 10px; padding: 14px; color: #991b1b; margin: 16px 0;">
+                    ${safeReason}
+                </div>
+                <p>Please open your Online Store settings and submit verification again.</p>
+            </div>
+        `,
+    });
+
+    return true;
+};

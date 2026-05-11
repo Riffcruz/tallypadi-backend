@@ -21,6 +21,7 @@ import {
   normalizeCampaignStatus,
   pauseCampaignByMerchant,
   queueCampaignMetricsSync,
+  repairOrphanCampaignReservations,
   resumeCompletedCampaign,
   serializeAdCampaign,
   stopCampaignByMerchant,
@@ -56,8 +57,8 @@ const getStatusQuery = (raw: unknown) => {
   const status = normalizeCampaignStatus(raw);
   if (!status) return undefined;
   if (status === 'PENDING') return { $in: ['PENDING', 'PENDING_ADMIN_REVIEW'] };
-  if (status === 'RUNNING') return { $in: ['RUNNING', 'ACTIVE', 'PARTIALLY_ACTIVE', 'STARTING_SOON', 'ACTIVE_WITH_PENDING_CHANGES'] };
-  if (status === 'REJECTED') return { $in: ['REJECTED', 'REJECTED_BY_TALLYPADI', 'PARTIALLY_REJECTED'] };
+  if (status === 'RUNNING') return { $in: ['RUNNING', 'APPROVED_BY_TALLYPADI', 'SUBMITTING_TO_PROVIDERS', 'ACTIVE', 'PARTIALLY_ACTIVE', 'STARTING_SOON', 'ACTIVE_WITH_PENDING_CHANGES', 'REQUIRES_REVIEW_AFTER_EDIT', 'PAUSED'] };
+  if (status === 'REJECTED') return { $in: ['REJECTED', 'REJECTED_BY_TALLYPADI', 'PARTIALLY_REJECTED', 'FAILED', 'CANCELLED'] };
   return status;
 };
 
@@ -369,6 +370,7 @@ export const getMyAdCampaigns = async (req: Request, res: Response) => {
     if (!userId) return res.status(401).json({ message: 'Unauthorized' });
 
     await markExpiredCampaignsCompleted();
+    const walletRepair = await repairOrphanCampaignReservations(userId);
 
     const page = Math.max(1, Number(req.query.page) || 1);
     const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 50));
@@ -377,7 +379,7 @@ export const getMyAdCampaigns = async (req: Request, res: Response) => {
     if (status) query.status = status;
 
     const result = await listCampaigns(query, page, limit);
-    return res.status(200).json(result);
+    return res.status(200).json({ ...result, walletRepair });
   } catch (error) {
     console.error('Get My Ads Error:', error);
     return res.status(500).json({ message: 'Internal server error' });

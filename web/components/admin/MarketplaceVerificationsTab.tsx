@@ -210,6 +210,39 @@ export default function MarketplaceVerificationsTab({ adminToken }: { adminToken
     }
   };
 
+  const requestReverification = async (verification: SellerVerification) => {
+    const id = getId(verification);
+    if (!id) return;
+
+    const result = await Swal.fire({
+      title: 'Request reverification',
+      input: 'textarea',
+      inputLabel: 'Reason shown to seller',
+      inputPlaceholder: 'Explain why the seller needs to verify again',
+      showCancelButton: true,
+      confirmButtonText: 'Request Reverification',
+      confirmButtonColor: '#0284c7',
+    });
+    if (!result.isConfirmed) return;
+
+    setActionId(id);
+    try {
+      const res = await axios.post(
+        `${API_URL}/admin/marketplace-verifications/${id}/request-reverification`,
+        { reason: String(result.value || '').trim() || 'TallyPadi needs you to complete seller verification again.' },
+        { headers }
+      );
+      Swal.fire('Done', res.data?.message || 'Reverification requested.', 'success');
+      setSelected(null);
+      await fetchVerifications(status);
+    } catch (error: unknown) {
+      const data = axios.isAxiosError(error) ? error.response?.data as { error?: string } | undefined : undefined;
+      Swal.fire('Error', data?.error || 'Could not request reverification.', 'error');
+    } finally {
+      setActionId(null);
+    }
+  };
+
   const filtered = verifications.filter((verification) => {
     const user = getUser(verification.user);
     const text = [
@@ -338,6 +371,16 @@ export default function MarketplaceVerificationsTab({ adminToken }: { adminToken
                           </button>
                         </>
                       )}
+                      {verification.status === 'APPROVED' && (
+                        <button
+                          onClick={() => requestReverification(verification)}
+                          disabled={actionId === id}
+                          className="inline-flex items-center justify-center gap-2 rounded-lg bg-sky-600 px-4 py-2 text-sm font-bold text-white hover:bg-sky-500 disabled:opacity-50"
+                        >
+                          <RefreshCcw size={15} />
+                          Reverify
+                        </button>
+                      )}
                     </div>
                   </div>
                 </article>
@@ -426,7 +469,17 @@ export default function MarketplaceVerificationsTab({ adminToken }: { adminToken
               </div>
             )}
             {selected.status !== 'PENDING' && (
-              <div className="sticky bottom-0 flex justify-end border-t border-slate-800 bg-slate-950/95 p-5">
+              <div className="sticky bottom-0 flex flex-col sm:flex-row justify-end gap-3 border-t border-slate-800 bg-slate-950/95 p-5">
+                {selected.status === 'APPROVED' && (
+                  <button
+                    onClick={() => requestReverification(selected)}
+                    disabled={actionId === getId(selected)}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-sky-600 px-5 py-3 text-sm font-bold text-white hover:bg-sky-500 disabled:opacity-50"
+                  >
+                    <RefreshCcw size={16} />
+                    Request Reverification
+                  </button>
+                )}
                 <button
                   onClick={() => deleteVerification(selected)}
                   disabled={actionId === getId(selected)}

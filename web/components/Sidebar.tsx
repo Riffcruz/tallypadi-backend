@@ -6,22 +6,44 @@ import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard, ShoppingCart, Package, Settings, LogOut, Users,
   BookOpen, ClipboardList, FileText, Banknote, UserPlus, Users2,
-  Store, CreditCard, Globe, Megaphone, Bell
+  Store, CreditCard, Globe, Megaphone, Bell, BadgeCheck
 } from 'lucide-react';
-import { removeCookie } from '../utils/cookies';
+import { getCookie, removeCookie } from '../utils/cookies';
 
 export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const [user, setUser] = React.useState<Record<string, unknown> | null>(null);
+  const [verificationStatus, setVerificationStatus] = React.useState('');
 
   React.useEffect(() => {
     try {
       const stored = sessionStorage.getItem('tallyUser');
-      if (stored) setUser(JSON.parse(stored));
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        setUser(parsed);
+        setVerificationStatus(String(parsed?.marketplaceVerificationStatus || ''));
+      }
     } catch (e) {
       console.error('Failed to parse user session', e);
     }
+
+    const token = getCookie('tallyToken');
+    if (!token) return;
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api'}/shop/verification`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => {
+        if (!data?.status) return;
+        setVerificationStatus(String(data.status));
+        setUser((current) => {
+          const next = { ...(current || {}), marketplaceVerificationStatus: data.status };
+          sessionStorage.setItem('tallyUser', JSON.stringify(next));
+          return next;
+        });
+      })
+      .catch(() => undefined);
   }, []);
 
   const handleLogout = () => {
@@ -78,7 +100,15 @@ export default function Sidebar() {
       {/* Brand Header */}
       <div className="p-6 border-b border-gray-100 flex items-center gap-2 shrink-0">
         <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center text-white font-bold text-xl">T</div>
-        <span className="font-bold text-xl text-emerald-700">TallyPadi</span>
+        <div className="min-w-0">
+          <span className="font-bold text-xl text-emerald-700">TallyPadi</span>
+          {verificationStatus === 'VERIFIED' && (
+            <div className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-sky-50 px-2.5 py-1 text-[11px] font-black text-sky-700 ring-1 ring-sky-100">
+              <BadgeCheck size={13} fill="currentColor" />
+              Verified ID
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Navigation Links */}

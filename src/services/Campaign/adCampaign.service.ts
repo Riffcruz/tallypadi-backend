@@ -14,6 +14,7 @@ import { OutboxEvent } from '../../models/outboxEvent.model';
 import { ProviderCampaign, IProviderCampaign } from '../../models/providerCampaign.model';
 import { Inventory } from '../../models/inventory.model';
 import { User } from '../../models/user.model';
+import { WalletTransaction } from '../../models/walletTransaction.model';
 import { activityService } from '../activity.service';
 import {
   AdBudgetError,
@@ -44,6 +45,8 @@ export const ALL_AD_PLATFORMS = 'ALL';
 
 const AD_CAMPAIGN_EXPIRY_BATCH_SIZE = Number(process.env.AD_CAMPAIGN_EXPIRY_BATCH_SIZE || 500);
 const AD_BOOST_METADATA_RETENTION_DAYS = Number(process.env.AD_BOOST_METADATA_RETENTION_DAYS || 15);
+const AD_ORPHAN_RESERVATION_REPAIR_LIMIT = Number(process.env.AD_ORPHAN_RESERVATION_REPAIR_LIMIT || 25);
+const AD_ORPHAN_RESERVATION_MIN_AGE_MS = Number(process.env.AD_ORPHAN_RESERVATION_MIN_AGE_MS || 60_000);
 const AD_TERMS_VERSION = process.env.AD_TERMS_VERSION || 'managed-boost-v1';
 
 export const DEFAULT_ADS_PLANS = [
@@ -97,6 +100,14 @@ const mapLegacyStatus = (status: string): AdCampaignStatus => {
   if (status === 'REJECTED') return 'REJECTED_BY_TALLYPADI';
   return status as AdCampaignStatus;
 };
+
+const RESERVATION_SETTLEMENT_TYPES = [
+  'CAMPAIGN_BUDGET_RELEASED',
+  'SERVICE_FEE_CAPTURED',
+  'AD_SPEND_ALLOCATED',
+  'PROVIDER_ALLOCATION_REFUNDED',
+  'UNUSED_BUDGET_REFUNDED',
+];
 
 const providerIsTerminal = (status: string) => ['COMPLETED', 'FAILED', 'CANCELLED', 'REJECTED_BY_PROVIDER'].includes(status);
 
@@ -746,6 +757,86 @@ export const createPendingAdCampaign = async (input: {
   targetAudience: input.adDetails?.audience,
   keywords: input.adDetails?.keywords,
 });
+
+export const repairOrphanCampaignReservations = async (userId?: string | Types.ObjectId) => {
+  const query: Record<string, unknown> = {
+    type: 'CAMPAIGN_BUDGET_RESERVED',
+    status: 'COMPLETED',
+    campaign: { $ne: null },
+    amountMinor: { $gt: 0 },
+    createdAt: { $lte: new Date(Date.now() - AD_ORPHAN_RESERVATION_MIN_AGE_MS) },
+  };
+  if (userId) query.user = toObjectId(userId as any);
+
+  const reservations = await WalletTransaction.find(query)
+    .sort({ createdAt: -1, _id: -1 })
+    .limit(Math.max(1, Math.min(100, AD_ORPHAN_RESERVATION_REPAIR_LIMIT)))
+    .lean();
+
+  const repaired: { reservationId: string; userId: string; amountMinor: number }[] = [];
+
+  for (const reservation of reservations) {
+    const session = await mongoose.startSession();
+    try {
+      await session.withTransaction(async () => {
+        const freshReservation = await WalletTransaction.findById(reservation._id).session(session);
+        if (!freshReservation?.campaign || freshReservation.type !== 'CAMPAIGN_BUDGET_RESERVED' || freshReservation.amountMinor <= 0) {
+          return;
+        }
+
+        const campaignExists = await AdCampaign.exists({ _id: freshReservation.campaign }).session(session);
+        if (campaignExists) return;
+
+        const settlementQuery: Record<string, unknown> = {
+          _id: { $ne: freshReservation._id },
+          type: { $in: RESERVATION_SETTLEMENT_TYPES },
+        };
+        if (freshReservation.campaignRun) {
+          settlementQuery.campaignRun = freshReservation.campaignRun;
+        } else {
+          settlementQuery.campaign = freshReservation.campaign;
+        }
+
+        const alreadySettled = await WalletTransaction.exists(settlementQuery).session(session);
+        if (alreadySettled) return;
+
+        const idempotencyKey = `orphan-campaign-reservation-release:${freshReservation._id}`;
+        const alreadyRepaired = await WalletTransaction.exists({ idempotencyKey }).session(session);
+        if (alreadyRepaired) return;
+
+        await walletService.releaseReserved({
+          userId: freshReservation.user,
+          amountMinor: freshReservation.amountMinor,
+          campaignId: freshReservation.campaign,
+          campaignRunId: freshReservation.campaignRun || null,
+          type: 'CAMPAIGN_BUDGET_RELEASED',
+          idempotencyKey,
+          session,
+          metadata: {
+            reason: 'orphan_campaign_reservation_repair',
+            originalReservationId: String(freshReservation._id),
+          },
+        });
+
+        repaired.push({
+          reservationId: String(freshReservation._id),
+          userId: String(freshReservation.user),
+          amountMinor: freshReservation.amountMinor,
+        });
+      });
+    } catch (error) {
+      console.error('Orphan ad reservation repair failed:', error);
+    } finally {
+      await session.endSession();
+    }
+  }
+
+  return {
+    repairedCount: repaired.length,
+    repairedAmountMinor: repaired.reduce((sum, item) => sum + item.amountMinor, 0),
+    repaired,
+  };
+};
 
 export const approveAdCampaign = async (campaignId: string, adminId: string) => {
   const campaignObjectId = toObjectId(campaignId);

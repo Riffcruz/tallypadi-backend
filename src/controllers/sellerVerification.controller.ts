@@ -3,7 +3,11 @@ import { Types } from 'mongoose';
 import { SellerVerification, SellerIdType } from '../models/sellerVerification.model';
 import { User } from '../models/user.model';
 import { r2Service } from '../services/r2.service';
-import { sendSellerVerificationAdminNotification } from '../services/email.service';
+import {
+  sendSellerReverificationRequestedEmail,
+  sendSellerVerificationAdminNotification,
+  sendSellerVerificationApprovedEmail,
+} from '../services/email.service';
 
 const VERIFICATION_CONSENT_VERSION = 'seller-verification-v1';
 const ID_TYPES: SellerIdType[] = ['NIN', 'NATIONAL_ID', 'DRIVERS_LICENSE', 'INTERNATIONAL_PASSPORT', 'GOVERNMENT_ID'];
@@ -275,6 +279,7 @@ export const approveSellerVerificationForAdmin = async (req: Request, res: Respo
     verification.rejectionReason = null;
     await verification.save();
 
+    const seller = await User.findById(verification.user).select('businessName name email');
     await User.updateOne(
       { _id: verification.user },
       {
@@ -284,6 +289,15 @@ export const approveSellerVerificationForAdmin = async (req: Request, res: Respo
         },
       }
     );
+
+    if (seller?.email) {
+      sendSellerVerificationApprovedEmail(
+        seller.email,
+        verification.fullName || seller.businessName || seller.name || 'Seller'
+      ).catch((emailError) => {
+        console.error('Seller verification approval email failed:', emailError);
+      });
+    }
 
     return res.json({ message: 'Seller verified successfully.', verification: publicVerification(verification) });
   } catch (error) {
@@ -348,6 +362,58 @@ export const deleteSellerVerificationForAdmin = async (req: Request, res: Respon
     });
   } catch (error) {
     console.error('Admin delete seller verification error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const requestSellerReverificationForAdmin = async (req: Request, res: Response) => {
+  try {
+    const verificationId = String(req.params.id || '');
+    if (!Types.ObjectId.isValid(verificationId)) return res.status(400).json({ error: 'Invalid verification ID' });
+
+    const verification = await SellerVerification.findById(verificationId);
+    if (!verification) return res.status(404).json({ error: 'Verification not found' });
+    if (verification.status !== 'APPROVED') {
+      return res.status(400).json({ error: 'Only approved verifications can be sent for reverification.' });
+    }
+
+    const adminId = getAdminId(req);
+    if (!Types.ObjectId.isValid(adminId)) return res.status(403).json({ error: 'Admin identity could not be resolved.' });
+
+    const reason = cleanText(req.body?.reason || 'TallyPadi needs you to complete seller verification again.', 1000);
+    verification.status = 'CANCELLED';
+    verification.reviewedAt = new Date();
+    verification.reviewedBy = new Types.ObjectId(adminId);
+    verification.rejectionReason = reason;
+    await verification.save();
+
+    const seller = await User.findByIdAndUpdate(
+      verification.user,
+      {
+        $set: {
+          marketplaceVerificationStatus: 'REVERIFY_REQUIRED',
+          marketplaceVerifiedAt: null,
+        },
+      },
+      { new: true }
+    ).select('businessName name email');
+
+    if (seller?.email) {
+      sendSellerReverificationRequestedEmail(
+        seller.email,
+        verification.fullName || seller.businessName || seller.name || 'Seller',
+        reason
+      ).catch((emailError) => {
+        console.error('Seller reverification email failed:', emailError);
+      });
+    }
+
+    return res.json({
+      message: 'Seller has been asked to reverify. Their verified badge has been removed.',
+      verification: publicVerification(verification),
+    });
+  } catch (error) {
+    console.error('Admin request seller reverification error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 };

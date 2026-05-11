@@ -44,6 +44,7 @@ import {
   getSellerVerificationForAdmin,
   listSellerVerificationsForAdmin,
   rejectSellerVerificationForAdmin,
+  requestSellerReverificationForAdmin,
 } from '../controllers/sellerVerification.controller';
 
 const router = Router();
@@ -76,6 +77,7 @@ router.get('/marketplace-verifications', listSellerVerificationsForAdmin);
 router.get('/marketplace-verifications/:id', getSellerVerificationForAdmin);
 router.post('/marketplace-verifications/:id/approve', approveSellerVerificationForAdmin);
 router.post('/marketplace-verifications/:id/reject', rejectSellerVerificationForAdmin);
+router.post('/marketplace-verifications/:id/request-reverification', requestSellerReverificationForAdmin);
 router.delete('/marketplace-verifications/:id', deleteSellerVerificationForAdmin);
 
 // Global Settings

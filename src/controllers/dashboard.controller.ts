@@ -337,6 +337,8 @@ export const getDashboardData = async (req: Request, res: Response) => {
         shopDescription: user.shopDescription || null,
         heroImageUrl: user.heroImageUrl || null,
         themeColor: user.themeColor || '#10b981',
+        marketplaceVerificationStatus: user.marketplaceVerificationStatus || 'UNVERIFIED',
+        marketplaceVerifiedAt: user.marketplaceVerifiedAt || null,
 
         bankDetails: user.bankDetails, // ✅ Added
 

@@ -649,18 +649,32 @@ export default function OnlineStorePage() {
                     <h2 className="text-lg font-bold text-gray-900">Seller Verification</h2>
                     <p className="text-xs text-gray-400">Approved sellers get a verified badge on marketplace listings and storefronts.</p>
                   </div>
-                  <span className={`ml-auto rounded-full px-3 py-1 text-xs font-black ${verificationStatus === 'VERIFIED' ? 'bg-sky-100 text-sky-700' : verificationStatus === 'PENDING' ? 'bg-amber-100 text-amber-700' : verificationStatus === 'REJECTED' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600'}`}>
-                    {verificationStatus}
+                  <span className={`ml-auto rounded-full px-3 py-1 text-xs font-black ${verificationStatus === 'VERIFIED' ? 'bg-sky-100 text-sky-700' : verificationStatus === 'PENDING' || verificationStatus === 'REVERIFY_REQUIRED' ? 'bg-amber-100 text-amber-700' : verificationStatus === 'REJECTED' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600'}`}>
+                    {verificationStatus === 'REVERIFY_REQUIRED' ? 'REVERIFY' : verificationStatus}
                   </span>
                 </div>
 
-                {verificationStatus === 'REJECTED' && latestVerification?.rejectionReason && (
-                  <div className="mb-5 rounded-xl border border-red-100 bg-red-50 p-4 text-sm text-red-700">
-                    <p className="font-black">Verification rejected</p>
-                    <p className="mt-1 font-medium">{latestVerification.rejectionReason}</p>
-                    <p className="mt-2 text-xs font-semibold text-red-500">You can correct the details below and submit again.</p>
+                {verificationStatus === 'VERIFIED' ? (
+                  <div className="rounded-2xl border border-sky-100 bg-sky-50 p-5">
+                    <div className="flex items-start gap-3">
+                      <div className="rounded-xl bg-white p-2 text-sky-700 shadow-sm">
+                        <BadgeCheck size={24} fill="currentColor" />
+                      </div>
+                      <div>
+                        <p className="text-lg font-black text-slate-900">ID verified</p>
+                        <p className="mt-1 text-sm font-semibold text-slate-600">Your marketplace profile and storefront can show the Verified ID badge.</p>
+                      </div>
+                    </div>
                   </div>
-                )}
+                ) : (
+                  <>
+                    {(verificationStatus === 'REJECTED' || verificationStatus === 'REVERIFY_REQUIRED') && latestVerification?.rejectionReason && (
+                      <div className={`mb-5 rounded-xl border p-4 text-sm ${verificationStatus === 'REVERIFY_REQUIRED' ? 'border-amber-100 bg-amber-50 text-amber-800' : 'border-red-100 bg-red-50 text-red-700'}`}>
+                        <p className="font-black">{verificationStatus === 'REVERIFY_REQUIRED' ? 'Reverification required' : 'Verification rejected'}</p>
+                        <p className="mt-1 font-medium">{latestVerification.rejectionReason}</p>
+                        <p className="mt-2 text-xs font-semibold opacity-80">You can correct the details below and submit again.</p>
+                      </div>
+                    )}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   <div>
@@ -751,9 +765,11 @@ export default function OnlineStorePage() {
                 <div className="mt-5 flex justify-end">
                   <button onClick={handleSubmitVerification} disabled={verificationSubmitting || verificationStatus === 'PENDING' || verificationStatus === 'VERIFIED'} className="inline-flex items-center gap-2 rounded-xl bg-sky-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-sky-600/20 disabled:opacity-50">
                     {verificationSubmitting ? <Loader2 size={16} className="animate-spin" /> : <BadgeCheck size={16} />}
-                    {verificationStatus === 'REJECTED' ? 'Resubmit Verification' : 'Submit Verification'}
+                    {verificationStatus === 'REJECTED' || verificationStatus === 'REVERIFY_REQUIRED' ? 'Resubmit Verification' : 'Submit Verification'}
                   </button>
                 </div>
+                  </>
+                )}
               </div>
             </>
           ) : (

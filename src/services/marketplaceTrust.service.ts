@@ -35,6 +35,10 @@ export const isStorefrontPublicReady = (user: any) => getStoreSetupStatus(user).
 export const getVerificationBadge = (user: any) => ({
   verified: user?.marketplaceVerificationStatus === 'VERIFIED',
   status: user?.marketplaceVerificationStatus || 'UNVERIFIED',
-  label: user?.marketplaceVerificationStatus === 'VERIFIED' ? 'Verified seller' : null,
+  label: user?.marketplaceVerificationStatus === 'VERIFIED' ? 'Verified ID' : null,
   verifiedAt: user?.marketplaceVerifiedAt || null,
+  rating: {
+    score: null,
+    count: 0,
+  },
 });

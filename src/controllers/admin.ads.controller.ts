@@ -10,6 +10,7 @@ import {
   markExpiredCampaignsCompleted,
   normalizeCampaignStatus,
   pauseAdCampaign,
+  repairOrphanCampaignReservations,
   refundProviderCampaignBalance,
   reallocateProviderCampaignBalance,
   rejectAdCampaign,
@@ -26,13 +27,14 @@ const getStatusQuery = (raw: unknown) => {
   const status = normalizeCampaignStatus(raw);
   if (!status) return undefined;
   if (status === 'PENDING') return { $in: ['PENDING', 'PENDING_ADMIN_REVIEW'] };
-  if (status === 'RUNNING') return { $in: ['RUNNING', 'ACTIVE', 'PARTIALLY_ACTIVE', 'STARTING_SOON', 'ACTIVE_WITH_PENDING_CHANGES'] };
-  if (status === 'REJECTED') return { $in: ['REJECTED', 'REJECTED_BY_TALLYPADI', 'PARTIALLY_REJECTED'] };
+  if (status === 'RUNNING') return { $in: ['RUNNING', 'APPROVED_BY_TALLYPADI', 'SUBMITTING_TO_PROVIDERS', 'ACTIVE', 'PARTIALLY_ACTIVE', 'STARTING_SOON', 'ACTIVE_WITH_PENDING_CHANGES', 'REQUIRES_REVIEW_AFTER_EDIT', 'PAUSED'] };
+  if (status === 'REJECTED') return { $in: ['REJECTED', 'REJECTED_BY_TALLYPADI', 'PARTIALLY_REJECTED', 'FAILED', 'CANCELLED'] };
   return status;
 };
 
 const listAdminCampaigns = async (req: Request, res: Response) => {
   await markExpiredCampaignsCompleted();
+  const walletRepair = await repairOrphanCampaignReservations();
 
   const page = Math.max(1, Number(req.query.page) || 1);
   const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 50));
@@ -76,9 +78,10 @@ const listAdminCampaigns = async (req: Request, res: Response) => {
 
   const counts = {
     ...rawCounts,
+    ALL: statusCounts.reduce((sum: number, item: { _id: string; count: number }) => sum + item.count, 0),
     PENDING: (rawCounts.PENDING || 0) + (rawCounts.PENDING_ADMIN_REVIEW || 0),
-    RUNNING: (rawCounts.RUNNING || 0) + (rawCounts.ACTIVE || 0) + (rawCounts.PARTIALLY_ACTIVE || 0) + (rawCounts.STARTING_SOON || 0),
-    REJECTED: (rawCounts.REJECTED || 0) + (rawCounts.REJECTED_BY_TALLYPADI || 0) + (rawCounts.PARTIALLY_REJECTED || 0),
+    RUNNING: (rawCounts.RUNNING || 0) + (rawCounts.APPROVED_BY_TALLYPADI || 0) + (rawCounts.SUBMITTING_TO_PROVIDERS || 0) + (rawCounts.ACTIVE || 0) + (rawCounts.PARTIALLY_ACTIVE || 0) + (rawCounts.STARTING_SOON || 0) + (rawCounts.ACTIVE_WITH_PENDING_CHANGES || 0) + (rawCounts.REQUIRES_REVIEW_AFTER_EDIT || 0) + (rawCounts.PAUSED || 0),
+    REJECTED: (rawCounts.REJECTED || 0) + (rawCounts.REJECTED_BY_TALLYPADI || 0) + (rawCounts.PARTIALLY_REJECTED || 0) + (rawCounts.FAILED || 0) + (rawCounts.CANCELLED || 0),
     COMPLETED: rawCounts.COMPLETED || 0,
   };
 
@@ -88,6 +91,7 @@ const listAdminCampaigns = async (req: Request, res: Response) => {
       providerCampaigns: providerMap.get(String(campaign._id)) || [],
     })),
     counts,
+    walletRepair,
     pagination: {
       page,
       limit,

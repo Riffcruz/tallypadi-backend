@@ -9,10 +9,13 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 
 type CampaignStatus =
   | 'PENDING_ADMIN_REVIEW'
+  | 'APPROVED_BY_TALLYPADI'
+  | 'SUBMITTING_TO_PROVIDERS'
   | 'STARTING_SOON'
   | 'ACTIVE'
   | 'PARTIALLY_ACTIVE'
   | 'ACTIVE_WITH_PENDING_CHANGES'
+  | 'REQUIRES_REVIEW_AFTER_EDIT'
   | 'PAUSED'
   | 'COMPLETED'
   | 'REJECTED_BY_TALLYPADI'
@@ -22,7 +25,7 @@ type CampaignStatus =
   | 'PENDING'
   | 'RUNNING'
   | 'REJECTED';
-type StatusFilter = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'REJECTED';
+type StatusFilter = 'ALL' | 'PENDING' | 'RUNNING' | 'COMPLETED' | 'REJECTED';
 
 interface Advertiser {
   _id?: string;
@@ -94,16 +97,20 @@ interface AdminAdCampaign {
   };
 }
 
-const statuses: StatusFilter[] = ['PENDING', 'RUNNING', 'COMPLETED', 'REJECTED'];
+const statuses: StatusFilter[] = ['ALL', 'PENDING', 'RUNNING', 'COMPLETED', 'REJECTED'];
 
 const statusMeta: Record<string, { label: string; icon: React.ElementType; className: string }> = {
+  ALL: { label: 'All Ads', icon: Megaphone, className: 'border-slate-500/30 bg-slate-500/10 text-slate-300' },
   PENDING: { label: 'Pending', icon: Clock3, className: 'border-amber-500/30 bg-amber-500/10 text-amber-300' },
   PENDING_ADMIN_REVIEW: { label: 'Pending', icon: Clock3, className: 'border-amber-500/30 bg-amber-500/10 text-amber-300' },
+  APPROVED_BY_TALLYPADI: { label: 'Approved', icon: CheckCircle2, className: 'border-blue-500/30 bg-blue-500/10 text-blue-300' },
+  SUBMITTING_TO_PROVIDERS: { label: 'Submitting', icon: Clock3, className: 'border-blue-500/30 bg-blue-500/10 text-blue-300' },
   RUNNING: { label: 'Running', icon: PlayCircle, className: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' },
   STARTING_SOON: { label: 'Starting Soon', icon: Clock3, className: 'border-blue-500/30 bg-blue-500/10 text-blue-300' },
   ACTIVE: { label: 'Active', icon: PlayCircle, className: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' },
   PARTIALLY_ACTIVE: { label: 'Partially Active', icon: PlayCircle, className: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' },
   ACTIVE_WITH_PENDING_CHANGES: { label: 'Active + Pending Edits', icon: PlayCircle, className: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' },
+  REQUIRES_REVIEW_AFTER_EDIT: { label: 'Pending Edit Review', icon: Clock3, className: 'border-amber-500/30 bg-amber-500/10 text-amber-300' },
   PAUSED: { label: 'Paused', icon: StopCircle, className: 'border-slate-500/30 bg-slate-500/10 text-slate-300' },
   COMPLETED: { label: 'Completed', icon: CheckCircle2, className: 'border-slate-500/30 bg-slate-500/10 text-slate-300' },
   REJECTED: { label: 'Rejected', icon: XCircle, className: 'border-red-500/30 bg-red-500/10 text-red-300' },
@@ -114,8 +121,9 @@ const statusMeta: Record<string, { label: string; icon: React.ElementType; class
 };
 
 const statusGroups: Record<StatusFilter, CampaignStatus[]> = {
+  ALL: [],
   PENDING: ['PENDING', 'PENDING_ADMIN_REVIEW'],
-  RUNNING: ['RUNNING', 'ACTIVE', 'PARTIALLY_ACTIVE', 'STARTING_SOON', 'ACTIVE_WITH_PENDING_CHANGES', 'PAUSED'],
+  RUNNING: ['RUNNING', 'APPROVED_BY_TALLYPADI', 'SUBMITTING_TO_PROVIDERS', 'ACTIVE', 'PARTIALLY_ACTIVE', 'STARTING_SOON', 'ACTIVE_WITH_PENDING_CHANGES', 'REQUIRES_REVIEW_AFTER_EDIT', 'PAUSED'],
   COMPLETED: ['COMPLETED'],
   REJECTED: ['REJECTED', 'REJECTED_BY_TALLYPADI', 'PARTIALLY_REJECTED', 'FAILED', 'CANCELLED'],
 };
@@ -149,7 +157,7 @@ const getProduct = (value: AdminAdCampaign['product']): AdminProduct => (
 export default function AdsTab({ adminToken }: { adminToken: string }) {
   const [campaigns, setCampaigns] = useState<AdminAdCampaign[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({});
-  const [status, setStatus] = useState<StatusFilter>('PENDING');
+  const [status, setStatus] = useState<StatusFilter>('ALL');
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [actionId, setActionId] = useState<string | null>(null);
@@ -224,9 +232,12 @@ export default function AdsTab({ adminToken }: { adminToken: string }) {
       campaign.id,
     ].join(' ').toLowerCase();
     return text.includes(query.trim().toLowerCase());
-  }).filter((campaign) => statusGroups[status].includes(campaign.status));
+  }).filter((campaign) => status === 'ALL' || statusGroups[status].includes(campaign.status));
 
-  const getStatusCount = (filter: StatusFilter) => statusGroups[filter].reduce((sum, item) => sum + (counts[item] || 0), 0);
+  const getStatusCount = (filter: StatusFilter) => {
+    if (filter === 'ALL') return counts.ALL || campaigns.length;
+    return statusGroups[filter].reduce((sum, item) => sum + (counts[item] || 0), 0);
+  };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">

@@ -35,6 +35,16 @@ interface StoreCampaign {
   product: string;
 }
 
+type PlatformOption = 'TALLYPADI_MARKETPLACE_BOOST' | 'META_ADS' | 'TIKTOK_ADS' | 'GOOGLE_ADS';
+
+const PROMOTION_PLATFORM_OPTIONS: { value: PlatformOption; label: string }[] = [
+  { value: 'TALLYPADI_MARKETPLACE_BOOST', label: 'TallyPadi Marketplace Boost' },
+  { value: 'META_ADS', label: 'Meta Ads' },
+  { value: 'TIKTOK_ADS', label: 'TikTok Ads' },
+  { value: 'GOOGLE_ADS', label: 'Google Ads' },
+];
+const ALL_PROMOTION_PLATFORMS = PROMOTION_PLATFORM_OPTIONS.map((option) => option.value);
+
 const platformLabel = (platform: string) => {
   if (platform === 'TALLYPADI_MARKETPLACE_BOOST' || platform === 'TALLYPADI_SEO') return 'TallyPadi Marketplace Boost';
   if (platform === 'META_ADS' || platform === 'META') return 'Meta Ads';
@@ -62,7 +72,7 @@ export default function StoreProductsModal({ token, onClose }: StoreProductsModa
   const [walletBalance, setWalletBalance] = useState(0);
   const [campaigns, setCampaigns] = useState<StoreCampaign[]>([]);
   const [boostingProductId, setBoostingProductId] = useState<string | null>(null);
-  const [boostForm, setBoostForm] = useState({ planId: '', platform: 'ALL', budget: '', brief: '', keywords: '' });
+  const [boostForm, setBoostForm] = useState({ planId: '', platforms: [...ALL_PROMOTION_PLATFORMS], budget: '', brief: '', keywords: '' });
   const [boosting, setBoosting] = useState(false);
   const selectedBoostPlan = adsPlans.find(plan => plan.id === boostForm.planId);
 
@@ -133,6 +143,7 @@ export default function StoreProductsModal({ token, onClose }: StoreProductsModa
 
   const handleBoostSubmit = async (productId: string) => {
     if (!boostForm.planId) return Swal.fire('Error', 'Please select a duration', 'error');
+    if (!boostForm.platforms.length) return Swal.fire('Error', 'Please select at least one platform', 'error');
     
     const selectedPlan = adsPlans.find(p => p.id === boostForm.planId);
     if (!selectedPlan) return;
@@ -159,7 +170,7 @@ export default function StoreProductsModal({ token, onClose }: StoreProductsModa
     try {
       const res = await axios.post(`${process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api'}/ads/boost/${productId}`, {
         planId: boostForm.planId,
-        platform: boostForm.platform,
+        providers: boostForm.platforms,
         budget,
         adDetails: {
           brief: boostForm.brief.trim(),
@@ -174,7 +185,7 @@ export default function StoreProductsModal({ token, onClose }: StoreProductsModa
         setCampaigns(prev => [res.data.campaign, ...prev.filter(c => c.id !== res.data.campaign.id)]);
       }
       setBoostingProductId(null);
-      setBoostForm({ planId: '', platform: 'ALL', budget: '', brief: '', keywords: '' });
+      setBoostForm({ planId: '', platforms: [...ALL_PROMOTION_PLATFORMS], budget: '', brief: '', keywords: '' });
       Swal.fire('Submitted', 'Boost request is pending admin review.', 'success');
     } catch (err: unknown) {
       console.error(err);
@@ -281,21 +292,34 @@ export default function StoreProductsModal({ token, onClose }: StoreProductsModa
                         </div>
                         
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-xs font-semibold text-blue-800 mb-1.5 uppercase tracking-wider">Select Platform</label>
-                            <select
-                              value={boostForm.platform}
-                              onChange={e => setBoostForm({ ...boostForm, platform: e.target.value })}
-                              className="w-full border border-blue-200 bg-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                            >
-                              <option value="ALL">All Platforms</option>
-                              <option value="TALLYPADI_MARKETPLACE_BOOST">{platformLabel('TALLYPADI_MARKETPLACE_BOOST')}</option>
-                              <option value="META_ADS">{platformLabel('META_ADS')}</option>
-                              <option value="TIKTOK_ADS">{platformLabel('TIKTOK_ADS')}</option>
-                              <option value="GOOGLE_ADS">{platformLabel('GOOGLE_ADS')}</option>
-                            </select>
+                          <div className="md:col-span-2">
+                            <label className="block text-xs font-semibold text-blue-800 mb-1.5 uppercase tracking-wider">Select Platforms</label>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 rounded-xl border border-blue-200 bg-white p-2">
+                              {PROMOTION_PLATFORM_OPTIONS.map((option) => {
+                                const checked = boostForm.platforms.includes(option.value);
+                                return (
+                                  <label
+                                    key={option.value}
+                                    className={`flex items-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-bold transition-colors ${checked ? 'border-blue-300 bg-blue-50 text-blue-700' : 'border-transparent text-slate-600 hover:bg-slate-50'}`}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={checked}
+                                      onChange={() => setBoostForm((prev) => ({
+                                        ...prev,
+                                        platforms: checked
+                                          ? prev.platforms.filter((platform) => platform !== option.value)
+                                          : [...prev.platforms, option.value],
+                                      }))}
+                                      className="h-4 w-4 accent-blue-600"
+                                    />
+                                    {platformLabel(option.value)}
+                                  </label>
+                                );
+                              })}
+                            </div>
                           </div>
-                          <div>
+                          <div className="md:col-span-2">
                             <label className="block text-xs font-semibold text-blue-800 mb-1.5 uppercase tracking-wider">Select Duration</label>
                             <select
                               value={boostForm.planId}
