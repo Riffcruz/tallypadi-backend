@@ -12,6 +12,37 @@ const getAuthUser = async (req: Request) => {
     return await User.findById(userId);
 };
 
+const cleanBranchText = (value: unknown, maxLength = 120) =>
+    String(value || '')
+        .replace(/[\u0000-\u001F\u007F-\u009F]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, maxLength);
+
+const generateWarehousePhone = (hqId: unknown) => {
+    const suffix = Math.random().toString(36).slice(2, 8).toUpperCase();
+    return `WH${String(hqId).slice(-8).toUpperCase()}${Date.now().toString(36).toUpperCase()}${suffix}`;
+};
+
+const getCreateBranchError = (error: any) => {
+    if (error?.code === 11000) {
+        const duplicateField = Object.keys(error.keyPattern || error.keyValue || {})[0] || 'value';
+        if (duplicateField === 'phoneNumber') return 'That phone number is already registered.';
+        if (duplicateField === 'email') return 'That email is already registered.';
+        if (duplicateField === 'shopSlug') return 'That shop link is already taken.';
+        return `Duplicate ${duplicateField}.`;
+    }
+
+    if (error?.name === 'ValidationError') {
+        const messages = Object.values(error.errors || {})
+            .map((item: any) => item?.message)
+            .filter(Boolean);
+        return messages[0] || 'Invalid branch details.';
+    }
+
+    return 'Server Error';
+};
+
 // GET /hq/branches
 // List all branches (Owners) linked to this HQ
 export const getBranches = async (req: Request, res: Response) => {
@@ -268,17 +299,20 @@ export const createBranch = async (req: Request, res: Response) => {
         }
 
         const hqId = (user.role === 'STAFF') ? user.ownerId : user._id;
+        if (!hqId) {
+            return res.status(400).json({ error: 'HQ owner could not be resolved for this account.' });
+        }
 
-        if (!businessName) {
+        const cleanBusinessName = cleanBranchText(businessName);
+        if (!cleanBusinessName) {
             return res.status(400).json({ error: 'Business name is required' });
         }
 
         const type = branchType === 'WAREHOUSE' ? 'WAREHOUSE' : 'SHOP';
         
-        let finalPhoneNumber = phoneNumber;
-        // If it's a warehouse and phone number is missing, auto-generate one to satisfy the unique/required constraints
+        let finalPhoneNumber = cleanBranchText(phoneNumber, 80);
         if (type === 'WAREHOUSE' && !finalPhoneNumber) {
-            finalPhoneNumber = `WH-${hqId}-${Date.now()}`;
+            finalPhoneNumber = generateWarehousePhone(hqId);
         } else if (!finalPhoneNumber) {
             return res.status(400).json({ error: 'Phone number is required for Shop Branches' });
         }
@@ -289,17 +323,20 @@ export const createBranch = async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'Phone number is already registered' });
         }
 
-        let hashedPassword = null;
-        if (password) {
+        const cleanPassword = String(password || '').trim();
+        let hashedPassword: string | undefined;
+        if (cleanPassword) {
             const salt = await bcrypt.genSalt(10);
-            hashedPassword = await bcrypt.hash(password, salt);
+            hashedPassword = await bcrypt.hash(cleanPassword, salt);
+        } else if (type === 'SHOP') {
+            return res.status(400).json({ error: 'Password is required for Shop Branches' });
         }
 
         const newBranch = new User({
             phoneNumber: finalPhoneNumber,
-            password: hashedPassword,
-            businessName,
-            name: `${businessName} Manager`,
+            ...(hashedPassword ? { password: hashedPassword } : {}),
+            businessName: cleanBusinessName,
+            name: `${cleanBusinessName} Manager`,
             role: 'OWNER',
             hqId: hqId,
             branchType: type,
@@ -324,6 +361,9 @@ export const createBranch = async (req: Request, res: Response) => {
 
     } catch (error) {
         console.error('HQ Create Branch/Warehouse Error:', error);
-        return res.status(500).json({ error: 'Server Error' });
+        const err = error as any;
+        const message = getCreateBranchError(err);
+        const status = err?.code === 11000 ? 409 : err?.name === 'ValidationError' ? 400 : 500;
+        return res.status(status).json({ error: message });
     }
 };

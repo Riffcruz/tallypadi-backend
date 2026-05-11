@@ -1,30 +1,56 @@
 import { Schema, model, Document, Types } from 'mongoose';
+import { AD_PROVIDERS, AdCampaignStatus, AdProvider } from '../types/ads';
 
-export type AdPlatform = 'TALLYPADI_SEO' | 'META' | 'TIKTOK';
-export type AdCampaignStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'REJECTED';
+export type { AdCampaignStatus } from '../types/ads';
+export type AdPlatform = AdProvider | 'TALLYPADI_SEO' | 'META' | 'TIKTOK';
 
 export interface IAdCampaign extends Document {
   user: Types.ObjectId;
-  product: Types.ObjectId;
+  product?: Types.ObjectId | null;
+  campaignType: 'PRODUCT_BOOST' | 'CUSTOM_CAMPAIGN';
   status: AdCampaignStatus;
-  platforms: AdPlatform[];
-  planId: string;
-  planLabel: string;
-  durationDays: number;
-  basePrice: number;
-  budget: number;
-  walletCharged: boolean;
+  name?: string;
+  activeRunId?: Types.ObjectId | null;
+  latestRunId?: Types.ObjectId | null;
+  selectedProviders?: AdProvider[];
+  walletCurrency?: string;
+  targetAudience?: string;
+  targetLocation?: {
+    country?: string;
+    state?: string;
+    city?: string;
+  };
+  ageRange?: {
+    min?: number | null;
+    max?: number | null;
+  };
+  campaignGoal?: string;
+  keywords?: string[];
+  creativeNotes?: string;
+  merchantConsentAccepted?: boolean;
+  merchantConsentVersion?: string | null;
+  adminNotes?: string | null;
+  rejectionReason?: string | null;
+  version: number;
+
+  // Legacy fields kept so old records and existing serializers do not explode during rollout.
+  platforms?: AdPlatform[];
+  planId?: string;
+  planLabel?: string;
+  durationDays?: number;
+  basePrice?: number;
+  budget?: number;
+  walletCharged?: boolean;
   walletBalanceAfterCharge?: number | null;
   refundAmount?: number | null;
-  requestedAt: Date;
+  requestedAt?: Date;
   reviewedAt?: Date | null;
   reviewedBy?: Types.ObjectId | null;
   startedAt?: Date | null;
   expiresAt?: Date | null;
   completedAt?: Date | null;
-  rejectionReason?: string | null;
-  productSnapshot: {
-    name: string;
+  productSnapshot?: {
+    name?: string;
     description?: string;
     image?: string | null;
     price?: number;
@@ -47,27 +73,70 @@ export interface IAdCampaign extends Document {
   updatedAt: Date;
 }
 
+const legacyPlatformValues = ['TALLYPADI_SEO', 'META', 'TIKTOK'];
+const statusValues: AdCampaignStatus[] = [
+  'DRAFT',
+  'PENDING_ADMIN_REVIEW',
+  'REJECTED_BY_TALLYPADI',
+  'APPROVED_BY_TALLYPADI',
+  'SUBMITTING_TO_PROVIDERS',
+  'STARTING_SOON',
+  'ACTIVE',
+  'ACTIVE_WITH_PENDING_CHANGES',
+  'PARTIALLY_ACTIVE',
+  'PARTIALLY_REJECTED',
+  'PAUSED',
+  'REQUIRES_REVIEW_AFTER_EDIT',
+  'COMPLETED',
+  'CANCELLED',
+  'FAILED',
+  'PENDING',
+  'RUNNING',
+  'REJECTED',
+];
+
 const adCampaignSchema = new Schema<IAdCampaign>(
   {
     user: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
-    product: { type: Schema.Types.ObjectId, ref: 'Inventory', required: true, index: true },
-    status: {
+    product: { type: Schema.Types.ObjectId, ref: 'Inventory', default: null, index: true },
+    campaignType: {
       type: String,
-      enum: ['PENDING', 'RUNNING', 'COMPLETED', 'REJECTED'],
-      default: 'PENDING',
+      enum: ['PRODUCT_BOOST', 'CUSTOM_CAMPAIGN'],
+      default: 'PRODUCT_BOOST',
       required: true,
       index: true,
     },
-    platforms: [{
-      type: String,
-      enum: ['TALLYPADI_SEO', 'META', 'TIKTOK'],
-      required: true,
-    }],
-    planId: { type: String, required: true, trim: true },
-    planLabel: { type: String, required: true, trim: true },
-    durationDays: { type: Number, required: true, min: 1 },
-    basePrice: { type: Number, required: true, min: 0 },
-    budget: { type: Number, required: true, min: 0 },
+    status: { type: String, enum: statusValues, default: 'PENDING_ADMIN_REVIEW', required: true, index: true },
+    name: { type: String, trim: true, maxlength: 160 },
+    activeRunId: { type: Schema.Types.ObjectId, ref: 'CampaignRun', default: null, index: true },
+    latestRunId: { type: Schema.Types.ObjectId, ref: 'CampaignRun', default: null, index: true },
+    selectedProviders: [{ type: String, enum: AD_PROVIDERS }],
+    walletCurrency: { type: String, uppercase: true, trim: true, default: 'NGN' },
+    targetAudience: { type: String, trim: true, maxlength: 500, default: '' },
+    targetLocation: {
+      country: { type: String, trim: true, uppercase: true, default: 'NG' },
+      state: { type: String, trim: true, default: '' },
+      city: { type: String, trim: true, default: '' },
+    },
+    ageRange: {
+      min: { type: Number, default: null, min: 13, max: 100 },
+      max: { type: Number, default: null, min: 13, max: 100 },
+    },
+    campaignGoal: { type: String, trim: true, maxlength: 120, default: '' },
+    keywords: [{ type: String, trim: true, maxlength: 60 }],
+    creativeNotes: { type: String, trim: true, maxlength: 1000, default: '' },
+    merchantConsentAccepted: { type: Boolean, default: false },
+    merchantConsentVersion: { type: String, default: null },
+    adminNotes: { type: String, default: null, trim: true, maxlength: 2000 },
+    rejectionReason: { type: String, default: null, trim: true, maxlength: 500 },
+    version: { type: Number, default: 0 },
+
+    platforms: [{ type: String, enum: [...AD_PROVIDERS, ...legacyPlatformValues] }],
+    planId: { type: String, trim: true },
+    planLabel: { type: String, trim: true },
+    durationDays: { type: Number, min: 1 },
+    basePrice: { type: Number, min: 0 },
+    budget: { type: Number, min: 0 },
     walletCharged: { type: Boolean, default: false },
     walletBalanceAfterCharge: { type: Number, default: null },
     refundAmount: { type: Number, default: null },
@@ -77,9 +146,8 @@ const adCampaignSchema = new Schema<IAdCampaign>(
     startedAt: { type: Date, default: null },
     expiresAt: { type: Date, default: null },
     completedAt: { type: Date, default: null },
-    rejectionReason: { type: String, default: null, trim: true, maxlength: 500 },
     productSnapshot: {
-      name: { type: String, required: true, trim: true },
+      name: { type: String, trim: true, default: '' },
       description: { type: String, default: '', trim: true },
       image: { type: String, default: null },
       price: { type: Number, default: 0 },

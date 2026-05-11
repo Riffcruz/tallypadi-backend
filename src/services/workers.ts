@@ -9,6 +9,11 @@ import { User } from '../models/user.model';
 import { SupportMessage } from '../models/supportMessage.model';
 import { processRawWebhook, handleMessageLogic } from '../controllers/whatsapp.controller';
 import { executePushNotification, executeGlobalPushNotification } from './push.service';
+import {
+  applyProviderCampaignControl,
+  submitProviderCampaignToProvider,
+  syncProviderCampaignMetricsFromProvider,
+} from './Campaign/providerAutomation.service';
 
 export const replyWorker = new Worker(
   'outbound-replies', // ✅ Fixed: Matches queue.service.ts
@@ -302,4 +307,43 @@ export const notificationWorker = new Worker(
 notificationWorker.on('completed', (job: import('bullmq').Job) => console.log(`🔔 Push sent: ${job.data?.type}`));
 notificationWorker.on('failed', (job: import('bullmq').Job | undefined, err: Error) =>
   console.error(`❌ Push failed: ${err.message}`)
+);
+
+// ============================================================
+// WORKER: ADS AUTOMATION
+// Submits approved provider campaigns using TallyPadi system ad accounts.
+// ============================================================
+export const adAutomationWorker = new Worker(
+  'ad-automation',
+  async (job: import('bullmq').Job) => {
+    if (job.name !== 'submit-provider-campaign') {
+      if (job.name === 'sync-provider-metrics') {
+        const providerCampaignId = String(job.data?.providerCampaignId || '');
+        await syncProviderCampaignMetricsFromProvider(providerCampaignId);
+        return;
+      }
+      if (job.name === 'control-provider-campaign') {
+        const providerCampaignId = String(job.data?.providerCampaignId || '');
+        const action = String(job.data?.action || 'PAUSE') as 'PAUSE' | 'STOP' | 'ENABLE';
+        await applyProviderCampaignControl(providerCampaignId, action);
+        return;
+      }
+      console.log(`⚠️ Unknown ads automation job: ${job.name}`);
+      return;
+    }
+
+    const providerCampaignId = String(job.data?.providerCampaignId || '');
+    await submitProviderCampaignToProvider(providerCampaignId);
+  },
+  {
+    connection: createRedisConnection('worker-ad-automation') as any,
+    concurrency: 3,
+  }
+);
+
+adAutomationWorker.on('completed', (job: import('bullmq').Job) =>
+  console.log(`📣 Ads automation completed: ${job.data?.providerCampaignId}`)
+);
+adAutomationWorker.on('failed', (job: import('bullmq').Job | undefined, err: Error) =>
+  console.error(`❌ Ads automation failed [${job?.data?.providerCampaignId}]: ${err.message}`)
 );

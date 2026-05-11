@@ -10,6 +10,10 @@ import {
   Loader2,
   Menu,
   Shield,
+  BadgeCheck,
+  FileCheck,
+  UploadCloud,
+  AlertCircle,
   Crown,
   Smartphone,
   Camera,
@@ -38,6 +42,26 @@ const THEME_COLORS = [
   { label: 'Slate',    hex: '#475569' },
 ];
 
+const STORE_SETUP_LABELS: Record<string, string> = {
+  businessName: 'Business name',
+  shopSlug: 'Shop link',
+  shopDescription: 'Shop description',
+  phoneNumber: 'Contact phone',
+  'location.country': 'Country',
+  'location.state': 'State / region',
+  'location.city': 'City',
+  'location.address': 'Street address',
+};
+
+type VerificationFileField =
+  | 'documentFrontUrl'
+  | 'documentBackUrl'
+  | 'selfieCenterUrl'
+  | 'selfieLeftUrl'
+  | 'selfieRightUrl'
+  | 'selfieUpUrl'
+  | 'selfieDownUrl';
+
 export default function OnlineStorePage() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -59,6 +83,25 @@ export default function OnlineStorePage() {
   const [addressLine, setAddressLine] = useState('');
 
   const [showProductsModal, setShowProductsModal] = useState(false);
+  const [storeSetup, setStoreSetup] = useState<{ isComplete: boolean; missing: string[] } | null>(null);
+  const [verificationStatus, setVerificationStatus] = useState('UNVERIFIED');
+  const [verificationSubmitting, setVerificationSubmitting] = useState(false);
+  const [verificationUploading, setVerificationUploading] = useState<Record<string, boolean>>({});
+  const [verificationForm, setVerificationForm] = useState({
+    idType: 'NIN',
+    fullName: '',
+    governmentIdNumber: '',
+    dateOfBirth: '',
+    address: '',
+    documentFrontUrl: '',
+    documentBackUrl: '',
+    selfieCenterUrl: '',
+    selfieLeftUrl: '',
+    selfieRightUrl: '',
+    selfieUpUrl: '',
+    selfieDownUrl: '',
+    consentAccepted: false,
+  });
 
   const getTokenOrRedirect = () => {
     const token = getCookie('tallyToken');
@@ -90,8 +133,25 @@ export default function OnlineStorePage() {
     if (!token) return;
     const fetchData = async () => {
       try {
-        const res = await axios.get(`${API_URL}/dashboard`, { headers: { Authorization: `Bearer ${token}` } });
-        hydrateFromDashboard(res.data?.user || {});
+        const [dashboardRes, shopRes, verificationRes] = await Promise.allSettled([
+          axios.get(`${API_URL}/dashboard`, { headers: { Authorization: `Bearer ${token}` } }),
+          axios.get(`${API_URL}/shop/me`, { headers: { Authorization: `Bearer ${token}` } }),
+          axios.get(`${API_URL}/shop/verification`, { headers: { Authorization: `Bearer ${token}` } }),
+        ]);
+        if (dashboardRes.status === 'fulfilled') hydrateFromDashboard(dashboardRes.value.data?.user || {});
+        if (shopRes.status === 'fulfilled') {
+          const shop = shopRes.value.data || {};
+          setStoreSetup(shop.storeSetup || null);
+          setVerificationStatus(shop.verification?.status || 'UNVERIFIED');
+          setVerificationForm((current) => ({
+            ...current,
+            fullName: current.fullName || shop.businessName || '',
+            address: current.address || shop.location?.address || '',
+          }));
+        }
+        if (verificationRes.status === 'fulfilled') {
+          setVerificationStatus(verificationRes.value.data?.status || 'UNVERIFIED');
+        }
       } catch (err) {
         console.error('Dashboard fetch error:', err);
       } finally {
@@ -123,7 +183,7 @@ export default function OnlineStorePage() {
     if (!token) return;
     setSaving(true);
     try {
-      await axios.put(
+      const res = await axios.put(
         `${API_URL}/shop/me`,
         { 
           shopSlug, 
@@ -140,11 +200,75 @@ export default function OnlineStorePage() {
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
+      setStoreSetup(res.data?.storeSetup || null);
       Swal.fire({ title: 'Shop Updated', text: 'Your storefront settings have been saved.', icon: 'success', timer: 1500, showConfirmButton: false });
     } catch (err: any) {
       Swal.fire('Error', err?.response?.data?.error || 'Failed to update shop', 'error');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const uploadVerificationFile = async (field: VerificationFileField, file?: File | null) => {
+    const token = getTokenOrRedirect();
+    if (!token || !file) return;
+    setVerificationUploading((current) => ({ ...current, [field]: true }));
+    try {
+      const purpose = field.startsWith('selfie') ? field.replace('Url', '') : field === 'documentBackUrl' ? 'documentBack' : 'documentFront';
+      const presignRes = await fetch(`${API_URL}/shop/verification/upload-url`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          mime: file.type,
+          ext: file.name.split('.').pop() || 'jpg',
+          purpose,
+        }),
+      });
+
+      if (!presignRes.ok) {
+        const error = await presignRes.json().catch(() => ({}));
+        throw new Error(error.error || 'Could not prepare upload');
+      }
+
+      const { uploadUrl, publicUrl } = await presignRes.json();
+      const uploadRes = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': file.type },
+        body: file,
+      });
+      if (!uploadRes.ok) throw new Error('Upload failed');
+
+      setVerificationForm((current) => ({ ...current, [field]: publicUrl }));
+      Swal.fire({ toast: true, position: 'top', icon: 'success', title: 'Uploaded', showConfirmButton: false, timer: 1000 });
+    } catch (err: any) {
+      Swal.fire('Upload failed', err?.message || 'Could not upload verification file', 'error');
+    } finally {
+      setVerificationUploading((current) => ({ ...current, [field]: false }));
+    }
+  };
+
+  const handleSubmitVerification = async () => {
+    const token = getTokenOrRedirect();
+    if (!token) return;
+    setVerificationSubmitting(true);
+    try {
+      const payload = {
+        ...verificationForm,
+        countryCode,
+        address: verificationForm.address || addressLine,
+      };
+      const res = await axios.post(`${API_URL}/shop/verification`, payload, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setVerificationStatus(res.data?.verification?.status || 'PENDING');
+      Swal.fire('Submitted', 'Your seller verification is pending admin review.', 'success');
+    } catch (err: any) {
+      Swal.fire('Verification Error', err?.response?.data?.error || 'Failed to submit verification', 'error');
+    } finally {
+      setVerificationSubmitting(false);
     }
   };
 
@@ -373,6 +497,107 @@ export default function OnlineStorePage() {
                   {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
                   Save Shop Settings
                 </button>
+              </div>
+
+              {/* ── Marketplace Readiness ── */}
+              <div className={`bg-white p-6 md:p-8 rounded-2xl shadow-sm border ${storeSetup?.isComplete ? 'border-emerald-100' : 'border-amber-100'}`}>
+                <div className="flex items-start gap-3">
+                  <div className={`p-2 rounded-xl ${storeSetup?.isComplete ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
+                    {storeSetup?.isComplete ? <FileCheck size={20} /> : <AlertCircle size={20} />}
+                  </div>
+                  <div className="flex-1">
+                    <h2 className="text-lg font-bold text-gray-900">Marketplace Readiness</h2>
+                    <p className="text-xs text-gray-400">Your shop appears publicly after required store settings are complete.</p>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {Object.entries(STORE_SETUP_LABELS).map(([key, label]) => {
+                        const missing = Boolean(storeSetup?.missing?.includes(key));
+                        return (
+                          <span key={key} className={`rounded-full px-3 py-1 text-xs font-bold ${missing ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'}`}>
+                            {missing ? 'Add ' : ''}{label}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Seller Verification ── */}
+              <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-sky-100">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-2 bg-sky-50 rounded-xl text-sky-600"><BadgeCheck size={20} /></div>
+                  <div>
+                    <h2 className="text-lg font-bold text-gray-900">Seller Verification</h2>
+                    <p className="text-xs text-gray-400">Approved sellers get a verified badge on marketplace listings and storefronts.</p>
+                  </div>
+                  <span className={`ml-auto rounded-full px-3 py-1 text-xs font-black ${verificationStatus === 'VERIFIED' ? 'bg-sky-100 text-sky-700' : verificationStatus === 'PENDING' ? 'bg-amber-100 text-amber-700' : verificationStatus === 'REJECTED' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600'}`}>
+                    {verificationStatus}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wider">ID Type</label>
+                    <select value={verificationForm.idType} onChange={(e) => setVerificationForm({ ...verificationForm, idType: e.target.value })} className="w-full border border-gray-200 bg-slate-50/50 rounded-xl px-4 py-3 text-sm font-medium">
+                      <option value="NIN">NIN</option>
+                      <option value="NATIONAL_ID">National ID</option>
+                      <option value="DRIVERS_LICENSE">Driver Licence</option>
+                      <option value="INTERNATIONAL_PASSPORT">International Passport</option>
+                      <option value="GOVERNMENT_ID">Government Issued ID</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wider">Full Name</label>
+                    <input value={verificationForm.fullName} onChange={(e) => setVerificationForm({ ...verificationForm, fullName: e.target.value })} className="w-full border border-gray-200 bg-slate-50/50 rounded-xl px-4 py-3 text-sm font-medium" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wider">ID Number</label>
+                    <input value={verificationForm.governmentIdNumber} onChange={(e) => setVerificationForm({ ...verificationForm, governmentIdNumber: e.target.value })} className="w-full border border-gray-200 bg-slate-50/50 rounded-xl px-4 py-3 text-sm font-medium" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wider">Date of Birth</label>
+                    <input type="date" value={verificationForm.dateOfBirth} onChange={(e) => setVerificationForm({ ...verificationForm, dateOfBirth: e.target.value })} className="w-full border border-gray-200 bg-slate-50/50 rounded-xl px-4 py-3 text-sm font-medium" />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wider">Residential Address</label>
+                    <input value={verificationForm.address} onChange={(e) => setVerificationForm({ ...verificationForm, address: e.target.value })} placeholder={addressLine || 'Enter address'} className="w-full border border-gray-200 bg-slate-50/50 rounded-xl px-4 py-3 text-sm font-medium" />
+                  </div>
+                </div>
+
+                <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {[
+                    ['documentFrontUrl', 'ID Front'],
+                    ['documentBackUrl', 'ID Back'],
+                    ['selfieCenterUrl', 'Face Center'],
+                    ...(countryCode !== 'NG' ? [
+                      ['selfieLeftUrl', 'Face Left'],
+                      ['selfieRightUrl', 'Face Right'],
+                      ['selfieUpUrl', 'Face Up'],
+                      ['selfieDownUrl', 'Face Down'],
+                    ] : []),
+                  ].map(([field, label]) => (
+                    <label key={field} className="relative flex min-h-24 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-4 text-center hover:bg-slate-100">
+                      <UploadCloud size={18} className="mb-2 text-sky-600" />
+                      <span className="text-xs font-black text-slate-700">{label}</span>
+                      <span className={`mt-1 text-[10px] font-bold ${(verificationForm as any)[field] ? 'text-emerald-600' : 'text-slate-400'}`}>
+                        {verificationUploading[field] ? 'Uploading...' : (verificationForm as any)[field] ? 'Uploaded' : 'Tap to upload'}
+                      </span>
+                      <input type="file" accept="image/*" className="absolute inset-0 opacity-0" onChange={(e) => uploadVerificationFile(field as VerificationFileField, e.target.files?.[0])} />
+                    </label>
+                  ))}
+                </div>
+
+                <label className="mt-5 flex items-start gap-3 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
+                  <input type="checkbox" checked={verificationForm.consentAccepted} onChange={(e) => setVerificationForm({ ...verificationForm, consentAccepted: e.target.checked })} className="mt-1" />
+                  <span>I confirm this information belongs to me and I authorize TallyPadi to review it for marketplace seller verification.</span>
+                </label>
+
+                <div className="mt-5 flex justify-end">
+                  <button onClick={handleSubmitVerification} disabled={verificationSubmitting || verificationStatus === 'PENDING' || verificationStatus === 'VERIFIED'} className="inline-flex items-center gap-2 rounded-xl bg-sky-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-sky-600/20 disabled:opacity-50">
+                    {verificationSubmitting ? <Loader2 size={16} className="animate-spin" /> : <BadgeCheck size={16} />}
+                    Submit Verification
+                  </button>
+                </div>
               </div>
             </>
           ) : (

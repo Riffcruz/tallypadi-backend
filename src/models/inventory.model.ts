@@ -24,7 +24,7 @@ export interface IInventoryItem extends Document {
 
   // ── Paid Ads & Boosts ──
   boosts?: {
-    platform: string; // 'TALLYPADI_SEO', 'TIKTOK', 'META'
+    platform: string; // e.g. 'TALLYPADI_MARKETPLACE_BOOST', 'META_ADS', 'TIKTOK_ADS', 'GOOGLE_ADS'
     expiresAt: Date;
     planId: string;
     campaignId?: Types.ObjectId;

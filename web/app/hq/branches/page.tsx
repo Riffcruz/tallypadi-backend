@@ -50,7 +50,12 @@ export default function HqBranchesPage() {
 
         setSubmitting(true);
         try {
-            await axios.post(`${API_URL}/hq/branch`, formData, {
+            const payload = {
+                ...formData,
+                phoneNumber: formData.phoneNumber.trim(),
+                password: formData.branchType === 'WAREHOUSE' && !formData.password.trim() ? undefined : formData.password,
+            };
+            await axios.post(`${API_URL}/hq/branch`, payload, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             Swal.fire({
@@ -209,8 +214,8 @@ export default function HqBranchesPage() {
                                 <label className="block text-sm font-bold text-slate-700 mb-1">Password</label>
                                 <input 
                                     type="password" 
-                                    required 
-                                    placeholder="Set login password for branch"
+                                    required={formData.branchType === 'SHOP'}
+                                    placeholder={formData.branchType === 'WAREHOUSE' ? 'Optional for warehouse' : 'Set login password for branch'}
                                     className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-600 focus:border-indigo-600 outline-none transition-all font-medium text-slate-800"
                                     value={formData.password}
                                     onChange={(e) => setFormData({...formData, password: e.target.value})}

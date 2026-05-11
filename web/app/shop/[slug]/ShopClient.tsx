@@ -4,6 +4,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import axios from 'axios';
 import {
+  BadgeCheck,
   ShoppingBag, Loader2, PackageX, ExternalLink, AlertTriangle,
   Search, Menu, Plus, Minus, ShoppingCart, X, MessageCircle,
 } from 'lucide-react';
@@ -37,6 +38,10 @@ type ShopInfo = {
   categories: string[];
   themeColor?: string;
   currencyCode?: string;
+  verification?: {
+    verified?: boolean;
+    label?: string | null;
+  };
 };
 
 interface ShopClientProps {
@@ -214,6 +219,12 @@ export default function ShopClient({ initialShop, slug }: ShopClientProps) {
                        <ShoppingBag size={20} />
                     </div>
                     <h1 className="text-white text-2xl md:text-3xl font-black tracking-tight drop-shadow-sm">{initialShop.name}</h1>
+                    {initialShop.verification?.verified && (
+                      <span title={initialShop.verification.label || 'Verified seller'} className="hidden sm:inline-flex items-center gap-1 rounded-lg bg-white px-2.5 py-1 text-xs font-black text-sky-700 shadow-sm">
+                        <BadgeCheck size={14} fill="currentColor" />
+                        Verified
+                      </span>
+                    )}
                  </div>
               </div>
               <div className="flex items-center gap-3 md:gap-4">

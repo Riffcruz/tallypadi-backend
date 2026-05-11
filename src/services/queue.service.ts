@@ -79,6 +79,20 @@ export const notificationQueue = new Queue('push-notifications', {
 });
 
 // ============================================================
+// ✅ ADS AUTOMATION: Provider submission and reconciliation
+// Queue name: ad-automation
+// ============================================================
+export const adAutomationQueue = new Queue('ad-automation', {
+  connection: createRedisConnection('queue-ad-automation') as any,
+  defaultJobOptions: {
+    attempts: 5,
+    backoff: { type: 'exponential', delay: 15000 },
+    removeOnComplete: true,
+    removeOnFail: 1000,
+  },
+});
+
+// ============================================================
 // ✅ HELPERS (Controller uses these)
 // ============================================================
 
@@ -95,6 +109,21 @@ function safeJobId(id: string) {
 export const queuePushNotification = async (payload: { type: 'SINGLE' | 'GLOBAL'; agentId?: string; title: string; body: string; data?: Record<string, unknown> }) => {
   const finalJobId = safeJobId(`push_${payload.type}_${Date.now()}_${Math.random()}`);
   await notificationQueue.add('send-push', payload, { jobId: finalJobId });
+};
+
+export const queueAdProviderSubmission = async (providerCampaignId: string, reason = 'admin-approved') => {
+  const finalJobId = safeJobId(`ad_submit_${providerCampaignId}`);
+  await adAutomationQueue.add('submit-provider-campaign', { providerCampaignId, reason }, { jobId: finalJobId });
+};
+
+export const queueAdProviderMetricsSync = async (providerCampaignId: string, reason = 'reporting-requested') => {
+  const finalJobId = safeJobId(`ad_metrics_${providerCampaignId}_${Date.now()}`);
+  await adAutomationQueue.add('sync-provider-metrics', { providerCampaignId, reason }, { jobId: finalJobId });
+};
+
+export const queueAdProviderControl = async (providerCampaignId: string, action: 'PAUSE' | 'STOP' | 'ENABLE', reason = 'merchant-control') => {
+  const finalJobId = safeJobId(`ad_control_${action}_${providerCampaignId}_${Date.now()}`);
+  await adAutomationQueue.add('control-provider-campaign', { providerCampaignId, action, reason }, { jobId: finalJobId });
 };
 
 // ✅ Text replies (interactive/fast)

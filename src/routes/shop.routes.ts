@@ -9,6 +9,11 @@ import {
 } from '../controllers/shop.controller';
 import { authRequired } from '../middleware/authRequired';
 import { subscribeUserPush } from '../controllers/auth.controller';
+import {
+  getMySellerVerification,
+  getSellerVerificationUploadUrl,
+  submitSellerVerification,
+} from '../controllers/sellerVerification.controller';
 
 const router = Router();
 
@@ -16,6 +21,9 @@ const router = Router();
 router.post('/push/subscribe', authRequired, subscribeUserPush);
 router.get('/me', authRequired, getShopMe);
 router.put('/me', authRequired, updateShopSettings);
+router.get('/verification', authRequired, getMySellerVerification);
+router.post('/verification/upload-url', authRequired, getSellerVerificationUploadUrl);
+router.post('/verification', authRequired, submitSellerVerification);
 
 // 🌍 Public Routes
 router.post('/:slug/visit', recordShopVisit);

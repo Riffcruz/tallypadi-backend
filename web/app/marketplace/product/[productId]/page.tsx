@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ArrowLeft, ExternalLink, MapPin, MessageCircle, Store, TrendingUp } from 'lucide-react';
+import { ArrowLeft, BadgeCheck, ExternalLink, MapPin, MessageCircle, Store, TrendingUp } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://tallypadi.com';
@@ -32,6 +32,10 @@ type MarketplaceProduct = {
       state?: string;
       city?: string;
       address?: string;
+    };
+    verification?: {
+      verified?: boolean;
+      label?: string | null;
     };
   };
 };
@@ -254,7 +258,15 @@ export default async function MarketplaceProductPage({ params }: Props) {
         <aside className="space-y-4">
           <div className="rounded-lg border border-stone-200 bg-white p-5 shadow-sm">
             <p className="text-xs font-black uppercase tracking-[0.14em] text-emerald-700">Advertiser details</p>
-            <h2 className="mt-2 text-xl font-black text-stone-950">{product.shop.name}</h2>
+            <h2 className="mt-2 flex items-center gap-2 text-xl font-black text-stone-950">
+              <span>{product.shop.name}</span>
+              {product.shop.verification?.verified && (
+                <span title={product.shop.verification.label || 'Verified seller'} className="inline-flex items-center gap-1 rounded-md bg-sky-50 px-2 py-1 text-xs font-black text-sky-700">
+                  <BadgeCheck size={14} fill="currentColor" />
+                  Verified
+                </span>
+              )}
+            </h2>
             {locationText && (
               <p className="mt-3 flex items-start gap-2 text-sm font-semibold leading-6 text-stone-600">
                 <MapPin size={16} className="mt-1 text-amber-600" />

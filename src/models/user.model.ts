@@ -37,6 +37,8 @@ export interface IUser extends Document {
   ownerId?: Types.ObjectId;
   hqId?: Types.ObjectId;
   branchType?: 'SHOP' | 'WAREHOUSE';
+  marketplaceVerificationStatus?: 'UNVERIFIED' | 'PENDING' | 'VERIFIED' | 'REJECTED';
+  marketplaceVerifiedAt?: Date | null;
 
   messageHistory?: string[];
 
@@ -176,6 +178,13 @@ const userSchema = new Schema<IUser>(
       enum: ['SHOP', 'WAREHOUSE'],
       default: 'SHOP'
     },
+    marketplaceVerificationStatus: {
+      type: String,
+      enum: ['UNVERIFIED', 'PENDING', 'VERIFIED', 'REJECTED'],
+      default: 'UNVERIFIED',
+      index: true,
+    },
+    marketplaceVerifiedAt: { type: Date, default: null },
 
     messageHistory: { type: [String], default: [] },
 

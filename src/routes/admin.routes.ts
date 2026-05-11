@@ -28,8 +28,22 @@ import {
   approveAdminAdCampaign,
   completeAdminAdCampaign,
   getAdminAdCampaigns,
+  getAdminAdCampaignById,
+  pauseAdminAdCampaign,
+  reallocateAdminProviderCampaign,
+  refundAdminProviderCampaign,
   rejectAdminAdCampaign,
+  resubmitAdminProviderCampaign,
+  resumeAdminAdCampaign,
+  updateAdminProviderCampaignMetrics,
+  updateAdminProviderCampaignStatus,
 } from '../controllers/admin.ads.controller';
+import {
+  approveSellerVerificationForAdmin,
+  getSellerVerificationForAdmin,
+  listSellerVerificationsForAdmin,
+  rejectSellerVerificationForAdmin,
+} from '../controllers/sellerVerification.controller';
 
 const router = Router();
 
@@ -40,9 +54,27 @@ router.get('/analytics', getSystemAnalytics);
 
 // Ads Review
 router.get('/ads', getAdminAdCampaigns);
+router.get('/ads/campaigns', getAdminAdCampaigns);
+router.get('/ads/campaigns/:id', getAdminAdCampaignById);
 router.patch('/ads/:id/approve', approveAdminAdCampaign);
 router.patch('/ads/:id/reject', rejectAdminAdCampaign);
 router.patch('/ads/:id/complete', completeAdminAdCampaign);
+router.post('/ads/campaigns/:id/approve', approveAdminAdCampaign);
+router.post('/ads/campaigns/:id/reject', rejectAdminAdCampaign);
+router.post('/ads/campaigns/:id/pause', pauseAdminAdCampaign);
+router.post('/ads/campaigns/:id/resume', resumeAdminAdCampaign);
+router.post('/ads/campaigns/:id/complete', completeAdminAdCampaign);
+router.post('/ads/provider-campaigns/:id/status', updateAdminProviderCampaignStatus);
+router.post('/ads/provider-campaigns/:id/metrics', updateAdminProviderCampaignMetrics);
+router.post('/ads/provider-campaigns/:id/refund', refundAdminProviderCampaign);
+router.post('/ads/provider-campaigns/:id/reallocate', reallocateAdminProviderCampaign);
+router.post('/ads/provider-campaigns/:id/resubmit', resubmitAdminProviderCampaign);
+
+// Marketplace Seller Verification
+router.get('/marketplace-verifications', listSellerVerificationsForAdmin);
+router.get('/marketplace-verifications/:id', getSellerVerificationForAdmin);
+router.post('/marketplace-verifications/:id/approve', approveSellerVerificationForAdmin);
+router.post('/marketplace-verifications/:id/reject', rejectSellerVerificationForAdmin);
 
 // Global Settings
 router.get('/settings', getGlobalSettings);

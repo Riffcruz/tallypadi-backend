@@ -1,0 +1,9 @@
+<svg width="1200" height="900" viewBox="0 0 1200 900" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="900" fill="#ecfdf5"/>
+  <rect x="156" y="104" width="888" height="692" rx="56" fill="#ffffff" stroke="#bbf7d0" stroke-width="8"/>
+  <circle cx="600" cy="330" r="118" fill="#10b981"/>
+  <path d="M556 348c0-43 23-75 65-75 20 0 39 6 55 18l-24 45c-9-7-19-11-30-11-15 0-23 10-23 28v10h57v48h-57v105h-43V411h-36v-48h36v-15Z" fill="#ffffff"/>
+  <rect x="330" y="555" width="540" height="28" rx="14" fill="#047857"/>
+  <rect x="412" y="623" width="376" height="24" rx="12" fill="#34d399"/>
+  <text x="600" y="724" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="36" font-weight="800" fill="#065f46">TallyPadi Marketplace</text>
+</svg>

@@ -35,6 +35,14 @@ interface StoreCampaign {
   product: string;
 }
 
+const platformLabel = (platform: string) => {
+  if (platform === 'TALLYPADI_MARKETPLACE_BOOST' || platform === 'TALLYPADI_SEO') return 'TallyPadi Marketplace Boost';
+  if (platform === 'META_ADS' || platform === 'META') return 'Meta Ads';
+  if (platform === 'TIKTOK_ADS' || platform === 'TIKTOK') return 'TikTok Ads';
+  if (platform === 'GOOGLE_ADS' || platform === 'GOOGLE') return 'Google Ads';
+  return platform;
+};
+
 export default function StoreProductsModal({ token, onClose }: StoreProductsModalProps) {
   const [products, setProducts] = useState<StoreProduct[]>([]);
   const [loading, setLoading] = useState(true);
@@ -214,7 +222,7 @@ export default function StoreProductsModal({ token, onClose }: StoreProductsModa
                 products
                   .filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()))
                   .map(product => {
-                    const pendingBoost = campaigns.some(c => c.status === 'PENDING' && String(c.product) === String(product.id));
+                    const pendingBoost = campaigns.some(c => ['PENDING', 'PENDING_ADMIN_REVIEW'].includes(c.status) && String(c.product) === String(product.id));
                     return (
               <div key={product.id} className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm transition-all">
                 <div 
@@ -281,9 +289,10 @@ export default function StoreProductsModal({ token, onClose }: StoreProductsModa
                               className="w-full border border-blue-200 bg-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                             >
                               <option value="ALL">All Platforms</option>
-                              <option value="TALLYPADI_SEO">TallyPadi SEO & Google</option>
-                              <option value="META">Meta Ads (Facebook/IG)</option>
-                              <option value="TIKTOK">TikTok Ads</option>
+                              <option value="TALLYPADI_MARKETPLACE_BOOST">{platformLabel('TALLYPADI_MARKETPLACE_BOOST')}</option>
+                              <option value="META_ADS">{platformLabel('META_ADS')}</option>
+                              <option value="TIKTOK_ADS">{platformLabel('TIKTOK_ADS')}</option>
+                              <option value="GOOGLE_ADS">{platformLabel('GOOGLE_ADS')}</option>
                             </select>
                           </div>
                           <div>

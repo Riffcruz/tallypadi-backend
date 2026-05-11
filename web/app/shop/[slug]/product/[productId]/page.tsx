@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ArrowLeft, ExternalLink, MapPin, MessageCircle, PackageCheck, Store, TrendingUp } from 'lucide-react';
+import { ArrowLeft, BadgeCheck, ExternalLink, MapPin, MessageCircle, PackageCheck, Store, TrendingUp } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://tallypadi.com';
@@ -18,6 +18,10 @@ type ShopInfo = {
     state?: string;
     city?: string;
     address?: string;
+  };
+  verification?: {
+    verified?: boolean;
+    label?: string | null;
   };
 };
 
@@ -209,6 +213,12 @@ export default async function ShopProductPage({ params }: Props) {
               <Store size={18} />
             </span>
             <span className="truncate">{shop.name}</span>
+            {shop.verification?.verified && (
+              <span title={shop.verification.label || 'Verified seller'} className="inline-flex shrink-0 items-center gap-1 rounded-md bg-white px-2 py-1 text-xs font-black text-sky-700">
+                <BadgeCheck size={13} fill="currentColor" />
+                Verified
+              </span>
+            )}
           </Link>
         </div>
       </header>

@@ -7,7 +7,22 @@ import Swal from 'sweetalert2';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 
-type CampaignStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'REJECTED';
+type CampaignStatus =
+  | 'PENDING_ADMIN_REVIEW'
+  | 'STARTING_SOON'
+  | 'ACTIVE'
+  | 'PARTIALLY_ACTIVE'
+  | 'ACTIVE_WITH_PENDING_CHANGES'
+  | 'PAUSED'
+  | 'COMPLETED'
+  | 'REJECTED_BY_TALLYPADI'
+  | 'PARTIALLY_REJECTED'
+  | 'FAILED'
+  | 'CANCELLED'
+  | 'PENDING'
+  | 'RUNNING'
+  | 'REJECTED';
+type StatusFilter = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'REJECTED';
 
 interface Advertiser {
   _id?: string;
@@ -79,13 +94,30 @@ interface AdminAdCampaign {
   };
 }
 
-const statuses: CampaignStatus[] = ['PENDING', 'RUNNING', 'COMPLETED', 'REJECTED'];
+const statuses: StatusFilter[] = ['PENDING', 'RUNNING', 'COMPLETED', 'REJECTED'];
 
-const statusMeta: Record<CampaignStatus, { label: string; icon: React.ElementType; className: string }> = {
+const statusMeta: Record<string, { label: string; icon: React.ElementType; className: string }> = {
   PENDING: { label: 'Pending', icon: Clock3, className: 'border-amber-500/30 bg-amber-500/10 text-amber-300' },
+  PENDING_ADMIN_REVIEW: { label: 'Pending', icon: Clock3, className: 'border-amber-500/30 bg-amber-500/10 text-amber-300' },
   RUNNING: { label: 'Running', icon: PlayCircle, className: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' },
+  STARTING_SOON: { label: 'Starting Soon', icon: Clock3, className: 'border-blue-500/30 bg-blue-500/10 text-blue-300' },
+  ACTIVE: { label: 'Active', icon: PlayCircle, className: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' },
+  PARTIALLY_ACTIVE: { label: 'Partially Active', icon: PlayCircle, className: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' },
+  ACTIVE_WITH_PENDING_CHANGES: { label: 'Active + Pending Edits', icon: PlayCircle, className: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' },
+  PAUSED: { label: 'Paused', icon: StopCircle, className: 'border-slate-500/30 bg-slate-500/10 text-slate-300' },
   COMPLETED: { label: 'Completed', icon: CheckCircle2, className: 'border-slate-500/30 bg-slate-500/10 text-slate-300' },
   REJECTED: { label: 'Rejected', icon: XCircle, className: 'border-red-500/30 bg-red-500/10 text-red-300' },
+  REJECTED_BY_TALLYPADI: { label: 'Rejected', icon: XCircle, className: 'border-red-500/30 bg-red-500/10 text-red-300' },
+  PARTIALLY_REJECTED: { label: 'Partially Rejected', icon: XCircle, className: 'border-red-500/30 bg-red-500/10 text-red-300' },
+  FAILED: { label: 'Failed', icon: XCircle, className: 'border-red-500/30 bg-red-500/10 text-red-300' },
+  CANCELLED: { label: 'Cancelled', icon: XCircle, className: 'border-red-500/30 bg-red-500/10 text-red-300' },
+};
+
+const statusGroups: Record<StatusFilter, CampaignStatus[]> = {
+  PENDING: ['PENDING', 'PENDING_ADMIN_REVIEW'],
+  RUNNING: ['RUNNING', 'ACTIVE', 'PARTIALLY_ACTIVE', 'STARTING_SOON', 'ACTIVE_WITH_PENDING_CHANGES', 'PAUSED'],
+  COMPLETED: ['COMPLETED'],
+  REJECTED: ['REJECTED', 'REJECTED_BY_TALLYPADI', 'PARTIALLY_REJECTED', 'FAILED', 'CANCELLED'],
 };
 
 const formatCurrency = (amount?: number | null) => `₦${Number(amount || 0).toLocaleString()}`;
@@ -99,9 +131,10 @@ const formatDate = (value?: string | null) => {
 };
 
 const platformLabel = (platform: string) => {
-  if (platform === 'TALLYPADI_SEO') return 'TallyPadi SEO';
-  if (platform === 'META') return 'Meta';
-  if (platform === 'TIKTOK') return 'TikTok';
+  if (platform === 'TALLYPADI_MARKETPLACE_BOOST' || platform === 'TALLYPADI_SEO') return 'TallyPadi Marketplace Boost';
+  if (platform === 'META_ADS' || platform === 'META') return 'Meta Ads';
+  if (platform === 'TIKTOK_ADS' || platform === 'TIKTOK') return 'TikTok Ads';
+  if (platform === 'GOOGLE_ADS' || platform === 'GOOGLE') return 'Google Ads';
   return platform;
 };
 
@@ -116,7 +149,7 @@ const getProduct = (value: AdminAdCampaign['product']): AdminProduct => (
 export default function AdsTab({ adminToken }: { adminToken: string }) {
   const [campaigns, setCampaigns] = useState<AdminAdCampaign[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({});
-  const [status, setStatus] = useState<CampaignStatus>('PENDING');
+  const [status, setStatus] = useState<StatusFilter>('PENDING');
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [actionId, setActionId] = useState<string | null>(null);
@@ -191,7 +224,9 @@ export default function AdsTab({ adminToken }: { adminToken: string }) {
       campaign.id,
     ].join(' ').toLowerCase();
     return text.includes(query.trim().toLowerCase());
-  });
+  }).filter((campaign) => statusGroups[status].includes(campaign.status));
+
+  const getStatusCount = (filter: StatusFilter) => statusGroups[filter].reduce((sum, item) => sum + (counts[item] || 0), 0);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -224,7 +259,7 @@ export default function AdsTab({ adminToken }: { adminToken: string }) {
             >
               <div className="flex items-center justify-between gap-3">
                 <Icon size={20} />
-                <span className="text-2xl font-black">{counts[item] || 0}</span>
+                <span className="text-2xl font-black">{getStatusCount(item)}</span>
               </div>
               <p className="mt-3 text-sm font-bold">{meta.label}</p>
             </button>
@@ -257,7 +292,7 @@ export default function AdsTab({ adminToken }: { adminToken: string }) {
             {filteredCampaigns.map((campaign) => {
               const advertiser = getAdvertiser(campaign.user);
               const product = getProduct(campaign.product);
-              const meta = statusMeta[campaign.status];
+              const meta = statusMeta[campaign.status] || statusMeta.RUNNING;
               const Icon = meta.icon;
 
               return (
@@ -357,7 +392,7 @@ export default function AdsTab({ adminToken }: { adminToken: string }) {
                     </div>
 
                     <div className="flex 2xl:flex-col gap-2 2xl:w-40 shrink-0">
-                      {campaign.status === 'PENDING' && (
+                      {['PENDING', 'PENDING_ADMIN_REVIEW'].includes(campaign.status) && (
                         <>
                           <ActionButton
                             label="Approve"
@@ -375,7 +410,7 @@ export default function AdsTab({ adminToken }: { adminToken: string }) {
                           />
                         </>
                       )}
-                      {campaign.status === 'RUNNING' && (
+                      {['RUNNING', 'ACTIVE', 'PARTIALLY_ACTIVE', 'STARTING_SOON', 'ACTIVE_WITH_PENDING_CHANGES', 'PAUSED'].includes(campaign.status) && (
                         <ActionButton
                           label="Complete"
                           icon={StopCircle}

@@ -5,6 +5,12 @@ import { DailyStats } from '../models/dailyStats.model';
 import { z } from 'zod';
 import { r2Service } from '../services/r2.service';
 import { isSubActive, isTycoon } from '../utils/permissions';
+import {
+  getPublicProductImage,
+  getStoreSetupStatus,
+  getVerificationBadge,
+  isStorefrontPublicReady,
+} from '../services/marketplaceTrust.service';
 
 const PUBLIC_SHOP_CACHE = 'public, max-age=30, s-maxage=120, stale-while-revalidate=300';
 
@@ -30,7 +36,7 @@ const updateShopSchema = z.object({
 export const getShopMe = async (req: Request, res: Response): Promise<any> => {
   try {
     const userId = req.user?.id;
-    const user = await User.findById(userId).select('businessName shopSlug shopDescription heroImageUrl planType themeColor settings.location');
+    const user = await User.findById(userId).select('businessName phoneNumber shopSlug shopDescription heroImageUrl planType themeColor settings.location marketplaceVerificationStatus marketplaceVerifiedAt');
 
     if (!user) return res.status(404).json({ error: 'User not found' });
 
@@ -48,6 +54,8 @@ export const getShopMe = async (req: Request, res: Response): Promise<any> => {
       location: user.settings?.location,
       publicUrl,
       isTycoon: user.planType === 'TYCOON',
+      storeSetup: getStoreSetupStatus(user),
+      verification: getVerificationBadge(user),
     });
   } catch (error) {
     console.error('Error fetching my shop:', error);
@@ -68,12 +76,12 @@ export const getShopBySlug = async (req: Request, res: Response): Promise<any> =
     if (!slug) return res.status(400).json({ error: 'Shop slug required' });
 
     const shopOwner = await User.findOne({ shopSlug: slug })
-      .select('businessName phoneNumber planType settings _id subscriptionStatus trialEndsAt shopDescription heroImageUrl themeColor countryCode');
+      .select('businessName phoneNumber planType settings _id subscriptionStatus trialEndsAt shopDescription heroImageUrl themeColor countryCode marketplaceVerificationStatus marketplaceVerifiedAt');
 
     if (!shopOwner) return res.status(404).json({ error: 'Shop not found' });
 
     // ✅ Enforce Plan & Subscription
-    if (!isTycoon(shopOwner) || !isSubActive(shopOwner)) {
+    if (!isTycoon(shopOwner) || !isSubActive(shopOwner) || !isStorefrontPublicReady(shopOwner)) {
        return res.status(404).json({ error: 'Shop is currently unavailable' });
     }
 
@@ -111,6 +119,7 @@ export const getShopBySlug = async (req: Request, res: Response): Promise<any> =
           city: shopOwner.settings?.location?.city || '',
           address: shopOwner.settings?.location?.address || '',
         },
+        verification: getVerificationBadge(shopOwner),
       },
     });
   } catch (error) {
@@ -130,11 +139,11 @@ export const getShopProducts = async (req: Request, res: Response): Promise<any>
     const { slug } = req.params;
     const { page = '1', q, category, sort } = req.query;
 
-    const shopOwner = await User.findOne({ shopSlug: slug }).select('_id planType subscriptionStatus trialEndsAt');
+    const shopOwner = await User.findOne({ shopSlug: slug }).select('_id planType subscriptionStatus trialEndsAt businessName phoneNumber shopSlug shopDescription settings.location');
     if (!shopOwner) return res.status(404).json({ error: 'Shop not found' });
 
     // Ensure shop is active (Tycoon + Valid Sub)
-    if (!isTycoon(shopOwner) || !isSubActive(shopOwner)) {
+    if (!isTycoon(shopOwner) || !isSubActive(shopOwner) || !isStorefrontPublicReady(shopOwner)) {
         return res.status(404).json({ error: 'Shop unavailable' });
     }
     
@@ -176,7 +185,7 @@ export const getShopProducts = async (req: Request, res: Response): Promise<any>
         id: p._id,
         name: p.name,
         price: p.lastUnitPrice,
-        image: p.image,
+        image: getPublicProductImage(p.image),
         category: p.category,
         description: p.description,
         colors: p.colors,
@@ -252,6 +261,7 @@ export const updateShopSettings = async (req: Request, res: Response): Promise<a
       businessName: user.businessName,
       shopDescription: user.shopDescription,
       heroImageUrl: user.heroImageUrl,
+      storeSetup: getStoreSetupStatus(user),
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -272,10 +282,10 @@ export const getShopProductById = async (req: Request, res: Response): Promise<a
 
     const { slug, productId } = req.params;
 
-    const shopOwner = await User.findOne({ shopSlug: slug }).select('_id planType subscriptionStatus trialEndsAt');
+    const shopOwner = await User.findOne({ shopSlug: slug }).select('_id planType subscriptionStatus trialEndsAt businessName phoneNumber shopSlug shopDescription settings.location marketplaceVerificationStatus marketplaceVerifiedAt');
     if (!shopOwner) return res.status(404).json({ error: 'Shop not found' });
 
-    if (!isTycoon(shopOwner) || !isSubActive(shopOwner)) {
+    if (!isTycoon(shopOwner) || !isSubActive(shopOwner) || !isStorefrontPublicReady(shopOwner)) {
         return res.status(404).json({ error: 'Shop unavailable' });
     }
 
@@ -295,7 +305,7 @@ export const getShopProductById = async (req: Request, res: Response): Promise<a
       id: product._id,
       name: product.name,
       price: product.lastUnitPrice,
-      image: product.image,
+      image: getPublicProductImage(product.image),
       category: product.category,
       description: product.description,
       colors: product.colors,
@@ -308,6 +318,7 @@ export const getShopProductById = async (req: Request, res: Response): Promise<a
         adDescription: activeBoost?.adDescription || '',
         keywords: activeBoost?.seoKeywords || [],
       },
+      shopVerification: getVerificationBadge(shopOwner),
     });
   } catch (error) {
     console.error('Error fetching product:', error);

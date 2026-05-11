@@ -32,6 +32,7 @@ async function boot() {
     if (workers.bulkWorker) closePromises.push(workers.bulkWorker.close());
     if (workers.messageWorker) closePromises.push(workers.messageWorker.close());
     if (workers.notificationWorker) closePromises.push(workers.notificationWorker.close());
+    if (workers.adAutomationWorker) closePromises.push(workers.adAutomationWorker.close());
     
     await Promise.all(closePromises);
     await mongoose.disconnect();

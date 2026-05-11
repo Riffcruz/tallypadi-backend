@@ -3,6 +3,11 @@ import { Types } from 'mongoose';
 import { Inventory } from '../models/inventory.model';
 import { User } from '../models/user.model';
 import { isSubActive } from '../utils/permissions';
+import {
+  getPublicProductImage,
+  getVerificationBadge,
+  isStorefrontPublicReady,
+} from '../services/marketplaceTrust.service';
 
 type MarketplaceOwner = {
   _id: Types.ObjectId;
@@ -15,6 +20,8 @@ type MarketplaceOwner = {
   planType?: string;
   subscriptionStatus?: string;
   trialEndsAt?: Date;
+  marketplaceVerificationStatus?: string;
+  marketplaceVerifiedAt?: Date | null;
   settings?: {
     currencyCode?: string;
     location?: {
@@ -255,7 +262,7 @@ const serializeProduct = (product: MarketplaceProduct, owner: MarketplaceOwner) 
     id: String(product._id),
     name: product.name,
     price: product.lastUnitPrice || 0,
-    image: product.image || null,
+    image: getPublicProductImage(product.image),
     category: product.category || smartCategory.label,
     smartCategory,
     description: product.description || '',
@@ -288,6 +295,7 @@ const serializeProduct = (product: MarketplaceProduct, owner: MarketplaceOwner) 
         city: location.city || '',
         address: location.address || '',
       },
+      verification: getVerificationBadge(owner),
     },
   };
 };
@@ -309,10 +317,10 @@ export const getMarketplaceListings = async (req: Request, res: Response): Promi
       planType: 'TYCOON',
       subscriptionStatus: { $in: ['active', 'trial'] },
     })
-      .select('businessName phoneNumber shopSlug themeColor heroImageUrl countryCode planType subscriptionStatus trialEndsAt settings.location settings.currencyCode')
+      .select('businessName phoneNumber shopSlug shopDescription themeColor heroImageUrl countryCode planType subscriptionStatus trialEndsAt settings.location settings.currencyCode marketplaceVerificationStatus marketplaceVerifiedAt')
       .lean<MarketplaceOwner[]>();
 
-    const activeOwners = owners.filter((owner) => isSubActive(owner as any));
+    const activeOwners = owners.filter((owner) => isSubActive(owner as any) && isStorefrontPublicReady(owner));
     const filteredOwners = activeOwners.filter((owner) => ownerMatchesLocation(owner, state, city));
     const ownerIds = filteredOwners.map((owner) => owner._id);
     const ownerMap = new Map(filteredOwners.map((owner) => [String(owner._id), owner]));
@@ -489,10 +497,10 @@ export const getMarketplaceProductById = async (req: Request, res: Response): Pr
     if (!product[0]) return res.status(404).json({ error: 'Product not found' });
 
     const owner = await User.findById(product[0].user)
-      .select('businessName phoneNumber shopSlug themeColor heroImageUrl countryCode planType subscriptionStatus trialEndsAt settings.location settings.currencyCode')
+      .select('businessName phoneNumber shopSlug shopDescription themeColor heroImageUrl countryCode planType subscriptionStatus trialEndsAt settings.location settings.currencyCode marketplaceVerificationStatus marketplaceVerifiedAt')
       .lean<MarketplaceOwner | null>();
 
-    if (!owner || !owner.shopSlug || String(owner.planType).toUpperCase() !== 'TYCOON' || !isSubActive(owner as any)) {
+    if (!owner || !owner.shopSlug || String(owner.planType).toUpperCase() !== 'TYCOON' || !isSubActive(owner as any) || !isStorefrontPublicReady(owner)) {
       return res.status(404).json({ error: 'Product not found' });
     }
 

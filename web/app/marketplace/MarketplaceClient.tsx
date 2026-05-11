@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { State } from 'country-state-city';
 import {
   ChevronDown,
+  BadgeCheck,
   ExternalLink,
   Filter,
   Loader2,
@@ -55,6 +56,10 @@ type MarketplaceProduct = {
       state?: string;
       city?: string;
       address?: string;
+    };
+    verification?: {
+      verified?: boolean;
+      label?: string | null;
     };
   };
 };
@@ -306,6 +311,11 @@ function ProductCard({ product }: { product: MarketplaceProduct }) {
             <div className="flex items-center gap-1.5 text-sm font-bold text-stone-800">
               <Store size={14} className="text-emerald-700" />
               <span className="truncate">{product.shop.name}</span>
+              {product.shop.verification?.verified && (
+                <span title={product.shop.verification.label || 'Verified seller'} className="inline-flex shrink-0 text-sky-600">
+                  <BadgeCheck size={15} fill="currentColor" className="text-sky-600" />
+                </span>
+              )}
             </div>
             {locationText && (
               <div className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-stone-500">

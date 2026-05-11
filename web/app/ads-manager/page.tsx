@@ -25,8 +25,23 @@ import { getCookie } from '../../utils/cookies';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 
-type CampaignStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'REJECTED';
-type PlatformOption = 'ALL' | 'TALLYPADI_SEO' | 'META' | 'TIKTOK';
+type CampaignStatus =
+  | 'PENDING_ADMIN_REVIEW'
+  | 'STARTING_SOON'
+  | 'ACTIVE'
+  | 'PARTIALLY_ACTIVE'
+  | 'ACTIVE_WITH_PENDING_CHANGES'
+  | 'PAUSED'
+  | 'COMPLETED'
+  | 'REJECTED_BY_TALLYPADI'
+  | 'PARTIALLY_REJECTED'
+  | 'FAILED'
+  | 'CANCELLED'
+  | 'PENDING'
+  | 'RUNNING'
+  | 'REJECTED';
+type StatusFilter = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'REJECTED';
+type PlatformOption = 'ALL' | 'TALLYPADI_MARKETPLACE_BOOST' | 'META_ADS' | 'TIKTOK_ADS' | 'GOOGLE_ADS';
 
 interface AdsUser {
   planType?: string;
@@ -137,17 +152,35 @@ const parseKeywords = (value: string) =>
     .slice(0, 12);
 
 const platformLabel = (platform: string) => {
-  if (platform === 'TALLYPADI_SEO') return 'TallyPadi SEO';
-  if (platform === 'META') return 'Meta';
-  if (platform === 'TIKTOK') return 'TikTok';
+  if (platform === 'TALLYPADI_MARKETPLACE_BOOST' || platform === 'TALLYPADI_SEO') return 'TallyPadi Marketplace Boost';
+  if (platform === 'META_ADS' || platform === 'META') return 'Meta Ads';
+  if (platform === 'TIKTOK_ADS' || platform === 'TIKTOK') return 'TikTok Ads';
+  if (platform === 'GOOGLE_ADS' || platform === 'GOOGLE') return 'Google Ads';
   return platform;
 };
 
-const statusCopy: Record<CampaignStatus, { label: string; icon: React.ElementType; className: string }> = {
+const statusCopy: Record<string, { label: string; icon: React.ElementType; className: string }> = {
   PENDING: { label: 'Pending Review', icon: Clock3, className: 'bg-amber-50 text-amber-700 border-amber-200' },
+  PENDING_ADMIN_REVIEW: { label: 'Pending Review', icon: Clock3, className: 'bg-amber-50 text-amber-700 border-amber-200' },
+  STARTING_SOON: { label: 'Starting Soon', icon: Clock3, className: 'bg-blue-50 text-blue-700 border-blue-200' },
   RUNNING: { label: 'Active', icon: TrendingUp, className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  ACTIVE: { label: 'Active', icon: TrendingUp, className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  PARTIALLY_ACTIVE: { label: 'Partially Active', icon: TrendingUp, className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  ACTIVE_WITH_PENDING_CHANGES: { label: 'Active + Pending Edits', icon: TrendingUp, className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  PAUSED: { label: 'Paused', icon: Clock3, className: 'bg-slate-100 text-slate-700 border-slate-200' },
   COMPLETED: { label: 'Completed', icon: CheckCircle2, className: 'bg-slate-100 text-slate-700 border-slate-200' },
   REJECTED: { label: 'Rejected', icon: XCircle, className: 'bg-red-50 text-red-700 border-red-200' },
+  REJECTED_BY_TALLYPADI: { label: 'Rejected', icon: XCircle, className: 'bg-red-50 text-red-700 border-red-200' },
+  PARTIALLY_REJECTED: { label: 'Partially Rejected', icon: XCircle, className: 'bg-red-50 text-red-700 border-red-200' },
+  FAILED: { label: 'Failed', icon: XCircle, className: 'bg-red-50 text-red-700 border-red-200' },
+  CANCELLED: { label: 'Cancelled', icon: XCircle, className: 'bg-red-50 text-red-700 border-red-200' },
+};
+
+const statusGroups: Record<StatusFilter, CampaignStatus[]> = {
+  PENDING: ['PENDING', 'PENDING_ADMIN_REVIEW'],
+  RUNNING: ['RUNNING', 'ACTIVE', 'PARTIALLY_ACTIVE', 'STARTING_SOON', 'ACTIVE_WITH_PENDING_CHANGES', 'PAUSED'],
+  COMPLETED: ['COMPLETED'],
+  REJECTED: ['REJECTED', 'REJECTED_BY_TALLYPADI', 'PARTIALLY_REJECTED', 'FAILED', 'CANCELLED'],
 };
 
 function AdsManagerContent() {
@@ -161,7 +194,7 @@ function AdsManagerContent() {
   const [products, setProducts] = useState<InventoryProduct[]>([]);
   const [selectedProductId, setSelectedProductId] = useState('');
   const [productSearch, setProductSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<CampaignStatus>('PENDING');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('PENDING');
   const [existingBoost, setExistingBoost] = useState<BoostForm>(defaultBoostForm);
   const [newBoost, setNewBoost] = useState<BoostForm>(defaultBoostForm);
   const [newProduct, setNewProduct] = useState<NewProductForm>(defaultNewProductForm);
@@ -263,7 +296,9 @@ function AdsManagerContent() {
     return acc;
   }, {} as Record<CampaignStatus, number>), [campaigns]);
 
-  const visibleCampaigns = campaigns.filter((campaign) => campaign.status === statusFilter);
+  const getStatusCount = (filter: StatusFilter) => statusGroups[filter].reduce((sum, status) => sum + (campaignCounts[status] || 0), 0);
+
+  const visibleCampaigns = campaigns.filter((campaign) => statusGroups[statusFilter].includes(campaign.status));
 
   const setBoostPlan = (planId: string, form: BoostForm, setter: React.Dispatch<React.SetStateAction<BoostForm>>) => {
     const plan = adsPlans.find((item) => item.id === planId);
@@ -652,7 +687,7 @@ function AdsManagerContent() {
                     <p className="text-xs text-slate-500 mt-1">Pending, active, completed, and rejected ads boosts</p>
                   </div>
                   <div className="grid grid-cols-2 sm:flex gap-2">
-                    {(['PENDING', 'RUNNING', 'COMPLETED', 'REJECTED'] as CampaignStatus[]).map((status) => {
+                    {(['PENDING', 'RUNNING', 'COMPLETED', 'REJECTED'] as StatusFilter[]).map((status) => {
                       const config = statusCopy[status];
                       const Icon = config.icon;
                       return (
@@ -663,7 +698,7 @@ function AdsManagerContent() {
                         >
                           <Icon size={14} />
                           {status === 'RUNNING' ? 'Active' : config.label.replace(' Review', '')}
-                          <span className="rounded-full bg-white/70 px-1.5 py-0.5">{campaignCounts[status] || 0}</span>
+                          <span className="rounded-full bg-white/70 px-1.5 py-0.5">{getStatusCount(status)}</span>
                         </button>
                       );
                     })}
@@ -677,7 +712,7 @@ function AdsManagerContent() {
                       <p className="text-sm font-semibold text-slate-600">No {statusCopy[statusFilter].label.toLowerCase()} boosts yet.</p>
                     </div>
                   ) : visibleCampaigns.map((campaign) => {
-                    const config = statusCopy[campaign.status];
+                    const config = statusCopy[campaign.status] || statusCopy.RUNNING;
                     const Icon = config.icon;
                     return (
                       <article key={campaign.id} className="rounded-lg border border-slate-200 p-4">
@@ -748,9 +783,10 @@ function BoostControls({
             className="w-full border border-slate-200 bg-slate-50 rounded-lg px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
           >
             <option value="ALL">All Platforms</option>
-            <option value="TALLYPADI_SEO">TallyPadi SEO</option>
-            <option value="META">Meta</option>
-            <option value="TIKTOK">TikTok</option>
+            <option value="TALLYPADI_MARKETPLACE_BOOST">TallyPadi Marketplace Boost</option>
+            <option value="META_ADS">Meta Ads</option>
+            <option value="TIKTOK_ADS">TikTok Ads</option>
+            <option value="GOOGLE_ADS">Google Ads</option>
           </select>
         </label>
 
