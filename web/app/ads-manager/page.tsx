@@ -258,9 +258,13 @@ function AdsManagerContent() {
     ]);
 
     const loadedProducts = normalizeProducts(invRes.data);
-    setUser(dashRes.data?.user || {});
+    const loadedUser = { ...(dashRes.data?.user || {}) };
+    if (typeof campaignsRes.data?.walletBalance === 'number') {
+      loadedUser.walletBalance = campaignsRes.data.walletBalance;
+    }
     setAdsPlans(plansRes.data?.plans || []);
     setProducts(loadedProducts);
+    setUser(loadedUser);
     setCampaigns(campaignsRes.data?.campaigns || []);
     setSelectedProductId((current) => current || loadedProducts[0]?.id || '');
   }, []);

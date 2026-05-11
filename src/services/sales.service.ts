@@ -54,19 +54,19 @@ export class SalesService {
     const inventoryOwnerId = (user.role === 'STAFF' && user.ownerId) ? user.ownerId : userId;
 
     // 2. Normalize Items & Merge Duplicates
-    const merged = new Map<string, { itemId: string; quantity: number; price: number }>();
+    const merged = new Map<string, { itemId: string; quantity: number; price: number | null }>();
     for (const x of itemsInput) {
-      const itemId = String(x?.itemId || '').trim();
-      const quantity = this.toNumber(x?.quantity);
-      const price = this.toNumber(x?.price);
+      const itemId = String(x?.itemId || x?.id || x?._id || x?.productId || x?.inventoryId || '').trim();
+      const quantity = this.toNumber(x?.quantity ?? x?.qty ?? x?.sellQty);
+      const price = this.toNumber(x?.price ?? x?.unitPrice ?? x?.sellPrice ?? x?.lastUnitPrice);
 
-      if (!itemId || !quantity || quantity <= 0 || !price || price < 0) continue;
+      if (!itemId || quantity === null || quantity <= 0 || (price !== null && price < 0)) continue;
 
       const prev = merged.get(itemId);
       if (!prev) merged.set(itemId, { itemId, quantity, price });
       else {
         prev.quantity += quantity;
-        prev.price = price; // Latest price wins or specialized logic
+        if (price !== null) prev.price = price; // Latest explicit price wins.
       }
     }
     const finalItems = Array.from(merged.values());
@@ -116,7 +116,12 @@ export class SalesService {
          });
       }
 
-      const lineTotal = it.quantity * it.price;
+      const salePrice = it.price ?? this.toNumber(invItem.lastUnitPrice) ?? 0;
+      if (salePrice < 0) {
+        throw new Error(`Invalid selling price for '${invItem.name}'`);
+      }
+
+      const lineTotal = it.quantity * salePrice;
       totalMoney += lineTotal;
 
       txItems.push({
@@ -125,8 +130,8 @@ export class SalesService {
         qty: it.quantity,
         quantity: it.quantity,
         unit: 'pc', // Default or fetch from invItem if available
-        unitPrice: it.price,
-        price: it.price,
+        unitPrice: salePrice,
+        price: salePrice,
         costPrice: invItem.costPrice || 0,
         total: lineTotal
       });

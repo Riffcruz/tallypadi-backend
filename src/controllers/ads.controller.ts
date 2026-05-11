@@ -380,7 +380,18 @@ export const getMyAdCampaigns = async (req: Request, res: Response) => {
     if (status) query.status = status;
 
     const result = await listCampaigns(query, page, limit);
-    return res.status(200).json({ ...result, walletRepair });
+    const walletSummary = walletRepair.repairedCount > 0
+      ? await walletService.getWalletSummary(userId)
+      : null;
+    return res.status(200).json({
+      ...result,
+      walletRepair,
+      ...(walletSummary ? {
+        walletBalance: walletSummary.walletBalance,
+        walletBalanceMinor: walletSummary.walletBalanceMinor,
+        reservedBalanceMinor: walletSummary.reservedBalanceMinor,
+      } : {}),
+    });
   } catch (error) {
     console.error('Get My Ads Error:', error);
     return res.status(500).json({ message: 'Internal server error' });

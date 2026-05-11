@@ -25,7 +25,7 @@ import {
   normalizeProviders,
   toMajorUnits,
 } from './adBudget.service';
-import { walletService } from '../wallet.service';
+import { isTransactionUnsupportedError, walletService } from '../wallet.service';
 import { queueAdProviderControl, queueAdProviderMetricsSync, queueAdProviderSubmission } from '../queue.service';
 import {
   AD_PROVIDERS,
@@ -489,214 +489,230 @@ export const createManagedCampaign = async (input: CreateManagedCampaignInput) =
     throw error;
   }
 
-  const session = await mongoose.startSession();
   let createdCampaign: any = null;
   let createdRun: any = null;
   let providerCampaigns: IProviderCampaign[] = [];
   let walletBalance = 0;
   let walletBalanceMinor = 0;
 
-  try {
-    await session.withTransaction(async () => {
-      const campaignDocs = await AdCampaign.create([{
-        user: userObjectId,
-        product: productObjectId,
-        campaignType: productObjectId ? 'PRODUCT_BOOST' : 'CUSTOM_CAMPAIGN',
-        status: 'PENDING_ADMIN_REVIEW',
-        name: product?.name || 'Custom ad campaign',
-        selectedProviders,
-        platforms: selectedProviders,
-        walletCurrency: 'NGN',
-        targetAudience: cleanText(input.targetAudience || input.adDetails?.audience, 500),
-        targetLocation: {
-          country: cleanText(input.targetLocation?.country || user.settings?.location?.country || user.countryCode || 'NG', 3).toUpperCase(),
-          state: cleanText(input.targetLocation?.state || user.settings?.location?.state, 80),
-          city: cleanText(input.targetLocation?.city || user.settings?.location?.city, 80),
-        },
-        ageRange: {
-          min: input.ageRange?.min || null,
-          max: input.ageRange?.max || null,
-        },
-        campaignGoal: cleanText(input.campaignGoal || 'Drive product enquiries', 120),
+  const applyCreation = async (session?: ClientSession) => {
+    const createOptions = session ? { session } : undefined;
+    const campaignDocs = await AdCampaign.create([{
+      user: userObjectId,
+      product: productObjectId,
+      campaignType: productObjectId ? 'PRODUCT_BOOST' : 'CUSTOM_CAMPAIGN',
+      status: 'PENDING_ADMIN_REVIEW',
+      name: product?.name || 'Custom ad campaign',
+      selectedProviders,
+      platforms: selectedProviders,
+      walletCurrency: 'NGN',
+      targetAudience: cleanText(input.targetAudience || input.adDetails?.audience, 500),
+      targetLocation: {
+        country: cleanText(input.targetLocation?.country || user.settings?.location?.country || user.countryCode || 'NG', 3).toUpperCase(),
+        state: cleanText(input.targetLocation?.state || user.settings?.location?.state, 80),
+        city: cleanText(input.targetLocation?.city || user.settings?.location?.city, 80),
+      },
+      ageRange: {
+        min: input.ageRange?.min || null,
+        max: input.ageRange?.max || null,
+      },
+      campaignGoal: cleanText(input.campaignGoal || 'Drive product enquiries', 120),
+      keywords: cleanKeywords(input.keywords || input.adDetails?.keywords),
+      creativeNotes: cleanText(input.creativeNotes || input.adDetails?.brief, 1000),
+      merchantConsentAccepted: Boolean(input.consent?.accepted ?? true),
+      merchantConsentVersion: input.consent?.version || AD_TERMS_VERSION,
+      planId: plan.id,
+      planLabel: plan.label,
+      durationDays,
+      basePrice: moneyMajor(toMajorUnits(breakdown.settings.minimumGrossBudgetMinor)),
+      budget: moneyMajor(toMajorUnits(breakdown.grossBudgetMinor)),
+      walletCharged: true,
+      requestedAt: new Date(),
+      productSnapshot: {
+        name: product?.name || 'Custom campaign',
+        description: product?.description || '',
+        image: product?.image || null,
+        price: product?.lastUnitPrice || 0,
+        category: product?.category || null,
+      },
+      adDetails: {
+        brief: cleanText(input.creativeNotes || input.adDetails?.brief, 1000),
+        audience: cleanText(input.targetAudience || input.adDetails?.audience, 300),
         keywords: cleanKeywords(input.keywords || input.adDetails?.keywords),
-        creativeNotes: cleanText(input.creativeNotes || input.adDetails?.brief, 1000),
-        merchantConsentAccepted: Boolean(input.consent?.accepted ?? true),
-        merchantConsentVersion: input.consent?.version || AD_TERMS_VERSION,
-        planId: plan.id,
-        planLabel: plan.label,
-        durationDays,
-        basePrice: moneyMajor(toMajorUnits(breakdown.settings.minimumGrossBudgetMinor)),
-        budget: moneyMajor(toMajorUnits(breakdown.grossBudgetMinor)),
-        walletCharged: true,
-        requestedAt: new Date(),
-        productSnapshot: {
-          name: product?.name || 'Custom campaign',
-          description: product?.description || '',
-          image: product?.image || null,
-          price: product?.lastUnitPrice || 0,
-          category: product?.category || null,
-        },
-        adDetails: {
-          brief: cleanText(input.creativeNotes || input.adDetails?.brief, 1000),
-          audience: cleanText(input.targetAudience || input.adDetails?.audience, 300),
-          keywords: cleanKeywords(input.keywords || input.adDetails?.keywords),
-        },
-      }], { session });
+      },
+    }], createOptions);
 
-      createdCampaign = campaignDocs[0];
+    createdCampaign = campaignDocs[0];
 
-      const latestRun = await CampaignRun.countDocuments({ campaign: createdCampaign._id }).session(session);
-      const runDocs = await CampaignRun.create([{
-        campaign: createdCampaign._id,
-        user: userObjectId,
-        product: productObjectId,
-        runNumber: latestRun + 1,
-        status: 'PENDING_ADMIN_REVIEW',
-        grossBudgetMinor: breakdown.grossBudgetMinor,
-        serviceFeeMinor: breakdown.serviceFeeMinor,
-        netCampaignBudgetMinor: breakdown.netCampaignBudgetMinor,
-        safetyReserveMinor: breakdown.safetyReserveMinor,
-        fxBufferMinor: breakdown.fxBufferMinor,
-        adSpendBudgetMinor: breakdown.adSpendBudgetMinor,
-        unallocatedBudgetMinor: breakdown.unallocatedBudgetMinor,
-        walletCurrency: 'NGN',
-        budgetSplit: breakdown.budgetSplit,
-        selectedProviders,
-        durationDays,
-        spentAmountMinor: 0,
-        remainingBudgetMinor: breakdown.adSpendBudgetMinor,
-        serviceFeeBasisPoints: breakdown.settings.serviceFeeBasisPoints,
-        safetyReserveBasisPoints: breakdown.settings.safetyReserveBasisPoints,
-        fxBufferBasisPoints: breakdown.settings.fxBufferBasisPoints,
-        lowBudgetAlertThresholdBasisPoints: breakdown.settings.lowBudgetAlertThresholdBasisPoints,
-      }], { session });
-      createdRun = runDocs[0];
+    const latestRun = await CampaignRun.countDocuments({ campaign: createdCampaign._id }).session(session || null);
+    const runDocs = await CampaignRun.create([{
+      campaign: createdCampaign._id,
+      user: userObjectId,
+      product: productObjectId,
+      runNumber: latestRun + 1,
+      status: 'PENDING_ADMIN_REVIEW',
+      grossBudgetMinor: breakdown.grossBudgetMinor,
+      serviceFeeMinor: breakdown.serviceFeeMinor,
+      netCampaignBudgetMinor: breakdown.netCampaignBudgetMinor,
+      safetyReserveMinor: breakdown.safetyReserveMinor,
+      fxBufferMinor: breakdown.fxBufferMinor,
+      adSpendBudgetMinor: breakdown.adSpendBudgetMinor,
+      unallocatedBudgetMinor: breakdown.unallocatedBudgetMinor,
+      walletCurrency: 'NGN',
+      budgetSplit: breakdown.budgetSplit,
+      selectedProviders,
+      durationDays,
+      spentAmountMinor: 0,
+      remainingBudgetMinor: breakdown.adSpendBudgetMinor,
+      serviceFeeBasisPoints: breakdown.settings.serviceFeeBasisPoints,
+      safetyReserveBasisPoints: breakdown.settings.safetyReserveBasisPoints,
+      fxBufferBasisPoints: breakdown.settings.fxBufferBasisPoints,
+      lowBudgetAlertThresholdBasisPoints: breakdown.settings.lowBudgetAlertThresholdBasisPoints,
+    }], createOptions);
+    createdRun = runDocs[0];
 
-      const reservation = await walletService.reserveCampaignBudget({
-        userId: userObjectId,
-        amountMinor: breakdown.grossBudgetMinor,
-        campaignId: createdCampaign._id as any,
-        campaignRunId: createdRun._id as any,
-        idempotencyKey: `campaign-reserve:${createdRun._id}`,
-        session,
-      });
-
-      createdRun.wallet = reservation.wallet._id as any;
-      createdRun.walletReservationTransaction = reservation.transaction._id as any;
-      await createdRun.save({ session });
-
-      createdCampaign.latestRunId = createdRun._id as any;
-      createdCampaign.walletBalanceAfterCharge = toMajorUnits(reservation.wallet.availableBalanceMinor);
-      await createdCampaign.save({ session });
-
-      const providerDocs = await ProviderCampaign.create(selectedProviders.map((provider) => {
-        const allocation = breakdown.budgetSplit.find((item) => item.provider === provider)?.allocationMinor || 0;
-        return {
-          campaign: createdCampaign!._id,
-          campaignRun: createdRun!._id,
-          user: userObjectId,
-          provider,
-          status: 'PENDING_TALLYPADI_REVIEW',
-          fulfillmentMode: 'MANUAL',
-          allocatedBudgetWalletMinor: allocation,
-          spentWalletMinor: 0,
-          remainingBudgetWalletMinor: allocation,
-          walletCurrency: 'NGN',
-          refundStatus: allocation > 0 ? 'HELD' : 'NOT_APPLICABLE',
-          settlementStatus: 'PENDING',
-        };
-      }), { session });
-      providerCampaigns = providerDocs as IProviderCampaign[];
-
-      if (product?.image) {
-        await CampaignCreativeAsset.create([{
-          campaign: createdCampaign._id,
-          campaignRun: createdRun._id,
-          product: product._id,
-          user: userObjectId,
-          assetType: 'IMAGE',
-          sourceType: 'PRODUCT_IMAGE',
-          publicUrl: product.image,
-          mimeType: 'image/*',
-          status: 'ACTIVE',
-          isDefaultProductImage: true,
-          referenceCount: 1,
-        }], { session });
-      }
-
-      await MerchantAdConsent.create([{
-        user: userObjectId,
-        campaign: createdCampaign._id,
-        campaignRun: createdRun._id,
-        acceptedTermsVersion: input.consent?.version || AD_TERMS_VERSION,
-        acceptedAt: new Date(),
-        ipAddress: input.consent?.ipAddress || null,
-        userAgent: input.consent?.userAgent || null,
-      }], { session });
-
-      await CampaignPolicyCheck.create([{
-        campaign: createdCampaign._id,
-        campaignRun: createdRun._id,
-        productCategory: product?.category || '',
-        restrictedProductDetected: false,
-        prohibitedWordsDetected: [],
-        landingPageValid: true,
-        sellerVerified: true,
-        policyRiskLevel: 'LOW',
-        result: 'PASS',
-        notes: 'Initial automated policy pass. Admin review still required.',
-      }], { session });
-
-      await CampaignAISuggestion.create([{
-        campaign: createdCampaign._id,
-        campaignRun: createdRun._id,
-        status: 'PENDING',
-        modelProvider: 'GEMINI',
-        promptVersion: 'managed-boost-v1',
-      }], { session });
-
-      await OutboxEvent.create([{
-        eventType: 'ADS_GEMINI_SUGGESTION_REQUESTED',
-        payload: {
-          campaignId: String(createdCampaign._id),
-          campaignRunId: String(createdRun._id),
-          productName: product?.name || '',
-          selectedProviders,
-        },
-      }, {
-        eventType: 'ADS_ADMIN_REVIEW_REQUESTED',
-        payload: {
-          campaignId: String(createdCampaign._id),
-          campaignRunId: String(createdRun._id),
-        },
-      }], { session });
-
-      await NotificationLog.create([{
-        user: userObjectId,
-        campaign: createdCampaign._id,
-        campaignRun: createdRun._id,
-        type: 'CAMPAIGN_SUBMITTED',
-        channel: 'IN_APP',
-        recipient: String(user.email || user.phoneNumber || user._id),
-        subject: 'Campaign submitted',
-        status: 'PENDING',
-        idempotencyKey: `campaign-submitted:${createdRun._id}`,
-      }], { session });
-
-      await audit({
-        action: 'Campaign submitted',
-        campaignId: createdCampaign._id as any,
-        campaignRunId: createdRun._id as any,
-        afterValue: {
-          selectedProviders,
-          grossBudgetMinor: breakdown.grossBudgetMinor,
-        },
-        session,
-      });
-
-      walletBalance = toMajorUnits(reservation.wallet.availableBalanceMinor);
-      walletBalanceMinor = reservation.wallet.availableBalanceMinor;
+    const reservation = await walletService.reserveCampaignBudget({
+      userId: userObjectId,
+      amountMinor: breakdown.grossBudgetMinor,
+      campaignId: createdCampaign._id as any,
+      campaignRunId: createdRun._id as any,
+      idempotencyKey: `campaign-reserve:${createdRun._id}`,
+      session,
     });
+
+    createdRun.wallet = reservation.wallet._id as any;
+    createdRun.walletReservationTransaction = reservation.transaction._id as any;
+    await createdRun.save(createOptions);
+
+    createdCampaign.latestRunId = createdRun._id as any;
+    createdCampaign.walletBalanceAfterCharge = toMajorUnits(reservation.wallet.availableBalanceMinor);
+    await createdCampaign.save(createOptions);
+
+    const providerDocs = await ProviderCampaign.create(selectedProviders.map((provider) => {
+      const allocation = breakdown.budgetSplit.find((item) => item.provider === provider)?.allocationMinor || 0;
+      return {
+        campaign: createdCampaign!._id,
+        campaignRun: createdRun!._id,
+        user: userObjectId,
+        provider,
+        status: 'PENDING_TALLYPADI_REVIEW',
+        fulfillmentMode: 'MANUAL',
+        allocatedBudgetWalletMinor: allocation,
+        spentWalletMinor: 0,
+        remainingBudgetWalletMinor: allocation,
+        walletCurrency: 'NGN',
+        refundStatus: allocation > 0 ? 'HELD' : 'NOT_APPLICABLE',
+        settlementStatus: 'PENDING',
+      };
+    }), createOptions);
+    providerCampaigns = providerDocs as IProviderCampaign[];
+
+    if (product?.image) {
+      await CampaignCreativeAsset.create([{
+        campaign: createdCampaign._id,
+        campaignRun: createdRun._id,
+        product: product._id,
+        user: userObjectId,
+        assetType: 'IMAGE',
+        sourceType: 'PRODUCT_IMAGE',
+        publicUrl: product.image,
+        mimeType: 'image/*',
+        status: 'ACTIVE',
+        isDefaultProductImage: true,
+        referenceCount: 1,
+      }], createOptions);
+    }
+
+    await MerchantAdConsent.create([{
+      user: userObjectId,
+      campaign: createdCampaign._id,
+      campaignRun: createdRun._id,
+      acceptedTermsVersion: input.consent?.version || AD_TERMS_VERSION,
+      acceptedAt: new Date(),
+      ipAddress: input.consent?.ipAddress || null,
+      userAgent: input.consent?.userAgent || null,
+    }], createOptions);
+
+    await CampaignPolicyCheck.create([{
+      campaign: createdCampaign._id,
+      campaignRun: createdRun._id,
+      productCategory: product?.category || '',
+      restrictedProductDetected: false,
+      prohibitedWordsDetected: [],
+      landingPageValid: true,
+      sellerVerified: true,
+      policyRiskLevel: 'LOW',
+      result: 'PASS',
+      notes: 'Initial automated policy pass. Admin review still required.',
+    }], createOptions);
+
+    await CampaignAISuggestion.create([{
+      campaign: createdCampaign._id,
+      campaignRun: createdRun._id,
+      status: 'PENDING',
+      modelProvider: 'GEMINI',
+      promptVersion: 'managed-boost-v1',
+    }], createOptions);
+
+    await OutboxEvent.create([{
+      eventType: 'ADS_GEMINI_SUGGESTION_REQUESTED',
+      payload: {
+        campaignId: String(createdCampaign._id),
+        campaignRunId: String(createdRun._id),
+        productName: product?.name || '',
+        selectedProviders,
+      },
+    }, {
+      eventType: 'ADS_ADMIN_REVIEW_REQUESTED',
+      payload: {
+        campaignId: String(createdCampaign._id),
+        campaignRunId: String(createdRun._id),
+      },
+    }], createOptions);
+
+    await NotificationLog.create([{
+      user: userObjectId,
+      campaign: createdCampaign._id,
+      campaignRun: createdRun._id,
+      type: 'CAMPAIGN_SUBMITTED',
+      channel: 'IN_APP',
+      recipient: String(user.email || user.phoneNumber || user._id),
+      subject: 'Campaign submitted',
+      status: 'PENDING',
+      idempotencyKey: `campaign-submitted:${createdRun._id}`,
+    }], createOptions);
+
+    await audit({
+      action: 'Campaign submitted',
+      campaignId: createdCampaign._id as any,
+      campaignRunId: createdRun._id as any,
+      afterValue: {
+        selectedProviders,
+        grossBudgetMinor: breakdown.grossBudgetMinor,
+      },
+      session,
+    });
+
+    walletBalance = toMajorUnits(reservation.wallet.availableBalanceMinor);
+    walletBalanceMinor = reservation.wallet.availableBalanceMinor;
+  };
+
+  const session = await mongoose.startSession();
+
+  try {
+    try {
+      await session.withTransaction(async () => {
+        await applyCreation(session);
+      });
+    } catch (error) {
+      if (!isTransactionUnsupportedError(error)) throw error;
+      createdCampaign = null;
+      createdRun = null;
+      providerCampaigns = [];
+      walletBalance = 0;
+      walletBalanceMinor = 0;
+      await applyCreation();
+    }
   } catch (error: any) {
     if (String(error?.message || '').includes('Insufficient wallet balance')) {
       throw new AdCampaignError('Insufficient wallet balance', 400);
@@ -779,54 +795,63 @@ export const repairOrphanCampaignReservations = async (userId?: string | Types.O
   const repaired: { reservationId: string; userId: string; amountMinor: number }[] = [];
 
   for (const reservation of reservations) {
+    const applyRepair = async (session?: ClientSession) => {
+      const freshReservation = await WalletTransaction.findById(reservation._id).session(session || null);
+      if (!freshReservation?.campaign || freshReservation.type !== 'CAMPAIGN_BUDGET_RESERVED' || freshReservation.amountMinor <= 0) {
+        return;
+      }
+
+      const campaignExists = await AdCampaign.exists({ _id: freshReservation.campaign }).session(session || null);
+      if (campaignExists) return;
+
+      const settlementQuery: Record<string, unknown> = {
+        _id: { $ne: freshReservation._id },
+        type: { $in: RESERVATION_SETTLEMENT_TYPES },
+      };
+      if (freshReservation.campaignRun) {
+        settlementQuery.campaignRun = freshReservation.campaignRun;
+      } else {
+        settlementQuery.campaign = freshReservation.campaign;
+      }
+
+      const alreadySettled = await WalletTransaction.exists(settlementQuery).session(session || null);
+      if (alreadySettled) return;
+
+      const idempotencyKey = `orphan-campaign-reservation-release:${freshReservation._id}`;
+      const alreadyRepaired = await WalletTransaction.exists({ idempotencyKey }).session(session || null);
+      if (alreadyRepaired) return;
+
+      await walletService.releaseReserved({
+        userId: freshReservation.user,
+        amountMinor: freshReservation.amountMinor,
+        campaignId: freshReservation.campaign,
+        campaignRunId: freshReservation.campaignRun || null,
+        type: 'CAMPAIGN_BUDGET_RELEASED',
+        idempotencyKey,
+        session,
+        metadata: {
+          reason: 'orphan_campaign_reservation_repair',
+          originalReservationId: String(freshReservation._id),
+        },
+      });
+
+      repaired.push({
+        reservationId: String(freshReservation._id),
+        userId: String(freshReservation.user),
+        amountMinor: freshReservation.amountMinor,
+      });
+    };
+
     const session = await mongoose.startSession();
     try {
-      await session.withTransaction(async () => {
-        const freshReservation = await WalletTransaction.findById(reservation._id).session(session);
-        if (!freshReservation?.campaign || freshReservation.type !== 'CAMPAIGN_BUDGET_RESERVED' || freshReservation.amountMinor <= 0) {
-          return;
-        }
-
-        const campaignExists = await AdCampaign.exists({ _id: freshReservation.campaign }).session(session);
-        if (campaignExists) return;
-
-        const settlementQuery: Record<string, unknown> = {
-          _id: { $ne: freshReservation._id },
-          type: { $in: RESERVATION_SETTLEMENT_TYPES },
-        };
-        if (freshReservation.campaignRun) {
-          settlementQuery.campaignRun = freshReservation.campaignRun;
-        } else {
-          settlementQuery.campaign = freshReservation.campaign;
-        }
-
-        const alreadySettled = await WalletTransaction.exists(settlementQuery).session(session);
-        if (alreadySettled) return;
-
-        const idempotencyKey = `orphan-campaign-reservation-release:${freshReservation._id}`;
-        const alreadyRepaired = await WalletTransaction.exists({ idempotencyKey }).session(session);
-        if (alreadyRepaired) return;
-
-        await walletService.releaseReserved({
-          userId: freshReservation.user,
-          amountMinor: freshReservation.amountMinor,
-          campaignId: freshReservation.campaign,
-          campaignRunId: freshReservation.campaignRun || null,
-          type: 'CAMPAIGN_BUDGET_RELEASED',
-          idempotencyKey,
-          session,
-          metadata: {
-            reason: 'orphan_campaign_reservation_repair',
-            originalReservationId: String(freshReservation._id),
-          },
+      try {
+        await session.withTransaction(async () => {
+          await applyRepair(session);
         });
-
-        repaired.push({
-          reservationId: String(freshReservation._id),
-          userId: String(freshReservation.user),
-          amountMinor: freshReservation.amountMinor,
-        });
-      });
+      } catch (error) {
+        if (!isTransactionUnsupportedError(error)) throw error;
+        await applyRepair();
+      }
     } catch (error) {
       console.error('Orphan ad reservation repair failed:', error);
     } finally {

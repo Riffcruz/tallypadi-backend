@@ -105,7 +105,9 @@ export default function StoreProductsModal({ token, onClose }: StoreProductsModa
       ]);
       setProducts(Array.isArray(invRes.data) ? invRes.data : invRes.data?.data || []);
       setAdsPlans(plansRes.data?.plans || []);
-      setWalletBalance(dashRes.data?.user?.walletBalance || 0);
+      setWalletBalance(typeof campaignsRes.data?.walletBalance === 'number'
+        ? campaignsRes.data.walletBalance
+        : dashRes.data?.user?.walletBalance || 0);
       setCurrencyCode(String(dashRes.data?.user?.currencyCode || dashRes.data?.user?.settings?.currencyCode || 'NGN').toUpperCase());
       setCampaigns(campaignsRes.data?.campaigns || []);
     } catch (err) {

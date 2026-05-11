@@ -349,9 +349,9 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess, on
         customerId: selectedCustomer?._id || undefined,
         discountAmount: discountAmount || 0,
         items: cart.map((i) => ({
-          itemId: i.id,
+          itemId: i.id || (i as any)._id || (i as any).itemId,
           quantity: Number(i.sellQty),
-          price: Number(i.sellPrice),
+          price: Number(i.sellPrice ?? i.price ?? (i as any).lastUnitPrice ?? 0),
         })),
       };
 

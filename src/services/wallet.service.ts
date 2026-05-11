@@ -41,7 +41,7 @@ const isDuplicateKeyError = (error: unknown) => {
   return typeof error === 'object' && error !== null && (error as { code?: number }).code === 11000;
 };
 
-const isTransactionUnsupportedError = (error: unknown) => {
+export const isTransactionUnsupportedError = (error: unknown) => {
   const message = String((error as { message?: string })?.message || error || '').toLowerCase();
   return message.includes('transaction numbers are only allowed') ||
     message.includes('replica set member') ||
@@ -327,11 +327,11 @@ export const walletService = {
     campaignId: string | Types.ObjectId;
     campaignRunId: string | Types.ObjectId;
     idempotencyKey: string;
-    session: ClientSession;
+    session?: ClientSession;
   }) {
-    const existing = await WalletTransaction.findOne({ idempotencyKey: input.idempotencyKey }).session(input.session);
+    const existing = await WalletTransaction.findOne({ idempotencyKey: input.idempotencyKey }).session(input.session || null);
     if (existing) {
-      const wallet = await Wallet.findById(existing.wallet).session(input.session);
+      const wallet = await Wallet.findById(existing.wallet).session(input.session || null);
       if (!wallet) throw new Error('Wallet not found for existing reservation');
       return { wallet, transaction: existing };
     }
@@ -375,10 +375,10 @@ export const walletService = {
     providerCampaignId?: string | Types.ObjectId | null;
     type: Extract<WalletTransactionType, 'CAMPAIGN_BUDGET_RELEASED' | 'PROVIDER_ALLOCATION_REFUNDED' | 'UNUSED_BUDGET_REFUNDED'>;
     idempotencyKey: string;
-    session: ClientSession;
+    session?: ClientSession;
     metadata?: Record<string, unknown> | null;
   }) {
-    const existing = await WalletTransaction.findOne({ idempotencyKey: input.idempotencyKey }).session(input.session);
+    const existing = await WalletTransaction.findOne({ idempotencyKey: input.idempotencyKey }).session(input.session || null);
     if (existing) return existing;
 
     const wallet = await this.getOrCreateWallet(input.userId, 'NGN', input.session);
