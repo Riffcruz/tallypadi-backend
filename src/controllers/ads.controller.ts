@@ -209,13 +209,14 @@ export const updateAdsPlans = async (req: Request, res: Response) => {
       !plan.id ||
       !plan.label ||
       !Number.isInteger(plan.durationDays) ||
-      plan.durationDays < 1 ||
+      plan.durationDays < 3 ||
+      plan.durationDays > 30 ||
       !Number.isFinite(plan.price) ||
-      plan.price < 0
+      plan.price < 50_000
     ));
 
     if (invalidPlan) {
-      return res.status(400).json({ message: 'Each plan must have a valid id, label, durationDays, and price' });
+      return res.status(400).json({ message: 'Each plan must have a valid id, label, 3-30 duration days, and minimum ₦50,000 price' });
     }
 
     let settings = await AdminSettings.findOne();

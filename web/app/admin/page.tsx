@@ -260,6 +260,7 @@ export default function AdminDashboard() {
       users={users}
       onAction={handleUserAction}
       adminToken={token}
+      onRefresh={() => loadData(token)}
     />
   )}
 

@@ -11,6 +11,7 @@ import {
   broadcastMessage,
   getGlobalSettings,
   updateGlobalSettings,
+  adminTopUpUserAdsWallet,
   adminAddStaff,
   deleteStaffMember,
   unlinkStaffMember,
@@ -87,6 +88,7 @@ router.put('/settings', updateGlobalSettings);
 // User Management
 router.get('/users', getAllUsers);
 router.get('/users/:id/details', getUserDeepDive);
+router.post('/users/:id/ads-wallet/top-up', adminTopUpUserAdsWallet);
 
 // Investor Management
 router.get('/investors', getInvestors);

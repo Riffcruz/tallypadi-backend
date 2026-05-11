@@ -5,6 +5,9 @@ import axios from 'axios';
 import Swal from 'sweetalert2';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
+const MIN_AD_PLAN_DAYS = 3;
+const MAX_AD_PLAN_DAYS = 30;
+const MIN_AD_PLAN_PRICE = 50000;
 
 export interface SettingsLimits {
   maxMessageHistory: number;
@@ -80,6 +83,21 @@ export default function SettingsTab({
     };
 
     const handleSave = async () => {
+        const invalidPlan = (localSettings.adsPlans || []).find((plan) => (
+            !String(plan.label || '').trim() ||
+            Number(plan.durationDays) < MIN_AD_PLAN_DAYS ||
+            Number(plan.durationDays) > MAX_AD_PLAN_DAYS ||
+            Number(plan.price) < MIN_AD_PLAN_PRICE
+        ));
+        if (invalidPlan) {
+            Swal.fire(
+                'Ads plan needs attention',
+                `Ads plans must be ${MIN_AD_PLAN_DAYS}-${MAX_AD_PLAN_DAYS} days and at least ₦${MIN_AD_PLAN_PRICE.toLocaleString()}.`,
+                'warning'
+            );
+            return;
+        }
+
         setSaving(true);
         try {
             await axios.put(`${API_URL}/admin/settings`, { 
@@ -93,8 +111,9 @@ export default function SettingsTab({
             
             onUpdate();
             Swal.fire('Saved!', 'Global settings have been updated.', 'success');
-        } catch (e) {
-            Swal.fire('Error', 'Failed to save settings. Check server logs.', 'error');
+        } catch (e: unknown) {
+            const data = axios.isAxiosError(e) ? e.response?.data as { error?: unknown; message?: string } | undefined : undefined;
+            Swal.fire('Error', data?.message || 'Failed to save settings. Check server logs.', 'error');
         } finally {
             setSaving(false);
         }
@@ -238,7 +257,7 @@ export default function SettingsTab({
                       <h3 className="text-slate-400 text-xs font-bold uppercase tracking-wider">Ads & Boost Pricing Plans</h3>
                       <button 
                         onClick={() => {
-                          const newPlan = { id: Date.now().toString(), durationDays: 1, price: 500, label: '1 Day Boost' };
+                          const newPlan = { id: Date.now().toString(), durationDays: MIN_AD_PLAN_DAYS, price: MIN_AD_PLAN_PRICE, label: `${MIN_AD_PLAN_DAYS} Days Boost` };
                           setLocalSettings(prev => ({ ...prev, adsPlans: [...(prev.adsPlans || []), newPlan] }));
                         }}
                         className="text-xs bg-green-500/20 text-green-400 px-3 py-1.5 rounded-lg font-bold hover:bg-green-500/30 transition"
@@ -246,6 +265,9 @@ export default function SettingsTab({
                         + Add Plan
                       </button>
                     </div>
+                    <p className="text-xs text-slate-500 -mt-2 mb-3">
+                      User-facing ads plans must respect the boost minimums: {MIN_AD_PLAN_DAYS}-{MAX_AD_PLAN_DAYS} days and at least ₦{MIN_AD_PLAN_PRICE.toLocaleString()}.
+                    </p>
                     
                     <div className="space-y-3">
                       {(localSettings.adsPlans || []).length === 0 && (
@@ -273,6 +295,8 @@ export default function SettingsTab({
                             <label className="text-xs text-slate-400 font-bold mb-1 block">Duration (Days)</label>
                             <input 
                               type="number" 
+                              min={MIN_AD_PLAN_DAYS}
+                              max={MAX_AD_PLAN_DAYS}
                               value={plan.durationDays} 
                               onChange={(e) => {
                                 const newPlans = [...(localSettings.adsPlans || [])];
@@ -286,6 +310,7 @@ export default function SettingsTab({
                             <label className="text-xs text-slate-400 font-bold mb-1 block">Price (₦)</label>
                             <input 
                               type="number" 
+                              min={MIN_AD_PLAN_PRICE}
                               value={plan.price} 
                               onChange={(e) => {
                                 const newPlans = [...(localSettings.adsPlans || [])];

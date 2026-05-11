@@ -6,6 +6,7 @@ import { User } from '../models/user.model';
 import { Transaction } from '../models/transaction.model';
 import { Inventory } from '../models/inventory.model';
 import { AdminSettings } from '../models/adminSettings.model';
+import { AdminAuditLog } from '../models/adminAuditLog.model';
 import { EmailTemplate } from '../models/emailTemplate.model';
 import { sendBroadcastEmail } from '../services/email.service';
 import { DailyStats } from '../models/dailyStats.model';
@@ -14,6 +15,8 @@ import { Debtor } from '../models/debtor.model';
 
 import { sendWhatsAppText, sendWhatsAppMediaById } from '../services/whatsapp.service';
 import { executeGlobalPushNotification } from '../services/push.service';
+import { walletService } from '../services/wallet.service';
+import { toMinorUnits } from '../services/Campaign/adBudget.service';
 
 import bcrypt from 'bcryptjs';
 
@@ -77,10 +80,19 @@ const updateGlobalSettingsSchema = z
     }).optional(),
     adsPlans: z.array(z.object({
       id: z.string(),
-      durationDays: z.coerce.number().int().min(1),
-      price: z.coerce.number().min(0),
+      durationDays: z.coerce.number().int().min(3).max(30),
+      price: z.coerce.number().min(50_000),
       label: z.string().trim().min(1)
     })).optional()
+  })
+  .strict();
+
+const adminWalletTopUpSchema = z
+  .object({
+    amount: z.coerce.number().min(100).max(5_000_000),
+    reason: z.string().trim().min(10).max(500),
+    confirmation: z.string().trim(),
+    idempotencyKey: z.string().trim().min(12).max(160).optional(),
   })
   .strict();
 
@@ -352,6 +364,7 @@ export const getAllUsers = async (req: Request, res: Response) => {
           phone: '$phoneNumber',
           plan: '$planType',
           status: '$subscriptionStatus',
+          walletBalance: 1,
           joinedAt: '$createdAt',
           lifetimeSales: 1,
           lastMessages: { $slice: ['$messageHistory', -3] },
@@ -363,6 +376,72 @@ export const getAllUsers = async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Fetch Users Error:', error);
     res.status(500).json({ error: 'Fetch Users Error' });
+  }
+};
+
+export const adminTopUpUserAdsWallet = async (req: Request, res: Response) => {
+  try {
+    const admin = req.admin as any;
+    if (String(admin?.role || '').toUpperCase() !== 'SUPER_ADMIN') {
+      return res.status(403).json({ error: 'Only super admins can top up ads wallets manually' });
+    }
+
+    const { id } = req.params;
+    if (typeof id !== 'string' || !isValidObjectId(id)) return res.status(400).json({ error: 'Invalid user id' });
+
+    const parsed = adminWalletTopUpSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+    const { amount, reason, confirmation } = parsed.data;
+    if (confirmation !== 'TOPUP ADS WALLET') {
+      return res.status(400).json({ error: 'Confirmation text must be TOPUP ADS WALLET' });
+    }
+
+    const owner = await User.findOne({ _id: id, role: 'OWNER' }).select('businessName email phoneNumber walletBalance role');
+    if (!owner) return res.status(404).json({ error: 'Owner account not found' });
+
+    const beforeWalletBalance = Number(owner.walletBalance || 0);
+    const amountMinor = toMinorUnits(amount);
+    const idempotencyKey = parsed.data.idempotencyKey || `admin-wallet-topup:${admin._id}:${owner._id}:${Date.now()}`;
+
+    const result = await walletService.adminTopUpWallet({
+      userId: owner._id as any,
+      adminId: admin._id as any,
+      amountMinor,
+      reason,
+      idempotencyKey,
+    });
+
+    await AdminAuditLog.create({
+      admin: admin._id,
+      action: 'Admin ads wallet top-up',
+      walletTransaction: result.transaction?._id || null,
+      beforeValue: {
+        userId: String(owner._id),
+        walletBalance: beforeWalletBalance,
+      },
+      afterValue: {
+        userId: String(owner._id),
+        amount,
+        amountMinor,
+        walletBalance: result.walletBalance,
+        walletBalanceMinor: result.walletBalanceMinor,
+      },
+      reason,
+      ipAddress: req.ip,
+      userAgent: String(req.headers['user-agent'] || ''),
+    });
+
+    return res.json({
+      success: true,
+      message: `Ads wallet topped up with ₦${amount.toLocaleString()}`,
+      walletBalance: result.walletBalance,
+      walletBalanceMinor: result.walletBalanceMinor,
+      transactionId: result.transaction?._id || null,
+    });
+  } catch (error) {
+    console.error('Admin Ads Wallet Top-Up Error:', error);
+    return res.status(500).json({ error: 'Admin Ads Wallet Top-Up Error' });
   }
 };
 

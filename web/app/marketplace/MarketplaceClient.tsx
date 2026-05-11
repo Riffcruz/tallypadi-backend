@@ -313,7 +313,7 @@ function ProductCard({ product }: { product: MarketplaceProduct }) {
               <span className="truncate">{product.shop.name}</span>
               {product.shop.verification?.verified && (
                 <span title={product.shop.verification.label || 'Verified seller'} className="inline-flex shrink-0 text-sky-600">
-                  <BadgeCheck size={15} fill="currentColor" className="text-sky-600" />
+                  <BadgeCheck size={15} fill="currentColor" className="text-sky-600" />Verified seller
                 </span>
               )}
             </div>

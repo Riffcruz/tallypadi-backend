@@ -1,8 +1,12 @@
 'use client';
 import React, { useMemo, useState } from 'react';
-import { Search, Filter, Eye, Lock, Unlock, UserPlus } from 'lucide-react';
+import axios from 'axios';
+import Swal from 'sweetalert2';
+import { Search, Filter, Eye, Lock, Unlock, UserPlus, Wallet } from 'lucide-react';
 import UserDeepDiveModal from './UserDeepDiveModal';
 import CreateInvestorModal from './CreateInvestorModal';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 
 export interface User {
   id: string;
@@ -11,6 +15,7 @@ export interface User {
   email?: string;
   status: string;
   plan: string;
+  walletBalance?: number;
   joinedAt?: string;
 }
 
@@ -18,6 +23,7 @@ interface UsersTabProps {
   users: User[];
   onAction: (userId: string, action: string, payload?: unknown) => Promise<unknown>;
   adminToken: string;
+  onRefresh?: () => Promise<void> | void;
   role?: 'admin' | 'agent';
 }
 
@@ -25,6 +31,7 @@ export default function UsersTab({
   users,
   onAction,
   adminToken,
+  onRefresh,
   role = 'admin',
 }: UsersTabProps) {
   const [filterActive, setFilterActive] = useState(true);
@@ -73,6 +80,62 @@ export default function UsersTab({
         {plan || '—'}
       </span>
     );
+  };
+
+  const handleWalletTopUp = async (user: User) => {
+    const result = await Swal.fire({
+      title: 'Ads Wallet Top-Up',
+      html: `
+        <div style="text-align:left">
+          <p style="margin:0 0 12px;color:#64748b;font-size:13px">Super-admin only. This creates a wallet ledger transaction and audit log.</p>
+          <label style="font-size:12px;font-weight:700;color:#334155">Amount (NGN)</label>
+          <input id="wallet-topup-amount" type="number" min="100" max="5000000" class="swal2-input" placeholder="50000" style="margin:6px 0 12px;width:100%" />
+          <label style="font-size:12px;font-weight:700;color:#334155">Reason</label>
+          <textarea id="wallet-topup-reason" class="swal2-textarea" placeholder="Why is this manual top-up needed?" style="margin:6px 0 12px;width:100%;height:88px"></textarea>
+          <label style="font-size:12px;font-weight:700;color:#334155">Type TOPUP ADS WALLET to confirm</label>
+          <input id="wallet-topup-confirmation" class="swal2-input" placeholder="TOPUP ADS WALLET" style="margin:6px 0 0;width:100%" />
+        </div>
+      `,
+      showCancelButton: true,
+      confirmButtonText: 'Top Up Wallet',
+      confirmButtonColor: '#059669',
+      focusConfirm: false,
+      preConfirm: () => {
+        const popup = Swal.getPopup();
+        const amount = (popup?.querySelector('#wallet-topup-amount') as HTMLInputElement | null)?.value || '';
+        const reason = (popup?.querySelector('#wallet-topup-reason') as HTMLTextAreaElement | null)?.value || '';
+        const confirmation = (popup?.querySelector('#wallet-topup-confirmation') as HTMLInputElement | null)?.value || '';
+        if (!amount || Number(amount) < 100) {
+          Swal.showValidationMessage('Enter an amount of at least ₦100');
+          return false;
+        }
+        if (reason.trim().length < 10) {
+          Swal.showValidationMessage('Reason must be at least 10 characters');
+          return false;
+        }
+        if (confirmation !== 'TOPUP ADS WALLET') {
+          Swal.showValidationMessage('Confirmation text must match exactly');
+          return false;
+        }
+        return { amount: Number(amount), reason: reason.trim(), confirmation };
+      },
+    });
+
+    if (!result.isConfirmed || !result.value) return;
+
+    try {
+      const idempotencyKey = `admin-wallet-topup:${user.id}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+      const res = await axios.post(
+        `${API_URL}/admin/users/${user.id}/ads-wallet/top-up`,
+        { ...result.value, idempotencyKey },
+        { headers: { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json' } }
+      );
+      Swal.fire('Wallet Updated', res.data?.message || 'Ads wallet top-up completed.', 'success');
+      await onRefresh?.();
+    } catch (error: unknown) {
+      const data = axios.isAxiosError(error) ? error.response?.data as { error?: string; message?: string } | undefined : undefined;
+      Swal.fire('Top-Up Failed', data?.error || data?.message || 'Could not top up wallet.', 'error');
+    }
   };
 
   return (
@@ -152,6 +215,10 @@ export default function UsersTab({
                   {u.joinedAt ? new Date(u.joinedAt).toLocaleDateString() : '—'}
                 </span>
               </div>
+              <div className="mt-2 flex items-center justify-between text-xs text-slate-400">
+                <span>Ads wallet</span>
+                <span className="text-emerald-200 font-bold">₦{Number(u.walletBalance || 0).toLocaleString()}</span>
+              </div>
 
               <div className="mt-4 grid grid-cols-2 gap-2">
                 <button
@@ -176,6 +243,14 @@ export default function UsersTab({
                     <Lock size={16} /> Suspend
                   </button>
                 )}
+                {role !== 'agent' && (
+                  <button
+                    onClick={() => handleWalletTopUp(u)}
+                    className="col-span-2 w-full px-3 py-2.5 bg-emerald-500/15 hover:bg-emerald-500/20 text-emerald-200 border border-emerald-500/25 rounded-xl text-sm font-extrabold flex items-center justify-center gap-2 transition"
+                  >
+                    <Wallet size={16} /> Ads Wallet Top-Up
+                  </button>
+                )}
               </div>
             </div>
           ))
@@ -191,6 +266,7 @@ export default function UsersTab({
                 <th className="px-6 py-4">User</th>
                 <th className="px-6 py-4">Plan</th>
                 <th className="px-6 py-4">Status</th>
+                <th className="px-6 py-4">Ads Wallet</th>
                 <th className="px-6 py-4">Joined</th>
                 <th className="px-6 py-4 text-right">Actions</th>
               </tr>
@@ -199,7 +275,7 @@ export default function UsersTab({
             <tbody className="divide-y divide-gray-700">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-10 text-center text-slate-400">
+                  <td colSpan={6} className="px-6 py-10 text-center text-slate-400">
                     No users match your search.
                   </td>
                 </tr>
@@ -220,6 +296,10 @@ export default function UsersTab({
                       <StatusPill status={u.status} />
                     </td>
 
+                    <td className="px-6 py-4 font-bold text-emerald-200">
+                      ₦{Number(u.walletBalance || 0).toLocaleString()}
+                    </td>
+
                     <td className="px-6 py-4">
                       {u.joinedAt ? new Date(u.joinedAt).toLocaleDateString() : '—'}
                     </td>
@@ -232,6 +312,16 @@ export default function UsersTab({
                         >
                           <Eye size={14} /> View
                         </button>
+
+                        {role !== 'agent' && (
+                          <button
+                            onClick={() => handleWalletTopUp(u)}
+                            className="bg-emerald-500/15 hover:bg-emerald-500/20 text-emerald-200 border border-emerald-500/25 px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors flex items-center gap-1"
+                            title="Top up ads wallet"
+                          >
+                            <Wallet size={14} /> Top-Up
+                          </button>
+                        )}
 
                         {u.status === 'suspended' ? (
                           <button

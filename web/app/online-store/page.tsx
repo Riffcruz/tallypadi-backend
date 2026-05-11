@@ -22,6 +22,7 @@ import {
   ExternalLink,
   Check,
   Palette,
+  ChevronDown,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { getCookie } from '../../utils/cookies';
@@ -76,6 +77,7 @@ export default function OnlineStorePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [openSettingsCard, setOpenSettingsCard] = useState<'storefront' | 'location' | 'verification' | null>('storefront');
   const router = useRouter();
 
   const [businessName, setBusinessName] = useState('');
@@ -425,21 +427,29 @@ export default function OnlineStorePage() {
               {/* ── Storefront Card ── */}
               <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-pink-100">
                 <div className="flex items-center justify-between mb-6">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-pink-50 rounded-xl text-pink-600"><Smartphone size={20} /></div>
-                    <div>
-                      <h2 className="text-lg font-bold text-gray-900">Online Storefront</h2>
-                      <p className="text-xs text-gray-400">Manage your public product page</p>
+                  <button
+                    type="button"
+                    onClick={() => setOpenSettingsCard(openSettingsCard === 'storefront' ? null : 'storefront')}
+                    className="flex flex-1 items-center justify-between gap-3 text-left"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-pink-50 rounded-xl text-pink-600"><Smartphone size={20} /></div>
+                      <div>
+                        <h2 className="text-lg font-bold text-gray-900">Online Storefront Settings</h2>
+                        <p className="text-xs text-gray-400">Shop link, cover image, description, products, and theme color.</p>
+                      </div>
                     </div>
-                  </div>
+                    <ChevronDown size={18} className={`text-slate-400 transition-transform ${openSettingsCard === 'storefront' ? 'rotate-180' : ''}`} />
+                  </button>
                   <button 
                     onClick={() => setShowProductsModal(true)}
-                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition"
+                    className="ml-3 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition"
                   >
                     Manage Products
                   </button>
                 </div>
 
+                {openSettingsCard === 'storefront' && (
                 <div className="space-y-6">
                   {/* Hero Image */}
                   <div>
@@ -493,9 +503,11 @@ export default function OnlineStorePage() {
                     </div>
                   </div>
                 </div>
+                )}
               </div>
 
               {/* ── Theme Color Card ── */}
+              {openSettingsCard === 'storefront' && (
               <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-purple-100">
                 <div className="flex items-center gap-3 mb-6">
                   <div className="p-2 bg-purple-50 rounded-xl text-purple-600"><Palette size={20} /></div>
@@ -536,19 +548,28 @@ export default function OnlineStorePage() {
                   </div>
                 </div>
               </div>
+              )}
 
               {/* ── Location Card ── */}
               <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-emerald-100">
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="p-2 bg-emerald-50 rounded-xl text-emerald-600">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+                <button
+                  type="button"
+                  onClick={() => setOpenSettingsCard(openSettingsCard === 'location' ? null : 'location')}
+                  className="mb-6 flex w-full items-center justify-between gap-3 text-left"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-emerald-50 rounded-xl text-emerald-600">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-bold text-gray-900">Shop Location Settings</h2>
+                      <p className="text-xs text-gray-400">Country, state, city, and street address used for marketplace visibility.</p>
+                    </div>
                   </div>
-                  <div>
-                    <h2 className="text-lg font-bold text-gray-900">Shop Location</h2>
-                    <p className="text-xs text-gray-400">Increase visibility on the marketplace</p>
-                  </div>
-                </div>
+                  <ChevronDown size={18} className={`text-slate-400 transition-transform ${openSettingsCard === 'location' ? 'rotate-180' : ''}`} />
+                </button>
                 
+                {openSettingsCard === 'location' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                    <div>
                       <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wider">Country</label>
@@ -607,6 +628,7 @@ export default function OnlineStorePage() {
                       />
                    </div>
                 </div>
+                )}
               </div>
 
               {/* ── Save Button ── */}
@@ -644,16 +666,27 @@ export default function OnlineStorePage() {
               {/* ── Seller Verification ── */}
               <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-sky-100">
                 <div className="flex items-center gap-3 mb-6">
-                  <div className="p-2 bg-sky-50 rounded-xl text-sky-600"><BadgeCheck size={20} /></div>
-                  <div>
-                    <h2 className="text-lg font-bold text-gray-900">Seller Verification</h2>
-                    <p className="text-xs text-gray-400">Approved sellers get a verified badge on marketplace listings and storefronts.</p>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setOpenSettingsCard(openSettingsCard === 'verification' ? null : 'verification')}
+                    className="flex flex-1 items-center justify-between gap-3 text-left"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-sky-50 rounded-xl text-sky-600"><BadgeCheck size={20} /></div>
+                      <div>
+                        <h2 className="text-lg font-bold text-gray-900">Seller Verification</h2>
+                        <p className="text-xs text-gray-400">Submit ID and live face capture to show a Verified ID badge.</p>
+                      </div>
+                    </div>
+                    <ChevronDown size={18} className={`text-slate-400 transition-transform ${openSettingsCard === 'verification' ? 'rotate-180' : ''}`} />
+                  </button>
                   <span className={`ml-auto rounded-full px-3 py-1 text-xs font-black ${verificationStatus === 'VERIFIED' ? 'bg-sky-100 text-sky-700' : verificationStatus === 'PENDING' || verificationStatus === 'REVERIFY_REQUIRED' ? 'bg-amber-100 text-amber-700' : verificationStatus === 'REJECTED' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600'}`}>
                     {verificationStatus === 'REVERIFY_REQUIRED' ? 'REVERIFY' : verificationStatus}
                   </span>
                 </div>
 
+                {openSettingsCard === 'verification' && (
+                <>
                 {verificationStatus === 'VERIFIED' ? (
                   <div className="rounded-2xl border border-sky-100 bg-sky-50 p-5">
                     <div className="flex items-start gap-3">
@@ -769,6 +802,8 @@ export default function OnlineStorePage() {
                   </button>
                 </div>
                   </>
+                )}
+                </>
                 )}
               </div>
             </>

@@ -239,7 +239,7 @@ export const getConfiguredAdsPlans = async () => {
   const configuredPlans = adminSettings?.adsPlans || [];
   const sourcePlans = configuredPlans.length > 0 ? configuredPlans : DEFAULT_ADS_PLANS;
 
-  return sourcePlans
+  const normalizePlans = (plans: typeof sourcePlans) => plans
     .map((plan: any) => ({
       id: String(plan.id || '').trim(),
       durationDays: Number(plan.durationDays),
@@ -247,6 +247,9 @@ export const getConfiguredAdsPlans = async () => {
       label: String(plan.label || '').trim() || `${plan.durationDays} Day Boost`,
     }))
     .filter((plan) => plan.id && Number.isInteger(plan.durationDays) && plan.durationDays >= settings.minimumDurationDays && plan.durationDays <= settings.maximumDurationDays);
+
+  const normalizedConfiguredPlans = normalizePlans(sourcePlans);
+  return normalizedConfiguredPlans.length > 0 ? normalizedConfiguredPlans : normalizePlans(DEFAULT_ADS_PLANS);
 };
 
 export const expandAdPlatforms = (raw: unknown): AdProvider[] => {

@@ -12,6 +12,14 @@ interface CreditWalletInput {
   paystackData: Record<string, unknown>;
 }
 
+interface AdminTopUpWalletInput {
+  userId: string | Types.ObjectId;
+  adminId: string | Types.ObjectId;
+  amountMinor: number;
+  reason: string;
+  idempotencyKey: string;
+}
+
 interface LedgerInput {
   userId: string | Types.ObjectId;
   wallet: IWallet;
@@ -235,6 +243,70 @@ export const walletService = {
       reference: providerReference,
       walletBalance: toMajorUnits(walletBalanceMinor),
       walletBalanceMinor,
+    };
+  },
+
+  async adminTopUpWallet(input: AdminTopUpWalletInput) {
+    const userId = String(input.userId);
+    const amountMinor = Number(input.amountMinor);
+    if (!Number.isSafeInteger(amountMinor) || amountMinor <= 0) {
+      throw new Error('Invalid wallet top-up amount');
+    }
+
+    const session = await mongoose.startSession();
+    let walletBalanceMinor = 0;
+    let transaction: any = null;
+
+    try {
+      await session.withTransaction(async () => {
+        const existing = await WalletTransaction.findOne({ idempotencyKey: input.idempotencyKey }).session(session);
+        if (existing) {
+          const wallet = await Wallet.findById(existing.wallet).session(session);
+          if (!wallet) throw new Error('Wallet not found for existing top-up');
+          walletBalanceMinor = wallet.availableBalanceMinor;
+          transaction = existing;
+          return;
+        }
+
+        const wallet = await this.getOrCreateWallet(userId, 'NGN', session);
+        const beforeAvailable = wallet.availableBalanceMinor;
+        const beforeReserved = wallet.reservedBalanceMinor;
+
+        wallet.availableBalanceMinor += amountMinor;
+        wallet.version += 1;
+        await wallet.save({ session });
+
+        transaction = await createLedgerEntry({
+          userId,
+          wallet,
+          type: 'ADMIN_ADJUSTMENT',
+          amountMinor,
+          idempotencyKey: input.idempotencyKey,
+          session,
+          beforeAvailable,
+          afterAvailable: wallet.availableBalanceMinor,
+          beforeReserved,
+          afterReserved: wallet.reservedBalanceMinor,
+          metadata: {
+            direction: 'CREDIT',
+            adminId: String(input.adminId),
+            reason: input.reason,
+          },
+        });
+
+        walletBalanceMinor = wallet.availableBalanceMinor;
+        await syncUserWalletMirror(userId, walletBalanceMinor, session);
+      });
+    } finally {
+      await session.endSession();
+    }
+
+    return {
+      transaction,
+      walletBalanceMinor,
+      walletBalance: toMajorUnits(walletBalanceMinor),
+      amountMinor,
+      amount: toMajorUnits(amountMinor),
     };
   },
 
