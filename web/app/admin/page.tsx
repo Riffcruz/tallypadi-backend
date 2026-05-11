@@ -14,10 +14,11 @@ import BroadcastTab from '../../components/admin/BroadcastTab';
 import InvestorsTab from '../../components/admin/InvestorsTab';
 import SupportTab from '../../components/admin/SupportTab';
 import AdsTab from '../../components/admin/AdsTab';
+import MarketplaceVerificationsTab from '../../components/admin/MarketplaceVerificationsTab';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 const TOKEN_KEY = 'adminToken';
-type AdminTab = 'overview' | 'users' | 'settings' | 'broadcast' | 'investors' | 'support' | 'ads';
+type AdminTab = 'overview' | 'users' | 'settings' | 'broadcast' | 'investors' | 'support' | 'ads' | 'verifications';
 type OverviewStats = React.ComponentProps<typeof OverviewTab>['stats'];
 
 export default function AdminDashboard() {
@@ -263,6 +264,8 @@ export default function AdminDashboard() {
   )}
 
   {tab === 'ads' && <AdsTab adminToken={token} />}
+
+  {tab === 'verifications' && <MarketplaceVerificationsTab adminToken={token} />}
 
   {tab === 'settings' && (
     <SettingsTab

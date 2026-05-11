@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import Sidebar from '../../components/Sidebar';
 import Preloader from '../../components/Preloader';
@@ -17,6 +17,7 @@ import {
   Crown,
   Smartphone,
   Camera,
+  X,
   Copy,
   ExternalLink,
   Check,
@@ -53,14 +54,14 @@ const STORE_SETUP_LABELS: Record<string, string> = {
   'location.address': 'Street address',
 };
 
-type VerificationFileField =
-  | 'documentFrontUrl'
-  | 'documentBackUrl'
+type VerificationDocumentField = 'documentFrontUrl' | 'documentBackUrl';
+type VerificationFaceField =
   | 'selfieCenterUrl'
   | 'selfieLeftUrl'
   | 'selfieRightUrl'
   | 'selfieUpUrl'
   | 'selfieDownUrl';
+type VerificationUploadField = VerificationDocumentField | VerificationFaceField;
 
 export default function OnlineStorePage() {
   const [user, setUser] = useState<any>(null);
@@ -87,6 +88,13 @@ export default function OnlineStorePage() {
   const [verificationStatus, setVerificationStatus] = useState('UNVERIFIED');
   const [verificationSubmitting, setVerificationSubmitting] = useState(false);
   const [verificationUploading, setVerificationUploading] = useState<Record<string, boolean>>({});
+  const [cameraCapture, setCameraCapture] = useState<{ field: VerificationFaceField; label: string } | null>(null);
+  const [cameraStarting, setCameraStarting] = useState(false);
+  const [cameraUploading, setCameraUploading] = useState(false);
+  const [cameraError, setCameraError] = useState('');
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const cameraStreamRef = useRef<MediaStream | null>(null);
   const [verificationForm, setVerificationForm] = useState({
     idType: 'NIN',
     fullName: '',
@@ -110,6 +118,69 @@ export default function OnlineStorePage() {
   };
 
   const isTycoon = String(user?.planType || '').toUpperCase() === 'TYCOON';
+  const requiresDocumentUpload = verificationForm.idType !== 'NIN';
+  const documentUploadFields: [VerificationDocumentField, string][] = requiresDocumentUpload
+    ? [['documentFrontUrl', 'ID Front'], ['documentBackUrl', 'ID Back']]
+    : [];
+  const faceCaptureFields: [VerificationFaceField, string][] = [
+    ['selfieCenterUrl', 'Face Center'],
+    ...(countryCode !== 'NG' ? [
+      ['selfieLeftUrl', 'Face Left'] as [VerificationFaceField, string],
+      ['selfieRightUrl', 'Face Right'] as [VerificationFaceField, string],
+      ['selfieUpUrl', 'Face Up'] as [VerificationFaceField, string],
+      ['selfieDownUrl', 'Face Down'] as [VerificationFaceField, string],
+    ] : []),
+  ];
+
+  const stopCamera = () => {
+    cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
+    cameraStreamRef.current = null;
+    if (videoRef.current) videoRef.current.srcObject = null;
+  };
+
+  useEffect(() => {
+    return () => stopCamera();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!cameraCapture) {
+      stopCamera();
+      return;
+    }
+
+    let cancelled = false;
+    const startCamera = async () => {
+      setCameraStarting(true);
+      setCameraError('');
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user', width: { ideal: 960 }, height: { ideal: 960 } },
+          audio: false,
+        });
+        if (cancelled) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+        cameraStreamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play().catch(() => undefined);
+        }
+      } catch (err) {
+        setCameraError('Camera access failed. Please allow camera permission and try again.');
+      } finally {
+        if (!cancelled) setCameraStarting(false);
+      }
+    };
+
+    startCamera();
+    return () => {
+      cancelled = true;
+      stopCamera();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cameraCapture?.field]);
 
   const hydrateFromDashboard = (userData: any) => {
     setUser({ ...userData, planType: userData?.planType || 'OGA_BOSS' });
@@ -209,12 +280,11 @@ export default function OnlineStorePage() {
     }
   };
 
-  const uploadVerificationFile = async (field: VerificationFileField, file?: File | null) => {
+  const uploadVerificationBlob = async (field: VerificationUploadField, blob: Blob, ext: string, purpose: string) => {
     const token = getTokenOrRedirect();
-    if (!token || !file) return;
+    if (!token) return null;
     setVerificationUploading((current) => ({ ...current, [field]: true }));
     try {
-      const purpose = field.startsWith('selfie') ? field.replace('Url', '') : field === 'documentBackUrl' ? 'documentBack' : 'documentFront';
       const presignRes = await fetch(`${API_URL}/shop/verification/upload-url`, {
         method: 'POST',
         headers: {
@@ -222,8 +292,8 @@ export default function OnlineStorePage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          mime: file.type,
-          ext: file.name.split('.').pop() || 'jpg',
+          mime: blob.type || 'image/jpeg',
+          ext,
           purpose,
         }),
       });
@@ -236,17 +306,55 @@ export default function OnlineStorePage() {
       const { uploadUrl, publicUrl } = await presignRes.json();
       const uploadRes = await fetch(uploadUrl, {
         method: 'PUT',
-        headers: { 'Content-Type': file.type },
-        body: file,
+        headers: { 'Content-Type': blob.type || 'image/jpeg' },
+        body: blob,
       });
       if (!uploadRes.ok) throw new Error('Upload failed');
 
       setVerificationForm((current) => ({ ...current, [field]: publicUrl }));
-      Swal.fire({ toast: true, position: 'top', icon: 'success', title: 'Uploaded', showConfirmButton: false, timer: 1000 });
+      return publicUrl as string;
     } catch (err: any) {
       Swal.fire('Upload failed', err?.message || 'Could not upload verification file', 'error');
+      return null;
     } finally {
       setVerificationUploading((current) => ({ ...current, [field]: false }));
+    }
+  };
+
+  const uploadVerificationFile = async (field: VerificationDocumentField, file?: File | null) => {
+    if (!file) return;
+    const purpose = field === 'documentBackUrl' ? 'documentBack' : 'documentFront';
+    const publicUrl = await uploadVerificationBlob(field, file, file.name.split('.').pop() || 'jpg', purpose);
+    if (publicUrl) Swal.fire({ toast: true, position: 'top', icon: 'success', title: 'Uploaded', showConfirmButton: false, timer: 1000 });
+  };
+
+  const captureFaceImage = async () => {
+    if (!cameraCapture || !videoRef.current || !canvasRef.current) return;
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    const width = video.videoWidth || 720;
+    const height = video.videoHeight || 720;
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext('2d');
+    if (!context) return;
+    context.drawImage(video, 0, 0, width, height);
+
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.88));
+    if (!blob) {
+      Swal.fire('Camera Error', 'Could not capture image from the camera.', 'error');
+      return;
+    }
+
+    setCameraUploading(true);
+    try {
+      const publicUrl = await uploadVerificationBlob(cameraCapture.field, blob, 'jpg', cameraCapture.field.replace('Url', ''));
+      if (publicUrl) {
+        Swal.fire({ toast: true, position: 'top', icon: 'success', title: 'Face captured', showConfirmButton: false, timer: 1000 });
+        setCameraCapture(null);
+      }
+    } finally {
+      setCameraUploading(false);
     }
   };
 
@@ -538,7 +646,19 @@ export default function OnlineStorePage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   <div>
                     <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wider">ID Type</label>
-                    <select value={verificationForm.idType} onChange={(e) => setVerificationForm({ ...verificationForm, idType: e.target.value })} className="w-full border border-gray-200 bg-slate-50/50 rounded-xl px-4 py-3 text-sm font-medium">
+                    <select
+                      value={verificationForm.idType}
+                      onChange={(e) => {
+                        const nextIdType = e.target.value;
+                        setVerificationForm({
+                          ...verificationForm,
+                          idType: nextIdType,
+                          documentFrontUrl: nextIdType === 'NIN' ? '' : verificationForm.documentFrontUrl,
+                          documentBackUrl: nextIdType === 'NIN' ? '' : verificationForm.documentBackUrl,
+                        });
+                      }}
+                      className="w-full border border-gray-200 bg-slate-50/50 rounded-xl px-4 py-3 text-sm font-medium"
+                    >
                       <option value="NIN">NIN</option>
                       <option value="NATIONAL_ID">National ID</option>
                       <option value="DRIVERS_LICENSE">Driver Licence</option>
@@ -564,27 +684,44 @@ export default function OnlineStorePage() {
                   </div>
                 </div>
 
-                <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {[
-                    ['documentFrontUrl', 'ID Front'],
-                    ['documentBackUrl', 'ID Back'],
-                    ['selfieCenterUrl', 'Face Center'],
-                    ...(countryCode !== 'NG' ? [
-                      ['selfieLeftUrl', 'Face Left'],
-                      ['selfieRightUrl', 'Face Right'],
-                      ['selfieUpUrl', 'Face Up'],
-                      ['selfieDownUrl', 'Face Down'],
-                    ] : []),
-                  ].map(([field, label]) => (
-                    <label key={field} className="relative flex min-h-24 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-4 text-center hover:bg-slate-100">
-                      <UploadCloud size={18} className="mb-2 text-sky-600" />
-                      <span className="text-xs font-black text-slate-700">{label}</span>
-                      <span className={`mt-1 text-[10px] font-bold ${(verificationForm as any)[field] ? 'text-emerald-600' : 'text-slate-400'}`}>
-                        {verificationUploading[field] ? 'Uploading...' : (verificationForm as any)[field] ? 'Uploaded' : 'Tap to upload'}
-                      </span>
-                      <input type="file" accept="image/*" className="absolute inset-0 opacity-0" onChange={(e) => uploadVerificationFile(field as VerificationFileField, e.target.files?.[0])} />
-                    </label>
-                  ))}
+                <div className="mt-5 space-y-4">
+                  {requiresDocumentUpload && (
+                    <div>
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">ID Document</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {documentUploadFields.map(([field, label]) => (
+                          <label key={field} className="relative flex min-h-24 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-4 text-center hover:bg-slate-100">
+                            <UploadCloud size={18} className="mb-2 text-sky-600" />
+                            <span className="text-xs font-black text-slate-700">{label}</span>
+                            <span className={`mt-1 text-[10px] font-bold ${verificationForm[field] ? 'text-emerald-600' : 'text-slate-400'}`}>
+                              {verificationUploading[field] ? 'Uploading...' : verificationForm[field] ? 'Uploaded' : 'Tap to upload'}
+                            </span>
+                            <input type="file" accept="image/*,application/pdf" className="absolute inset-0 opacity-0" onChange={(e) => uploadVerificationFile(field, e.target.files?.[0])} />
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div>
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Live Face Capture</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {faceCaptureFields.map(([field, label]) => (
+                        <button
+                          type="button"
+                          key={field}
+                          onClick={() => setCameraCapture({ field, label })}
+                          className="flex min-h-24 flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-4 text-center hover:bg-slate-100"
+                        >
+                          <Camera size={18} className="mb-2 text-sky-600" />
+                          <span className="text-xs font-black text-slate-700">{label}</span>
+                          <span className={`mt-1 text-[10px] font-bold ${verificationForm[field] ? 'text-emerald-600' : 'text-slate-400'}`}>
+                            {verificationUploading[field] ? 'Uploading...' : verificationForm[field] ? 'Captured' : 'Open camera'}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
 
                 <label className="mt-5 flex items-start gap-3 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
@@ -627,6 +764,63 @@ export default function OnlineStorePage() {
           token={getCookie('tallyToken') as string}
           onClose={() => setShowProductsModal(false)}
         />
+      )}
+
+      {cameraCapture && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/80 px-4 py-6 backdrop-blur-sm">
+          <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+              <div>
+                <h3 className="text-sm font-black text-slate-900">{cameraCapture.label}</h3>
+                <p className="text-xs font-medium text-slate-500">Use your camera to capture this face angle.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCameraCapture(null)}
+                className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50"
+                aria-label="Close camera"
+              >
+                <X size={17} />
+              </button>
+            </div>
+
+            <div className="p-4">
+              <div className="relative aspect-square overflow-hidden rounded-2xl bg-slate-900">
+                {cameraStarting && (
+                  <div className="absolute inset-0 z-10 flex items-center justify-center bg-slate-900 text-white">
+                    <Loader2 size={24} className="animate-spin" />
+                  </div>
+                )}
+                {cameraError ? (
+                  <div className="absolute inset-0 flex items-center justify-center p-6 text-center text-sm font-semibold text-white">
+                    {cameraError}
+                  </div>
+                ) : (
+                  <video ref={videoRef} muted playsInline className="h-full w-full object-cover" />
+                )}
+              </div>
+              <canvas ref={canvasRef} className="hidden" />
+
+              <div className="mt-4 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setCameraCapture(null)}
+                  className="flex-1 rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={captureFaceImage}
+                  disabled={cameraStarting || cameraUploading || Boolean(cameraError)}
+                  className="flex-1 rounded-xl bg-sky-600 px-4 py-3 text-sm font-bold text-white hover:bg-sky-700 disabled:opacity-50"
+                >
+                  {cameraUploading ? 'Uploading...' : 'Capture'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

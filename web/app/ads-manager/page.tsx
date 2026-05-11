@@ -18,6 +18,7 @@ import {
   Sparkles,
   TrendingUp,
   Wallet,
+  X,
   XCircle
 } from 'lucide-react';
 import Swal from 'sweetalert2';
@@ -200,6 +201,7 @@ function AdsManagerContent() {
   const [newProduct, setNewProduct] = useState<NewProductForm>(defaultNewProductForm);
   const [submittingExisting, setSubmittingExisting] = useState(false);
   const [submittingNew, setSubmittingNew] = useState(false);
+  const [activeBoostModal, setActiveBoostModal] = useState<'new' | 'existing' | null>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -398,6 +400,7 @@ function AdsManagerContent() {
     try {
       await submitBoostRequest(selectedProductId, existingBoost, selectedExistingPlan);
       setExistingBoost(defaultBoostForm);
+      setActiveBoostModal(null);
       Swal.fire('Submitted', 'Boost request is pending admin review.', 'success');
       const token = getTokenOrRedirect();
       if (token) await refreshData(token);
@@ -438,6 +441,7 @@ function AdsManagerContent() {
       await submitBoostRequest(productId, newBoost, selectedNewPlan);
       setNewProduct(defaultNewProductForm);
       setNewBoost(defaultBoostForm);
+      setActiveBoostModal(null);
       Swal.fire('Submitted', 'Product created and boost request is pending admin review.', 'success');
       if (token) await refreshData(token);
     } catch (err: unknown) {
@@ -554,11 +558,60 @@ function AdsManagerContent() {
             </section>
 
             <section className="space-y-6">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="bg-white border border-slate-200 rounded-lg p-6 shadow-sm">
-                  <div className="flex items-center gap-3 mb-5">
-                    <PackagePlus size={20} className="text-blue-600" />
-                    <h2 className="text-base font-bold text-slate-900">Create Product to Boost</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <button
+                  type="button"
+                  onClick={() => setActiveBoostModal('new')}
+                  disabled={!isTycoon}
+                  className="group rounded-lg border border-blue-100 bg-white p-5 text-left shadow-sm transition-all hover:border-blue-200 hover:shadow-md disabled:opacity-50"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+                      <PackagePlus size={20} />
+                    </div>
+                    <div>
+                      <h2 className="text-base font-black text-slate-900">Create New Campaign</h2>
+                      <p className="text-xs font-medium text-slate-500">Add a new product and submit it for ads review.</p>
+                    </div>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveBoostModal('existing')}
+                  disabled={!isTycoon}
+                  className="group rounded-lg border border-emerald-100 bg-white p-5 text-left shadow-sm transition-all hover:border-emerald-200 hover:shadow-md disabled:opacity-50"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+                      <Search size={20} />
+                    </div>
+                    <div>
+                      <h2 className="text-base font-black text-slate-900">Use Existing Product</h2>
+                      <p className="text-xs font-medium text-slate-500">Pick a product already in inventory and boost it.</p>
+                    </div>
+                  </div>
+                </button>
+              </div>
+
+              {activeBoostModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
+                  <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl">
+                    <div className="grid grid-cols-1 gap-6">
+                <div className={`${activeBoostModal === 'new' ? 'block' : 'hidden'} bg-white border border-slate-200 rounded-lg p-6 shadow-xl`}>
+                  <div className="flex items-center justify-between gap-3 mb-5">
+                    <div className="flex items-center gap-3">
+                      <PackagePlus size={20} className="text-blue-600" />
+                      <h2 className="text-base font-bold text-slate-900">Create Product to Boost</h2>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setActiveBoostModal(null)}
+                      className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50"
+                      aria-label="Close"
+                    >
+                      <X size={17} />
+                    </button>
                   </div>
 
                   <div className="space-y-4">
@@ -617,10 +670,20 @@ function AdsManagerContent() {
                   </div>
                 </div>
 
-                <div className="bg-white border border-slate-200 rounded-lg p-6 shadow-sm">
-                  <div className="flex items-center gap-3 mb-5">
-                    <Search size={20} className="text-emerald-600" />
-                    <h2 className="text-base font-bold text-slate-900">Boost Existing Product</h2>
+                <div className={`${activeBoostModal === 'existing' ? 'block' : 'hidden'} bg-white border border-slate-200 rounded-lg p-6 shadow-xl`}>
+                  <div className="flex items-center justify-between gap-3 mb-5">
+                    <div className="flex items-center gap-3">
+                      <Search size={20} className="text-emerald-600" />
+                      <h2 className="text-base font-bold text-slate-900">Boost Existing Product</h2>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setActiveBoostModal(null)}
+                      className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50"
+                      aria-label="Close"
+                    >
+                      <X size={17} />
+                    </button>
                   </div>
 
                   <div className="relative mb-3">
@@ -678,7 +741,10 @@ function AdsManagerContent() {
                     Submit Boost for Review
                   </button>
                 </div>
-              </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="bg-white border border-slate-200 rounded-lg shadow-sm">
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-6 border-b border-slate-100">

@@ -12,7 +12,7 @@ export interface ISellerVerification extends Document {
   dateOfBirth?: string | null;
   address: string;
   governmentIdNumber?: string | null;
-  documentFrontUrl: string;
+  documentFrontUrl?: string | null;
   documentBackUrl?: string | null;
   selfieCenterUrl: string;
   selfieLeftUrl?: string | null;
@@ -49,7 +49,7 @@ const sellerVerificationSchema = new Schema<ISellerVerification>(
     dateOfBirth: { type: String, default: null, trim: true, maxlength: 20 },
     address: { type: String, required: true, trim: true, maxlength: 500 },
     governmentIdNumber: { type: String, default: null, trim: true, maxlength: 120, select: false },
-    documentFrontUrl: { type: String, required: true, trim: true },
+    documentFrontUrl: { type: String, default: null, trim: true },
     documentBackUrl: { type: String, default: null, trim: true },
     selfieCenterUrl: { type: String, required: true, trim: true },
     selfieLeftUrl: { type: String, default: null, trim: true },

@@ -3,6 +3,7 @@ import { Types } from 'mongoose';
 import { SellerVerification, SellerIdType } from '../models/sellerVerification.model';
 import { User } from '../models/user.model';
 import { r2Service } from '../services/r2.service';
+import { sendSellerVerificationAdminNotification } from '../services/email.service';
 
 const VERIFICATION_CONSENT_VERSION = 'seller-verification-v1';
 const ID_TYPES: SellerIdType[] = ['NIN', 'NATIONAL_ID', 'DRIVERS_LICENSE', 'INTERNATIONAL_PASSPORT', 'GOVERNMENT_ID'];
@@ -91,6 +92,7 @@ export const submitSellerVerification = async (req: Request, res: Response) => {
     const idType = cleanText(req.body?.idType, 40) as SellerIdType;
     const fullName = cleanText(req.body?.fullName, 160);
     const address = cleanText(req.body?.address || user.settings?.location?.address, 500);
+    const governmentIdNumber = cleanText(req.body?.governmentIdNumber, 120);
     const documentFrontUrl = cleanText(req.body?.documentFrontUrl, 1000);
     const selfieCenterUrl = cleanText(req.body?.selfieCenterUrl, 1000);
     const selfieLeftUrl = cleanText(req.body?.selfieLeftUrl, 1000);
@@ -98,9 +100,18 @@ export const submitSellerVerification = async (req: Request, res: Response) => {
     const selfieUpUrl = cleanText(req.body?.selfieUpUrl, 1000);
     const selfieDownUrl = cleanText(req.body?.selfieDownUrl, 1000);
 
+    const requiresDocumentUpload = idType !== 'NIN';
+
     if (!ID_TYPES.includes(idType)) return res.status(400).json({ error: 'Select a valid ID type.' });
-    if (!fullName || !address || !documentFrontUrl || !selfieCenterUrl) {
-      return res.status(400).json({ error: 'Full name, address, front ID document, and center selfie are required.' });
+    if (idType === 'NIN' && !governmentIdNumber) {
+      return res.status(400).json({ error: 'NIN number is required.' });
+    }
+    if (!fullName || !address || !selfieCenterUrl || (requiresDocumentUpload && !documentFrontUrl)) {
+      return res.status(400).json({
+        error: requiresDocumentUpload
+          ? 'Full name, address, front ID document, and center face capture are required.'
+          : 'Full name, address, NIN number, and center face capture are required.',
+      });
     }
     if (countryCode !== 'NG' && (!selfieLeftUrl || !selfieRightUrl || !selfieUpUrl || !selfieDownUrl)) {
       return res.status(400).json({ error: 'Non-Nigerian verification requires center, left, right, up, and down face captures.' });
@@ -117,9 +128,9 @@ export const submitSellerVerification = async (req: Request, res: Response) => {
       fullName,
       dateOfBirth: cleanText(req.body?.dateOfBirth, 20) || null,
       address,
-      governmentIdNumber: cleanText(req.body?.governmentIdNumber, 120) || null,
-      documentFrontUrl,
-      documentBackUrl: cleanText(req.body?.documentBackUrl, 1000) || null,
+      governmentIdNumber: governmentIdNumber || null,
+      documentFrontUrl: requiresDocumentUpload ? documentFrontUrl : null,
+      documentBackUrl: requiresDocumentUpload ? cleanText(req.body?.documentBackUrl, 1000) || null : null,
       selfieCenterUrl,
       selfieLeftUrl: selfieLeftUrl || null,
       selfieRightUrl: selfieRightUrl || null,
@@ -133,6 +144,18 @@ export const submitSellerVerification = async (req: Request, res: Response) => {
     user.marketplaceVerificationStatus = 'PENDING';
     user.marketplaceVerifiedAt = null;
     await user.save();
+
+    sendSellerVerificationAdminNotification({
+      verificationId: String(verification._id),
+      fullName,
+      businessName: user.businessName || user.name,
+      phoneNumber: user.phoneNumber,
+      email: user.email,
+      countryCode,
+      idType,
+    }).catch((emailError) => {
+      console.error('Seller verification admin email failed:', emailError);
+    });
 
     return res.status(201).json({
       message: 'Verification submitted for admin review.',

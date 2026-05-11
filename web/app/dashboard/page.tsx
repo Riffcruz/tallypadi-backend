@@ -201,17 +201,17 @@ function StatCard({
   };
 
   return (
-    <div className="relative overflow-hidden rounded-3xl border bg-white shadow-sm hover:shadow-md transition-all">
+    <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl border bg-white shadow-sm hover:shadow-md transition-all">
       <div className={`absolute inset-0 bg-gradient-to-br ${accentMap[accent]} pointer-events-none`} />
-      <div className="relative p-6">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-[11px] font-extrabold uppercase tracking-widest text-slate-500">{title}</p>
-            <div className="mt-2 text-3xl font-black tracking-tight text-slate-900 break-words">{value}</div>
-            {sub ? <p className="mt-1 text-xs font-semibold text-slate-500">{sub}</p> : null}
+      <div className="relative p-3.5 sm:p-6">
+        <div className="flex items-start justify-between gap-2 sm:gap-3">
+          <div className="min-w-0">
+            <p className="text-[9px] sm:text-[11px] font-extrabold uppercase tracking-wider sm:tracking-widest text-slate-500 truncate">{title}</p>
+            <div className="mt-1.5 sm:mt-2 text-lg sm:text-3xl font-black tracking-tight text-slate-900 break-words leading-tight">{value}</div>
+            {sub ? <p className="mt-1 text-[10px] sm:text-xs font-semibold text-slate-500 line-clamp-2">{sub}</p> : null}
           </div>
-          <div className="h-11 w-11 rounded-2xl bg-white border border-slate-200 flex items-center justify-center shadow-sm">
-            <Icon className="w-5 h-5 text-slate-700" />
+          <div className="h-8 w-8 sm:h-11 sm:w-11 rounded-xl sm:rounded-2xl bg-white border border-slate-200 flex items-center justify-center shadow-sm shrink-0">
+            <Icon className="w-4 h-4 sm:w-5 sm:h-5 text-slate-700" />
           </div>
         </div>
       </div>
@@ -664,7 +664,7 @@ const topTransactions = filteredTransactions.slice(0, 6);
         </header>
 
         {/* Top Stats Grid (POSA Look) */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-5">
           <StatCard
             title="Sales"
             value={formattedRevenue}
@@ -703,12 +703,12 @@ const topTransactions = filteredTransactions.slice(0, 6);
         {data?.stats?.paymentMethods && Object.keys(data.stats.paymentMethods).length > 0 && (
            <div className="mt-8">
               <h3 className="text-xl font-black tracking-tight text-slate-900 mb-4">Sales by payment method</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5">
                 {['CASH', 'POS', 'TRANSFER', 'OPAY'].map((pm) => {
                   const val = data?.stats?.paymentMethods?.[pm] || 0;
                   if (val === 0) return null; // Only show active payment methods
                   return (
-                    <div key={pm} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 hover:shadow-md transition-all">
+                    <div key={pm} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-3.5 sm:p-5 hover:shadow-md transition-all">
                       <div className="flex items-center gap-2 mb-2">
                         {pm === 'CASH' && <Banknote className="w-4 h-4 text-emerald-600" />}
                         {(pm === 'POS' || pm === 'CARD') && <CreditCard className="w-4 h-4 text-blue-600" />}
@@ -716,7 +716,7 @@ const topTransactions = filteredTransactions.slice(0, 6);
                         {pm === 'OPAY' && <Wallet className="w-4 h-4 text-emerald-600" />}
                         <span className="text-sm font-bold text-slate-500 capitalize">{pm === 'POS' ? 'Card' : pm.toLowerCase()}</span>
                       </div>
-                      <div className="text-2xl font-black text-slate-900">{formatCurrency(val, currencyCode, userLocale)}</div>
+                      <div className="text-lg sm:text-2xl font-black text-slate-900 break-words">{formatCurrency(val, currencyCode, userLocale)}</div>
                     </div>
                   );
                 })}

@@ -1,6 +1,14 @@
 import nodemailer from 'nodemailer';
 import { AdminSettings } from '../models/adminSettings.model';
 
+const escapeHtml = (value: unknown) =>
+    String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+
 export const sendRegistrationOTP = async (email: string, otp: string) => {
     // Dynamically retrieve SMTP settings from the DB
     const settings = await AdminSettings.findOne().lean();
@@ -82,4 +90,76 @@ export const sendBroadcastEmail = async (email: string, subject: string, htmlBod
         console.error(`Failed to send Broadcast Email to ${email}:`, error);
         throw error;
     }
+};
+
+export const sendSellerVerificationAdminNotification = async ({
+    verificationId,
+    fullName,
+    businessName,
+    phoneNumber,
+    email,
+    countryCode,
+    idType,
+}: {
+    verificationId: string;
+    fullName: string;
+    businessName?: string;
+    phoneNumber?: string;
+    email?: string;
+    countryCode: string;
+    idType: string;
+}) => {
+    const settings = await AdminSettings.findOne().lean();
+    const smtpConfig = (settings as any)?.smtp;
+
+    if (!smtpConfig || !smtpConfig.host || !smtpConfig.user) {
+        throw new Error('SMTP Configuration is missing or disabled in Admin Settings');
+    }
+
+    const adminEmail = String(process.env.SELLER_VERIFICATION_ADMIN_EMAIL || smtpConfig.fromAddress || smtpConfig.user || '').trim();
+    if (!adminEmail) throw new Error('Seller verification admin email is not configured');
+
+    const transporter = nodemailer.createTransport({
+        host: smtpConfig.host,
+        port: smtpConfig.port,
+        secure: smtpConfig.secure,
+        auth: {
+            user: smtpConfig.user,
+            pass: smtpConfig.pass,
+        },
+    });
+
+    const safe = {
+        verificationId: escapeHtml(verificationId),
+        fullName: escapeHtml(fullName),
+        businessName: escapeHtml(businessName || 'Not provided'),
+        phoneNumber: escapeHtml(phoneNumber || 'Not provided'),
+        email: escapeHtml(email || 'Not provided'),
+        countryCode: escapeHtml(countryCode),
+        idType: escapeHtml(idType),
+    };
+
+    await transporter.sendMail({
+        from: `TallyPadi <${smtpConfig.fromAddress || smtpConfig.user}>`,
+        to: adminEmail,
+        subject: `New seller verification: ${fullName}`,
+        html: `
+            <div style="font-family: Arial, sans-serif; max-width: 640px; margin: 0 auto; color: #0f172a;">
+                <h2 style="margin: 0 0 12px; color: #0284c7;">New seller verification request</h2>
+                <p style="color: #475569;">A marketplace seller has submitted identity verification for admin review.</p>
+                <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
+                    <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Verification ID</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; font-weight: 700;">${safe.verificationId}</td></tr>
+                    <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Full name</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; font-weight: 700;">${safe.fullName}</td></tr>
+                    <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Business</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">${safe.businessName}</td></tr>
+                    <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Phone</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">${safe.phoneNumber}</td></tr>
+                    <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Email</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">${safe.email}</td></tr>
+                    <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Country</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">${safe.countryCode}</td></tr>
+                    <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">ID type</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">${safe.idType}</td></tr>
+                </table>
+                <p style="margin-top: 20px; color: #64748b; font-size: 13px;">Open the admin dashboard and review this request under marketplace verifications.</p>
+            </div>
+        `,
+    });
+
+    return true;
 };
