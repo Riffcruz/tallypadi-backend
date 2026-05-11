@@ -40,6 +40,7 @@ import {
 } from '../controllers/admin.ads.controller';
 import {
   approveSellerVerificationForAdmin,
+  deleteSellerVerificationForAdmin,
   getSellerVerificationForAdmin,
   listSellerVerificationsForAdmin,
   rejectSellerVerificationForAdmin,
@@ -75,6 +76,7 @@ router.get('/marketplace-verifications', listSellerVerificationsForAdmin);
 router.get('/marketplace-verifications/:id', getSellerVerificationForAdmin);
 router.post('/marketplace-verifications/:id/approve', approveSellerVerificationForAdmin);
 router.post('/marketplace-verifications/:id/reject', rejectSellerVerificationForAdmin);
+router.delete('/marketplace-verifications/:id', deleteSellerVerificationForAdmin);
 
 // Global Settings
 router.get('/settings', getGlobalSettings);

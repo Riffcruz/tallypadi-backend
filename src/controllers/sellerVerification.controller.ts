@@ -20,6 +20,62 @@ const cleanText = (value: unknown, maxLength: number) =>
 const getUserId = (req: Request) => String(req.user?.id || '');
 const getAdminId = (req: Request) => String(req.admin?._id || req.user?.id || '');
 
+const verificationAssetUrls = (verification: any) => [
+  verification?.documentFrontUrl,
+  verification?.documentBackUrl,
+  verification?.selfieCenterUrl,
+  verification?.selfieLeftUrl,
+  verification?.selfieRightUrl,
+  verification?.selfieUpUrl,
+  verification?.selfieDownUrl,
+].filter((value): value is string => Boolean(value));
+
+const syncUserMarketplaceVerificationStatus = async (userId: Types.ObjectId) => {
+  const remaining = await SellerVerification.find({ user: userId })
+    .select('status reviewedAt submittedAt createdAt')
+    .sort({ createdAt: -1 })
+    .lean();
+
+  const approved = remaining.find((item) => item.status === 'APPROVED');
+  if (approved) {
+    await User.updateOne(
+      { _id: userId },
+      {
+        $set: {
+          marketplaceVerificationStatus: 'VERIFIED',
+          marketplaceVerifiedAt: approved.reviewedAt || approved.submittedAt || approved.createdAt || new Date(),
+        },
+      }
+    );
+    return;
+  }
+
+  const pending = remaining.find((item) => item.status === 'PENDING');
+  if (pending) {
+    await User.updateOne(
+      { _id: userId },
+      {
+        $set: {
+          marketplaceVerificationStatus: 'PENDING',
+          marketplaceVerifiedAt: null,
+        },
+      }
+    );
+    return;
+  }
+
+  const rejected = remaining.find((item) => item.status === 'REJECTED');
+  await User.updateOne(
+    { _id: userId },
+    {
+      $set: {
+        marketplaceVerificationStatus: rejected ? 'REJECTED' : 'UNVERIFIED',
+        marketplaceVerifiedAt: null,
+      },
+    }
+  );
+};
+
 const publicVerification = (verification: any) => verification ? {
   id: String(verification._id),
   status: verification.status,
@@ -267,6 +323,31 @@ export const rejectSellerVerificationForAdmin = async (req: Request, res: Respon
     return res.json({ message: 'Seller verification rejected.', verification: publicVerification(verification) });
   } catch (error) {
     console.error('Admin reject seller verification error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const deleteSellerVerificationForAdmin = async (req: Request, res: Response) => {
+  try {
+    const verificationId = String(req.params.id || '');
+    if (!Types.ObjectId.isValid(verificationId)) return res.status(400).json({ error: 'Invalid verification ID' });
+
+    const verification = await SellerVerification.findById(verificationId);
+    if (!verification) return res.status(404).json({ error: 'Verification not found' });
+
+    const userId = verification.user as Types.ObjectId;
+    const assets = verificationAssetUrls(verification);
+
+    await Promise.all(assets.map((url) => r2Service.deleteFile(url)));
+    await verification.deleteOne();
+    await syncUserMarketplaceVerificationStatus(userId);
+
+    return res.json({
+      message: 'Seller verification and uploaded assets deleted.',
+      deletedAssets: assets.length,
+    });
+  } catch (error) {
+    console.error('Admin delete seller verification error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 };

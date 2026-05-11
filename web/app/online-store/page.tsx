@@ -63,6 +63,14 @@ type VerificationFaceField =
   | 'selfieDownUrl';
 type VerificationUploadField = VerificationDocumentField | VerificationFaceField;
 
+interface PublicSellerVerification {
+  id: string;
+  status: string;
+  rejectionReason?: string | null;
+  reviewedAt?: string | null;
+  submittedAt?: string | null;
+}
+
 export default function OnlineStorePage() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -86,6 +94,7 @@ export default function OnlineStorePage() {
   const [showProductsModal, setShowProductsModal] = useState(false);
   const [storeSetup, setStoreSetup] = useState<{ isComplete: boolean; missing: string[] } | null>(null);
   const [verificationStatus, setVerificationStatus] = useState('UNVERIFIED');
+  const [latestVerification, setLatestVerification] = useState<PublicSellerVerification | null>(null);
   const [verificationSubmitting, setVerificationSubmitting] = useState(false);
   const [verificationUploading, setVerificationUploading] = useState<Record<string, boolean>>({});
   const [cameraCapture, setCameraCapture] = useState<{ field: VerificationFaceField; label: string } | null>(null);
@@ -222,6 +231,7 @@ export default function OnlineStorePage() {
         }
         if (verificationRes.status === 'fulfilled') {
           setVerificationStatus(verificationRes.value.data?.status || 'UNVERIFIED');
+          setLatestVerification(verificationRes.value.data?.verification || null);
         }
       } catch (err) {
         console.error('Dashboard fetch error:', err);
@@ -372,6 +382,7 @@ export default function OnlineStorePage() {
         headers: { Authorization: `Bearer ${token}` },
       });
       setVerificationStatus(res.data?.verification?.status || 'PENDING');
+      setLatestVerification(res.data?.verification || null);
       Swal.fire('Submitted', 'Your seller verification is pending admin review.', 'success');
     } catch (err: any) {
       Swal.fire('Verification Error', err?.response?.data?.error || 'Failed to submit verification', 'error');
@@ -643,6 +654,14 @@ export default function OnlineStorePage() {
                   </span>
                 </div>
 
+                {verificationStatus === 'REJECTED' && latestVerification?.rejectionReason && (
+                  <div className="mb-5 rounded-xl border border-red-100 bg-red-50 p-4 text-sm text-red-700">
+                    <p className="font-black">Verification rejected</p>
+                    <p className="mt-1 font-medium">{latestVerification.rejectionReason}</p>
+                    <p className="mt-2 text-xs font-semibold text-red-500">You can correct the details below and submit again.</p>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   <div>
                     <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wider">ID Type</label>
@@ -732,7 +751,7 @@ export default function OnlineStorePage() {
                 <div className="mt-5 flex justify-end">
                   <button onClick={handleSubmitVerification} disabled={verificationSubmitting || verificationStatus === 'PENDING' || verificationStatus === 'VERIFIED'} className="inline-flex items-center gap-2 rounded-xl bg-sky-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-sky-600/20 disabled:opacity-50">
                     {verificationSubmitting ? <Loader2 size={16} className="animate-spin" /> : <BadgeCheck size={16} />}
-                    Submit Verification
+                    {verificationStatus === 'REJECTED' ? 'Resubmit Verification' : 'Submit Verification'}
                   </button>
                 </div>
               </div>

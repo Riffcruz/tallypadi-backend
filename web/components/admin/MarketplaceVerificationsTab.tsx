@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import Swal from 'sweetalert2';
-import { BadgeCheck, Eye, FileText, Loader2, RefreshCcw, Search, ShieldCheck, X, XCircle } from 'lucide-react';
+import { BadgeCheck, Eye, FileText, Loader2, RefreshCcw, Search, ShieldCheck, Trash2, X, XCircle } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 
@@ -182,6 +182,34 @@ export default function MarketplaceVerificationsTab({ adminToken }: { adminToken
     }
   };
 
+  const deleteVerification = async (verification: SellerVerification) => {
+    const id = getId(verification);
+    if (!id) return;
+
+    const result = await Swal.fire({
+      title: 'Delete verification?',
+      text: 'This will permanently delete the verification record and its uploaded R2 files.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Delete Record & Assets',
+      confirmButtonColor: '#ef4444',
+    });
+    if (!result.isConfirmed) return;
+
+    setActionId(id);
+    try {
+      const res = await axios.delete(`${API_URL}/admin/marketplace-verifications/${id}`, { headers });
+      Swal.fire('Deleted', res.data?.message || 'Verification deleted.', 'success');
+      setSelected(null);
+      await fetchVerifications(status);
+    } catch (error: unknown) {
+      const data = axios.isAxiosError(error) ? error.response?.data as { error?: string } | undefined : undefined;
+      Swal.fire('Error', data?.error || 'Delete failed.', 'error');
+    } finally {
+      setActionId(null);
+    }
+  };
+
   const filtered = verifications.filter((verification) => {
     const user = getUser(verification.user);
     const text = [
@@ -282,6 +310,14 @@ export default function MarketplaceVerificationsTab({ adminToken }: { adminToken
                         <Eye size={15} />
                         Review
                       </button>
+                      <button
+                        onClick={() => deleteVerification(verification)}
+                        disabled={actionId === id}
+                        className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm font-bold text-red-200 hover:bg-red-500/20 disabled:opacity-50"
+                      >
+                        <Trash2 size={15} />
+                        Delete
+                      </button>
                       {verification.status === 'PENDING' && (
                         <>
                           <button
@@ -364,6 +400,14 @@ export default function MarketplaceVerificationsTab({ adminToken }: { adminToken
             {selected.status === 'PENDING' && (
               <div className="sticky bottom-0 flex flex-col sm:flex-row justify-end gap-3 border-t border-slate-800 bg-slate-950/95 p-5">
                 <button
+                  onClick={() => deleteVerification(selected)}
+                  disabled={actionId === getId(selected)}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-500/40 px-5 py-3 text-sm font-bold text-red-200 hover:bg-red-500/10 disabled:opacity-50"
+                >
+                  <Trash2 size={16} />
+                  Delete
+                </button>
+                <button
                   onClick={() => runAction(selected, 'reject')}
                   disabled={actionId === getId(selected)}
                   className="inline-flex items-center justify-center gap-2 rounded-lg bg-red-600 px-5 py-3 text-sm font-bold text-white hover:bg-red-500 disabled:opacity-50"
@@ -378,6 +422,18 @@ export default function MarketplaceVerificationsTab({ adminToken }: { adminToken
                 >
                   <ShieldCheck size={16} />
                   Approve & Verify Seller
+                </button>
+              </div>
+            )}
+            {selected.status !== 'PENDING' && (
+              <div className="sticky bottom-0 flex justify-end border-t border-slate-800 bg-slate-950/95 p-5">
+                <button
+                  onClick={() => deleteVerification(selected)}
+                  disabled={actionId === getId(selected)}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-red-600 px-5 py-3 text-sm font-bold text-white hover:bg-red-500 disabled:opacity-50"
+                >
+                  <Trash2 size={16} />
+                  Delete Record & Assets
                 </button>
               </div>
             )}
