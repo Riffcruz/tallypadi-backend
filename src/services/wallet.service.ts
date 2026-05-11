@@ -41,6 +41,14 @@ const isDuplicateKeyError = (error: unknown) => {
   return typeof error === 'object' && error !== null && (error as { code?: number }).code === 11000;
 };
 
+const isTransactionUnsupportedError = (error: unknown) => {
+  const message = String((error as { message?: string })?.message || error || '').toLowerCase();
+  return message.includes('transaction numbers are only allowed') ||
+    message.includes('replica set member') ||
+    message.includes('transactions are not supported') ||
+    message.includes('transaction not supported');
+};
+
 const getNumber = (value: unknown) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
@@ -253,58 +261,61 @@ export const walletService = {
       throw new Error('Invalid wallet top-up amount');
     }
 
-    const session = await mongoose.startSession();
-    let walletBalanceMinor = 0;
-    let transaction: any = null;
+    const applyTopUp = async (session?: ClientSession) => {
+      const existing = await WalletTransaction.findOne({ idempotencyKey: input.idempotencyKey }).session(session || null);
+      if (existing) {
+        const wallet = await Wallet.findById(existing.wallet).session(session || null);
+        if (!wallet) throw new Error('Wallet not found for existing top-up');
+        return { walletBalanceMinor: wallet.availableBalanceMinor, transaction: existing };
+      }
 
+      const wallet = await this.getOrCreateWallet(userId, undefined, session);
+      const beforeAvailable = wallet.availableBalanceMinor;
+      const beforeReserved = wallet.reservedBalanceMinor;
+
+      wallet.availableBalanceMinor += amountMinor;
+      wallet.version += 1;
+      await wallet.save({ session });
+
+      const transaction = await createLedgerEntry({
+        userId,
+        wallet,
+        type: 'ADMIN_ADJUSTMENT',
+        amountMinor,
+        idempotencyKey: input.idempotencyKey,
+        session,
+        beforeAvailable,
+        afterAvailable: wallet.availableBalanceMinor,
+        beforeReserved,
+        afterReserved: wallet.reservedBalanceMinor,
+        metadata: {
+          direction: 'CREDIT',
+          adminId: String(input.adminId),
+          reason: input.reason,
+        },
+      });
+
+      await syncUserWalletMirror(userId, wallet.availableBalanceMinor, session);
+      return { walletBalanceMinor: wallet.availableBalanceMinor, transaction };
+    };
+
+    let applied: { walletBalanceMinor: number; transaction: any };
+    const session = await mongoose.startSession();
     try {
       await session.withTransaction(async () => {
-        const existing = await WalletTransaction.findOne({ idempotencyKey: input.idempotencyKey }).session(session);
-        if (existing) {
-          const wallet = await Wallet.findById(existing.wallet).session(session);
-          if (!wallet) throw new Error('Wallet not found for existing top-up');
-          walletBalanceMinor = wallet.availableBalanceMinor;
-          transaction = existing;
-          return;
-        }
-
-        const wallet = await this.getOrCreateWallet(userId, undefined, session);
-        const beforeAvailable = wallet.availableBalanceMinor;
-        const beforeReserved = wallet.reservedBalanceMinor;
-
-        wallet.availableBalanceMinor += amountMinor;
-        wallet.version += 1;
-        await wallet.save({ session });
-
-        transaction = await createLedgerEntry({
-          userId,
-          wallet,
-          type: 'ADMIN_ADJUSTMENT',
-          amountMinor,
-          idempotencyKey: input.idempotencyKey,
-          session,
-          beforeAvailable,
-          afterAvailable: wallet.availableBalanceMinor,
-          beforeReserved,
-          afterReserved: wallet.reservedBalanceMinor,
-          metadata: {
-            direction: 'CREDIT',
-            adminId: String(input.adminId),
-            reason: input.reason,
-          },
-        });
-
-        walletBalanceMinor = wallet.availableBalanceMinor;
-        await syncUserWalletMirror(userId, walletBalanceMinor, session);
+        applied = await applyTopUp(session);
       });
+    } catch (error) {
+      if (!isTransactionUnsupportedError(error)) throw error;
+      applied = await applyTopUp();
     } finally {
       await session.endSession();
     }
 
     return {
-      transaction,
-      walletBalanceMinor,
-      walletBalance: toMajorUnits(walletBalanceMinor),
+      transaction: applied!.transaction,
+      walletBalanceMinor: applied!.walletBalanceMinor,
+      walletBalance: toMajorUnits(applied!.walletBalanceMinor),
       amountMinor,
       amount: toMajorUnits(amountMinor),
     };

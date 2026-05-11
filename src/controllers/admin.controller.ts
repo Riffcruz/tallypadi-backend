@@ -417,25 +417,31 @@ export const adminTopUpUserAdsWallet = async (req: Request, res: Response) => {
       idempotencyKey,
     });
 
-    await AdminAuditLog.create({
-      admin: admin._id,
-      action: 'Admin ads wallet top-up',
-      walletTransaction: result.transaction?._id || null,
-      beforeValue: {
-        userId: String(owner._id),
-        walletBalance: beforeWalletBalance,
-      },
-      afterValue: {
-        userId: String(owner._id),
-        amount,
-        amountMinor,
-        walletBalance: result.walletBalance,
-        walletBalanceMinor: result.walletBalanceMinor,
-      },
-      reason,
-      ipAddress: req.ip,
-      userAgent: String(req.headers['user-agent'] || ''),
-    });
+    let auditLogged = true;
+    try {
+      await AdminAuditLog.create({
+        admin: admin._id,
+        action: 'Admin ads wallet top-up',
+        walletTransaction: result.transaction?._id || null,
+        beforeValue: {
+          userId: String(owner._id),
+          walletBalance: beforeWalletBalance,
+        },
+        afterValue: {
+          userId: String(owner._id),
+          amount,
+          amountMinor,
+          walletBalance: result.walletBalance,
+          walletBalanceMinor: result.walletBalanceMinor,
+        },
+        reason,
+        ipAddress: req.ip,
+        userAgent: String(req.headers['user-agent'] || ''),
+      });
+    } catch (auditError) {
+      auditLogged = false;
+      console.error('Admin Ads Wallet Top-Up Audit Error:', auditError);
+    }
 
     return res.json({
       success: true,
@@ -444,10 +450,12 @@ export const adminTopUpUserAdsWallet = async (req: Request, res: Response) => {
       walletBalance: result.walletBalance,
       walletBalanceMinor: result.walletBalanceMinor,
       transactionId: result.transaction?._id || null,
+      auditLogged,
     });
   } catch (error) {
     console.error('Admin Ads Wallet Top-Up Error:', error);
-    return res.status(500).json({ error: 'Admin Ads Wallet Top-Up Error' });
+    const message = String((error as { message?: string })?.message || 'Admin Ads Wallet Top-Up Error');
+    return res.status(500).json({ error: message });
   }
 };
 

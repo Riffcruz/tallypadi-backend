@@ -145,7 +145,13 @@ export default function UsersTab({
         { ...result.value, idempotencyKey },
         { headers: { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json' } }
       );
-      Swal.fire('Wallet Updated', res.data?.message || 'Ads wallet top-up completed.', 'success');
+      Swal.fire(
+        res.data?.auditLogged === false ? 'Wallet Updated, Audit Warning' : 'Wallet Updated',
+        res.data?.auditLogged === false
+          ? `${res.data?.message || 'Ads wallet top-up completed.'} The audit log could not be written; check server logs.`
+          : res.data?.message || 'Ads wallet top-up completed.',
+        res.data?.auditLogged === false ? 'warning' : 'success'
+      );
       await onRefresh?.();
     } catch (error: unknown) {
       const data = axios.isAxiosError(error) ? error.response?.data as { error?: string; message?: string } | undefined : undefined;
