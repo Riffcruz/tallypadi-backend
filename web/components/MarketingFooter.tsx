@@ -1,7 +1,7 @@
 import React from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { ArrowRight, TrendingUp } from 'lucide-react';
+import { ArrowRight, Mail, MapPin, MessageCircle, TrendingUp } from 'lucide-react';
 
 export default function MarketingFooter() {
   return (
@@ -32,15 +32,18 @@ export default function MarketingFooter() {
               </a>
             </div>
             <p className="text-slate-400 text-sm leading-relaxed max-w-xs">
-              Empowering global businesses with AI-driven inventory and sales management tools. Built for growth, designed for simplicity.
+              TallyPadi helps growing businesses manage inventory, receipts, storefronts, marketplace listings, and managed product promotion.
             </p>
-            <div className="flex gap-4 pt-2">
-              {/* Social Placeholders */}
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="w-8 h-8 rounded-full bg-slate-800/50 flex items-center justify-center hover:bg-emerald-500 hover:text-white transition-all cursor-pointer border border-white/5">
-                   <span className="w-2 h-2 bg-current rounded-full" />
-                </div>
-              ))}
+            <div className="space-y-2 pt-2 text-xs text-slate-400">
+              <a href="mailto:support@tallypadi.com" className="flex items-center gap-2 hover:text-emerald-400 transition">
+                <Mail size={14} /> support@tallypadi.com
+              </a>
+              <a href="https://wa.me/2349035664420?text=Hello%20TallyPadi%20support" target="_blank" rel="noreferrer" className="flex items-center gap-2 hover:text-emerald-400 transition">
+                <MessageCircle size={14} /> +234 903 566 4420
+              </a>
+              <p className="flex items-center gap-2">
+                <MapPin size={14} /> Lagos, Nigeria
+              </p>
             </div>
           </div>
 
@@ -58,8 +61,10 @@ export default function MarketingFooter() {
 
           {/* Growth & Platform */}
           <div>
-            <h4 className="text-white font-bold mb-6 text-lg">Growth</h4>
+            <h4 className="text-white font-bold mb-6 text-lg">Company</h4>
             <ul className="space-y-3 text-sm">
+               <li><Link href="/about" className="hover:text-emerald-400 transition-colors flex items-center gap-2"><ArrowRight size={12} className="opacity-0 hover:opacity-100 transition-opacity" />About</Link></li>
+               <li><Link href="/contact" className="hover:text-emerald-400 transition-colors flex items-center gap-2"><ArrowRight size={12} className="opacity-0 hover:opacity-100 transition-opacity" />Contact</Link></li>
                <li>
                    <a href="/best-way-to-grow-business" className="text-emerald-400 hover:text-emerald-300 font-bold transition-colors flex items-center gap-2">
                        <TrendingUp size={14} /> Scale in 2026
@@ -69,7 +74,8 @@ export default function MarketingFooter() {
                <li><a href="/#pricing" className="hover:text-emerald-400 transition-colors flex items-center gap-2"><ArrowRight size={12} className="opacity-0 hover:opacity-100 transition-opacity" />Pricing</a></li>
                <li><a href="/login" className="hover:text-emerald-400 transition-colors flex items-center gap-2"><ArrowRight size={12} className="opacity-0 hover:opacity-100 transition-opacity" />Login</a></li>
                <li><a href="/help" className="hover:text-emerald-400 transition-colors flex items-center gap-2"><ArrowRight size={12} className="opacity-0 hover:opacity-100 transition-opacity" />Help Center</a></li>
-               <li><a href="/policy" className="hover:text-emerald-400 transition-colors flex items-center gap-2"><ArrowRight size={12} className="opacity-0 hover:opacity-100 transition-opacity" />Privacy Policy</a></li>
+               <li><Link href="/privacy-policy" className="hover:text-emerald-400 transition-colors flex items-center gap-2"><ArrowRight size={12} className="opacity-0 hover:opacity-100 transition-opacity" />Privacy Policy</Link></li>
+               <li><Link href="/terms-of-service" className="hover:text-emerald-400 transition-colors flex items-center gap-2"><ArrowRight size={12} className="opacity-0 hover:opacity-100 transition-opacity" />Terms of Service</Link></li>
             </ul>
           </div>
 
@@ -95,7 +101,7 @@ export default function MarketingFooter() {
           <div className="flex gap-6">
             <span>Built For Growing Businesses</span>
             <span className="w-px h-4 bg-slate-800" />
-            <span>Global</span>
+            <span>Lagos, Nigeria</span>
           </div>
         </div>
       </div>

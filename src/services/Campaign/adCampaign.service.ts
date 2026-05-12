@@ -607,92 +607,6 @@ export const createManagedCampaign = async (input: CreateManagedCampaignInput) =
     }), createOptions);
     providerCampaigns = providerDocs as IProviderCampaign[];
 
-    if (product?.image) {
-      await CampaignCreativeAsset.create([{
-        campaign: createdCampaign._id,
-        campaignRun: createdRun._id,
-        product: product._id,
-        user: userObjectId,
-        assetType: 'IMAGE',
-        sourceType: 'PRODUCT_IMAGE',
-        publicUrl: product.image,
-        mimeType: 'image/*',
-        status: 'ACTIVE',
-        isDefaultProductImage: true,
-        referenceCount: 1,
-      }], createOptions);
-    }
-
-    await MerchantAdConsent.create([{
-      user: userObjectId,
-      campaign: createdCampaign._id,
-      campaignRun: createdRun._id,
-      acceptedTermsVersion: input.consent?.version || AD_TERMS_VERSION,
-      acceptedAt: new Date(),
-      ipAddress: input.consent?.ipAddress || null,
-      userAgent: input.consent?.userAgent || null,
-    }], createOptions);
-
-    await CampaignPolicyCheck.create([{
-      campaign: createdCampaign._id,
-      campaignRun: createdRun._id,
-      productCategory: product?.category || '',
-      restrictedProductDetected: false,
-      prohibitedWordsDetected: [],
-      landingPageValid: true,
-      sellerVerified: true,
-      policyRiskLevel: 'LOW',
-      result: 'PASS',
-      notes: 'Initial automated policy pass. Admin review still required.',
-    }], createOptions);
-
-    await CampaignAISuggestion.create([{
-      campaign: createdCampaign._id,
-      campaignRun: createdRun._id,
-      status: 'PENDING',
-      modelProvider: 'GEMINI',
-      promptVersion: 'managed-boost-v1',
-    }], createOptions);
-
-    await OutboxEvent.create([{
-      eventType: 'ADS_GEMINI_SUGGESTION_REQUESTED',
-      payload: {
-        campaignId: String(createdCampaign._id),
-        campaignRunId: String(createdRun._id),
-        productName: product?.name || '',
-        selectedProviders,
-      },
-    }, {
-      eventType: 'ADS_ADMIN_REVIEW_REQUESTED',
-      payload: {
-        campaignId: String(createdCampaign._id),
-        campaignRunId: String(createdRun._id),
-      },
-    }], createOptions);
-
-    await NotificationLog.create([{
-      user: userObjectId,
-      campaign: createdCampaign._id,
-      campaignRun: createdRun._id,
-      type: 'CAMPAIGN_SUBMITTED',
-      channel: 'IN_APP',
-      recipient: String(user.email || user.phoneNumber || user._id),
-      subject: 'Campaign submitted',
-      status: 'PENDING',
-      idempotencyKey: `campaign-submitted:${createdRun._id}`,
-    }], createOptions);
-
-    await audit({
-      action: 'Campaign submitted',
-      campaignId: createdCampaign._id as any,
-      campaignRunId: createdRun._id as any,
-      afterValue: {
-        selectedProviders,
-        grossBudgetMinor: breakdown.grossBudgetMinor,
-      },
-      session,
-    });
-
     walletBalance = toMajorUnits(reservation.wallet.availableBalanceMinor);
     walletBalanceMinor = reservation.wallet.availableBalanceMinor;
   };
@@ -723,6 +637,97 @@ export const createManagedCampaign = async (input: CreateManagedCampaignInput) =
   }
 
   if (!createdCampaign || !createdRun) throw new AdCampaignError('Unable to create campaign', 500);
+
+  const sidecarWrites: Promise<unknown>[] = [];
+
+  if (product?.image) {
+    sidecarWrites.push(CampaignCreativeAsset.create([{
+      campaign: createdCampaign._id,
+      campaignRun: createdRun._id,
+      product: product._id,
+      user: userObjectId,
+      assetType: 'IMAGE',
+      sourceType: 'PRODUCT_IMAGE',
+      publicUrl: product.image,
+      mimeType: 'image/*',
+      status: 'ACTIVE',
+      isDefaultProductImage: true,
+      referenceCount: 1,
+    }]));
+  }
+
+  sidecarWrites.push(
+    MerchantAdConsent.create([{
+      user: userObjectId,
+      campaign: createdCampaign._id,
+      campaignRun: createdRun._id,
+      acceptedTermsVersion: input.consent?.version || AD_TERMS_VERSION,
+      acceptedAt: new Date(),
+      ipAddress: input.consent?.ipAddress || null,
+      userAgent: input.consent?.userAgent || null,
+    }]),
+    CampaignPolicyCheck.create([{
+      campaign: createdCampaign._id,
+      campaignRun: createdRun._id,
+      productCategory: product?.category || '',
+      restrictedProductDetected: false,
+      prohibitedWordsDetected: [],
+      landingPageValid: true,
+      sellerVerified: true,
+      policyRiskLevel: 'LOW',
+      result: 'PASS',
+      notes: 'Initial automated policy pass. Admin review still required.',
+    }]),
+    CampaignAISuggestion.create([{
+      campaign: createdCampaign._id,
+      campaignRun: createdRun._id,
+      status: 'PENDING',
+      modelProvider: 'GEMINI',
+      promptVersion: 'managed-boost-v1',
+    }]),
+    OutboxEvent.create([{
+      eventType: 'ADS_GEMINI_SUGGESTION_REQUESTED',
+      payload: {
+        campaignId: String(createdCampaign._id),
+        campaignRunId: String(createdRun._id),
+        productName: product?.name || '',
+        selectedProviders,
+      },
+    }, {
+      eventType: 'ADS_ADMIN_REVIEW_REQUESTED',
+      payload: {
+        campaignId: String(createdCampaign._id),
+        campaignRunId: String(createdRun._id),
+      },
+    }]),
+    NotificationLog.create([{
+      user: userObjectId,
+      campaign: createdCampaign._id,
+      campaignRun: createdRun._id,
+      type: 'CAMPAIGN_SUBMITTED',
+      channel: 'IN_APP',
+      recipient: String(user.email || user.phoneNumber || user._id),
+      subject: 'Campaign submitted',
+      status: 'PENDING',
+      idempotencyKey: `campaign-submitted:${createdRun._id}`,
+    }]),
+    audit({
+      action: 'Campaign submitted',
+      campaignId: createdCampaign._id as any,
+      campaignRunId: createdRun._id as any,
+      afterValue: {
+        selectedProviders,
+        grossBudgetMinor: breakdown.grossBudgetMinor,
+      },
+    })
+  );
+
+  const sidecarResults = await Promise.allSettled(sidecarWrites);
+  sidecarResults.forEach((result) => {
+    if (result.status === 'rejected') {
+      console.error('Managed ad sidecar write failed:', result.reason);
+    }
+  });
 
   await activityService.recordActivitySafely({
     user: userObjectId,

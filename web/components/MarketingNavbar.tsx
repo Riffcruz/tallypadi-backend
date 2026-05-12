@@ -44,6 +44,12 @@ export default function MarketingNavbar({ whatsappLink = 'https://wa.me/23490356
               Marketplace
             </Link>
             <Link
+              href="/about"
+              className="text-sm font-medium text-slate-300 hover:text-emerald-400 transition"
+            >
+              About
+            </Link>
+            <Link
               href="/#marketplace-ads"
               className="text-sm font-medium text-slate-300 hover:text-emerald-400 transition"
             >
@@ -122,6 +128,20 @@ export default function MarketingNavbar({ whatsappLink = 'https://wa.me/23490356
             className="block text-slate-300 hover:text-white font-medium p-2 hover:bg-slate-800 rounded"
           >
             Marketplace
+          </Link>
+          <Link
+            href="/about"
+            onClick={() => setMobileMenuOpen(false)}
+            className="block text-slate-300 hover:text-white font-medium p-2 hover:bg-slate-800 rounded"
+          >
+            About
+          </Link>
+          <Link
+            href="/contact"
+            onClick={() => setMobileMenuOpen(false)}
+            className="block text-slate-300 hover:text-white font-medium p-2 hover:bg-slate-800 rounded"
+          >
+            Contact
           </Link>
           <Link
             href="/#marketplace-ads"
