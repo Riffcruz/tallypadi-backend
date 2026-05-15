@@ -15,6 +15,10 @@ const blockStyle = (block: BlogContentBlock): CSSProperties => ({
   textAlign: block.align || 'left',
 });
 
+const backgroundClass = (block: BlogContentBlock, classes: string) => (
+  block.backgroundColor ? classes : ''
+);
+
 export default function BlogRenderer({ blocks }: { blocks: BlogContentBlock[] }) {
   if (!blocks.length) {
     return (
@@ -36,12 +40,12 @@ export default function BlogRenderer({ blocks }: { blocks: BlogContentBlock[] })
 
         if (block.type === 'heading') {
           if (block.level === 4) {
-            return <h4 key={block.id} className="text-2xl font-black text-stone-950" style={style}>{block.text}</h4>;
+            return <h4 key={block.id} className={`text-2xl font-black text-stone-950 ${backgroundClass(block, 'rounded-lg px-5 py-4')}`} style={style}>{block.text}</h4>;
           }
           if (block.level === 3) {
-            return <h3 key={block.id} className="text-3xl font-black text-stone-950" style={style}>{block.text}</h3>;
+            return <h3 key={block.id} className={`text-3xl font-black text-stone-950 ${backgroundClass(block, 'rounded-lg px-5 py-4')}`} style={style}>{block.text}</h3>;
           }
-          return <h2 key={block.id} className="text-4xl font-black text-stone-950" style={style}>{block.text}</h2>;
+          return <h2 key={block.id} className={`text-4xl font-black text-stone-950 ${backgroundClass(block, 'rounded-lg px-5 py-4')}`} style={style}>{block.text}</h2>;
         }
 
         if (block.type === 'image') {
@@ -75,7 +79,7 @@ export default function BlogRenderer({ blocks }: { blocks: BlogContentBlock[] })
 
         if (block.type === 'list') {
           return (
-            <ul key={block.id} className={`list-disc space-y-3 pl-6 leading-8 text-stone-800 ${sizeClass}`} style={style}>
+            <ul key={block.id} className={`list-disc space-y-3 pl-6 leading-8 text-stone-800 ${sizeClass} ${backgroundClass(block, 'rounded-lg px-10 py-5')}`} style={style}>
               {(block.items || []).map((item, index) => <li key={`${block.id}-${index}`}>{item}</li>)}
             </ul>
           );
@@ -106,7 +110,7 @@ export default function BlogRenderer({ blocks }: { blocks: BlogContentBlock[] })
         }
 
         return (
-          <p key={block.id} className={`leading-8 text-stone-800 ${sizeClass}`} style={style}>
+          <p key={block.id} className={`leading-8 text-stone-800 ${sizeClass} ${backgroundClass(block, 'rounded-lg px-5 py-4')}`} style={style}>
             {block.text}
           </p>
         );

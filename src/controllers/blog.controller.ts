@@ -13,6 +13,8 @@ const allowedBlockTypes = new Set<BlogBlockType>([
   'divider',
 ]);
 
+const allowedFontSizes = new Set(['sm', 'base', 'lg', 'xl', '2xl']);
+
 const cleanString = (value: unknown, max = 5000) => String(value || '').trim().slice(0, max);
 
 const getRouteParam = (value: unknown): string => {
@@ -72,6 +74,8 @@ const normalizeBlocks = (value: unknown): IBlogContentBlock[] => {
     const level = Math.min(4, Math.max(2, Number(block.level) || 2));
     const alignValue = cleanString(block.align, 12);
     const align = alignValue === 'center' || alignValue === 'right' ? alignValue : 'left';
+    const fontSizeValue = cleanString(block.fontSize, 24);
+    const fontSize = allowedFontSizes.has(fontSizeValue) ? fontSizeValue : 'base';
 
     return {
       id: cleanString(block.id, 64) || `block-${Date.now()}-${index}`,
@@ -86,7 +90,7 @@ const normalizeBlocks = (value: unknown): IBlogContentBlock[] => {
       label: cleanString(block.label, 120),
       textColor: cleanString(block.textColor, 32),
       backgroundColor: cleanString(block.backgroundColor, 32),
-      fontSize: cleanString(block.fontSize, 24) || 'base',
+      fontSize,
       align,
     };
   });
