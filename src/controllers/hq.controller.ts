@@ -4,6 +4,7 @@ import { Inventory } from '../models/inventory.model';
 import { Transaction } from '../models/transaction.model';
 import { Types } from 'mongoose';
 import bcrypt from 'bcryptjs';
+import { buildMarketplaceProductSeo } from '../services/marketplaceSeo.service';
 
 // --- Helpers ---
 const getAuthUser = async (req: Request) => {
@@ -202,11 +203,12 @@ export const transferStock = async (req: Request, res: Response) => {
         if (destItem) {
             destItem.quantity += quantity;
             // Optionally average cost price? Keeping it simple for now.
+            destItem.marketplaceSeo = buildMarketplaceProductSeo(destItem, toBranch);
             await destItem.save();
         } else {
             // Create new item in dest branch
             // Copy properties from source
-            await Inventory.create({
+            const newProduct = {
                 user: toBranch._id,
                 name: itemName.toLowerCase(),
                 quantity: quantity,
@@ -214,6 +216,10 @@ export const transferStock = async (req: Request, res: Response) => {
                 costPrice: sourceItem.costPrice,
                 category: sourceItem.category,
                 image: sourceItem.image
+            };
+            await Inventory.create({
+                ...newProduct,
+                marketplaceSeo: buildMarketplaceProductSeo(newProduct, toBranch),
             });
         }
 

@@ -7,13 +7,21 @@ import MarketingFooter from '../../components/MarketingFooter';
 
 export const metadata: Metadata = {
   title: 'Free WhatsApp Receipt Generator Nigeria | TallyPadi',
-  description: 'Generate professional receipts on WhatsApp for free in Nigeria. The easiest receipt generator for small businesses. Send PDF receipts instantly.',
+  description: 'Generate professional receipts on WhatsApp for free in Nigeria. Send PDF receipts instantly and connect receipts with sales, inventory, and business management.',
+  keywords: [
+    'free WhatsApp receipt generator Nigeria',
+    'receipt generator Nigeria',
+    'PDF receipt maker Nigeria',
+    'WhatsApp POS Nigeria',
+    'business management software Nigeria',
+    'small business receipts Nigeria',
+  ],
   alternates: {
     canonical: 'https://tallypadi.com/whatsapp-receipt-generator-nigeria',
   },
   openGraph: {
-    title: 'Free WhatsApp Receipt Generator',
-    description: 'Create and send professional receipts directly on WhatsApp. Perfect for Nigerian business owners.',
+    title: 'Free WhatsApp Receipt Generator for Nigeria',
+    description: 'Create and send professional receipts directly on WhatsApp. Built for Nigerian business owners.',
     url: 'https://tallypadi.com/whatsapp-receipt-generator-nigeria',
     type: 'website',
   },
@@ -26,7 +34,7 @@ export default function WhatsAppReceiptGeneratorPage() {
     name: 'TallyPadi Receipt Generator',
     applicationCategory: 'BusinessApplication',
     operatingSystem: 'Web, WhatsApp',
-    description: 'Free tool to generate professional receipts via WhatsApp.',
+    description: 'Free tool to generate professional receipts via WhatsApp for Nigerian businesses.',
     offers: {
       '@type': 'Offer',
       price: '0',

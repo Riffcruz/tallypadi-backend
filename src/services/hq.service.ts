@@ -2,6 +2,7 @@ import { User } from '../models/user.model';
 import { Inventory } from '../models/inventory.model';
 import { Transaction } from '../models/transaction.model';
 import { Types } from 'mongoose';
+import { buildMarketplaceProductSeo } from './marketplaceSeo.service';
 
 export const hqService = {
   // Get all branches for an HQ user
@@ -126,9 +127,10 @@ export const hqService = {
     let destItem = await Inventory.findOne({ user: toBranch._id, name: itemName.toLowerCase() });
     if (destItem) {
         destItem.quantity += quantity;
+        destItem.marketplaceSeo = buildMarketplaceProductSeo(destItem, toBranch);
         await destItem.save();
     } else {
-        await Inventory.create({
+        const newProduct = {
             user: toBranch._id,
             name: itemName.toLowerCase(),
             quantity: quantity,
@@ -136,6 +138,10 @@ export const hqService = {
             costPrice: sourceItem.costPrice,
             category: sourceItem.category,
             image: sourceItem.image
+        };
+        await Inventory.create({
+            ...newProduct,
+            marketplaceSeo: buildMarketplaceProductSeo(newProduct, toBranch),
         });
     }
 

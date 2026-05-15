@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ArrowLeft, BadgeCheck, ExternalLink, MapPin, MessageCircle, Store, TrendingUp } from 'lucide-react';
+import { ArrowLeft, BadgeCheck, ExternalLink, MapPin, MessageCircle, TrendingUp } from 'lucide-react';
+import MarketplaceFooter from '../../../../components/marketplace/MarketplaceFooter';
+import MarketplaceHeader from '../../../../components/marketplace/MarketplaceHeader';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://tallypadi.com';
@@ -21,6 +23,8 @@ type MarketplaceProduct = {
     metaDescription?: string;
     adDescription?: string;
     keywords?: string[];
+    source?: string;
+    generatedAt?: string;
   };
   shop: {
     name: string;
@@ -103,7 +107,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   const title = truncate(product.seo?.title || `${product.name} | ${product.shop.name} on TallyPadi`, 65);
   const description = truncate(getDescription(product), 170);
-  const canonical = `/marketplace/product/${product.id}`;
+  const canonical = `${SITE_URL}/marketplace/product/${product.id}`;
   const keywords = product.seo?.keywords || [product.name, product.category || '', product.shop.name].filter(Boolean);
 
   return {
@@ -111,19 +115,20 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     description,
     keywords,
     alternates: { canonical },
+    robots: { index: true, follow: true },
     openGraph: {
       type: 'website',
       url: canonical,
       title,
       description,
       siteName: 'TallyPadi Marketplace',
-      images: product.image ? [{ url: product.image, alt: product.name }] : [{ url: '/og.png', alt: 'TallyPadi Marketplace' }],
+      images: product.image ? [{ url: product.image, alt: product.name }] : [{ url: `${SITE_URL}/og.png`, alt: 'TallyPadi Marketplace' }],
     },
     twitter: {
       card: 'summary_large_image',
       title,
       description,
-      images: product.image ? [product.image] : ['/og.png'],
+      images: product.image ? [product.image] : [`${SITE_URL}/og.png`],
     },
   };
 }
@@ -145,12 +150,17 @@ export default async function MarketplaceProductPage({ params }: Props) {
     description: visibleDescription,
     image: product.image ? [product.image] : undefined,
     category: product.category,
+    brand: {
+      '@type': 'Brand',
+      name: product.shop.name,
+    },
     offers: {
       '@type': 'Offer',
       price: product.price,
       priceCurrency: product.shop.currencyCode || 'NGN',
       availability: 'https://schema.org/InStock',
       url: productUrl,
+      itemCondition: 'https://schema.org/NewCondition',
       seller: {
         '@type': 'Organization',
         name: product.shop.name,
@@ -160,28 +170,21 @@ export default async function MarketplaceProductPage({ params }: Props) {
   };
 
   return (
-    <main className="min-h-screen bg-[#f7fbf8] text-stone-950">
+    <div className="min-h-screen bg-[#f7fbf8] text-stone-950">
+      <MarketplaceHeader />
+      <main>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
 
-      <header className="border-b border-emerald-100 bg-white">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-          <Link href="/marketplace" className="inline-flex items-center gap-2 text-sm font-black text-emerald-800">
-            <ArrowLeft size={17} />
-            Marketplace
-          </Link>
-          <Link href="/" className="inline-flex items-center gap-2 font-black text-emerald-900">
-            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-700 text-white">
-              <Store size={18} />
-            </span>
-            TallyPadi
-          </Link>
-        </div>
-      </header>
+      <section className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-10">
+        <Link href="/marketplace" className="inline-flex items-center gap-2 text-sm font-black text-emerald-800 hover:text-emerald-950">
+          <ArrowLeft size={17} />
+          Back to Marketplace
+        </Link>
 
-      <section className="mx-auto grid max-w-7xl gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[1fr_380px] lg:px-8 lg:py-10">
+        <div className="mt-5 grid gap-6 lg:grid-cols-[1fr_380px]">
         <div className="overflow-hidden rounded-lg border border-stone-200 bg-white shadow-sm">
           <div className="aspect-[4/3] bg-emerald-50">
             {product.image ? (
@@ -303,7 +306,10 @@ export default async function MarketplaceProductPage({ params }: Props) {
             </p>
           </div>
         </aside>
+        </div>
       </section>
     </main>
+      <MarketplaceFooter />
+    </div>
   );
 }

@@ -21,6 +21,14 @@ export interface IInventoryItem extends Document {
   description?: string;
   colors?: string[];
   sizes?: string[];
+  marketplaceSeo?: {
+    title?: string;
+    metaDescription?: string;
+    adDescription?: string;
+    keywords?: string[];
+    generatedAt?: Date;
+    source?: 'SYSTEM' | 'BOOST' | 'AI' | 'FALLBACK';
+  };
 
   // ── Paid Ads & Boosts ──
   boosts?: {
@@ -58,6 +66,14 @@ export interface IInventoryItem extends Document {
       description: { type: String, trim: true, maxlength: 1000 },
       colors: [{ type: String, trim: true }],
       sizes: [{ type: String, trim: true }],
+      marketplaceSeo: {
+        title: { type: String, trim: true, maxlength: 120, default: '' },
+        metaDescription: { type: String, trim: true, maxlength: 220, default: '' },
+        adDescription: { type: String, trim: true, maxlength: 1000, default: '' },
+        keywords: [{ type: String, trim: true, maxlength: 70 }],
+        generatedAt: { type: Date, default: null },
+        source: { type: String, enum: ['SYSTEM', 'BOOST', 'AI', 'FALLBACK', null], default: null },
+      },
 
       // ── Paid Ads & Boosts ──
       boosts: [{
@@ -78,5 +94,6 @@ inventorySchema.index({ user: 1, sku: 1 }, { sparse: true }); // Fast SKU lookup
 inventorySchema.index({ user: 1, isPublished: 1, quantity: 1, createdAt: -1 });
 inventorySchema.index({ isPublished: 1, quantity: 1, category: 1, createdAt: -1 });
 inventorySchema.index({ 'boosts.expiresAt': 1 });
+inventorySchema.index({ 'marketplaceSeo.keywords': 1 });
 
 export const Inventory = model<IInventoryItem>('Inventory', inventorySchema);

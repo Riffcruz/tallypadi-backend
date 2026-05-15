@@ -8,6 +8,18 @@ export default function robots(): MetadataRoute.Robots {
         userAgent: "*",
         allow: [
           "/",
+          "/about",
+          "/blog",
+          "/contact",
+          "/faq",
+          "/faqs",
+          "/help",
+          "/partners",
+          "/privacy",
+          "/privacy-policy",
+          "/terms",
+          "/terms-of-service",
+          "/policy",
           "/sales-tracking-ledger",
           "/inventory-stock-management",
           "/best-way-to-grow-business",
@@ -15,8 +27,13 @@ export default function robots(): MetadataRoute.Robots {
           "/marketplace/product/",
           "/shop/",
           "/whatsapp-receipt-generator",
+          "/whatsapp-receipt-generator-nigeria",
+          "/free-invoice-generator",
           "/product-catalog-shop-link-generator",
-          "/accounts-receivable-debtors-tracking"
+          "/accounts-receivable-debtors-tracking",
+          "/receiptbuddy-alternative",
+          "/nairatrack-alternative",
+          "/tallyprime-whatsapp-alternative"
         ],
         disallow: [
           "/api/",

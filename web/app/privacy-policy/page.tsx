@@ -47,65 +47,65 @@ const sections = [
 
 export default function PrivacyPolicyPage() {
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
+    <div className="min-h-screen bg-[#f7f0df] text-stone-900">
       <MarketingNavbar />
       <main className="pt-24">
-        <section className="bg-white border-b border-slate-200">
+        <section className="border-b border-stone-200 bg-[#f7f0df]">
           <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-14 lg:py-20">
-            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-bold uppercase tracking-wide text-emerald-700">
+            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-bold uppercase text-emerald-700">
               <ShieldCheck size={14} />
               Last updated May 12, 2026
             </div>
-            <h1 className="mt-6 text-4xl sm:text-5xl font-black tracking-tight text-slate-950">Privacy Policy</h1>
-            <p className="mt-5 max-w-3xl text-base sm:text-lg leading-8 text-slate-600">
+            <h1 className="mt-6 text-4xl sm:text-5xl font-black text-stone-950">Privacy Policy</h1>
+            <p className="mt-5 max-w-3xl text-base sm:text-lg leading-8 text-stone-700">
               This Privacy Policy explains how TallyPadi collects, uses, stores, shares, and protects information when merchants, staff, customers, marketplace visitors, and admins use TallyPadi.
             </p>
           </div>
         </section>
 
         <section className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-6">
-          <div className="rounded-lg border border-slate-200 bg-white p-6">
-            <h2 className="text-xl font-black text-slate-950">Business identity</h2>
-            <p className="mt-3 leading-7 text-slate-600">
+          <div className="rounded-lg border border-stone-200 bg-white p-6">
+            <h2 className="text-xl font-black text-stone-950">Business identity</h2>
+            <p className="mt-3 leading-7 text-stone-700">
               TallyPadi is a business management and merchant promotion platform operating from Lagos, Nigeria. Contact us at <a href="mailto:support@tallypadi.com" className="font-bold text-emerald-700">support@tallypadi.com</a>. Privacy requests can be sent to <a href="mailto:privacy@tallypadi.com" className="font-bold text-emerald-700">privacy@tallypadi.com</a>.
             </p>
           </div>
 
           {sections.map((section) => (
-            <div key={section.title} className="rounded-lg border border-slate-200 bg-white p-6">
-              <h2 className="text-xl font-black text-slate-950">{section.title}</h2>
-              <ul className="mt-4 space-y-3 text-slate-600 leading-7 list-disc pl-5 marker:text-emerald-600">
+            <div key={section.title} className="rounded-lg border border-stone-200 bg-white p-6">
+              <h2 className="text-xl font-black text-stone-950">{section.title}</h2>
+              <ul className="mt-4 space-y-3 text-stone-700 leading-7 list-disc pl-5 marker:text-emerald-600">
                 {section.body.map((item) => <li key={item}>{item}</li>)}
               </ul>
             </div>
           ))}
 
           <div className="grid md:grid-cols-3 gap-4">
-            <div className="rounded-lg border border-slate-200 bg-white p-5">
+            <div className="rounded-lg border border-stone-200 bg-white p-5">
               <Database className="text-emerald-600" size={24} />
-              <h3 className="mt-4 font-black text-slate-950">Retention</h3>
-              <p className="mt-2 text-sm leading-6 text-slate-600">We keep account and business records while needed to provide the service, meet legal requirements, resolve disputes, and maintain reliable financial history.</p>
+              <h3 className="mt-4 font-black text-stone-950">Retention</h3>
+              <p className="mt-2 text-sm leading-6 text-stone-700">We keep account and business records while needed to provide the service, meet legal requirements, resolve disputes, and maintain reliable financial history.</p>
             </div>
-            <div className="rounded-lg border border-slate-200 bg-white p-5">
+            <div className="rounded-lg border border-stone-200 bg-white p-5">
               <LockKeyhole className="text-emerald-600" size={24} />
-              <h3 className="mt-4 font-black text-slate-950">Security</h3>
-              <p className="mt-2 text-sm leading-6 text-slate-600">We use technical and administrative safeguards, access controls, secure authentication, cloud infrastructure, audit logs, and operational monitoring to protect data.</p>
+              <h3 className="mt-4 font-black text-stone-950">Security</h3>
+              <p className="mt-2 text-sm leading-6 text-stone-700">We use technical and administrative safeguards, access controls, secure authentication, cloud infrastructure, audit logs, and operational monitoring to protect data.</p>
             </div>
-            <div className="rounded-lg border border-slate-200 bg-white p-5">
+            <div className="rounded-lg border border-stone-200 bg-white p-5">
               <Megaphone className="text-emerald-600" size={24} />
-              <h3 className="mt-4 font-black text-slate-950">Ads data</h3>
-              <p className="mt-2 text-sm leading-6 text-slate-600">Campaign data is used only to manage merchant-requested promotions, show results, reconcile spend, and support campaign controls.</p>
+              <h3 className="mt-4 font-black text-stone-950">Ads data</h3>
+              <p className="mt-2 text-sm leading-6 text-stone-700">Campaign data is used only to manage merchant-requested promotions, show results, reconcile spend, and support campaign controls.</p>
             </div>
           </div>
 
-          <div className="rounded-lg border border-slate-200 bg-white p-6">
-            <h2 className="text-xl font-black text-slate-950">Your choices and rights</h2>
-            <p className="mt-3 leading-7 text-slate-600">
+          <div className="rounded-lg border border-stone-200 bg-white p-6">
+            <h2 className="text-xl font-black text-stone-950">Your choices and rights</h2>
+            <p className="mt-3 leading-7 text-stone-700">
               You may request access, correction, export, or deletion of your personal data by contacting us. Some business records may need to be retained where required for legal, security, fraud prevention, or accounting reasons. Merchants can also pause, stop, or request review of active ad campaigns through TallyPadi support or available dashboard controls.
             </p>
           </div>
 
-          <div className="rounded-lg border border-slate-200 bg-slate-950 p-6 text-white">
+          <div className="rounded-lg border border-stone-200 bg-[#171715] p-6 text-white">
             <h2 className="text-xl font-black">Contact</h2>
             <p className="mt-3 text-slate-300 leading-7">
               Privacy email: privacy@tallypadi.com<br />

@@ -41,6 +41,8 @@ type ShopProduct = {
     metaDescription?: string;
     adDescription?: string;
     keywords?: string[];
+    source?: string;
+    generatedAt?: string;
   };
 };
 
@@ -127,7 +129,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const title = truncate(product.seo?.title || `${product.name} | ${shop.name}`, 65);
   const description = truncate(getDescription(product, shop), 170);
   const image = normalizeImageUrl(product.image) || normalizeImageUrl(shop.heroImageUrl) || '/og.png';
-  const canonical = `/shop/${slug}/product/${product.id}`;
+  const canonical = `${SITE_URL}/shop/${slug}/product/${product.id}`;
   const keywords = product.seo?.keywords || [product.name, product.category || '', shop.name].filter(Boolean);
 
   return {
@@ -135,6 +137,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     description,
     keywords,
     alternates: { canonical },
+    robots: { index: true, follow: true },
     openGraph: {
       type: 'website',
       url: canonical,
@@ -174,12 +177,17 @@ export default async function ShopProductPage({ params }: Props) {
     description: visibleDescription,
     image: image ? [image] : undefined,
     category: product.category,
+    brand: {
+      '@type': 'Brand',
+      name: shop.name,
+    },
     offers: {
       '@type': 'Offer',
       price: product.price,
       priceCurrency: shop.currencyCode || 'NGN',
       availability: product.inStock ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
       url: productUrl,
+      itemCondition: 'https://schema.org/NewCondition',
       seller: {
         '@type': 'Organization',
         name: shop.name,

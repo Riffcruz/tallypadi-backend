@@ -1,109 +1,134 @@
-import React from 'react';
-import Image from 'next/image';
-import Link from 'next/link';
-import { ArrowRight, Mail, MapPin, MessageCircle, TrendingUp } from 'lucide-react';
+import React from "react";
+import Image from "next/image";
+import Link from "next/link";
+import { Mail, MapPin, MessageCircle } from "lucide-react";
+
+const footerColumns = [
+  {
+    title: "PRODUCT",
+    links: [
+      { href: "/#features", label: "Features" },
+      { href: "/#pricing", label: "Pricing" },
+      { href: "/#how-it-works", label: "How it Works" },
+      { href: "/marketplace", label: "Marketplace" },
+      { href: "/free-invoice-generator", label: "Free Invoice" },
+    ],
+  },
+  {
+    title: "COMPANY",
+    links: [
+      { href: "/about", label: "About TallyPadi" },
+      { href: "/contact", label: "Contact" },
+      { href: "/partners", label: "Partnership" },
+      { href: "/blog", label: "Blog" },
+    ],
+  },
+  {
+    title: "RESOURCES",
+    links: [
+      { href: "/help", label: "Help Center" },
+      { href: "/faq", label: "FAQs" },
+      { href: "/whatsapp-receipt-generator", label: "WhatsApp Receipts" },
+      { href: "/inventory-stock-management", label: "Inventory Guide" },
+    ],
+  },
+  {
+    title: "LEGAL",
+    links: [
+      { href: "/privacy-policy", label: "Privacy Policy" },
+      { href: "/terms-of-service", label: "Terms and Services" },
+      { href: "/policy", label: "Store Policy" },
+    ],
+  },
+];
+
+const companyFacts = [
+  { label: "Business name", value: "TallyPadi" },
+  { label: "Service location", value: "Lagos, Nigeria" },
+  { label: "Support email", value: "support@tallypadi.com" },
+  { label: "Privacy email", value: "privacy@tallypadi.com" },
+  { label: "WhatsApp support", value: "+234 903 566 4420" },
+
+];
+
+const handStyle = {
+  fontFamily: '"Comic Sans MS", "Marker Felt", "Trebuchet MS", cursive',
+} satisfies React.CSSProperties;
 
 export default function MarketingFooter() {
   return (
-    <footer className="relative bg-slate-950 text-slate-300 py-16 overflow-hidden">
-      {/* Background Image & Overlay */}
-      <div className="absolute inset-0 z-0">
-        <Image
-          src="/photo-1451187580459-43490279c0fa.avif"
-          alt="Footer Background"
-          fill
-          className="object-cover opacity-20"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/80 to-slate-900/90" />
+    <footer className="bg-[#181816] text-stone-300">
+      <div className="mx-auto grid max-w-[1480px] gap-10 px-5 py-12 sm:px-10 md:grid-cols-2 lg:grid-cols-[1.25fr_2.6fr_1fr_210px] lg:px-20">
+        <div>
+          <Link href="/" className="relative block h-11 w-[160px]" aria-label="TallyPadi home">
+            <Image src="/tallypadi-logo.png" alt="TallyPadi logo" fill sizes="160px" className="object-contain brightness-0 invert" />
+          </Link>
+          <p className="mt-5 max-w-[260px] text-sm leading-6 text-stone-400">
+            The complete shop on WhatsApp, web, and compatible POS machines. Built for all SMEs.
+          </p>
+          <dl className="mt-5 space-y-2 text-xs leading-5 text-stone-500">
+            {companyFacts.map((fact) => (
+              <div key={fact.label}>
+                <dt className="inline font-black text-stone-300">{fact.label}: </dt>
+                <dd className="inline">{fact.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+
+        <div className="grid gap-8 sm:grid-cols-2 xl:grid-cols-4">
+          {footerColumns.map((column) => (
+            <div key={column.title}>
+              <h3 className="text-xs font-black text-white">{column.title}</h3>
+              <ul className="mt-4 space-y-3 text-sm">
+                {column.links.map((link) => (
+                  <li key={link.href}>
+                    <Link href={link.href} className="transition hover:text-emerald-300">
+                      {link.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+
+        <div>
+          <h3 className="text-xs font-black text-white">CONTACT US</h3>
+          <div className="mt-4 space-y-3 text-sm">
+            <a href="mailto:support@tallypadi.com" className="flex items-center gap-2 transition hover:text-emerald-300">
+              <Mail size={15} />
+              support@tallypadi.com
+            </a>
+            <a
+              href="https://wa.me/2349035664420?text=Hello%20TallyPadi%20support"
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-2 transition hover:text-emerald-300"
+            >
+              <MessageCircle size={15} />
+              +234 903 566 4420
+            </a>
+            <p className="flex items-center gap-2">
+              <MapPin size={15} />
+              Lagos, Nigeria
+            </p>
+          </div>
+        </div>
+
+        <div className="relative min-h-[120px] rounded-sm bg-[#f7f0df] p-5 text-stone-950 shadow-xl">
+          <span className="absolute -top-3 left-7 h-7 w-20 rotate-[-8deg] bg-amber-100/90" />
+          <p className="text-2xl font-black leading-8" style={handStyle}>
+            We dey here
+            <br />
+            for you!
+          </p>
+          <div className="mt-3 h-10 w-10 rounded-full border-2 border-stone-900 text-center text-xl leading-9">⌣</div>
+        </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 mb-12">
-          {/* Brand Column */}
-          <div className="space-y-4">
-            <div className="cursor-pointer group inline-block">
-              <a href="/" className="relative block w-[160px] h-[40px] transition-transform duration-300 group-hover:scale-105">
-                <Image
-                  src="/tallypadi-logo.png"
-                  alt="TallyPadi logo"
-                  fill
-                  className="object-contain"
-                />
-              </a>
-            </div>
-            <p className="text-slate-400 text-sm leading-relaxed max-w-xs">
-              TallyPadi helps growing businesses manage inventory, receipts, storefronts, marketplace listings, and managed product promotion.
-            </p>
-            <div className="space-y-2 pt-2 text-xs text-slate-400">
-              <a href="mailto:support@tallypadi.com" className="flex items-center gap-2 hover:text-emerald-400 transition">
-                <Mail size={14} /> support@tallypadi.com
-              </a>
-              <a href="https://wa.me/2349035664420?text=Hello%20TallyPadi%20support" target="_blank" rel="noreferrer" className="flex items-center gap-2 hover:text-emerald-400 transition">
-                <MessageCircle size={14} /> +234 903 566 4420
-              </a>
-              <p className="flex items-center gap-2">
-                <MapPin size={14} /> Lagos, Nigeria
-              </p>
-            </div>
-          </div>
-
-          {/* Features (SEO Links) */}
-          <div>
-            <h4 className="text-white font-bold mb-6 text-lg">Solutions</h4>
-            <ul className="space-y-3 text-sm">
-              <li><a href="/whatsapp-receipt-generator" className="hover:text-emerald-400 transition-colors flex items-center gap-2"><ArrowRight size={12} className="opacity-0 hover:opacity-100 transition-opacity" />Receipt Generator</a></li>
-              <li><a href="/sales-tracking-ledger" className="hover:text-emerald-400 transition-colors flex items-center gap-2"><ArrowRight size={12} className="opacity-0 hover:opacity-100 transition-opacity" />Sales Tracking</a></li>
-              <li><a href="/inventory-stock-management" className="hover:text-emerald-400 transition-colors flex items-center gap-2"><ArrowRight size={12} className="opacity-0 hover:opacity-100 transition-opacity" />Inventory Management</a></li>
-              <li><a href="/product-catalog-shop-link-generator" className="hover:text-emerald-400 transition-colors flex items-center gap-2"><ArrowRight size={12} className="opacity-0 hover:opacity-100 transition-opacity" />Online Catalog</a></li>
-              <li><a href="/accounts-receivable-debtors-tracking" className="hover:text-emerald-400 transition-colors flex items-center gap-2"><ArrowRight size={12} className="opacity-0 hover:opacity-100 transition-opacity" />Debtor Tracking</a></li>
-            </ul>
-          </div>
-
-          {/* Growth & Platform */}
-          <div>
-            <h4 className="text-white font-bold mb-6 text-lg">Company</h4>
-            <ul className="space-y-3 text-sm">
-               <li><Link href="/about" className="hover:text-emerald-400 transition-colors flex items-center gap-2"><ArrowRight size={12} className="opacity-0 hover:opacity-100 transition-opacity" />About</Link></li>
-               <li><Link href="/contact" className="hover:text-emerald-400 transition-colors flex items-center gap-2"><ArrowRight size={12} className="opacity-0 hover:opacity-100 transition-opacity" />Contact</Link></li>
-               <li>
-                   <a href="/best-way-to-grow-business" className="text-emerald-400 hover:text-emerald-300 font-bold transition-colors flex items-center gap-2">
-                       <TrendingUp size={14} /> Scale in 2026
-                   </a>
-               </li>
-               <li><Link href="/marketplace" className="hover:text-emerald-400 transition-colors flex items-center gap-2"><ArrowRight size={12} className="opacity-0 hover:opacity-100 transition-opacity" />Marketplace</Link></li>
-               <li><a href="/#pricing" className="hover:text-emerald-400 transition-colors flex items-center gap-2"><ArrowRight size={12} className="opacity-0 hover:opacity-100 transition-opacity" />Pricing</a></li>
-               <li><a href="/login" className="hover:text-emerald-400 transition-colors flex items-center gap-2"><ArrowRight size={12} className="opacity-0 hover:opacity-100 transition-opacity" />Login</a></li>
-               <li><a href="/help" className="hover:text-emerald-400 transition-colors flex items-center gap-2"><ArrowRight size={12} className="opacity-0 hover:opacity-100 transition-opacity" />Help Center</a></li>
-               <li><Link href="/privacy-policy" className="hover:text-emerald-400 transition-colors flex items-center gap-2"><ArrowRight size={12} className="opacity-0 hover:opacity-100 transition-opacity" />Privacy Policy</Link></li>
-               <li><Link href="/terms-of-service" className="hover:text-emerald-400 transition-colors flex items-center gap-2"><ArrowRight size={12} className="opacity-0 hover:opacity-100 transition-opacity" />Terms of Service</Link></li>
-            </ul>
-          </div>
-
-          {/* Newsletter / CTA */}
-          <div className="bg-slate-800/30 backdrop-blur-sm p-6 rounded-2xl border border-white/5">
-            <h4 className="text-white font-bold mb-2 text-lg">Stay Updated</h4>
-            <p className="text-xs text-slate-400 mb-4">Get the latest business tips and feature updates.</p>
-            <div className="flex gap-2">
-              <input 
-                type="email" 
-                placeholder="Enter email" 
-                className="bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:border-emerald-500 transition-colors"
-              />
-              <button className="bg-emerald-500 hover:bg-emerald-400 text-white rounded-lg px-3 py-2 transition-colors">
-                <ArrowRight size={16} />
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="border-t border-slate-800/50 pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-slate-500">
-          <p>&copy; {new Date().getFullYear()} Tallypadi. All rights reserved.</p>
-          <div className="flex gap-6">
-            <span>Built For Growing Businesses</span>
-            <span className="w-px h-4 bg-slate-800" />
-            <span>Lagos, Nigeria</span>
-          </div>
-        </div>
+      <div className="mx-auto max-w-[1480px] border-t border-white/10 px-5 py-5 text-xs text-stone-500 sm:px-10 lg:px-20">
+        © {new Date().getFullYear()} TallyPadi. All rights reserved.
       </div>
     </footer>
   );

@@ -20,7 +20,8 @@ import {
   TrendingUp,
   Wallet,
   X,
-  XCircle
+  XCircle,
+  type LucideIcon
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { getCookie } from '../../utils/cookies';
@@ -184,7 +185,7 @@ const platformLabel = (platform: string) => {
   return platform;
 };
 
-const statusCopy: Record<string, { label: string; icon: React.ElementType; className: string }> = {
+const statusCopy: Record<string, { label: string; icon: LucideIcon; className: string }> = {
   ALL: { label: 'All Boosts', icon: Megaphone, className: 'bg-slate-100 text-slate-700 border-slate-200' },
   PENDING: { label: 'Pending Review', icon: Clock3, className: 'bg-amber-50 text-amber-700 border-amber-200' },
   PENDING_ADMIN_REVIEW: { label: 'Pending Review', icon: Clock3, className: 'bg-amber-50 text-amber-700 border-amber-200' },

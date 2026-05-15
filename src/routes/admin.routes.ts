@@ -47,6 +47,14 @@ import {
   rejectSellerVerificationForAdmin,
   requestSellerReverificationForAdmin,
 } from '../controllers/sellerVerification.controller';
+import {
+  createAdminBlogPost,
+  deleteAdminBlogPost,
+  listAdminBlogPosts,
+  publishAdminBlogPost,
+  unpublishAdminBlogPost,
+  updateAdminBlogPost,
+} from '../controllers/blog.controller';
 
 const router = Router();
 
@@ -80,6 +88,14 @@ router.post('/marketplace-verifications/:id/approve', approveSellerVerificationF
 router.post('/marketplace-verifications/:id/reject', rejectSellerVerificationForAdmin);
 router.post('/marketplace-verifications/:id/request-reverification', requestSellerReverificationForAdmin);
 router.delete('/marketplace-verifications/:id', deleteSellerVerificationForAdmin);
+
+// Blog CMS
+router.get('/blog', listAdminBlogPosts);
+router.post('/blog', createAdminBlogPost);
+router.put('/blog/:id', updateAdminBlogPost);
+router.post('/blog/:id/publish', publishAdminBlogPost);
+router.post('/blog/:id/unpublish', unpublishAdminBlogPost);
+router.delete('/blog/:id', deleteAdminBlogPost);
 
 // Global Settings
 router.get('/settings', getGlobalSettings);

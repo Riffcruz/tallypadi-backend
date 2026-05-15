@@ -7,13 +7,20 @@ import MarketingFooter from '../../components/MarketingFooter';
 
 export const metadata: Metadata = {
   title: 'Best ReceiptBuddy Alternative for WhatsApp Receipts | TallyPadi',
-  description: 'Looking for a ReceiptBuddy alternative? TallyPadi offers superior WhatsApp receipts, barcode scanning, real-time inventory tracking, and deep team analytics.',
+  description: 'Looking for a ReceiptBuddy alternative? TallyPadi gives Nigerian and African SMEs WhatsApp receipts, inventory tracking, sales records, and business management.',
+  keywords: [
+    'ReceiptBuddy alternative',
+    'ReceiptBuddy alternative Nigeria',
+    'WhatsApp receipt software Africa',
+    'business management software Nigeria',
+    'inventory and receipt app',
+  ],
   alternates: {
     canonical: 'https://tallypadi.com/receiptbuddy-alternative',
   },
   openGraph: {
     title: 'The Smarter Alternative to ReceiptBuddy - TallyPadi',
-    description: 'Switch to the business tool that does more than just invoices. TallyPadi gives you instant WhatsApp receipts alongside a powerful POS and stock tracker.',
+    description: 'Switch to a business tool that does more than receipts: WhatsApp POS, stock tracking, sales records, and reports.',
     url: 'https://tallypadi.com/receiptbuddy-alternative',
     type: 'website',
   },
@@ -26,11 +33,11 @@ export default function ReceiptBuddyAlternativePage() {
     name: 'TallyPadi',
     applicationCategory: 'BusinessApplication',
     operatingSystem: 'Web, WhatsApp',
-    description: 'The best alternative to ReceiptBuddy for business management.',
+    description: 'An alternative to ReceiptBuddy for WhatsApp receipts, inventory, sales tracking, and business management.',
     offers: {
       '@type': 'Offer',
       price: '0',
-      priceCurrency: 'USD',
+      priceCurrency: 'NGN',
     },
   };
 

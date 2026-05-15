@@ -6,14 +6,22 @@ import MarketingNavbar from '../../components/MarketingNavbar';
 import MarketingFooter from '../../components/MarketingFooter';
 
 export const metadata: Metadata = {
-  title: 'Inventory Management Software & Stock Tracker | TallyPadi',
-  description: 'Track shop inventory, manage stock levels, and receive low-stock alerts automatically on WhatsApp. The best inventory software for small businesses.',
+  title: 'Inventory Management Software for Nigeria & Africa | TallyPadi',
+  description: 'Track shop inventory, stock levels, low-stock alerts, sales, and business records on WhatsApp. Stock management software for Nigerian and African SMEs.',
+  keywords: [
+    'inventory management software Nigeria',
+    'inventory management software Africa',
+    'stock management app Nigeria',
+    'WhatsApp inventory tracker',
+    'retail inventory software Africa',
+    'business management software Africa',
+  ],
   alternates: {
     canonical: 'https://tallypadi.com/inventory-stock-management',
   },
   openGraph: {
-    title: 'Automated Inventory Management System',
-    description: 'Never run out of stock. Track your inventory in real-time and get automated alerts directly on WhatsApp.',
+    title: 'Inventory and Stock Management for African SMEs',
+    description: 'Track stock, product movement, sales, and low-stock alerts from WhatsApp and web.',
     url: 'https://tallypadi.com/inventory-stock-management',
     type: 'website',
   },
@@ -26,11 +34,11 @@ export default function InventoryPage() {
     name: 'TallyPadi Inventory Manager',
     applicationCategory: 'BusinessApplication',
     operatingSystem: 'Web, WhatsApp',
-    description: 'Inventory management and stock tracking system for businesses.',
+    description: 'Inventory management and stock tracking system for Nigerian and African businesses.',
     offers: {
       '@type': 'Offer',
       price: '0',
-      priceCurrency: 'USD',
+      priceCurrency: 'NGN',
     },
   };
 

@@ -37,6 +37,7 @@ import {
 } from '../../types/ads';
 import { generateAdSeoMetadata } from '../gemini.service';
 import { getProviderAutomationReadiness } from './providerCredentials.service';
+import { buildMarketplaceProductSeo } from '../marketplaceSeo.service';
 
 export { AdCampaignStatus, AdPlatform };
 
@@ -136,20 +137,27 @@ const calculateAggregateStatus = (campaignStatus: string, providers: IProviderCa
   return mapLegacyStatus(campaignStatus);
 };
 
-const getProductSeoFallback = (product: any, campaign: IAdCampaign) => {
-  const title = cleanText(`${product.name || campaign.productSnapshot?.name || 'Product'} | TallyPadi Marketplace`, 120);
-  const description = cleanText(
-    `${product.name || campaign.productSnapshot?.name || 'This product'} is available from a TallyPadi merchant. View price, details, location, and contact the seller directly.`,
-    220
+const getProductSeoFallback = (product: any, owner: any, campaign: IAdCampaign) =>
+  buildMarketplaceProductSeo(
+    {
+      name: product.name || campaign.productSnapshot?.name || 'Product',
+      category: product.category || campaign.productSnapshot?.category || '',
+      description: product.description || campaign.productSnapshot?.description || '',
+      lastUnitPrice: product.lastUnitPrice || campaign.productSnapshot?.price || 0,
+    },
+    owner,
+    {
+      source: 'BOOST',
+      extraKeywords: [
+        ...(campaign.keywords || []),
+        ...(campaign.adDetails?.keywords || []),
+        ...(campaign.selectedProviders || []),
+      ],
+      adBrief: campaign.creativeNotes || campaign.adDetails?.brief || '',
+      targetAudience: campaign.targetAudience || campaign.adDetails?.audience || '',
+      campaignGoal: campaign.campaignGoal || '',
+    }
   );
-  return {
-    title,
-    metaDescription: description,
-    adDescription: cleanText(product.description || campaign.productSnapshot?.description || description, 1000),
-    keywords: cleanKeywords([product.name, product.category, ...(campaign.keywords || [])]),
-    source: 'FALLBACK' as const,
-  };
-};
 
 const audit = async (input: {
   adminId?: string | Types.ObjectId | null;
@@ -977,8 +985,11 @@ export const approveAdCampaign = async (campaignId: string, adminId: string) => 
       if (campaign.product) {
         const product = await Inventory.findOne({ _id: campaign.product, user: campaign.user, isDeleted: { $ne: true } }).session(session);
         if (!product) throw new AdCampaignError('Product not found', 404);
+        const owner = await User.findById(campaign.user)
+          .select('businessName countryCode settings.location settings.currencyCode marketplaceVerificationStatus marketplaceVerifiedAt')
+          .session(session);
 
-        const seo = getProductSeoFallback(product, campaign);
+        const seo = getProductSeoFallback(product, owner, campaign);
         product.boosts = (product.boosts || []).filter((boost) => {
           const provider = LEGACY_PROVIDER_MAP[String(boost.platform).toUpperCase()] || boost.platform;
           const sameProvider = (campaign!.selectedProviders || []).includes(provider as AdProvider);
@@ -1005,7 +1016,7 @@ export const approveAdCampaign = async (campaignId: string, adminId: string) => 
           adDescription: seo.adDescription,
           keywords: seo.keywords,
           generatedAt: now,
-          source: seo.source,
+          source: 'FALLBACK',
         };
         await Promise.all([product.save({ session }), campaign.save({ session })]);
       }

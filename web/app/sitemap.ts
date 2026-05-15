@@ -16,6 +16,16 @@ type MarketplaceSitemapResponse = {
   products?: MarketplaceSitemapProduct[];
 };
 
+type BlogSitemapPost = {
+  slug: string;
+  updatedAt?: string;
+  publishedAt?: string;
+};
+
+type BlogSitemapResponse = {
+  posts?: BlogSitemapPost[];
+};
+
 const fetchMarketplaceUrls = async (): Promise<MetadataRoute.Sitemap> => {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 2500);
@@ -56,8 +66,40 @@ const fetchMarketplaceUrls = async (): Promise<MetadataRoute.Sitemap> => {
   }
 };
 
+const fetchBlogUrls = async (): Promise<MetadataRoute.Sitemap> => {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 2500);
+
+  try {
+    const res = await fetch(`${apiUrl}/blog?limit=100`, {
+      next: { revalidate: 3600 },
+      signal: controller.signal,
+    });
+    if (!res.ok) return [];
+
+    const data = (await res.json()) as BlogSitemapResponse;
+    const posts = Array.isArray(data.posts) ? data.posts : [];
+
+    return posts
+      .filter((post) => post.slug)
+      .map((post) => ({
+        url: `${baseUrl}/blog/${post.slug}`,
+        lastModified: post.updatedAt || post.publishedAt ? new Date(post.updatedAt || post.publishedAt || '') : new Date(),
+        changeFrequency: 'weekly' as const,
+        priority: 0.75,
+      }));
+  } catch {
+    return [];
+  } finally {
+    clearTimeout(timeout);
+  }
+};
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const marketplaceUrls = await fetchMarketplaceUrls();
+  const [marketplaceUrls, blogUrls] = await Promise.all([
+    fetchMarketplaceUrls(),
+    fetchBlogUrls(),
+  ]);
 
   return [
     {
@@ -65,18 +107,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       lastModified: new Date(),
       changeFrequency: 'weekly',
       priority: 1,
-    },
-    {
-      url: `${baseUrl}/login`,
-      lastModified: new Date(),
-      changeFrequency: 'monthly',
-      priority: 0.8,
-    },
-    {
-      url: `${baseUrl}/register`,
-      lastModified: new Date(),
-      changeFrequency: 'monthly',
-      priority: 0.8,
     },
     {
       url: `${baseUrl}/help`,
@@ -100,6 +130,24 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       url: `${baseUrl}/contact`,
       lastModified: new Date(),
       changeFrequency: 'monthly',
+      priority: 0.8,
+    },
+    {
+      url: `${baseUrl}/blog`,
+      lastModified: new Date(),
+      changeFrequency: 'weekly',
+      priority: 0.7,
+    },
+    {
+      url: `${baseUrl}/partners`,
+      lastModified: new Date(),
+      changeFrequency: 'monthly',
+      priority: 0.7,
+    },
+    {
+      url: `${baseUrl}/faq`,
+      lastModified: new Date(),
+      changeFrequency: 'weekly',
       priority: 0.8,
     },
     {
@@ -181,13 +229,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: 'weekly',
       priority: 0.9,
     },
-    // Growth / "Manipulative" SEO Page
+    // Growth education page
     {
       url: `${baseUrl}/best-way-to-grow-business`,
       lastModified: new Date(),
       changeFrequency: 'weekly',
       priority: 1.0, 
     },
+    ...blogUrls,
     ...marketplaceUrls,
   ];
 }

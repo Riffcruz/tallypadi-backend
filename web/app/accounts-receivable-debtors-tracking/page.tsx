@@ -6,14 +6,22 @@ import MarketingNavbar from '../../components/MarketingNavbar';
 import MarketingFooter from '../../components/MarketingFooter';
 
 export const metadata: Metadata = {
-  title: 'Accounts Receivable & Debtors Tracking Software | TallyPadi',
-  description: 'Keep track of customers who buy on credit. Manage accounts receivable, send automated payment reminders, and recover shop debts faster.',
+  title: 'Debtors Tracking & Accounts Receivable Software | TallyPadi',
+  description: 'Track customers who buy on credit, manage accounts receivable, send WhatsApp reminders, and recover shop debts faster. Built for Nigerian and African SMEs.',
+  keywords: [
+    'debtors tracking software Nigeria',
+    'accounts receivable software Africa',
+    'customer credit tracker Nigeria',
+    'business debt management app',
+    'WhatsApp payment reminders',
+    'business management software Nigeria',
+  ],
   alternates: {
     canonical: 'https://tallypadi.com/accounts-receivable-debtors-tracking',
   },
   openGraph: {
-    title: 'Business Debtors & Accounts Receivable Tracker',
-    description: 'Log credit sales easily and track who owes you money. The smartest way to manage shop debtors and cash flow. on WhatsApp. The best debt manager for small business.',
+    title: 'Debtors and Accounts Receivable Tracker for SMEs',
+    description: 'Log credit sales, track who owes you money, and manage shop debtors from WhatsApp and web.',
     url: 'https://tallypadi.com/accounts-receivable-debtors-tracking',
     type: 'website',
   },
@@ -26,11 +34,11 @@ export default function DebtorsPage() {
     name: 'TallyPadi Debt Tracker',
     applicationCategory: 'BusinessApplication',
     operatingSystem: 'Web, WhatsApp',
-    description: 'Track debtors and manage customer credit.',
+    description: 'Track debtors and manage customer credit for Nigerian and African SMEs.',
     offers: {
       '@type': 'Offer',
       price: '0',
-      priceCurrency: 'USD',
+      priceCurrency: 'NGN',
     },
   };
 

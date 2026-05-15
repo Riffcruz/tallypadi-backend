@@ -6,14 +6,22 @@ import MarketingFooter from '../../components/MarketingFooter';
 import InvoiceGeneratorClient from './InvoiceGeneratorClient';
 
 export const metadata: Metadata = {
-  title: 'Free Invoice Generator & Receipt Maker Online | TallyPadi',
-  description: 'Create professional, branded invoices and receipts for free. No signup needed. Add your logo, calculate taxes, and download PDF instantly for WhatsApp or Email.',
+  title: 'Free Invoice Generator & Receipt Maker for Nigeria | TallyPadi',
+  description: 'Create professional invoices and receipts for free. Download PDF invoices for WhatsApp or email. Useful for Nigerian and African SMEs managing sales records.',
+  keywords: [
+    'free invoice generator Nigeria',
+    'receipt maker Nigeria',
+    'invoice generator Africa',
+    'PDF invoice for WhatsApp',
+    'small business invoice generator',
+    'business management software Nigeria',
+  ],
   alternates: {
     canonical: 'https://tallypadi.com/free-invoice-generator',
   },
   openGraph: {
-    title: 'Free Invoice Generator & Receipt Maker Online',
-    description: 'Create professional, branded invoices and receipts for free. No signup needed. Download PDF instantly for WhatsApp or Email.',
+    title: 'Free Invoice Generator and Receipt Maker for SMEs',
+    description: 'Create professional PDF invoices and receipts for WhatsApp or email. No signup needed.',
     url: 'https://tallypadi.com/free-invoice-generator',
     type: 'website',
   },
@@ -26,11 +34,11 @@ export default function FreeInvoiceGeneratorPage() {
     name: 'TallyPadi Free Invoice Generator',
     applicationCategory: 'BusinessApplication',
     operatingSystem: 'Web',
-    description: 'Create professional invoices and receipts for free. No login required. Download PDF instantly.',
+    description: 'Create professional invoices and receipts for Nigerian and African SMEs. No login required. Download PDF instantly.',
     offers: {
       '@type': 'Offer',
       price: '0',
-      priceCurrency: 'USD',
+      priceCurrency: 'NGN',
     },
   };
 

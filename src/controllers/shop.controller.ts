@@ -11,6 +11,7 @@ import {
   getVerificationBadge,
   isStorefrontPublicReady,
 } from '../services/marketplaceTrust.service';
+import { getMarketplaceProductSeo } from '../services/marketplaceSeo.service';
 
 const PUBLIC_SHOP_CACHE = 'public, max-age=30, s-maxage=120, stale-while-revalidate=300';
 
@@ -139,7 +140,7 @@ export const getShopProducts = async (req: Request, res: Response): Promise<any>
     const { slug } = req.params;
     const { page = '1', q, category, sort } = req.query;
 
-    const shopOwner = await User.findOne({ shopSlug: slug }).select('_id planType subscriptionStatus trialEndsAt businessName phoneNumber shopSlug shopDescription settings.location');
+    const shopOwner = await User.findOne({ shopSlug: slug }).select('_id planType subscriptionStatus trialEndsAt businessName phoneNumber shopSlug shopDescription countryCode settings.location settings.currencyCode marketplaceVerificationStatus marketplaceVerifiedAt');
     if (!shopOwner) return res.status(404).json({ error: 'Shop not found' });
 
     // Ensure shop is active (Tycoon + Valid Sub)
@@ -176,22 +177,28 @@ export const getShopProducts = async (req: Request, res: Response): Promise<any>
         .sort(sortOptions)
         .skip(skip)
         .limit(limit)
-        .select('name quantity lastUnitPrice image category description colors sizes'),
+        .select('name quantity lastUnitPrice image category description colors sizes marketplaceSeo boosts'),
       Inventory.countDocuments(filter),
     ]);
 
     return res.json({
-      products: products.map(p => ({
-        id: p._id,
-        name: p.name,
-        price: p.lastUnitPrice,
-        image: getPublicProductImage(p.image),
-        category: p.category,
-        description: p.description,
-        colors: p.colors,
-        sizes: p.sizes,
-        inStock: p.quantity > 0,
-      })),
+      products: products.map(p => {
+        const activeBoost = (p.boosts || []).find((boost) => new Date(boost.expiresAt).getTime() > Date.now());
+        const seo = getMarketplaceProductSeo(p, shopOwner, activeBoost);
+        return {
+          id: p._id,
+          name: p.name,
+          price: p.lastUnitPrice,
+          image: getPublicProductImage(p.image),
+          category: p.category,
+          description: p.description,
+          colors: p.colors,
+          sizes: p.sizes,
+          inStock: p.quantity > 0,
+          isBoosted: Boolean(activeBoost),
+          seo,
+        };
+      }),
       pagination: {
         page: Number(page),
         totalPages: Math.ceil(total / limit),
@@ -282,7 +289,7 @@ export const getShopProductById = async (req: Request, res: Response): Promise<a
 
     const { slug, productId } = req.params;
 
-    const shopOwner = await User.findOne({ shopSlug: slug }).select('_id planType subscriptionStatus trialEndsAt businessName phoneNumber shopSlug shopDescription settings.location marketplaceVerificationStatus marketplaceVerifiedAt');
+    const shopOwner = await User.findOne({ shopSlug: slug }).select('_id planType subscriptionStatus trialEndsAt businessName phoneNumber shopSlug shopDescription countryCode settings.location settings.currencyCode marketplaceVerificationStatus marketplaceVerifiedAt');
     if (!shopOwner) return res.status(404).json({ error: 'Shop not found' });
 
     if (!isTycoon(shopOwner) || !isSubActive(shopOwner) || !isStorefrontPublicReady(shopOwner)) {
@@ -295,11 +302,12 @@ export const getShopProductById = async (req: Request, res: Response): Promise<a
       quantity: { $gt: 0 },
       isPublished: { $ne: false },
       isDeleted: { $ne: true },
-    }).select('name lastUnitPrice image quantity category description colors sizes boosts');
+    }).select('name lastUnitPrice image quantity category description colors sizes boosts marketplaceSeo');
 
     if (!product) return res.status(404).json({ error: 'Product not found' });
 
     const activeBoost = (product.boosts || []).find((boost) => new Date(boost.expiresAt).getTime() > Date.now());
+    const seo = getMarketplaceProductSeo(product, shopOwner, activeBoost);
 
     return res.json({
       id: product._id,
@@ -312,12 +320,7 @@ export const getShopProductById = async (req: Request, res: Response): Promise<a
       sizes: product.sizes,
       inStock: product.quantity > 0,
       isBoosted: Boolean(activeBoost),
-      seo: {
-        title: activeBoost?.seoTitle || '',
-        metaDescription: activeBoost?.seoDescription || '',
-        adDescription: activeBoost?.adDescription || '',
-        keywords: activeBoost?.seoKeywords || [],
-      },
+      seo,
       shopVerification: getVerificationBadge(shopOwner),
     });
   } catch (error) {

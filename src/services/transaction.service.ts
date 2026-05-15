@@ -7,6 +7,7 @@ import { ParsedResult } from './gemini.service';
 import { queueOutboundMessage } from './queue.service';
 import { ProcessedMessage } from '../models/processedMessage.model';
 import { DraftRestock } from '../models/draftRestock.model';
+import { buildMarketplaceProductSeo } from './marketplaceSeo.service';
 
 import { applyPaymentToDebts } from './debt.service';
 import { resolveDebtor, normName } from './debtor.service';
@@ -258,6 +259,7 @@ export const processTransaction = async (
       }
 
       inv.lastUnitPrice = unitPrice;
+      inv.marketplaceSeo = buildMarketplaceProductSeo(inv, user);
       await inv.save();
 
       parsed.reply_text = `✅ Price updated: *${inv.name}* is now *${unitPrice.toLocaleString()}* each.`;
@@ -612,6 +614,7 @@ export const processTransaction = async (
         inv.quantity = qty; // SET_STOCK
       }
 
+      inv.marketplaceSeo = buildMarketplaceProductSeo(inv, user);
       await inv.save();
 
       // ✅ LOW STOCK ALERT
@@ -771,7 +774,9 @@ export const processTransaction = async (
 // ✅ STOCK DEDUCTION HELPER (Exported)
 // =========================================================
 export const deductStockForItems = async (userId: Types.ObjectId, items: {name: string, qty: number}[]) => {
-  const user = await User.findById(userId).select('settings.smartMatchingEnabled').lean();
+  const user = await User.findById(userId)
+    .select('businessName countryCode settings.smartMatchingEnabled settings.location settings.currencyCode marketplaceVerificationStatus marketplaceVerifiedAt')
+    .lean();
   const smartMatchingEnabled = user?.settings?.smartMatchingEnabled !== false;
 
   for (const item of items) {
@@ -807,6 +812,7 @@ export const deductStockForItems = async (userId: Types.ObjectId, items: {name: 
     }
 
     inv.quantity = Number(inv.quantity || 0) - qty;
+    inv.marketplaceSeo = buildMarketplaceProductSeo(inv, user);
     await inv.save();
   }
 };

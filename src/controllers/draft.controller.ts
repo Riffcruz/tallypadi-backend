@@ -3,6 +3,8 @@ import { Types } from 'mongoose';
 import { DraftRestock } from '../models/draftRestock.model';
 import { Inventory } from '../models/inventory.model';
 import { Transaction } from '../models/transaction.model';
+import { User } from '../models/user.model';
+import { buildMarketplaceProductSeo } from '../services/marketplaceSeo.service';
 
 // --- SKU Generator (duplicated here to keep controller self-contained) ---
 function generateSku(): string {
@@ -86,6 +88,7 @@ export const resolveDraft = async (req: Request, res: Response) => {
     }
 
     const userId = draft.user as Types.ObjectId;
+    const owner = await User.findById(userId).select('businessName countryCode settings.location settings.currencyCode marketplaceVerificationStatus marketplaceVerifiedAt');
     const resolvedNames: string[] = [];
 
     for (const resolution of resolutions) {
@@ -99,13 +102,17 @@ export const resolveDraft = async (req: Request, res: Response) => {
       if (resolution.createNew) {
         // Create a brand new inventory item with the exact raw name
         const sku = await generateUniqueSku(userId);
-        const newItem = await Inventory.create({
+        const newProduct = {
           user: userId,
           name: String(resolution.rawName || draftItem.rawName).toLowerCase().trim(),
           sku,
           quantity: qty,
           lastUnitPrice: unitPrice,
           costPrice: costPrice,
+        };
+        const newItem = await Inventory.create({
+          ...newProduct,
+          marketplaceSeo: buildMarketplaceProductSeo(newProduct, owner),
         });
         resolvedNames.push(newItem.name);
       } else if (resolution.inventoryId && Types.ObjectId.isValid(resolution.inventoryId)) {
@@ -115,6 +122,7 @@ export const resolveDraft = async (req: Request, res: Response) => {
           inv.quantity = Number(inv.quantity || 0) + qty;
           if (costPrice > 0) inv.costPrice = costPrice;
           if (unitPrice > 0) inv.lastUnitPrice = unitPrice;
+          inv.marketplaceSeo = buildMarketplaceProductSeo(inv, owner);
           await inv.save();
           resolvedNames.push(inv.name);
         }

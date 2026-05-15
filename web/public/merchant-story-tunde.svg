@@ -1,0 +1,16 @@
+<svg width="640" height="640" viewBox="0 0 640 640" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="640" height="640" fill="#F7F0DF"/>
+  <circle cx="320" cy="318" r="250" fill="#DDF4DC"/>
+  <path d="M154 521c38-102 112-154 166-154s128 52 166 154H154z" fill="#153A2F"/>
+  <path d="M218 236c0-67 42-115 102-115s102 48 102 115v58c0 57-46 105-102 105s-102-48-102-105v-58z" fill="#6D3E27"/>
+  <path d="M214 225c5-70 50-126 112-126 58 0 105 42 112 101-69-19-137-9-224 25z" fill="#1B1B18"/>
+  <path d="M242 197c44 20 107 19 165 3" stroke="#2E221A" stroke-width="22" stroke-linecap="round"/>
+  <circle cx="282" cy="269" r="9" fill="#1E1C17"/>
+  <circle cx="360" cy="269" r="9" fill="#1E1C17"/>
+  <path d="M294 333c18 15 42 15 58 0" stroke="#2C1810" stroke-width="12" stroke-linecap="round"/>
+  <rect x="255" y="410" width="130" height="74" rx="16" fill="#1A7F49"/>
+  <path d="M275 445h90" stroke="#F3B52E" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="502" cy="144" r="40" fill="#0F6B45"/>
+  <path d="M483 144l12 12 27-31" stroke="white" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="320" y="585" text-anchor="middle" fill="#1E1C17" font-family="Arial, sans-serif" font-size="28" font-weight="700">Composite merchant portrait</text>
+</svg>

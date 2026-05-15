@@ -1,14 +1,14 @@
 'use client';
 import React from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
-import { Activity, Users, Shield, Crown, TrendingUp } from 'lucide-react';
+import { Activity, Users, Shield, Crown, TrendingUp, type LucideIcon } from 'lucide-react';
 
 interface StatCardProps {
     title: string;
     value: React.ReactNode;
     sub: string;
     color: 'green' | 'blue' | 'purple' | 'white';
-    icon: React.ElementType;
+    icon: LucideIcon;
 }
 
 const StatCard = ({ title, value, sub, color, icon: Icon }: StatCardProps) => {

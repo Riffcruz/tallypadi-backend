@@ -8,6 +8,7 @@ import {
   getVerificationBadge,
   isStorefrontPublicReady,
 } from '../services/marketplaceTrust.service';
+import { getMarketplaceProductSeo, MarketplaceProductSeo } from '../services/marketplaceSeo.service';
 
 type MarketplaceOwner = {
   _id: Types.ObjectId;
@@ -58,6 +59,7 @@ type MarketplaceProduct = {
   createdAt?: Date;
   activeBoosts?: Boost[];
   boostScore?: number;
+  marketplaceSeo?: Partial<MarketplaceProductSeo>;
 };
 
 const DEFAULT_LIMIT = 24;
@@ -257,6 +259,7 @@ const serializeProduct = (product: MarketplaceProduct, owner: MarketplaceOwner) 
   const location = owner.settings?.location || {};
   const activeBoosts = product.activeBoosts || [];
   const primaryBoost = activeBoosts[0];
+  const seo = getMarketplaceProductSeo(product, owner, primaryBoost);
 
   return {
     id: String(product._id),
@@ -276,10 +279,12 @@ const serializeProduct = (product: MarketplaceProduct, owner: MarketplaceOwner) 
       expiresAt: boost.expiresAt,
     })),
     seo: {
-      title: primaryBoost?.seoTitle || '',
-      metaDescription: primaryBoost?.seoDescription || '',
-      adDescription: primaryBoost?.adDescription || '',
-      keywords: primaryBoost?.seoKeywords || [],
+      title: seo.title,
+      metaDescription: seo.metaDescription,
+      adDescription: seo.adDescription,
+      keywords: seo.keywords,
+      source: seo.source,
+      generatedAt: seo.generatedAt,
     },
     createdAt: product.createdAt,
     shop: {
@@ -345,6 +350,12 @@ export const getMarketplaceListings = async (req: Request, res: Response): Promi
           { name: qRegex },
           { description: qRegex },
           { category: qRegex },
+          { 'marketplaceSeo.title': qRegex },
+          { 'marketplaceSeo.metaDescription': qRegex },
+          { 'marketplaceSeo.keywords': qRegex },
+          { 'boosts.seoTitle': qRegex },
+          { 'boosts.seoDescription': qRegex },
+          { 'boosts.seoKeywords': qRegex },
           { user: { $in: matchingOwnerIds } },
         ],
       });
@@ -357,6 +368,7 @@ export const getMarketplaceListings = async (req: Request, res: Response): Promi
           { category: categoryRegex },
           { name: categoryRegex },
           { description: categoryRegex },
+          { 'marketplaceSeo.keywords': categoryRegex },
         ],
       });
     }
@@ -405,6 +417,7 @@ export const getMarketplaceListings = async (req: Request, res: Response): Promi
             createdAt: 1,
             activeBoosts: 1,
             boostScore: 1,
+            marketplaceSeo: 1,
           },
         },
       ]),
@@ -490,6 +503,7 @@ export const getMarketplaceProductById = async (req: Request, res: Response): Pr
           createdAt: 1,
           activeBoosts: 1,
           boostScore: 1,
+          marketplaceSeo: 1,
         },
       },
     ]);

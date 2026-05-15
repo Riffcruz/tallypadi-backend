@@ -6,14 +6,22 @@ import MarketingNavbar from '../../components/MarketingNavbar';
 import MarketingFooter from '../../components/MarketingFooter';
 
 export const metadata: Metadata = {
-  title: 'WhatsApp Receipt Generator & Invoice Maker | TallyPadi',
-  description: 'Generate professional, branded receipts and invoices directly on WhatsApp. Send instant PDF receipts to customers immediately after a sale.',
+  title: 'WhatsApp Receipt Generator for Nigeria & Africa | TallyPadi',
+  description: 'Generate branded PDF receipts and invoices on WhatsApp. Built for Nigerian and African SMEs that need receipts, sales tracking, inventory, and business management.',
+  keywords: [
+    'WhatsApp receipt generator Nigeria',
+    'WhatsApp receipt generator Africa',
+    'receipt generator for small business',
+    'invoice maker Nigeria',
+    'WhatsApp POS receipts',
+    'business management software Nigeria',
+  ],
   alternates: {
     canonical: 'https://tallypadi.com/whatsapp-receipt-generator',
   },
   openGraph: {
-    title: 'WhatsApp Receipt Generator & POS System',
-    description: 'Generate professional receipts on WhatsApp. Track your sales and impress your customers with instant digital invoices.',
+    title: 'WhatsApp Receipt Generator & POS System for African SMEs',
+    description: 'Generate professional receipts on WhatsApp, track sales, and manage business records for your Nigerian or African shop.',
     url: 'https://tallypadi.com/whatsapp-receipt-generator',
     type: 'website',
   },
@@ -26,11 +34,11 @@ export default function WhatsAppReceiptGeneratorPage() {
     name: 'TallyPadi Receipt Generator',
     applicationCategory: 'BusinessApplication',
     operatingSystem: 'Web, WhatsApp',
-    description: 'Generate professional receipts and invoices directly on WhatsApp. Send digital PDFs to customers instantly.',
+    description: 'Generate professional receipts and invoices directly on WhatsApp. Built for Nigerian and African SMEs that need PDF receipts, sales tracking, and business management.',
     offers: {
       '@type': 'Offer',
       price: '0',
-      priceCurrency: 'USD',
+      priceCurrency: 'NGN',
     },
   };
 

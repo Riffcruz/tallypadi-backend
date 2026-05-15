@@ -4,6 +4,7 @@ import { User } from '../models/user.model';
 import { saveImageFromBase64 } from '../utils/image';
 import { Types } from 'mongoose';
 import { parseMessageWithGemini } from '../services/gemini.service';
+import { buildMarketplaceProductSeo } from '../services/marketplaceSeo.service';
 
 // --- SKU Generator ---
 // Generates a short unique code like "P-4X9M" for a product
@@ -341,13 +342,14 @@ export const addInventoryItem = async (req: Request, res: Response) => {
       if (safeSizes !== undefined) item.sizes = safeSizes;
       // Allow dashboard SKU override if provided
       if (body.sku && typeof body.sku === 'string') item.sku = body.sku.toUpperCase().trim();
+      item.marketplaceSeo = buildMarketplaceProductSeo(item, user);
       await item.save();
     } else {
       const sku = (body.sku && typeof body.sku === 'string')
         ? body.sku.toUpperCase().trim()
         : await generateUniqueSku(user._id);
 
-      item = await Inventory.create({
+      const newProduct = {
         user: user._id,
         name: safeName.toLowerCase(),
         sku,
@@ -361,6 +363,11 @@ export const addInventoryItem = async (req: Request, res: Response) => {
         description: safeDescription,
         colors: safeColors || [],
         sizes: safeSizes || [],
+      };
+
+      item = await Inventory.create({
+        ...newProduct,
+        marketplaceSeo: buildMarketplaceProductSeo(newProduct, user),
       });
     }
 
@@ -449,6 +456,7 @@ export const updateInventoryItem = async (req: Request, res: Response) => {
     if (body.description !== undefined) item.description = sanitizeString(body.description);
     if (Array.isArray(body.colors)) item.colors = sanitizeStringArray(body.colors) || [];
     if (Array.isArray(body.sizes)) item.sizes = sanitizeStringArray(body.sizes) || [];
+    item.marketplaceSeo = buildMarketplaceProductSeo(item, user);
 
     await item.save();
 
@@ -635,17 +643,22 @@ export const bulkSaveInventory = async (req: Request, res: Response) => {
         existingItem.quantity = Number(existingItem.quantity || 0) + qty;
         if (costPrice > 0) existingItem.costPrice = costPrice;
         if (sellingPrice > 0) existingItem.lastUnitPrice = sellingPrice;
+        existingItem.marketplaceSeo = buildMarketplaceProductSeo(existingItem, user);
         await existingItem.save();
         updatedCount++;
       } else {
         const sku = await generateUniqueSku(user._id);
-        await Inventory.create({
+        const newProduct = {
           user: user._id,
           name,
           sku,
           quantity: qty,
           lastUnitPrice: sellingPrice,
           costPrice: costPrice,
+        };
+        await Inventory.create({
+          ...newProduct,
+          marketplaceSeo: buildMarketplaceProductSeo(newProduct, user),
         });
         createdCount++;
       }

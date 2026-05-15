@@ -1,209 +1,129 @@
-'use client';
+"use client";
 
-import React, { useState } from 'react';
-import Link from 'next/link';
-import { Menu, X, ArrowRight } from 'lucide-react';
-import Image from 'next/image';
+import React, { useState } from "react";
+import Image from "next/image";
+import Link from "next/link";
+import { Menu, MessageCircle, X } from "lucide-react";
 
 interface MarketingNavbarProps {
   whatsappLink?: string;
 }
 
-export default function MarketingNavbar({ whatsappLink = 'https://wa.me/2349035664420?text=Hello%20Tallypadi' }: MarketingNavbarProps) {
+const navLinks = [
+  { href: "/#features", label: "Features" },
+  { href: "/#pricing", label: "Pricing" },
+  { href: "/#how-it-works", label: "How it Works" },
+  { href: "/about", label: "About" },
+  { href: "/faq", label: "FAQ" },
+  { href: "/contact", label: "Contact" },
+];
+
+const mobileExtraLinks = [
+  { href: "/help", label: "Help Center" },
+  { href: "/blog", label: "Blog" },
+  { href: "/partners", label: "Partnership" },
+];
+
+export default function MarketingNavbar({
+  whatsappLink = "https://wa.me/2349035664420?text=Hello%20Tallypadi",
+}: MarketingNavbarProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
-    <nav className="fixed w-full z-50 transition-all duration-300 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 shadow-lg">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between h-20 items-center">
-          {/* Logo */}
-          <Link href="/" className="cursor-pointer group">
-            <div className="relative w-[180px] h-[44px] sm:w-[220px] sm:h-[54px] lg:w-[250px] lg:h-[60px] group-hover:scale-[1.02] transition-transform duration-300">
-              <Image
-                src="/tallypadi-logo.png"
-                alt="TallyPadi logo"
-                fill
-                className="object-contain"
-                priority
-              />
-            </div>
-          </Link>
+    <nav className="fixed inset-x-0 top-0 z-50 h-[72px] border-b border-white/10 bg-[#101914]/95 shadow-sm shadow-stone-950/20 backdrop-blur-md">
+      <div className="mx-auto flex h-full max-w-[1480px] items-center justify-between px-5 sm:px-10 lg:px-20">
+        <Link href="/" className="relative block h-11 w-[158px] sm:w-[190px]" aria-label="TallyPadi home">
+          <Image src="/tallypadi-logo.png" alt="TallyPadi logo" fill priority sizes="(max-width: 640px) 158px, 190px" className="object-contain" />
+        </Link>
 
-          {/* Desktop Links */}
-          <div className="hidden md:flex space-x-8 items-center">
-            <Link
-              href="/"
-              className="text-sm font-medium text-slate-300 hover:text-emerald-400 transition"
-            >
-              Home
+        <div className="hidden items-center gap-5 lg:flex xl:gap-7">
+          {navLinks.map((item) => (
+            <Link key={item.href} href={item.href} className="text-xs font-black text-white transition hover:text-emerald-200 xl:text-sm">
+              {item.label}
             </Link>
-            <Link
-              href="/marketplace"
-              className="text-sm font-medium text-slate-300 hover:text-emerald-400 transition"
-            >
-              Marketplace
-            </Link>
-            <Link
-              href="/about"
-              className="text-sm font-medium text-slate-300 hover:text-emerald-400 transition"
-            >
-              About
-            </Link>
-            <Link
-              href="/#marketplace-ads"
-              className="text-sm font-medium text-slate-300 hover:text-emerald-400 transition"
-            >
-              Ads
-            </Link>
-            <Link
-              href="/#features"
-              className="text-sm font-medium text-slate-300 hover:text-emerald-400 transition"
-            >
-              Features
-            </Link>
-            <Link
-              href="/free-invoice-generator"
-              className="text-sm font-medium text-emerald-400 hover:text-emerald-300 transition"
-            >
-              Free Invoice
-            </Link>
-            <Link
-              href="/#pricing"
-              className="text-sm font-medium text-slate-300 hover:text-emerald-400 transition"
-            >
-              Pricing
-            </Link>
-            <Link
-              href="/#faq"
-              className="text-sm font-medium text-slate-300 hover:text-emerald-400 transition"
-            >
-              FAQ
-            </Link>
-            <Link
-              href="/help"
-              className="text-sm font-medium text-slate-300 hover:text-emerald-400 transition"
-            >
-              Docs
-            </Link>
-          </div>
-
-          {/* Auth Buttons */}
-          <div className="hidden md:flex items-center gap-4">
-            <Link href="/login" className="text-sm font-semibold text-white hover:text-emerald-400 transition">
-              Login
-            </Link>
-            <Link
-              href="/register"
-              className="bg-emerald-500 hover:bg-emerald-400 text-white px-6 py-2.5 rounded-full font-bold transition-all shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:shadow-[0_0_30px_rgba(16,185,129,0.5)] text-sm flex items-center gap-2 group hover:-translate-y-0.5"
-            >
-              Signup <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
-            </Link>
-          </div>
-
-          {/* Mobile Toggle */}
-          <div className="md:hidden">
-            <button
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-2 text-white hover:bg-slate-800 rounded-lg transition"
-            >
-              {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
-            </button>
-          </div>
+          ))}
         </div>
-      </div>
 
-      {/* Mobile Menu */}
-      {mobileMenuOpen && (
-        <div className="md:hidden bg-slate-900 border-t border-slate-800 p-4 flex flex-col gap-4 shadow-2xl absolute w-full animate-fade-in">
-          <Link
-            href="/#how-it-works"
-            onClick={() => setMobileMenuOpen(false)}
-            className="block text-slate-300 hover:text-white font-medium p-2 hover:bg-slate-800 rounded"
-          >
-            How it Works
-          </Link>
-          <Link
-            href="/marketplace"
-            onClick={() => setMobileMenuOpen(false)}
-            className="block text-slate-300 hover:text-white font-medium p-2 hover:bg-slate-800 rounded"
-          >
-            Marketplace
-          </Link>
-          <Link
-            href="/about"
-            onClick={() => setMobileMenuOpen(false)}
-            className="block text-slate-300 hover:text-white font-medium p-2 hover:bg-slate-800 rounded"
-          >
-            About
-          </Link>
-          <Link
-            href="/contact"
-            onClick={() => setMobileMenuOpen(false)}
-            className="block text-slate-300 hover:text-white font-medium p-2 hover:bg-slate-800 rounded"
-          >
-            Contact
-          </Link>
-          <Link
-            href="/#marketplace-ads"
-            onClick={() => setMobileMenuOpen(false)}
-            className="block text-slate-300 hover:text-white font-medium p-2 hover:bg-slate-800 rounded"
-          >
-            Marketplace Ads
-          </Link>
-          <Link
-            href="/#features"
-            onClick={() => setMobileMenuOpen(false)}
-            className="block text-slate-300 hover:text-white font-medium p-2 hover:bg-slate-800 rounded"
-          >
-            Features
-          </Link>
-          <Link
-            href="/free-invoice-generator"
-            onClick={() => setMobileMenuOpen(false)}
-            className="block text-slate-300 hover:text-white font-medium p-2 hover:bg-slate-800 rounded"
-          >
-            Free Invoice Generator
-          </Link>
-          <Link
-            href="/help"
-            className="block text-slate-300 hover:text-white font-medium p-2 hover:bg-slate-800 rounded"
-          >
-            Docs
-          </Link>
-          <Link
-            href="/#pricing"
-            onClick={() => setMobileMenuOpen(false)}
-            className="block text-slate-300 hover:text-white font-medium p-2 hover:bg-slate-800 rounded"
-          >
-            Pricing
-          </Link>
-          <Link
-            href="/#gallery"
-            onClick={() => setMobileMenuOpen(false)}
-            className="block text-slate-300 hover:text-white font-medium p-2 hover:bg-slate-800 rounded"
-          >
-            Showcase
-          </Link>
-          <Link
-            href="/#faq"
-            onClick={() => setMobileMenuOpen(false)}
-            className="block text-slate-300 hover:text-white font-medium p-2 hover:bg-slate-800 rounded"
-          >
-            FAQ
-          </Link>
-          <Link href="/login" className="block text-slate-300 hover:text-white font-medium p-2 hover:bg-slate-800 rounded">
+        <div className="hidden items-center gap-5 lg:flex xl:gap-7">
+          <Link href="/login" className="text-xs font-black text-white transition hover:text-emerald-200 xl:text-sm">
             Login
           </Link>
           <a
             href={whatsappLink}
             target="_blank"
             rel="noreferrer"
-            className="block text-center bg-emerald-500 text-white py-3 rounded-lg font-bold shadow-lg"
+            className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-5 py-3 text-sm font-black text-white shadow-sm shadow-emerald-950/30 transition hover:bg-emerald-500"
           >
-            Register on WhatsApp
+            <MessageCircle size={17} />
+            Start on WhatsApp
           </a>
         </div>
-      )}
+
+        <button
+          type="button"
+          onClick={() => setMobileMenuOpen((open) => !open)}
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 text-sm font-black text-white lg:hidden"
+          aria-label="Toggle navigation menu"
+          aria-expanded={mobileMenuOpen}
+        >
+          {mobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
+          Menu
+        </button>
+      </div>
+
+      {mobileMenuOpen ? (
+        <div className="absolute left-4 right-4 top-[82px] overflow-hidden rounded-2xl border border-stone-200 bg-[#f7f0df] p-4 text-stone-950 shadow-2xl shadow-black/35 lg:hidden">
+          <div className="pointer-events-none absolute inset-0 opacity-60" style={{
+            backgroundImage: "linear-gradient(135deg, rgba(16, 185, 129, 0.12) 1px, transparent 1px), linear-gradient(45deg, rgba(245, 158, 11, 0.10) 1px, transparent 1px)",
+            backgroundSize: "24px 24px, 36px 36px",
+          }} />
+          <div className="relative">
+            <div className="mb-4 flex items-center justify-between border-b border-stone-300 pb-3">
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-800">Menu</p>
+              <Link href="/login" onClick={() => setMobileMenuOpen(false)} className="rounded-full border border-stone-300 bg-white px-4 py-2 text-xs font-black text-stone-900">
+                Login
+              </Link>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              {navLinks.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="rounded-xl border border-stone-200 bg-white/85 px-4 py-3 text-sm font-black text-stone-950 shadow-sm transition hover:border-emerald-400"
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </div>
+
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              {mobileExtraLinks.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="rounded-xl bg-emerald-950/5 px-3 py-3 text-center text-xs font-black text-emerald-900"
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </div>
+
+            <a
+              href={whatsappLink}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-700 px-5 py-4 text-sm font-black text-white shadow-lg shadow-emerald-900/20"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              <MessageCircle size={17} />
+              Start on WhatsApp
+            </a>
+          </div>
+        </div>
+      ) : null}
     </nav>
   );
 }

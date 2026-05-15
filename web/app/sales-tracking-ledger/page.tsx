@@ -6,14 +6,22 @@ import MarketingNavbar from '../../components/MarketingNavbar';
 import MarketingFooter from '../../components/MarketingFooter';
 
 export const metadata: Metadata = {
-  title: 'Best Sales Tracking Software & Business Ledger App | TallyPadi',
-  description: 'Replace your paper ledger with a digital sales tracker on WhatsApp. Auto-calculate daily profit, track cash flow, and manage business expenses easily.',
+  title: 'Sales Tracking & Business Ledger Software for Africa | TallyPadi',
+  description: 'Replace paper ledgers with WhatsApp sales tracking, cash flow, profit reports, expenses, and business management for Nigerian and African SMEs.',
+  keywords: [
+    'sales tracking software Nigeria',
+    'sales tracking app Africa',
+    'business ledger app Nigeria',
+    'cash flow tracker for SMEs',
+    'business management software Africa',
+    'WhatsApp sales tracker',
+  ],
   alternates: {
     canonical: 'https://tallypadi.com/sales-tracking-ledger',
   },
   openGraph: {
-    title: 'Automated Sales Tracking & Business Ledger',
-    description: 'Track daily sales, cash flow, and profit automatically on WhatsApp. The smartest ledger for African businesses.',
+    title: 'Sales Tracking and Business Ledger for African SMEs',
+    description: 'Track daily sales, cash flow, expenses, and profit from WhatsApp and web.',
     url: 'https://tallypadi.com/sales-tracking-ledger',
     type: 'website',
   },
@@ -26,11 +34,11 @@ export default function SalesTrackingPage() {
     name: 'TallyPadi Sales Tracker',
     applicationCategory: 'BusinessApplication',
     operatingSystem: 'Web, WhatsApp',
-    description: 'Automated sales tracking and digital ledger for businesses. Track profit and cash flow.',
+    description: 'Sales tracking and digital business ledger for Nigerian and African SMEs. Track profit, expenses, and cash flow.',
     offers: {
       '@type': 'Offer',
       price: '0',
-      priceCurrency: 'USD',
+      priceCurrency: 'NGN',
     },
   };
 

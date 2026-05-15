@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
-import { CheckCircle2, Clock3, Loader2, Megaphone, Phone, PlayCircle, RefreshCcw, Search, StopCircle, Wallet, XCircle } from 'lucide-react';
+import { CheckCircle2, Clock3, Loader2, Megaphone, Phone, PlayCircle, RefreshCcw, Search, StopCircle, Wallet, XCircle, type LucideIcon } from 'lucide-react';
 import Swal from 'sweetalert2';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
@@ -101,7 +101,7 @@ interface AdminAdCampaign {
 
 const statuses: StatusFilter[] = ['ALL', 'PENDING', 'RUNNING', 'COMPLETED', 'REJECTED'];
 
-const statusMeta: Record<string, { label: string; icon: React.ElementType; className: string }> = {
+const statusMeta: Record<string, { label: string; icon: LucideIcon; className: string }> = {
   ALL: { label: 'All Ads', icon: Megaphone, className: 'border-slate-500/30 bg-slate-500/10 text-slate-300' },
   PENDING: { label: 'Pending', icon: Clock3, className: 'border-amber-500/30 bg-amber-500/10 text-amber-300' },
   PENDING_ADMIN_REVIEW: { label: 'Pending', icon: Clock3, className: 'border-amber-500/30 bg-amber-500/10 text-amber-300' },
@@ -472,7 +472,7 @@ function ActionButton({
   onClick,
 }: {
   label: string;
-  icon: React.ElementType;
+  icon: LucideIcon;
   loading: boolean;
   className: string;
   onClick: () => void;

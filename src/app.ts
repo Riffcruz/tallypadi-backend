@@ -4,6 +4,7 @@ import { json } from 'express';
 import whatsappRouter from './routes/whatsapp.routes';
 import expenseRouter from './routes/expense.routes';
 import marketplaceRouter from './routes/marketplace.routes';
+import blogRouter from './routes/blog.routes';
 import {
   loginUser,
   registerUser,
@@ -30,6 +31,7 @@ app.post('/api/auth/staff/otp/verify', loginStaffWithOTP);
 
 app.use('/api/expenses', expenseRouter);
 app.use('/api/marketplace', marketplaceRouter);
+app.use('/api/blog', blogRouter);
 app.use('/webhook', whatsappRouter);
 
 export default app;

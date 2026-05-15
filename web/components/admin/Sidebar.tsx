@@ -1,14 +1,17 @@
 'use client';
 import Link from 'next/link';
-import { LayoutDashboard, Users, Settings as SettingsIcon, Send, ShieldAlert, Briefcase, Headphones, MessageSquare, Megaphone, BadgeCheck } from 'lucide-react';
+import { LayoutDashboard, Users, Settings as SettingsIcon, Send, ShieldAlert, Briefcase, Headphones, MessageSquare, Megaphone, BadgeCheck, Newspaper, type LucideIcon } from 'lucide-react';
+
+type AdminMenuItem = { id: string; icon: LucideIcon; label: string; href?: string };
 
 export default function Sidebar({ tab, setTab }: { tab: string, setTab: (t: string) => void }) {
     // 🔴 Removed: isOpen state and setIsOpen setter
 
-    const menu = [
+    const menu: AdminMenuItem[] = [
         { id: 'overview', icon: LayoutDashboard, label: 'Overview' },
         { id: 'users', icon: Users, label: 'User Management' },
         { id: 'ads', icon: Megaphone, label: 'Ads Review' },
+        { id: 'blog', icon: Newspaper, label: 'Blog CMS' },
         { id: 'verifications', icon: BadgeCheck, label: 'Verifications' },
         { id: 'investors', icon: Briefcase, label: 'Investors' },
         { id: 'support', icon: Headphones, label: 'Customer Care' },
@@ -32,14 +35,15 @@ export default function Sidebar({ tab, setTab }: { tab: string, setTab: (t: stri
             </h1>
             
             <nav className="flex flex-col gap-2">
-                {menu.map((item: { id: string, icon: React.ElementType, label: string, href?: string }) => (
-                    item.href ? (
+                {menu.map((item) => {
+                    const Icon = item.icon;
+                    return item.href ? (
                         <Link
                             key={item.id}
                             href={item.href}
                             className="p-3 rounded-lg flex items-center gap-3 text-sm font-medium transition-all duration-200 text-slate-400 hover:bg-slate-700/50 hover:text-slate-200"
                         >
-                            <item.icon size={18} /> {item.label}
+                            <Icon size={18} /> {item.label}
                         </Link>
                     ) : (
                         <button 
@@ -56,10 +60,10 @@ export default function Sidebar({ tab, setTab }: { tab: string, setTab: (t: stri
                                 }
                             `}
                         >
-                            <item.icon size={18} /> {item.label}
+                            <Icon size={18} /> {item.label}
                         </button>
-                    )
-                ))}
+                    );
+                })}
             </nav>
 
             <div className="mt-auto pt-6 border-t border-slate-700">

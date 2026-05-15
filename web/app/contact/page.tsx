@@ -50,16 +50,16 @@ const contacts = [
 
 export default function ContactPage() {
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
+    <div className="min-h-screen bg-[#f7f0df] text-stone-900">
       <MarketingNavbar />
       <main className="pt-24">
-        <section className="bg-white border-b border-slate-200">
+        <section className="border-b border-stone-200 bg-[#f7f0df]">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 lg:py-20">
-            <p className="text-sm font-bold uppercase tracking-wide text-emerald-700">Contact</p>
-            <h1 className="mt-4 max-w-3xl text-4xl sm:text-5xl font-black tracking-tight text-slate-950">
+            <p className="text-sm font-bold uppercase text-emerald-700">Contact</p>
+            <h1 className="mt-4 max-w-3xl text-4xl sm:text-5xl font-black text-stone-950">
               Talk to TallyPadi support or business verification.
             </h1>
-            <p className="mt-5 max-w-2xl text-base sm:text-lg leading-8 text-slate-600">
+            <p className="mt-5 max-w-2xl text-base sm:text-lg leading-8 text-stone-700">
               Use these official channels for account help, privacy requests, ads platform questions, and verification of TallyPadi business use cases.
             </p>
           </div>
@@ -70,11 +70,11 @@ export default function ContactPage() {
             {contacts.map((item) => {
               const Icon = item.icon;
               const content = (
-                <div className="h-full rounded-lg border border-slate-200 bg-white p-5 transition hover:border-emerald-300 hover:shadow-lg hover:shadow-emerald-900/5">
-                  <Icon className="text-emerald-600" size={24} />
-                  <p className="mt-4 text-xs font-bold uppercase tracking-wide text-slate-500">{item.label}</p>
-                  <p className="mt-2 font-black text-slate-950">{item.value}</p>
-                  <p className="mt-3 text-sm leading-6 text-slate-600">{item.text}</p>
+                  <div className="h-full rounded-lg border border-stone-200 bg-white p-5 transition hover:border-emerald-300 hover:shadow-lg hover:shadow-emerald-900/5">
+                    <Icon className="text-emerald-600" size={24} />
+                  <p className="mt-4 text-xs font-bold uppercase text-stone-500">{item.label}</p>
+                  <p className="mt-2 font-black text-stone-950">{item.value}</p>
+                  <p className="mt-3 text-sm leading-6 text-stone-700">{item.text}</p>
                 </div>
               );
 
@@ -89,24 +89,24 @@ export default function ContactPage() {
           </div>
         </section>
 
-        <section className="bg-white border-y border-slate-200">
+        <section className="border-y border-stone-200 bg-white">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 grid lg:grid-cols-2 gap-8">
             <div>
-              <h2 className="text-2xl font-black text-slate-950">For ads platform reviewers</h2>
-              <p className="mt-4 leading-7 text-slate-600">
+              <h2 className="text-2xl font-black text-stone-950">For ads platform reviewers</h2>
+              <p className="mt-4 leading-7 text-stone-700">
                 TallyPadi is a business management and merchant promotion tool. Its advertising workflows help merchants request product boosts, approve ad copy, allocate budgets, and view campaign reporting from their TallyPadi dashboard.
               </p>
-              <p className="mt-4 leading-7 text-slate-600">
+              <p className="mt-4 leading-7 text-stone-700">
                 Advertising API access is used only for business-approved campaign creation, campaign status controls, performance reporting, and reconciliation connected to merchant-submitted product campaigns.
               </p>
             </div>
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-6">
-              <h3 className="font-black text-slate-950">Useful pages</h3>
+            <div className="rounded-lg border border-stone-200 bg-[#f7f0df] p-6">
+              <h3 className="font-black text-stone-950">Useful pages</h3>
               <div className="mt-4 grid gap-3 text-sm font-semibold">
-                <Link href="/about" className="rounded-lg bg-white border border-slate-200 px-4 py-3 hover:border-emerald-300">About TallyPadi</Link>
-                <Link href="/privacy-policy" className="rounded-lg bg-white border border-slate-200 px-4 py-3 hover:border-emerald-300">Privacy Policy</Link>
-                <Link href="/terms-of-service" className="rounded-lg bg-white border border-slate-200 px-4 py-3 hover:border-emerald-300">Terms of Service</Link>
-                <Link href="/marketplace" className="rounded-lg bg-white border border-slate-200 px-4 py-3 hover:border-emerald-300">Marketplace</Link>
+                <Link href="/about" className="rounded-lg bg-white border border-stone-200 px-4 py-3 hover:border-emerald-300">About TallyPadi</Link>
+                <Link href="/privacy-policy" className="rounded-lg bg-white border border-stone-200 px-4 py-3 hover:border-emerald-300">Privacy Policy</Link>
+                <Link href="/terms-of-service" className="rounded-lg bg-white border border-stone-200 px-4 py-3 hover:border-emerald-300">Terms of Service</Link>
+                <Link href="/marketplace" className="rounded-lg bg-white border border-stone-200 px-4 py-3 hover:border-emerald-300">Marketplace</Link>
               </div>
             </div>
           </div>

@@ -1,7 +1,7 @@
 import React from 'react';
 import type { Metadata } from 'next';
 import Script from 'next/script';
-import { TrendingUp, Lock, Zap, ArrowRight, Target, AlertTriangle } from 'lucide-react';
+import { TrendingUp, Zap, ArrowRight, Target, AlertTriangle } from 'lucide-react';
 import MarketingNavbar from '../../components/MarketingNavbar';
 import MarketingFooter from '../../components/MarketingFooter';
 
@@ -13,11 +13,21 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: 'The Best Way to Grow a Small Business in 2026',
-    description: 'Why do some businesses explode while others struggle? The answer isn\'t luck. It\'s data. See the WhatsApp tool that automates growth.',
+    description: "Why do some businesses explode while others struggle? The answer isn't luck. It's data. See the WhatsApp tool that automates growth.",
     url: 'https://tallypadi.com/best-way-to-grow-business',
     type: 'website',
   },
-  keywords: ["best way to grow a business 2026", "how to scale a business", "business growth strategies", "small business tools 2025", "automate business whatsapp"],
+  keywords: [
+    'how to grow a small business in Nigeria',
+    'how to grow a business in Africa',
+    'best way to grow a business 2026',
+    'how to scale a business',
+    'business management software Africa',
+    'small business tools Nigeria',
+    'business growth strategies for SMEs',
+    'WhatsApp POS for business growth',
+    'inventory management for business growth',
+  ],
 };
 
 export default function GrowthPage() {

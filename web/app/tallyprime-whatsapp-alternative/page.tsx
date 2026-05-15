@@ -6,14 +6,22 @@ import MarketingNavbar from '../../components/MarketingNavbar';
 import MarketingFooter from '../../components/MarketingFooter';
 
 export const metadata: Metadata = {
-  title: 'TallyPrime Alternative for WhatsApp & Mobile | TallyPadi',
-  description: 'Looking for a simpler TallyPrime alternative? TallyPadi is the mobile-first accounting, POS, and inventory solution built for modern business owners.',
+  title: 'TallyPrime Alternative for WhatsApp & Mobile SMEs | TallyPadi',
+  description: 'Looking for a simpler TallyPrime alternative? TallyPadi is a mobile-first WhatsApp POS, inventory, receipt, sales ledger, and business management tool for African SMEs.',
+  keywords: [
+    'TallyPrime alternative',
+    'TallyPrime alternative Nigeria',
+    'mobile accounting app Africa',
+    'WhatsApp POS for SMEs',
+    'business management software Africa',
+    'inventory software Nigeria',
+  ],
   alternates: {
     canonical: 'https://tallypadi.com/tallyprime-whatsapp-alternative',
   },
   openGraph: {
     title: 'TallyPrime vs TallyPadi - The Simple Mobile Alternative',
-    description: 'Move your business accounting to the cloud. TallyPadi offers the power of stock management and invoicing directly on your smartphone via WhatsApp.',
+    description: 'Move sales, receipts, stock management, debtors, and business reports to WhatsApp and mobile.',
     url: 'https://tallypadi.com/tallyprime-whatsapp-alternative',
     type: 'website',
   },
@@ -26,11 +34,11 @@ export default function TallyPrimeAlternativePage() {
     name: 'TallyPadi',
     applicationCategory: 'BusinessApplication',
     operatingSystem: 'Web, WhatsApp',
-    description: 'A modern, mobile-friendly alternative to TallyPrime.',
+    description: 'A modern mobile-friendly alternative to TallyPrime for African SMEs.',
     offers: {
       '@type': 'Offer',
       price: '0',
-      priceCurrency: 'USD',
+      priceCurrency: 'NGN',
     },
   };
 

@@ -6,14 +6,22 @@ import MarketingNavbar from '../../components/MarketingNavbar';
 import MarketingFooter from '../../components/MarketingFooter';
 
 export const metadata: Metadata = {
-  title: 'Product Catalog & Online Shop Link Generator | TallyPadi',
-  description: 'Create a free online product catalog for your business. Generate a shop link to share on WhatsApp, Instagram, and Facebook.',
+  title: 'Product Catalog & Online Shop Link Generator for SMEs | TallyPadi',
+  description: 'Create an online product catalog and shop link from your inventory. Share products on WhatsApp, Instagram, and Facebook. Built for Nigerian and African SMEs.',
+  keywords: [
+    'product catalog generator Nigeria',
+    'online shop link generator Africa',
+    'WhatsApp product catalog',
+    'online storefront for SMEs',
+    'business management software Nigeria',
+    'African marketplace for small business',
+  ],
   alternates: {
     canonical: 'https://tallypadi.com/product-catalog-shop-link-generator',
   },
   openGraph: {
-    title: 'Product Catalog & Online Shop Link Generator',
-    description: 'Turn your inventory into an online store instantly. Share your shop link and let customers browse your products online.',
+    title: 'Product Catalog and Online Shop Link Generator',
+    description: 'Turn your inventory into an online store and share your shop link with customers across WhatsApp and social media.',
     url: 'https://tallypadi.com/product-catalog-shop-link-generator',
     type: 'website',
   },
@@ -26,11 +34,11 @@ export default function CatalogPage() {
     name: 'TallyPadi Shop Generator',
     applicationCategory: 'BusinessApplication',
     operatingSystem: 'Web, WhatsApp',
-    description: 'Instant online product catalog and shop link generator.',
+    description: 'Instant online product catalog and shop link generator for Nigerian and African SMEs.',
     offers: {
       '@type': 'Offer',
       price: '0',
-      priceCurrency: 'USD',
+      priceCurrency: 'NGN',
     },
   };
 
