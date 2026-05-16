@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import axios from 'axios';
 import {
@@ -11,6 +11,7 @@ import {
 import ShopSidebar from './ShopSidebar';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
+const DESCRIPTION_SLIDE_MAX_CHARS = 92;
 
 type Product = {
   id: string;
@@ -49,6 +50,58 @@ interface ShopClientProps {
   slug: string;
 }
 
+const splitLongSentence = (sentence: string) => {
+  const chunks: string[] = [];
+  let current = '';
+
+  sentence.split(/\s+/).forEach((word) => {
+    const next = current ? `${current} ${word}` : word;
+    if (next.length > DESCRIPTION_SLIDE_MAX_CHARS && current) {
+      chunks.push(current);
+      current = word;
+    } else {
+      current = next;
+    }
+  });
+
+  if (current) chunks.push(current);
+  return chunks;
+};
+
+const buildDescriptionSlides = (description?: string) => {
+  const clean = String(description || '').replace(/\s+/g, ' ').trim();
+  if (!clean) return [];
+
+  const slides: string[] = [];
+  const sentences = clean.match(/[^.!?]+[.!?]*/g) || [clean];
+  let current = '';
+
+  sentences.forEach((rawSentence) => {
+    const sentence = rawSentence.trim();
+    if (!sentence) return;
+
+    if (sentence.length > DESCRIPTION_SLIDE_MAX_CHARS) {
+      if (current) {
+        slides.push(current);
+        current = '';
+      }
+      slides.push(...splitLongSentence(sentence));
+      return;
+    }
+
+    const next = current ? `${current} ${sentence}` : sentence;
+    if (next.length > DESCRIPTION_SLIDE_MAX_CHARS && current) {
+      slides.push(current);
+      current = sentence;
+    } else {
+      current = next;
+    }
+  });
+
+  if (current) slides.push(current);
+  return slides;
+};
+
 export default function ShopClient({ initialShop, slug }: ShopClientProps) {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
@@ -66,11 +119,13 @@ export default function ShopClient({ initialShop, slug }: ShopClientProps) {
   const [category, setCategory] = useState('');
   const [sort, setSort] = useState('newest');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [descriptionSlideIndex, setDescriptionSlideIndex] = useState(0);
 
   // Theme color from shop settings
   const themeColor = initialShop?.themeColor || '#10b981';
   // Dynamic currency from shop settings
   const currencyCode = initialShop?.currencyCode || 'NGN';
+  const descriptionSlides = useMemo(() => buildDescriptionSlides(initialShop?.description), [initialShop?.description]);
 
   // Record Visit on Mount
   useEffect(() => {
@@ -82,6 +137,18 @@ export default function ShopClient({ initialShop, slug }: ShopClientProps) {
     const timer = setTimeout(() => setDebouncedSearch(search), 500);
     return () => clearTimeout(timer);
   }, [search]);
+
+  useEffect(() => {
+    setDescriptionSlideIndex(0);
+  }, [initialShop?.description]);
+
+  useEffect(() => {
+    if (descriptionSlides.length <= 1) return;
+    const timer = setInterval(() => {
+      setDescriptionSlideIndex((index) => (index + 1) % descriptionSlides.length);
+    }, 3600);
+    return () => clearInterval(timer);
+  }, [descriptionSlides.length]);
 
   const fetchProducts = useCallback(async (reset = false) => {
     setLoading(true);
@@ -203,24 +270,24 @@ export default function ShopClient({ initialShop, slug }: ShopClientProps) {
       )}
 
       {/* JIJI-STYLE HEADER */}
-      <header className="relative w-full pb-8 md:pb-16 pt-4 md:pt-6 px-4 shadow-sm" style={{ backgroundColor: themeColor }}>
+      <header className="relative w-full px-4 pb-6 pt-4 shadow-sm md:pb-16 md:pt-6" style={{ backgroundColor: themeColor }}>
         {initialShop.heroImageUrl && (
            <img src={initialShop.heroImageUrl} alt="Cover" className="absolute inset-0 w-full h-full object-cover mix-blend-overlay opacity-20 pointer-events-none" />
         )}
         <div className="relative z-10 max-w-7xl mx-auto flex flex-col">
            {/* Top row: Logo/Name and Contact/Cart */}
-           <div className="flex items-center justify-between mb-8 md:mb-12">
-              <div className="flex items-center gap-3">
-                 <button onClick={() => setIsSidebarOpen(true)} className="md:hidden p-2 text-white hover:bg-white/10 rounded-lg transition">
+           <div className="mb-6 flex items-start justify-between gap-3 md:mb-12 md:items-center">
+              <div className="flex min-w-0 items-start gap-3">
+                 <button onClick={() => setIsSidebarOpen(true)} className="mt-1 shrink-0 rounded-lg p-2 text-white transition hover:bg-white/10 md:hidden">
                     <Menu size={24} />
                  </button>
                  <div className="flex min-w-0 items-start gap-2">
-                    <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm" style={{ color: themeColor }}>
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm" style={{ color: themeColor }}>
                        <ShoppingBag size={20} />
                     </div>
                     <div className="min-w-0">
                       <div className="flex min-w-0 flex-wrap items-center gap-2">
-                        <h1 className="text-white text-2xl md:text-3xl font-black tracking-tight drop-shadow-sm">{initialShop.name}</h1>
+                        <h1 className="text-2xl font-black leading-tight tracking-tight text-white drop-shadow-sm md:text-3xl">{initialShop.name}</h1>
                         {initialShop.verification?.verified && (
                           <span title={initialShop.verification.label || 'Verified seller'} className="hidden sm:inline-flex items-center gap-1 rounded-lg bg-white px-2.5 py-1 text-xs font-black text-sky-700 shadow-sm">
                             <BadgeCheck size={14} fill="currentColor" />
@@ -228,10 +295,34 @@ export default function ShopClient({ initialShop, slug }: ShopClientProps) {
                           </span>
                         )}
                       </div>
-                      {initialShop.description && (
-                        <p className="mt-1 max-w-xl text-sm font-semibold leading-6 text-white/90 drop-shadow-sm md:text-base">
-                          {initialShop.description}
-                        </p>
+                      {descriptionSlides.length > 0 && (
+                        <div className="mt-1 max-w-2xl overflow-hidden" aria-live="polite">
+                          <div
+                            className="flex transition-transform duration-700 ease-out"
+                            style={{ transform: `translateX(-${descriptionSlideIndex * 100}%)` }}
+                          >
+                            {descriptionSlides.map((slide, index) => (
+                              <p
+                                key={`${index}-${slide.slice(0, 18)}`}
+                                className="w-full shrink-0 text-sm font-semibold leading-6 text-white/90 drop-shadow-sm md:text-base"
+                              >
+                                {slide}
+                              </p>
+                            ))}
+                          </div>
+                          {descriptionSlides.length > 1 && (
+                            <div className="mt-2 flex gap-1">
+                              {descriptionSlides.map((slide, index) => (
+                                <span
+                                  key={`${slide.slice(0, 8)}-${index}`}
+                                  className={`h-1.5 rounded-full transition-all ${
+                                    index === descriptionSlideIndex ? 'w-5 bg-white' : 'w-1.5 bg-white/45'
+                                  }`}
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       )}
                     </div>
                  </div>
@@ -261,7 +352,7 @@ export default function ShopClient({ initialShop, slug }: ShopClientProps) {
 
            {/* Search Area */}
            <div className="max-w-2xl mx-auto w-full text-center">
-              <h2 className="text-white text-2xl md:text-4xl font-bold mb-6 drop-shadow-sm">What are you looking for?</h2>
+              <h2 className="mb-3 text-xl font-bold text-white drop-shadow-sm md:mb-6 md:text-4xl">What are you looking for?</h2>
               <div className="relative flex items-center shadow-2xl rounded-full">
                  <Search className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
                  <input
@@ -269,7 +360,7 @@ export default function ShopClient({ initialShop, slug }: ShopClientProps) {
                     placeholder="I am looking for..."
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    className="w-full pl-14 pr-4 py-4 rounded-full bg-white border-none outline-none text-base md:text-lg font-medium placeholder:text-slate-400"
+                    className="w-full rounded-full border-none bg-white py-3 pl-14 pr-4 text-base font-medium outline-none placeholder:text-slate-400 md:py-4 md:text-lg"
                  />
               </div>
            </div>
@@ -285,15 +376,6 @@ export default function ShopClient({ initialShop, slug }: ShopClientProps) {
               {category ? `Showing ${category}` : 'All products'}
             </p>
           </div>
-          <select
-            value={sort}
-            onChange={(e) => setSort(e.target.value)}
-            className="shrink-0 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700 outline-none"
-          >
-            <option value="newest">Newest</option>
-            <option value="price_asc">Low price</option>
-            <option value="price_desc">High price</option>
-          </select>
         </div>
 
         <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
@@ -323,6 +405,28 @@ export default function ShopClient({ initialShop, slug }: ShopClientProps) {
             );
           })}
         </div>
+
+        <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+          {[
+            { value: 'newest', label: 'Newest' },
+            { value: 'price_asc', label: 'Low price' },
+            { value: 'price_desc', label: 'High price' },
+          ].map((option) => {
+            const active = sort === option.value;
+            return (
+              <button
+                key={option.value}
+                onClick={() => setSort(option.value)}
+                className={`shrink-0 rounded-lg border px-3 py-2 text-xs font-black transition ${
+                  active ? 'text-white shadow-sm' : 'border-slate-200 bg-slate-50 text-slate-600'
+                }`}
+                style={active ? { backgroundColor: themeColor, borderColor: themeColor } : {}}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
       </section>
 
       {/* Main Layout Container */}
@@ -342,7 +446,7 @@ export default function ShopClient({ initialShop, slug }: ShopClientProps) {
         {/* Main Product Area */}
         <main className="flex-1 min-w-0 flex flex-col">
           {/* Sorting Header */}
-          <div className="flex items-center justify-between mb-6">
+          <div className="mb-6 hidden items-center justify-between md:flex">
              <h3 className="font-bold text-slate-800 text-lg md:text-xl">Trending ads</h3>
              <select
                value={sort}
