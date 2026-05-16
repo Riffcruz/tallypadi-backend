@@ -214,17 +214,26 @@ export default function ShopClient({ initialShop, slug }: ShopClientProps) {
                  <button onClick={() => setIsSidebarOpen(true)} className="md:hidden p-2 text-white hover:bg-white/10 rounded-lg transition">
                     <Menu size={24} />
                  </button>
-                 <div className="flex items-center gap-2">
+                 <div className="flex min-w-0 items-start gap-2">
                     <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm" style={{ color: themeColor }}>
                        <ShoppingBag size={20} />
                     </div>
-                    <h1 className="text-white text-2xl md:text-3xl font-black tracking-tight drop-shadow-sm">{initialShop.name}</h1>
-                    {initialShop.verification?.verified && (
-                      <span title={initialShop.verification.label || 'Verified seller'} className="hidden sm:inline-flex items-center gap-1 rounded-lg bg-white px-2.5 py-1 text-xs font-black text-sky-700 shadow-sm">
-                        <BadgeCheck size={14} fill="currentColor" />
-                        Verified
-                      </span>
-                    )}
+                    <div className="min-w-0">
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <h1 className="text-white text-2xl md:text-3xl font-black tracking-tight drop-shadow-sm">{initialShop.name}</h1>
+                        {initialShop.verification?.verified && (
+                          <span title={initialShop.verification.label || 'Verified seller'} className="hidden sm:inline-flex items-center gap-1 rounded-lg bg-white px-2.5 py-1 text-xs font-black text-sky-700 shadow-sm">
+                            <BadgeCheck size={14} fill="currentColor" />
+                            Verified
+                          </span>
+                        )}
+                      </div>
+                      {initialShop.description && (
+                        <p className="mt-1 max-w-xl text-sm font-semibold leading-6 text-white/90 drop-shadow-sm md:text-base">
+                          {initialShop.description}
+                        </p>
+                      )}
+                    </div>
                  </div>
               </div>
               <div className="flex items-center gap-3 md:gap-4">
@@ -266,6 +275,55 @@ export default function ShopClient({ initialShop, slug }: ShopClientProps) {
            </div>
         </div>
       </header>
+
+      {/* Mobile visible filters */}
+      <section className="border-b border-slate-200 bg-white px-4 py-4 shadow-sm md:hidden">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xs font-black uppercase tracking-wider text-slate-400">Filter products</p>
+            <p className="truncate text-sm font-bold text-slate-800">
+              {category ? `Showing ${category}` : 'All products'}
+            </p>
+          </div>
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value)}
+            className="shrink-0 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700 outline-none"
+          >
+            <option value="newest">Newest</option>
+            <option value="price_asc">Low price</option>
+            <option value="price_desc">High price</option>
+          </select>
+        </div>
+
+        <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+          <button
+            onClick={() => setCategory('')}
+            className={`shrink-0 rounded-full border px-4 py-2 text-xs font-black transition ${
+              category === '' ? 'text-white shadow-sm' : 'border-slate-200 bg-slate-50 text-slate-600'
+            }`}
+            style={category === '' ? { backgroundColor: themeColor, borderColor: themeColor } : {}}
+          >
+            All
+          </button>
+          {initialShop.categories.map((cat) => {
+            const value = cat.toLowerCase();
+            const active = category === value;
+            return (
+              <button
+                key={cat}
+                onClick={() => setCategory(value)}
+                className={`shrink-0 rounded-full border px-4 py-2 text-xs font-black capitalize transition ${
+                  active ? 'text-white shadow-sm' : 'border-slate-200 bg-slate-50 text-slate-600'
+                }`}
+                style={active ? { backgroundColor: themeColor, borderColor: themeColor } : {}}
+              >
+                {cat}
+              </button>
+            );
+          })}
+        </div>
+      </section>
 
       {/* Main Layout Container */}
       <div className="flex-1 max-w-7xl mx-auto w-full px-4 py-8 flex flex-col md:flex-row gap-8">
