@@ -9,7 +9,6 @@ import {
   getPublicProductImage,
   getStoreSetupStatus,
   getVerificationBadge,
-  isStorefrontPublicReady,
 } from '../services/marketplaceTrust.service';
 import { getMarketplaceProductSeo } from '../services/marketplaceSeo.service';
 
@@ -81,8 +80,9 @@ export const getShopBySlug = async (req: Request, res: Response): Promise<any> =
 
     if (!shopOwner) return res.status(404).json({ error: 'Shop not found' });
 
-    // ✅ Enforce Plan & Subscription
-    if (!isTycoon(shopOwner) || !isSubActive(shopOwner) || !isStorefrontPublicReady(shopOwner)) {
+    // Direct shop links should remain public for active sellers with a slug.
+    // Marketplace discovery applies the stricter completed-settings readiness gate.
+    if (!isTycoon(shopOwner) || !isSubActive(shopOwner)) {
        return res.status(404).json({ error: 'Shop is currently unavailable' });
     }
 
@@ -143,8 +143,8 @@ export const getShopProducts = async (req: Request, res: Response): Promise<any>
     const shopOwner = await User.findOne({ shopSlug: slug }).select('_id planType subscriptionStatus trialEndsAt businessName phoneNumber shopSlug shopDescription countryCode settings.location settings.currencyCode marketplaceVerificationStatus marketplaceVerifiedAt');
     if (!shopOwner) return res.status(404).json({ error: 'Shop not found' });
 
-    // Ensure shop is active (Tycoon + Valid Sub)
-    if (!isTycoon(shopOwner) || !isSubActive(shopOwner) || !isStorefrontPublicReady(shopOwner)) {
+    // Keep direct shop links browsable even when marketplace readiness is incomplete.
+    if (!isTycoon(shopOwner) || !isSubActive(shopOwner)) {
         return res.status(404).json({ error: 'Shop unavailable' });
     }
     
@@ -292,7 +292,7 @@ export const getShopProductById = async (req: Request, res: Response): Promise<a
     const shopOwner = await User.findOne({ shopSlug: slug }).select('_id planType subscriptionStatus trialEndsAt businessName phoneNumber shopSlug shopDescription countryCode settings.location settings.currencyCode marketplaceVerificationStatus marketplaceVerifiedAt');
     if (!shopOwner) return res.status(404).json({ error: 'Shop not found' });
 
-    if (!isTycoon(shopOwner) || !isSubActive(shopOwner) || !isStorefrontPublicReady(shopOwner)) {
+    if (!isTycoon(shopOwner) || !isSubActive(shopOwner)) {
         return res.status(404).json({ error: 'Shop unavailable' });
     }
 

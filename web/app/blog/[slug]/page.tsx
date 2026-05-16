@@ -7,6 +7,8 @@ import MarketingFooter from '../../../components/MarketingFooter';
 import BlogRenderer from '../../../components/blog/BlogRenderer';
 import { fetchBlogPost } from '../blogApi';
 
+export const dynamic = 'force-dynamic';
+
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://tallypadi.com';
 
 const formatDate = (value?: string) => {

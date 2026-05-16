@@ -648,7 +648,7 @@ export default function OnlineStorePage() {
                   </div>
                   <div className="flex-1">
                     <h2 className="text-lg font-bold text-gray-900">Marketplace Readiness</h2>
-                    <p className="text-xs text-gray-400">Your shop appears publicly after required store settings are complete.</p>
+                    <p className="text-xs text-gray-400">Your direct shop link stays public, but marketplace discovery needs these details completed.</p>
                     <div className="mt-4 flex flex-wrap gap-2">
                       {Object.entries(STORE_SETUP_LABELS).map(([key, label]) => {
                         const missing = Boolean(storeSetup?.missing?.includes(key));

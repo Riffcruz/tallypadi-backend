@@ -5,6 +5,8 @@ import MarketingNavbar from '../../components/MarketingNavbar';
 import MarketingFooter from '../../components/MarketingFooter';
 import { fetchBlogPosts } from './blogApi';
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: 'TallyPadi Blog - Business Management Tips for African SMEs',
   description:

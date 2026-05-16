@@ -144,9 +144,11 @@ const buildPostPayload = async (body: Record<string, unknown>, existingId?: stri
 };
 
 const publicProjection = '-createdBy -updatedBy -__v';
+const blogCacheControl = 'no-store, no-cache, must-revalidate, proxy-revalidate';
 
 export const listPublishedBlogPosts = async (req: Request, res: Response) => {
   try {
+    res.set('Cache-Control', blogCacheControl);
     const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 20));
     const q = cleanString(req.query.q, 80);
 
@@ -173,6 +175,7 @@ export const listPublishedBlogPosts = async (req: Request, res: Response) => {
 
 export const getPublishedBlogPostBySlug = async (req: Request, res: Response) => {
   try {
+    res.set('Cache-Control', blogCacheControl);
     const slug = makeSlug(req.params.slug);
     const post = await BlogPost.findOne({
       slug,

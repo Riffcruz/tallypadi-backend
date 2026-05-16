@@ -16,7 +16,7 @@ const fetchWithTimeout = async (url: string, timeoutMs = 2500) => {
 
   try {
     return await fetch(url, {
-      next: { revalidate: 300 },
+      cache: 'no-store',
       signal: controller.signal,
     });
   } finally {
