@@ -32,6 +32,8 @@ export interface IAdCampaign extends Document {
   adminNotes?: string | null;
   rejectionReason?: string | null;
   previewUrls?: { provider: string; url: string }[];
+  globalLandingPageUrl?: string;
+  providerLandingPageUrls?: Map<string, string>;
   version: number;
 
   // Legacy fields kept so old records and existing serializers do not explode during rollout.
@@ -140,6 +142,8 @@ const adCampaignSchema = new Schema<IAdCampaign>(
         url: { type: String, required: true },
       },
     ],
+    globalLandingPageUrl: { type: String, trim: true, default: '' },
+    providerLandingPageUrls: { type: Map, of: String, default: {} },
     version: { type: Number, default: 0 },
 
     platforms: [{ type: String, enum: [...AD_PROVIDERS, ...legacyPlatformValues] }],

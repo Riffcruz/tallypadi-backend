@@ -136,6 +136,9 @@ interface BoostForm {
   endDate: string;
   adDescription: string;
   budgetType: 'DAILY' | 'TOTAL';
+  useGlobalLandingPage: boolean;
+  globalLandingPageUrl: string;
+  providerLandingPageUrls: Record<string, string>;
 }
 
 interface NewProductForm {
@@ -159,6 +162,9 @@ const defaultBoostForm: BoostForm = {
   endDate: '',
   adDescription: '',
   budgetType: 'TOTAL',
+  useGlobalLandingPage: true,
+  globalLandingPageUrl: '',
+  providerLandingPageUrls: {},
 };
 
 const defaultNewProductForm: NewProductForm = {
@@ -512,7 +518,11 @@ function AdsManagerContent() {
         },
         consent: {
           accepted: true
-        }
+        },
+        globalLandingPageUrl: form.useGlobalLandingPage ? form.globalLandingPageUrl.trim() : '',
+        providerLandingPageUrls: !form.useGlobalLandingPage ? Object.fromEntries(
+          Object.entries(form.providerLandingPageUrls).map(([k, v]) => [k, v.trim()]).filter(([_, v]) => v)
+        ) : undefined,
       }, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -969,7 +979,7 @@ function AdsManagerContent() {
                                 <Icon size={13} />
                                 {config.label}
                               </span>
-                              {campaign.platforms.map((platform) => (
+                              {(campaign.selectedProviders || campaign.platforms || []).map((platform) => (
                                 <span key={platform} className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">
                                   {platformLabel(platform)}
                                 </span>
@@ -1308,6 +1318,7 @@ function CampaignReportPanel({
   userCurrencyCode: string;
 }) {
   const [activeTab, setActiveTab] = useState<'impressions' | 'clicks' | 'conversions' | 'spend'>('impressions');
+  const [activePlatformFilter, setActivePlatformFilter] = useState<string>('ALL');
 
   const platformsList = campaign.selectedProviders?.length ? campaign.selectedProviders : campaign.platforms || [];
   const platformNames = platformsList.length > 0 
@@ -1322,32 +1333,58 @@ function CampaignReportPanel({
         return d.toISOString().split('T')[0];
       });
 
-      let seed = 0;
-      const cid = (campaign.id || campaign._id || 'demo') as string;
-      for (let c = 0; c < cid.length; c++) {
-        seed += cid.charCodeAt(c);
-      }
+      const allMockMetrics: any[] = [];
+      const budget = (campaign.budget || 2000) / (platformsList.length || 1);
 
-      const budget = campaign.budget || 2000;
-      return dates.map((date, idx) => {
-        const dayFactor = 0.5 + ((seed * (idx + 1)) % 10) / 10;
-        const daySpend = (budget / 7) * dayFactor;
-        const dayImps = Math.round(daySpend * 4.5);
-        const dayClicks = Math.round(dayImps * 0.024);
-        const dayConvs = Math.round(dayClicks * 0.055);
+      (platformsList.length ? platformsList : ['TIKTOK']).forEach((platform, pIdx) => {
+        let seed = pIdx * 100;
+        const cid = (campaign.id || campaign._id || 'demo') as string;
+        for (let c = 0; c < cid.length; c++) {
+          seed += cid.charCodeAt(c);
+        }
 
-        return {
-          date,
-          impressions: dayImps,
-          clicks: dayClicks,
-          conversions: dayConvs,
-          spendMinor: Math.round(daySpend * 100),
-          currency: 'NGN',
-        };
+        dates.forEach((date, idx) => {
+          const dayFactor = 0.5 + ((seed * (idx + 1)) % 10) / 10;
+          const daySpend = (budget / 7) * dayFactor;
+          const dayImps = Math.round(daySpend * 4.5);
+          const dayClicks = Math.round(dayImps * 0.024);
+          const dayConvs = Math.round(dayClicks * 0.055);
+
+          allMockMetrics.push({
+            date,
+            provider: platform,
+            impressions: dayImps,
+            clicks: dayClicks,
+            conversions: dayConvs,
+            spendMinor: Math.round(daySpend * 100),
+            currency: 'NGN',
+          });
+        });
       });
+      return allMockMetrics;
     }
     return [...metrics].reverse();
-  }, [isSimulated, metrics, campaign.id, campaign._id, campaign.budget]);
+  }, [isSimulated, metrics, campaign.id, campaign._id, campaign.budget, platformsList]);
+
+  const filteredMetrics = useMemo(() => {
+    if (activePlatformFilter === 'ALL') return activeMetrics;
+    return activeMetrics.filter(m => m.provider === activePlatformFilter);
+  }, [activeMetrics, activePlatformFilter]);
+
+  const aggregatedMetrics = useMemo(() => {
+    const byDate = new Map<string, any>();
+    filteredMetrics.forEach(m => {
+      if (!byDate.has(m.date)) {
+        byDate.set(m.date, { date: m.date, impressions: 0, clicks: 0, conversions: 0, spendMinor: 0, currency: m.currency });
+      }
+      const agg = byDate.get(m.date);
+      agg.impressions += m.impressions || 0;
+      agg.clicks += m.clicks || 0;
+      agg.conversions += m.conversions || 0;
+      agg.spendMinor += m.spendMinor || 0;
+    });
+    return Array.from(byDate.values()).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  }, [filteredMetrics]);
 
   const totals = useMemo(() => {
     let imps = 0;
@@ -1355,7 +1392,7 @@ function CampaignReportPanel({
     let convs = 0;
     let spendM = 0;
 
-    activeMetrics.forEach((m) => {
+    aggregatedMetrics.forEach((m) => {
       imps += m.impressions || 0;
       clicks += m.clicks || 0;
       convs += m.conversions || 0;
@@ -1368,7 +1405,7 @@ function CampaignReportPanel({
     const cpc = clicks > 0 ? spend / clicks : 0;
 
     return { imps, clicks, convs, spend, ctr, convRate, cpc };
-  }, [activeMetrics]);
+  }, [aggregatedMetrics]);
 
   if (loading && !isSimulated) {
     return (
@@ -1400,12 +1437,12 @@ function CampaignReportPanel({
   const plotW = W - paddingLeft - paddingRight;
   const plotH = H - paddingTop - paddingBottom;
 
-  const chartValues = activeMetrics.map((m) => {
+  const chartValues = aggregatedMetrics.map((m) => {
     if (activeTab === 'spend') return (m.spendMinor || 0) / 100;
     return m[activeTab] || 0;
   });
 
-  const chartLabels = activeMetrics.map((m) => {
+  const chartLabels = aggregatedMetrics.map((m) => {
     try {
       const parts = m.date.split('-');
       if (parts.length === 3) {
@@ -1440,13 +1477,29 @@ function CampaignReportPanel({
 
   return (
     <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50/50 p-4 space-y-4 animate-in slide-in-from-top-2 duration-300">
-      <div className="flex items-center justify-between">
-        <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded w-max">
           <Globe size={11} /> {platformNames} Live API Reports
         </span>
-        <span className="text-[10px] text-slate-400 font-bold">
-          7-Day Trend Chart
-        </span>
+        {platformsList.length > 1 && (
+          <div className="flex items-center gap-1 bg-slate-200/50 p-1 rounded-lg self-start">
+            <button
+              onClick={() => setActivePlatformFilter('ALL')}
+              className={`px-3 py-1 text-[10px] font-bold rounded-md transition-all ${activePlatformFilter === 'ALL' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              All
+            </button>
+            {platformsList.map(platform => (
+              <button
+                key={platform}
+                onClick={() => setActivePlatformFilter(platform)}
+                className={`px-3 py-1 text-[10px] font-bold rounded-md transition-all ${activePlatformFilter === platform ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                {platformLabel(platform).replace(' Ads', '').replace('TallyPadi Marketplace Boost', 'TallyPadi')}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
@@ -1649,6 +1702,55 @@ function BoostControls({
             );
           })}
         </div>
+      </div>
+
+      <div className="space-y-3 border-t border-b border-slate-100 py-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <span className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">Landing Page Destination</span>
+          <label className="flex items-center gap-2 text-[10px] font-bold text-slate-500 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.useGlobalLandingPage}
+              onChange={(e) => onChange(prev => ({ ...prev, useGlobalLandingPage: e.target.checked }))}
+              className="h-3.5 w-3.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500/20"
+            />
+            Use same link for all platforms
+          </label>
+        </div>
+        
+        {form.useGlobalLandingPage ? (
+          <input
+            type="url"
+            placeholder="https://tallypadi.com/... (Leave empty to use auto-generated product link)"
+            value={form.globalLandingPageUrl}
+            onChange={(e) => onChange(prev => ({ ...prev, globalLandingPageUrl: e.target.value }))}
+            className="w-full border border-slate-200 bg-slate-50 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-medium"
+          />
+        ) : (
+          <div className="space-y-2">
+            {form.platforms.map(platform => {
+              const platformName = PROMOTION_PLATFORM_OPTIONS.find(p => p.value === platform)?.label || platform;
+              return (
+                <div key={platform} className="flex flex-col gap-1">
+                  <span className="text-[10px] font-bold text-slate-400">{platformName} URL</span>
+                  <input
+                    type="url"
+                    placeholder={`Link for ${platformName}...`}
+                    value={form.providerLandingPageUrls[platform] || ''}
+                    onChange={(e) => onChange(prev => ({ 
+                      ...prev, 
+                      providerLandingPageUrls: { ...prev.providerLandingPageUrls, [platform]: e.target.value } 
+                    }))}
+                    className="w-full border border-slate-200 bg-slate-50 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-medium"
+                  />
+                </div>
+              );
+            })}
+            {form.platforms.length === 0 && (
+              <p className="text-xs text-slate-400 italic">Select at least one platform above to add custom links.</p>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="space-y-2">

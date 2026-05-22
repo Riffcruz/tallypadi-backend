@@ -253,6 +253,8 @@ export const createCampaign = async (req: Request, res: Response) => {
       keywords: Array.isArray(req.body?.keywords) ? req.body.keywords : undefined,
       customSplitBasisPoints: req.body?.customSplitBasisPoints,
       adDetails: req.body?.adDetails,
+      globalLandingPageUrl: req.body?.globalLandingPageUrl,
+      providerLandingPageUrls: req.body?.providerLandingPageUrls,
       consent: {
         accepted: Boolean(req.body?.adTermsAccepted ?? req.body?.consent?.accepted ?? true),
         version: req.body?.consent?.version,

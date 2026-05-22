@@ -445,6 +445,8 @@ interface CreateManagedCampaignInput {
     ipAddress?: string;
     userAgent?: string;
   };
+  globalLandingPageUrl?: string;
+  providerLandingPageUrls?: Record<string, string>;
 }
 
 const resolvePlan = async (input: CreateManagedCampaignInput) => {
@@ -517,6 +519,8 @@ export const createManagedCampaign = async (input: CreateManagedCampaignInput) =
       name: product?.name || 'Custom ad campaign',
       selectedProviders,
       platforms: selectedProviders,
+      globalLandingPageUrl: input.globalLandingPageUrl,
+      providerLandingPageUrls: input.providerLandingPageUrls,
       walletCurrency: 'NGN',
       targetAudience: cleanText(input.targetAudience || input.adDetails?.audience, 500),
       targetLocation: {
@@ -790,6 +794,8 @@ export const createPendingAdCampaign = async (input: {
     endDate?: string;
     adDescription?: string;
   };
+  globalLandingPageUrl?: string;
+  providerLandingPageUrls?: Record<string, string>;
 }) => createManagedCampaign({
   userId: input.userId,
   productId: input.productId,
@@ -800,6 +806,8 @@ export const createPendingAdCampaign = async (input: {
   creativeNotes: input.adDetails?.brief,
   targetAudience: input.adDetails?.audience,
   keywords: input.adDetails?.keywords,
+  globalLandingPageUrl: input.globalLandingPageUrl,
+  providerLandingPageUrls: input.providerLandingPageUrls,
 });
 
 export const repairOrphanCampaignReservations = async (userId?: string | Types.ObjectId) => {
