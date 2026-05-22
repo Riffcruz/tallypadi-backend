@@ -408,7 +408,28 @@ export const syncProviderCampaignMetricsFromProvider = async (providerCampaignId
         provider.cpc = provider.clicks > 0 ? provider.spentWalletMinor / provider.clicks : 0;
         provider.providerError = null;
         provider.lastSyncedAt = new Date();
+        
+        const foundPreview = rows.find(r => r.adPreviewUrl);
+        if (foundPreview?.adPreviewUrl) {
+           provider.adPreviewUrl = foundPreview.adPreviewUrl;
+        }
+
         await provider.save({ session });
+        
+        // Sync to parent AdCampaign
+        if (provider.adPreviewUrl) {
+           const campaignDoc = await AdCampaign.findById(provider.campaign).session(session);
+           if (campaignDoc) {
+              const existingIdx = campaignDoc.previewUrls?.findIndex(p => p.provider === provider.provider);
+              if (existingIdx !== undefined && existingIdx >= 0 && campaignDoc.previewUrls) {
+                 campaignDoc.previewUrls[existingIdx].url = provider.adPreviewUrl;
+              } else {
+                 campaignDoc.previewUrls = campaignDoc.previewUrls || [];
+                 campaignDoc.previewUrls.push({ provider: provider.provider, url: provider.adPreviewUrl });
+              }
+              await campaignDoc.save({ session });
+           }
+        }
 
         const providers = await ProviderCampaign.find({ campaignRun: provider.campaignRun }).session(session);
         const run = await CampaignRun.findById(provider.campaignRun).session(session);

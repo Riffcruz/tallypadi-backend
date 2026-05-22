@@ -31,6 +31,7 @@ export interface IAdCampaign extends Document {
   merchantConsentVersion?: string | null;
   adminNotes?: string | null;
   rejectionReason?: string | null;
+  previewUrls?: { provider: string; url: string }[];
   version: number;
 
   // Legacy fields kept so old records and existing serializers do not explode during rollout.
@@ -133,6 +134,12 @@ const adCampaignSchema = new Schema<IAdCampaign>(
     merchantConsentVersion: { type: String, default: null },
     adminNotes: { type: String, default: null, trim: true, maxlength: 2000 },
     rejectionReason: { type: String, default: null, trim: true, maxlength: 500 },
+    previewUrls: [
+      {
+        provider: { type: String, required: true },
+        url: { type: String, required: true },
+      },
+    ],
     version: { type: Number, default: 0 },
 
     platforms: [{ type: String, enum: [...AD_PROVIDERS, ...legacyPlatformValues] }],

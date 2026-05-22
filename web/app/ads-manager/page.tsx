@@ -1003,14 +1003,29 @@ function AdsManagerContent() {
                         )}
 
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between border-t border-slate-100 pt-3 mt-4 gap-2">
-                          <button
-                            type="button"
-                            onClick={() => handleExpandCampaign(campaign.id)}
-                            className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 hover:text-emerald-700 transition-colors self-start"
-                          >
-                            <TrendingUp size={14} />
-                            {expandedCampaignId === campaign.id ? 'Hide Performance Report' : 'View Performance Report'}
-                          </button>
+                          <div className="flex items-center gap-4">
+                            <button
+                              type="button"
+                              onClick={() => handleExpandCampaign(campaign.id)}
+                              className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 hover:text-emerald-700 transition-colors self-start"
+                            >
+                              <TrendingUp size={14} />
+                              {expandedCampaignId === campaign.id ? 'Hide Performance Report' : 'View Performance Report'}
+                            </button>
+                            
+                            {(campaign as any).previewUrls?.length > 0 && (
+                              <a
+                                href={(campaign as any).previewUrls[0].url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-1.5 text-xs font-bold text-blue-600 hover:text-blue-700 transition-colors self-start"
+                                title="View your live ad on the provider platform"
+                              >
+                                <ExternalLink size={14} />
+                                View Live Ad
+                              </a>
+                            )}
+                          </div>
 
                           {expandedCampaignId === campaign.id && (
                             <label className="flex items-center gap-2 text-xs font-medium text-slate-500 cursor-pointer select-none">

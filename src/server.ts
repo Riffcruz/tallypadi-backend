@@ -33,6 +33,7 @@ import hqRouter from './routes/hq.routes';
 import invoiceRouter from './routes/invoice.routes';
 import supportRouter from './routes/support.routes';
 import supportWebhookRouter from './routes/support.webhook.routes';
+import { adsWebhookRoutes } from './routes/ads.webhook.routes';
 import expenseRouter from './routes/expense.routes';
 import draftRouter from './routes/draft.routes';
 import customerRouter from './routes/customer.routes';
@@ -283,6 +284,7 @@ app.use(
 
 app.use('/api/webhook', webhookRoutes);
 app.use('/api/support/webhook', supportWebhookRouter); // ✅ New Support Webhook
+app.use('/api/webhook/ads', adsWebhookRoutes);
 
 // ==========================================
 // 🧼 SECURITY SANITIZATION

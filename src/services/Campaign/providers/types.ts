@@ -41,6 +41,7 @@ export interface ProviderMetricResult {
   allConversions?: number;
   spendMinor: number;
   currency: string;
+  adPreviewUrl?: string | null;
   raw?: Record<string, unknown>;
 }
 

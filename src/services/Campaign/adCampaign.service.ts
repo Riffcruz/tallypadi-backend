@@ -1612,7 +1612,7 @@ export const updateProviderCampaignMetrics = async (input: {
   return provider;
 };
 
-export const refundProviderCampaignBalance = async (providerCampaignId: string, adminId: string) => {
+export const refundProviderCampaignBalance = async (providerCampaignId: string, adminId?: string | null) => {
   const session = await mongoose.startSession();
   let provider: any = null;
   let refundMinor = 0;
@@ -1646,7 +1646,7 @@ export const refundProviderCampaignBalance = async (providerCampaignId: string, 
       }
 
       await audit({
-        adminId,
+        adminId: adminId ? adminId : null,
         action: 'Provider allocation refunded',
         campaignId: provider.campaign,
         campaignRunId: provider.campaignRun,
@@ -1659,6 +1659,59 @@ export const refundProviderCampaignBalance = async (providerCampaignId: string, 
     await session.endSession();
   }
   if (!provider) throw new AdCampaignError('Provider campaign not found', 404);
+  return provider;
+};
+
+export const processAutomatedAdRejection = async (providerCampaignId: string, reason: string) => {
+  const provider = await ProviderCampaign.findById(toObjectId(providerCampaignId))
+    .populate('campaign')
+    .populate('campaignRun');
+    
+  if (!provider) throw new AdCampaignError('Provider campaign not found', 404);
+  if (provider.status === 'REJECTED_BY_PROVIDER') return provider;
+
+  const campaign = provider.campaign as any;
+
+  // 1. Mark as rejected by provider
+  provider.status = 'REJECTED_BY_PROVIDER';
+  provider.rejectionReason = cleanText(reason, 1000);
+  provider.rejectedAt = new Date();
+  provider.providerReviewStatus = 'REJECTED';
+  provider.lastSyncedAt = new Date();
+  await provider.save();
+
+  // 2. Refund wallet allocation automatically (adminId = null)
+  if (provider.remainingBudgetWalletMinor > 0 && provider.refundStatus !== 'REFUNDED') {
+    try {
+      await refundProviderCampaignBalance(providerCampaignId, null);
+    } catch (error) {
+      console.error(`Automated refund failed for provider campaign ${providerCampaignId}:`, error);
+    }
+  }
+
+  // 3. Update aggregate campaign status
+  const providers = await ProviderCampaign.find({ campaignRun: provider.campaignRun });
+  const campaignInfo = await AdCampaign.findById(provider.campaign);
+  if (campaignInfo) {
+    const nextStatus = calculateAggregateStatus(campaignInfo.status, providers);
+    await Promise.all([
+      AdCampaign.updateOne({ _id: campaignInfo._id }, { $set: { status: nextStatus } }),
+      CampaignRun.updateOne({ _id: provider.campaignRun }, { $set: { status: nextStatus } }),
+    ]);
+  }
+
+  // 4. Record Activity Log
+  await activityService.recordActivitySafely({
+    user: provider.user,
+    type: 'AD_BOOST',
+    title: 'Ad Campaign Rejected by Provider',
+    message: `Your ad campaign "${campaign?.name || 'Campaign'}" was rejected by ${provider.provider}. Your remaining ad budget has been refunded to your wallet.`,
+    metadata: {
+      providerCampaignId: String(provider._id),
+      reason,
+    }
+  });
+
   return provider;
 };
 

@@ -32,6 +32,7 @@ export interface IProviderCampaign extends Document {
   externalAdSetId?: string | null;
   externalAdGroupId?: string | null;
   externalAdId?: string | null;
+  adPreviewUrl?: string | null;
   providerReviewStatus?: string | null;
   rejectionReason?: string | null;
   rejectionPolicyTopics?: string[];
@@ -94,6 +95,7 @@ const providerCampaignSchema = new Schema<IProviderCampaign>(
     externalAdSetId: { type: String, default: null, trim: true },
     externalAdGroupId: { type: String, default: null, trim: true },
     externalAdId: { type: String, default: null, trim: true },
+    adPreviewUrl: { type: String, default: null, trim: true },
     providerReviewStatus: { type: String, default: null, trim: true },
     rejectionReason: { type: String, default: null, trim: true, maxlength: 1000 },
     rejectionPolicyTopics: [{ type: String, trim: true, maxlength: 120 }],

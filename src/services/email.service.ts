@@ -230,3 +230,55 @@ export const sendSellerReverificationRequestedEmail = async (email: string, full
 
     return true;
 };
+
+export const sendAdRejectionAdminNotification = async ({
+    campaignId,
+    campaignName,
+    provider,
+    reason,
+}: {
+    campaignId: string;
+    campaignName: string;
+    provider: string;
+    reason: string;
+}) => {
+    const { transporter, smtpConfig } = await createSmtpTransport();
+    
+    // We can pull the admin email from env or fall back to the from address
+    const adminEmail = String(process.env.ADMIN_ALERT_EMAIL || smtpConfig.fromAddress || smtpConfig.user || '').trim();
+    if (!adminEmail) {
+        console.warn('Ad rejection admin email is not configured, skipping notification.');
+        return false;
+    }
+
+    const safe = {
+        campaignId: escapeHtml(campaignId),
+        campaignName: escapeHtml(campaignName),
+        provider: escapeHtml(provider),
+        reason: escapeHtml(reason),
+    };
+
+    await transporter.sendMail({
+        from: `TallyPadi <${smtpConfig.fromAddress || smtpConfig.user}>`,
+        to: adminEmail,
+        subject: `Ad Campaign Rejected by ${safe.provider}`,
+        html: `
+            <div style="font-family: Arial, sans-serif; max-width: 640px; margin: 0 auto; color: #0f172a;">
+                <h2 style="margin: 0 0 12px; color: #dc2626;">Ad Campaign Rejected</h2>
+                <p style="color: #475569;">An automated ad campaign was rejected by the provider's reviewers.</p>
+                <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
+                    <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Campaign ID</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; font-weight: 700;">${safe.campaignId}</td></tr>
+                    <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Campaign Name</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; font-weight: 700;">${safe.campaignName}</td></tr>
+                    <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Provider</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">${safe.provider}</td></tr>
+                </table>
+                <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 10px; padding: 14px; color: #991b1b; margin: 16px 0;">
+                    <strong>Reason given:</strong><br/>
+                    ${safe.reason}
+                </div>
+                <p style="margin-top: 20px; color: #64748b; font-size: 13px;">The system has automatically updated the campaign status and refunded the merchant's wallet.</p>
+            </div>
+        `,
+    });
+
+    return true;
+};

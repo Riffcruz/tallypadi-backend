@@ -29,6 +29,15 @@ const postJson = async <T = any>(path: string, body: Record<string, unknown>): P
   return response.data;
 };
 
+const getJson = async <T = any>(path: string, params: Record<string, unknown>): Promise<T> => {
+  const response = await axios.get<T>(endpoint(path), {
+    params,
+    timeout: axiosTimeout(),
+    headers: tiktokHeaders(),
+  });
+  return response.data;
+};
+
 const assertTikTokOk = (response: any, action: string) => {
   const code = response?.code;
   if (code !== 0 && code !== '0') {
@@ -156,7 +165,25 @@ export const tiktokAdsProvider: AdsProviderAdapter = {
     assertTikTokOk(result, 'TikTok reporting');
 
     const rows = Array.isArray(result?.data?.list) ? result.data.list : [];
-    return rows.map((row: any) => {
+    
+    let adPreviewUrl: string | null = null;
+    if (context.providerCampaign.externalAdId && rows.length > 0) {
+      try {
+        const previewReq = await getJson<any>('/ad/get/', {
+          advertiser_id: env.ads.tiktok.advertiserId,
+          filtering: JSON.stringify({ ad_ids: [context.providerCampaign.externalAdId] })
+        });
+        const adInfo = previewReq?.data?.list?.[0];
+        // Sometimes TikTok returns an ad preview link in ad_text or deep_link, or we could construct a pseudo link
+        // We'll capture it if it exists or fallback
+        if (adInfo?.ad_format === 'URL' || adInfo?.ad_url) {
+          adPreviewUrl = adInfo.ad_url || adInfo.video_url;
+        }
+      } catch (error) {
+         console.warn(`Failed to fetch TikTok ad preview for ${context.providerCampaign.externalAdId}:`, error);
+      }
+    }
+    return rows.map((row: any, index: number) => {
       const metrics = row?.metrics || {};
       const dimensions = row?.dimensions || {};
       const impressions = Number(metrics.impressions || 0);
@@ -171,6 +198,7 @@ export const tiktokAdsProvider: AdsProviderAdapter = {
         allConversions: conversions,
         spendMinor,
         currency: context.providerCampaign.walletCurrency || 'NGN',
+        adPreviewUrl: index === 0 && adPreviewUrl ? adPreviewUrl : undefined,
         raw: row,
       };
     });

@@ -151,7 +151,22 @@ export const metaAdsProvider: AdsProviderAdapter = {
     });
 
     const rows = Array.isArray(result?.data) ? result.data : [];
-    return rows.map((row: any) => {
+    
+    let adPreviewUrl: string | null = null;
+    if (context.providerCampaign.externalAdId && rows.length > 0) {
+      try {
+        const previewReq = await metaGet<any>(`/${context.providerCampaign.externalAdId}/previews`, {
+          ad_format: 'SHAREABLE_LINK',
+        });
+        if (previewReq?.data?.[0]?.body) {
+           adPreviewUrl = previewReq.data[0].body; // SHAREABLE_LINK usually returns a direct URL in the body
+        }
+      } catch (error) {
+        console.warn(`Failed to fetch Meta ad preview for ${context.providerCampaign.externalAdId}:`, error);
+      }
+    }
+
+    return rows.map((row: any, index: number) => {
       const impressions = Number(row?.impressions || 0);
       const clicks = Number(row?.clicks || 0);
       const spendMinor = Math.max(0, Math.round(Number(row?.spend || 0) * 100));
@@ -166,6 +181,7 @@ export const metaAdsProvider: AdsProviderAdapter = {
         allConversions: conversions,
         spendMinor,
         currency: context.providerCampaign.walletCurrency || 'NGN',
+        adPreviewUrl: index === 0 && adPreviewUrl ? adPreviewUrl : undefined,
         raw: row,
       };
     });
