@@ -1020,7 +1020,7 @@ function AdsManagerContent() {
                                 onChange={(e) => setSimulationMode((prev) => ({ ...prev, [campaign.id]: e.target.checked }))}
                                 className="h-3.5 w-3.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500/20"
                               />
-                              Simulate Live TikTok Metrics (Demo)
+                              Simulate Live {(campaign.platforms && campaign.platforms.length > 0) ? campaign.platforms.map(p => platformLabel(p).replace(' Ads', '').replace('TallyPadi Marketplace Boost', 'TallyPadi')).join(' & ') : 'TikTok'} Metrics (Demo)
                             </label>
                           )}
                         </div>
@@ -1292,6 +1292,10 @@ function CampaignReportPanel({
 }) {
   const [activeTab, setActiveTab] = useState<'impressions' | 'clicks' | 'conversions' | 'spend'>('impressions');
 
+  const platformNames = (campaign.platforms && campaign.platforms.length > 0) 
+    ? campaign.platforms.map(p => platformLabel(p).replace(' Ads', '').replace('TallyPadi Marketplace Boost', 'TallyPadi')).join(' & ')
+    : 'Platform';
+
   const activeMetrics = useMemo(() => {
     if (isSimulated) {
       const dates = Array.from({ length: 7 }, (_, i) => {
@@ -1362,7 +1366,7 @@ function CampaignReportPanel({
         <AlertCircle className="mx-auto mb-2 text-slate-400" size={24} />
         <p className="text-xs font-bold text-slate-700">No Metrics Found</p>
         <p className="text-[11px] text-slate-500 mt-1 max-w-sm mx-auto leading-relaxed">
-          TikTok has not reported campaign activity for this reference yet. Check the checkbox on the right to simulate live metrics.
+          {platformNames} has not reported campaign activity for this reference yet. Check the checkbox on the right to simulate live metrics.
         </p>
       </div>
     );
@@ -1419,7 +1423,7 @@ function CampaignReportPanel({
     <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50/50 p-4 space-y-4 animate-in slide-in-from-top-2 duration-300">
       <div className="flex items-center justify-between">
         <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded">
-          <Globe size={11} /> TikTok Live API Reports
+          <Globe size={11} /> {platformNames} Live API Reports
         </span>
         <span className="text-[10px] text-slate-400 font-bold">
           7-Day Trend Chart
