@@ -968,6 +968,14 @@ export const handleMessageLogic = async (
     const rawText = cleanTextForSecurity(text);
     const btn = parseBtnText(rawText);
 
+    // ✅ Update user's lastSeen immediately upon any WhatsApp interaction
+    const cleanPhone = from.replace(/\+/g, '');
+    const uniqueVariants = [...new Set([from, cleanPhone, `+${cleanPhone}`])];
+    await User.updateOne(
+      { phoneNumber: { $in: uniqueVariants } },
+      { $set: { lastSeen: new Date() } }
+    ).catch(err => console.error('Failed to update lastSeen in handleMessageLogic:', err));
+
     // =====================================================
     // 🕵️ SUPPORT AGENT INTERCEPT (High Priority)
     // Check if sender is an Agent operating via WhatsApp
@@ -1082,6 +1090,7 @@ export const handleMessageLogic = async (
         } else {
              actor.messageHistory = currentHist;
         }
+        actor.lastSeen = new Date();
         await actor.save();
     }
 
@@ -1103,6 +1112,7 @@ export const handleMessageLogic = async (
 
         planType: 'TYCOON',
         messageHistory: [rawText],
+        lastSeen: new Date(),
         settings: {
           dailySummaryEnabled: false,
           closingTime: '20:00',
