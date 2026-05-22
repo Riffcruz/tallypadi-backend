@@ -420,6 +420,10 @@ interface CreateManagedCampaignInput {
     brief?: string;
     audience?: string;
     keywords?: string[];
+    budgetType?: 'DAILY' | 'TOTAL';
+    startDate?: string;
+    endDate?: string;
+    adDescription?: string;
   };
   targetAudience?: string;
   targetLocation?: {
@@ -547,6 +551,10 @@ export const createManagedCampaign = async (input: CreateManagedCampaignInput) =
         brief: cleanText(input.creativeNotes || input.adDetails?.brief, 1000),
         audience: cleanText(input.targetAudience || input.adDetails?.audience, 300),
         keywords: cleanKeywords(input.keywords || input.adDetails?.keywords),
+        budgetType: input.adDetails?.budgetType || 'TOTAL',
+        startDate: input.adDetails?.startDate || '',
+        endDate: input.adDetails?.endDate || '',
+        adDescription: cleanText(input.adDetails?.adDescription || '', 1000),
       },
     }], createOptions);
 
@@ -777,6 +785,10 @@ export const createPendingAdCampaign = async (input: {
     brief?: string;
     audience?: string;
     keywords?: string[];
+    budgetType?: 'DAILY' | 'TOTAL';
+    startDate?: string;
+    endDate?: string;
+    adDescription?: string;
   };
 }) => createManagedCampaign({
   userId: input.userId,

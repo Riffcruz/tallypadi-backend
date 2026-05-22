@@ -6,7 +6,8 @@ export function setCookie(name: string, value: string, days: number = 7) {
     date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
     expires = "; expires=" + date.toUTCString();
   }
-  document.cookie = name + "=" + (value || "") + expires + "; path=/; Secure; SameSite=Strict";
+  const secure = typeof window !== 'undefined' && window.location.protocol === 'https:' ? '; Secure' : '';
+  document.cookie = name + "=" + (value || "") + expires + "; path=/; SameSite=Lax" + secure;
 }
 
 export function getCookie(name: string): string | null {

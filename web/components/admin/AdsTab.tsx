@@ -85,10 +85,19 @@ interface AdminAdCampaign {
     price?: number;
     category?: string | null;
   };
+  targetLocation?: {
+    country?: string;
+    state?: string;
+    city?: string;
+  };
   adDetails?: {
     brief?: string;
     audience?: string;
     keywords?: string[];
+    budgetType?: 'DAILY' | 'TOTAL';
+    startDate?: string;
+    endDate?: string;
+    adDescription?: string;
   };
   seo?: {
     title?: string;
@@ -378,19 +387,68 @@ export default function AdsTab({ adminToken }: { adminToken: string }) {
                         </p>
                       )}
 
-                      {(campaign.adDetails?.brief || (campaign.adDetails?.keywords || []).length > 0) && (
-                        <div className="mt-3 rounded-lg border border-blue-500/20 bg-blue-500/10 px-3 py-3">
-                          <p className="text-xs font-bold uppercase tracking-wider text-blue-300">Submitted ad details</p>
-                          {campaign.adDetails?.brief && (
-                            <p className="mt-2 text-sm leading-6 text-blue-100">{campaign.adDetails.brief}</p>
+                      {(campaign.adDetails?.brief ||
+                        (campaign.adDetails?.keywords || []).length > 0 ||
+                        campaign.adDetails?.adDescription ||
+                        campaign.targetLocation ||
+                        campaign.adDetails?.budgetType ||
+                        campaign.adDetails?.startDate) && (
+                        <div className="mt-3 rounded-lg border border-blue-500/20 bg-blue-500/10 px-4 py-4 space-y-3">
+                          <div>
+                            <p className="text-xs font-bold uppercase tracking-wider text-blue-300">Submitted ad details</p>
+                            {campaign.adDetails?.brief && (
+                              <p className="mt-2 text-sm leading-6 text-blue-100">{campaign.adDetails.brief}</p>
+                            )}
+                            {(campaign.adDetails?.keywords || []).length > 0 && (
+                              <div className="mt-2 flex flex-wrap gap-1.5">
+                                {campaign.adDetails?.keywords?.map((keyword) => (
+                                  <span key={keyword} className="rounded-full bg-slate-950/60 px-2.5 py-1 text-xs font-bold text-blue-100">
+                                    {keyword}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Target Location */}
+                          {campaign.targetLocation && (campaign.targetLocation.city || campaign.targetLocation.state || campaign.targetLocation.country) && (
+                            <div className="border-t border-blue-500/20 pt-2.5">
+                              <p className="text-[10px] font-bold uppercase tracking-wider text-blue-300/80">Target Location</p>
+                              <p className="mt-1 text-xs text-blue-100">
+                                {[campaign.targetLocation.city, campaign.targetLocation.state, campaign.targetLocation.country].filter(Boolean).join(', ') || 'Not set'}
+                              </p>
+                            </div>
                           )}
-                          {(campaign.adDetails?.keywords || []).length > 0 && (
-                            <div className="mt-2 flex flex-wrap gap-2">
-                              {campaign.adDetails?.keywords?.map((keyword) => (
-                                <span key={keyword} className="rounded-full bg-slate-950/60 px-2.5 py-1 text-xs font-bold text-blue-100">
-                                  {keyword}
-                                </span>
-                              ))}
+
+                          {/* Budget & Schedule */}
+                          {(campaign.adDetails?.budgetType || campaign.adDetails?.startDate || campaign.adDetails?.endDate) && (
+                            <div className="border-t border-blue-500/20 pt-2.5 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              {campaign.adDetails?.budgetType && (
+                                <div>
+                                  <p className="text-[10px] font-bold uppercase tracking-wider text-blue-300/80">Budget Type</p>
+                                  <p className="mt-1 text-xs text-blue-100 font-semibold">
+                                    {campaign.adDetails.budgetType === 'DAILY' ? 'Daily Budget' : 'Total Budget'}
+                                  </p>
+                                </div>
+                              )}
+                              {(campaign.adDetails?.startDate || campaign.adDetails?.endDate) && (
+                                <div>
+                                  <p className="text-[10px] font-bold uppercase tracking-wider text-blue-300/80">Schedule Run</p>
+                                  <p className="mt-1 text-xs text-blue-100">
+                                    {campaign.adDetails?.startDate ? new Date(campaign.adDetails.startDate).toLocaleDateString('en-NG', { dateStyle: 'medium' }) : 'Starts immediately'}
+                                    {' - '}
+                                    {campaign.adDetails?.endDate ? new Date(campaign.adDetails.endDate).toLocaleDateString('en-NG', { dateStyle: 'medium' }) : 'Runs indefinitely'}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Creative Ad Copy / Description */}
+                          {campaign.adDetails?.adDescription && (
+                            <div className="border-t border-blue-500/20 pt-2.5">
+                              <p className="text-[10px] font-bold uppercase tracking-wider text-blue-300/80">Creative Copy (Description)</p>
+                              <p className="mt-1 text-xs text-blue-100 whitespace-pre-wrap leading-relaxed">{campaign.adDetails.adDescription}</p>
                             </div>
                           )}
                         </div>

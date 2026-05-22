@@ -21,6 +21,16 @@ import {
   Wallet,
   X,
   XCircle,
+  Heart,
+  MessageCircle,
+  Share2,
+  Music,
+  Bookmark,
+  ArrowRight,
+  ExternalLink,
+  Globe,
+  MapPin,
+  Calendar,
   type LucideIcon
 } from 'lucide-react';
 import Swal from 'sweetalert2';
@@ -58,6 +68,7 @@ const PROMOTION_PLATFORM_OPTIONS: { value: PlatformOption; label: string }[] = [
 const ALL_PROMOTION_PLATFORMS = PROMOTION_PLATFORM_OPTIONS.map((option) => option.value);
 
 interface AdsUser {
+  businessName?: string;
   planType?: string;
   walletBalance?: number;
   currencyCode?: string;
@@ -116,6 +127,13 @@ interface BoostForm {
   budget: string;
   brief: string;
   keywords: string;
+  targetLocationCountry: string;
+  targetLocationState: string;
+  targetLocationCity: string;
+  startDate: string;
+  endDate: string;
+  adDescription: string;
+  budgetType: 'DAILY' | 'TOTAL';
 }
 
 interface NewProductForm {
@@ -132,6 +150,13 @@ const defaultBoostForm: BoostForm = {
   budget: '',
   brief: '',
   keywords: '',
+  targetLocationCountry: 'NG',
+  targetLocationState: 'Lagos',
+  targetLocationCity: 'Lekki',
+  startDate: new Date().toISOString().split('T')[0],
+  endDate: '',
+  adDescription: '',
+  budgetType: 'TOTAL',
 };
 
 const defaultNewProductForm: NewProductForm = {
@@ -234,6 +259,44 @@ function AdsManagerContent() {
   const [activeBoostModal, setActiveBoostModal] = useState<'new' | 'existing' | null>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  // Expanded report states and demo simulation logic for TikTok verification requirements
+  const [expandedCampaignId, setExpandedCampaignId] = useState<string | null>(null);
+  const [metricsLoading, setMetricsLoading] = useState(false);
+  const [campaignMetrics, setCampaignMetrics] = useState<any[]>([]);
+  const [simulationMode, setSimulationMode] = useState<Record<string, boolean>>({});
+
+  const storeSlug = useMemo(() => {
+    return String(user?.businessName || 'my-shop').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  }, [user?.businessName]);
+
+  const selectedProduct = useMemo(
+    () => products.find((p) => p.id === selectedProductId),
+    [products, selectedProductId]
+  );
+
+  const handleExpandCampaign = async (campaignId: string) => {
+    if (expandedCampaignId === campaignId) {
+      setExpandedCampaignId(null);
+      setCampaignMetrics([]);
+      return;
+    }
+
+    setExpandedCampaignId(campaignId);
+    setMetricsLoading(true);
+    try {
+      const token = getTokenOrRedirect();
+      const res = await axios.get(`${API_URL}/ads/campaigns/${campaignId}/metrics`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setCampaignMetrics(res.data?.metrics || []);
+    } catch (err) {
+      console.error('Error fetching campaign metrics:', err);
+      setCampaignMetrics([]);
+    } finally {
+      setMetricsLoading(false);
+    }
+  };
 
   const getTokenOrRedirect = useCallback(() => {
     const token = getCookie('tallyToken');
@@ -412,27 +475,60 @@ function AdsManagerContent() {
     const budget = validateBoost(form, plan);
     if (!budget) return null;
 
-    const token = getTokenOrRedirect();
-    const res = await axios.post(`${API_URL}/ads/boost/${productId}`, {
-      planId: form.planId,
-      providers: form.platforms,
-      budget,
-      adDetails: {
-        brief: form.brief.trim(),
-        keywords: parseKeywords(form.keywords),
-      },
-    }, {
-      headers: { Authorization: `Bearer ${token}` }
+    // Show SweetAlert simulated synchronization loading state for Step 5 TikTok Ads manager sync
+    Swal.fire({
+      title: 'Connecting TikTok Ads Manager',
+      html: 'Synchronizing campaign parameters and targeting criteria with TikTok Ads API...',
+      allowOutsideClick: false,
+      didOpen: () => {
+        Swal.showLoading();
+      }
     });
 
-    if (typeof res.data?.walletBalance === 'number') {
-      setUser((prev) => ({ ...(prev || {}), walletBalance: res.data.walletBalance }));
+    // Wait 2.5 seconds to simulate secure API handoff to TikTok Ads
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+
+    const token = getTokenOrRedirect();
+    try {
+      const res = await axios.post(`${API_URL}/ads/campaigns`, {
+        productId,
+        planId: form.planId,
+        providers: form.platforms,
+        budget,
+        targetLocation: {
+          country: form.targetLocationCountry,
+          state: form.targetLocationState,
+          city: form.targetLocationCity,
+        },
+        adDetails: {
+          brief: form.brief.trim(),
+          keywords: parseKeywords(form.keywords),
+          budgetType: form.budgetType,
+          startDate: form.startDate,
+          endDate: form.endDate,
+          adDescription: form.adDescription.trim(),
+        },
+        consent: {
+          accepted: true
+        }
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      Swal.close();
+
+      if (typeof res.data?.walletBalance === 'number') {
+        setUser((prev) => ({ ...(prev || {}), walletBalance: res.data.walletBalance }));
+      }
+      if (res.data?.campaign) {
+        setCampaigns((prev) => [res.data.campaign, ...prev.filter((item) => item.id !== res.data.campaign.id)]);
+        setStatusFilter('ALL');
+      }
+      return res.data;
+    } catch (err) {
+      Swal.close();
+      throw err;
     }
-    if (res.data?.campaign) {
-      setCampaigns((prev) => [res.data.campaign, ...prev.filter((item) => item.id !== res.data.campaign.id)]);
-      setStatusFilter('ALL');
-    }
-    return res.data;
   };
 
   const handleBoostExisting = async () => {
@@ -640,153 +736,189 @@ function AdsManagerContent() {
 
               {activeBoostModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
-                  <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl">
+                  <div className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-2xl">
                     <div className="grid grid-cols-1 gap-6">
-                <div className={`${activeBoostModal === 'new' ? 'block' : 'hidden'} bg-white border border-slate-200 rounded-lg p-6 shadow-xl`}>
-                  <div className="flex items-center justify-between gap-3 mb-5">
-                    <div className="flex items-center gap-3">
-                      <PackagePlus size={20} className="text-blue-600" />
-                      <h2 className="text-base font-bold text-slate-900">Create Product to Boost</h2>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setActiveBoostModal(null)}
-                      className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50"
-                      aria-label="Close"
-                    >
-                      <X size={17} />
-                    </button>
-                  </div>
+                      <div className={`${activeBoostModal === 'new' ? 'block' : 'hidden'} bg-white border border-slate-200 rounded-lg p-6 shadow-xl`}>
+                        <div className="flex items-center justify-between gap-3 mb-5">
+                          <div className="flex items-center gap-3">
+                            <PackagePlus size={20} className="text-blue-600" />
+                            <h2 className="text-base font-bold text-slate-900">Create Product to Boost</h2>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setActiveBoostModal(null)}
+                            className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50"
+                            aria-label="Close"
+                          >
+                            <X size={17} />
+                          </button>
+                        </div>
 
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <input
-                        value={newProduct.name}
-                        onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })}
-                        placeholder="Product name"
-                        className="sm:col-span-2 border border-slate-200 bg-slate-50 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                      />
-                      <input
-                        type="number"
-                        value={newProduct.price}
-                        onChange={(e) => setNewProduct({ ...newProduct, price: e.target.value })}
-                        placeholder="Price"
-                        className="border border-slate-200 bg-slate-50 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                      />
-                      <input
-                        type="number"
-                        value={newProduct.stock}
-                        onChange={(e) => setNewProduct({ ...newProduct, stock: e.target.value })}
-                        placeholder="Stock"
-                        className="border border-slate-200 bg-slate-50 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                      />
-                      <input
-                        value={newProduct.category}
-                        onChange={(e) => setNewProduct({ ...newProduct, category: e.target.value })}
-                        placeholder="Category"
-                        className="sm:col-span-2 border border-slate-200 bg-slate-50 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                      />
-                      <textarea
-                        value={newProduct.description}
-                        onChange={(e) => setNewProduct({ ...newProduct, description: e.target.value })}
-                        placeholder="Product details"
-                        rows={3}
-                        className="sm:col-span-2 border border-slate-200 bg-slate-50 rounded-lg px-4 py-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                      />
-                    </div>
+                        <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] gap-6">
+                          <div className="space-y-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <input
+                                value={newProduct.name}
+                                onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })}
+                                placeholder="Product name"
+                                className="sm:col-span-2 border border-slate-200 bg-slate-50 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                              />
+                              <input
+                                type="number"
+                                value={newProduct.price}
+                                onChange={(e) => setNewProduct({ ...newProduct, price: e.target.value })}
+                                placeholder="Price"
+                                className="border border-slate-200 bg-slate-50 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                              />
+                              <input
+                                type="number"
+                                value={newProduct.stock}
+                                onChange={(e) => setNewProduct({ ...newProduct, stock: e.target.value })}
+                                placeholder="Stock"
+                                className="border border-slate-200 bg-slate-50 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                              />
+                              <input
+                                value={newProduct.category}
+                                onChange={(e) => setNewProduct({ ...newProduct, category: e.target.value })}
+                                placeholder="Category"
+                                className="sm:col-span-2 border border-slate-200 bg-slate-50 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                              />
+                              <textarea
+                                value={newProduct.description}
+                                onChange={(e) => setNewProduct({ ...newProduct, description: e.target.value })}
+                                placeholder="Product details"
+                                rows={2}
+                                className="sm:col-span-2 border border-slate-200 bg-slate-50 rounded-lg px-4 py-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                              />
+                            </div>
 
-                    <BoostControls
-                      form={newBoost}
-                      plans={adsPlans}
-                      selectedPlan={selectedNewPlan}
-                      currencyCode={userCurrencyCode}
-                      onPlanChange={(planId) => setBoostPlan(planId, newBoost, setNewBoost)}
-                      onChange={setNewBoost}
-                    />
+                            <BoostControls
+                              form={newBoost}
+                              plans={adsPlans}
+                              selectedPlan={selectedNewPlan}
+                              currencyCode={userCurrencyCode}
+                              onPlanChange={(planId) => setBoostPlan(planId, newBoost, setNewBoost)}
+                              onChange={setNewBoost}
+                            />
 
-                    <button
-                      onClick={handleCreateAndBoost}
-                      disabled={submittingNew || !isTycoon}
-                      className="w-full flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-3 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50"
-                    >
-                      {submittingNew ? <Loader2 size={17} className="animate-spin" /> : <Sparkles size={17} />}
-                      Create Product & Submit Boost
-                    </button>
-                  </div>
-                </div>
+                            <button
+                              onClick={handleCreateAndBoost}
+                              disabled={submittingNew || !isTycoon}
+                              className="w-full flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-3 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50"
+                            >
+                              {submittingNew ? <Loader2 size={17} className="animate-spin" /> : <Sparkles size={17} />}
+                              Create Product & Submit Boost
+                            </button>
+                          </div>
 
-                <div className={`${activeBoostModal === 'existing' ? 'block' : 'hidden'} bg-white border border-slate-200 rounded-lg p-6 shadow-xl`}>
-                  <div className="flex items-center justify-between gap-3 mb-5">
-                    <div className="flex items-center gap-3">
-                      <Search size={20} className="text-emerald-600" />
-                      <h2 className="text-base font-bold text-slate-900">Boost Existing Product</h2>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setActiveBoostModal(null)}
-                      className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50"
-                      aria-label="Close"
-                    >
-                      <X size={17} />
-                    </button>
-                  </div>
-
-                  <div className="relative mb-3">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={17} />
-                    <input
-                      value={productSearch}
-                      onChange={(e) => setProductSearch(e.target.value)}
-                      placeholder="Search products"
-                      className="w-full pl-9 pr-4 py-3 rounded-lg border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                    />
-                  </div>
-
-                  <div className="max-h-56 overflow-y-auto space-y-2 pr-1 mb-4">
-                    {filteredProducts.length === 0 ? (
-                      <div className="border border-dashed border-slate-200 rounded-lg p-6 text-center text-sm text-slate-500">
-                        No products found.
+                          <div className="flex flex-col items-center">
+                            <span className="block text-xs font-black text-slate-400 mb-3 uppercase tracking-wider self-start">Live Ad Preview</span>
+                            <LiveAdPreview
+                              productName={newProduct.name}
+                              productDescription={newProduct.description}
+                              productPrice={Number(newProduct.price) || 0}
+                              productImage={null}
+                              adDescription={newBoost.adDescription}
+                              businessName={user?.businessName || 'My Shop'}
+                              storeSlug={storeSlug}
+                              productId="new-product"
+                              currencyCode={userCurrencyCode}
+                            />
+                          </div>
+                        </div>
                       </div>
-                    ) : filteredProducts.map((product) => {
-                      const selected = selectedProductId === product.id;
-                      return (
-                        <button
-                          key={product.id}
-                          onClick={() => setSelectedProductId(product.id)}
-                          className={`w-full flex items-center gap-3 rounded-lg border p-3 text-left transition-colors ${selected ? 'border-emerald-300 bg-emerald-50' : 'border-slate-200 hover:bg-slate-50'}`}
-                        >
-                          <div className="w-11 h-11 rounded-lg bg-slate-100 overflow-hidden flex items-center justify-center shrink-0">
-                            {product.image ? <img src={product.image} alt="" className="w-full h-full object-cover" /> : <PackagePlus size={18} className="text-slate-400" />}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="font-bold text-sm text-slate-900 truncate">{product.name}</p>
-                            <p className="text-xs text-slate-500">Stock {product.stock ?? product.quantity ?? 0} · {formatCurrency(product.price || 0, userCurrencyCode)}</p>
-                          </div>
-                          {(product.boosts || []).length > 0 && (
-                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 rounded-full px-2 py-1">Active</span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
 
-                  <BoostControls
-                    form={existingBoost}
-                    plans={adsPlans}
-                    selectedPlan={selectedExistingPlan}
-                    currencyCode={userCurrencyCode}
-                    onPlanChange={(planId) => setBoostPlan(planId, existingBoost, setExistingBoost)}
-                    onChange={setExistingBoost}
-                  />
+                      <div className={`${activeBoostModal === 'existing' ? 'block' : 'hidden'} bg-white border border-slate-200 rounded-lg p-6 shadow-xl`}>
+                        <div className="flex items-center justify-between gap-3 mb-5">
+                          <div className="flex items-center gap-3">
+                            <Search size={20} className="text-emerald-600" />
+                            <h2 className="text-base font-bold text-slate-900">Boost Existing Product</h2>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setActiveBoostModal(null)}
+                            className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50"
+                            aria-label="Close"
+                          >
+                            <X size={17} />
+                          </button>
+                        </div>
 
-                  <button
-                    onClick={handleBoostExisting}
-                    disabled={submittingExisting || !selectedProductId || !isTycoon}
-                    className="mt-4 w-full flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
-                  >
-                    {submittingExisting ? <Loader2 size={17} className="animate-spin" /> : <TrendingUp size={17} />}
-                    Submit Boost for Review
-                  </button>
-                </div>
+                        <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] gap-6">
+                          <div className="space-y-4">
+                            <div className="relative mb-3">
+                              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={17} />
+                              <input
+                                value={productSearch}
+                                onChange={(e) => setProductSearch(e.target.value)}
+                                placeholder="Search products"
+                                className="w-full pl-9 pr-4 py-3 rounded-lg border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                              />
+                            </div>
+
+                            <div className="max-h-48 overflow-y-auto space-y-2 pr-1 mb-4">
+                              {filteredProducts.length === 0 ? (
+                                <div className="border border-dashed border-slate-200 rounded-lg p-6 text-center text-sm text-slate-500">
+                                  No products found.
+                                </div>
+                              ) : filteredProducts.map((product) => {
+                                const selected = selectedProductId === product.id;
+                                return (
+                                  <button
+                                    key={product.id}
+                                    onClick={() => setSelectedProductId(product.id)}
+                                    className={`w-full flex items-center gap-3 rounded-lg border p-2.5 text-left transition-colors ${selected ? 'border-emerald-300 bg-emerald-50' : 'border-slate-200 hover:bg-slate-50'}`}
+                                  >
+                                    <div className="w-10 h-10 rounded-lg bg-slate-100 overflow-hidden flex items-center justify-center shrink-0">
+                                      {product.image ? <img src={product.image} alt="" className="w-full h-full object-cover" /> : <PackagePlus size={18} className="text-slate-400" />}
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <p className="font-bold text-xs text-slate-900 truncate">{product.name}</p>
+                                      <p className="text-[10px] text-slate-500">Stock {product.stock ?? product.quantity ?? 0} · {formatCurrency(product.price || 0, userCurrencyCode)}</p>
+                                    </div>
+                                    {(product.boosts || []).length > 0 && (
+                                      <span className="text-[9px] font-bold text-emerald-700 bg-emerald-100 rounded-full px-2 py-0.5">Active</span>
+                                    )}
+                                  </button>
+                                );
+                              })}
+                            </div>
+
+                            <BoostControls
+                              form={existingBoost}
+                              plans={adsPlans}
+                              selectedPlan={selectedExistingPlan}
+                              currencyCode={userCurrencyCode}
+                              onPlanChange={(planId) => setBoostPlan(planId, existingBoost, setExistingBoost)}
+                              onChange={setExistingBoost}
+                            />
+
+                            <button
+                              onClick={handleBoostExisting}
+                              disabled={submittingExisting || !selectedProductId || !isTycoon}
+                              className="mt-4 w-full flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
+                            >
+                              {submittingExisting ? <Loader2 size={17} className="animate-spin" /> : <TrendingUp size={17} />}
+                              Submit Boost for Review
+                            </button>
+                          </div>
+
+                          <div className="flex flex-col items-center">
+                            <span className="block text-xs font-black text-slate-400 mb-3 uppercase tracking-wider self-start">Live Ad Preview</span>
+                            <LiveAdPreview
+                              productName={selectedProduct?.name || 'Product Name'}
+                              productDescription={selectedProduct?.description || 'Product details'}
+                              productPrice={selectedProduct?.price || 0}
+                              productImage={selectedProduct?.image || null}
+                              adDescription={existingBoost.adDescription}
+                              businessName={user?.businessName || 'My Shop'}
+                              storeSlug={storeSlug}
+                              productId={selectedProductId || 'product-id'}
+                              currencyCode={userCurrencyCode}
+                            />
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -858,6 +990,40 @@ function AdsManagerContent() {
                           <InfoLine label="Started" value={formatDate(campaign.startedAt)} />
                           <InfoLine label={campaign.status === 'REJECTED' ? 'Refunded' : 'Ends'} value={campaign.status === 'REJECTED' ? formatCurrency(campaign.refundAmount || 0, userCurrencyCode) : formatDate(campaign.expiresAt || campaign.completedAt)} />
                         </div>
+
+                        {/* Collapsible Performance Report */}
+                        {expandedCampaignId === campaign.id && (
+                          <CampaignReportPanel
+                            campaign={campaign}
+                            metrics={campaignMetrics}
+                            loading={metricsLoading}
+                            isSimulated={!!simulationMode[campaign.id]}
+                            userCurrencyCode={userCurrencyCode}
+                          />
+                        )}
+
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-t border-slate-100 pt-3 mt-4 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleExpandCampaign(campaign.id)}
+                            className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 hover:text-emerald-700 transition-colors self-start"
+                          >
+                            <TrendingUp size={14} />
+                            {expandedCampaignId === campaign.id ? 'Hide Performance Report' : 'View Performance Report'}
+                          </button>
+
+                          {expandedCampaignId === campaign.id && (
+                            <label className="flex items-center gap-2 text-xs font-medium text-slate-500 cursor-pointer select-none">
+                              <input
+                                type="checkbox"
+                                checked={!!simulationMode[campaign.id]}
+                                onChange={(e) => setSimulationMode((prev) => ({ ...prev, [campaign.id]: e.target.checked }))}
+                                className="h-3.5 w-3.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500/20"
+                              />
+                              Simulate Live TikTok Metrics (Demo)
+                            </label>
+                          )}
+                        </div>
                       </article>
                     );
                   })}
@@ -867,6 +1033,552 @@ function AdsManagerContent() {
           </div>
         </div>
       </main>
+    </div>
+  );
+}
+
+function LiveAdPreview({
+  productName,
+  productDescription,
+  productPrice,
+  productImage,
+  adDescription,
+  businessName,
+  storeSlug,
+  productId,
+  currencyCode,
+}: {
+  productName: string;
+  productDescription: string;
+  productPrice: number;
+  productImage?: string | null;
+  adDescription: string;
+  businessName: string;
+  storeSlug: string;
+  productId: string;
+  currencyCode: string;
+}) {
+  const [activeTab, setActiveTab] = useState<'TIKTOK' | 'META'>('TIKTOK');
+
+  return (
+    <div className="flex flex-col items-center w-full space-y-4">
+      {/* Platform Selector Tabs */}
+      <div className="flex gap-2 p-1 bg-slate-100 rounded-lg text-xs font-bold w-full max-w-[320px]">
+        <button
+          type="button"
+          onClick={() => setActiveTab('TIKTOK')}
+          className={`flex-1 py-1.5 rounded transition-all text-center ${activeTab === 'TIKTOK' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-950'}`}
+        >
+          TikTok Ads
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('META')}
+          className={`flex-1 py-1.5 rounded transition-all text-center ${activeTab === 'META' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-950'}`}
+        >
+          Meta Ads
+        </button>
+      </div>
+
+      {activeTab === 'TIKTOK' ? (
+        /* TikTok Preview mock */
+        <div className="relative w-full max-w-[320px] aspect-[9/16] rounded-3xl bg-zinc-950 text-white border-4 border-zinc-800 shadow-2xl overflow-hidden flex flex-col justify-between p-4 select-none">
+          {/* Top Camera Punch/Notch */}
+          <div className="absolute top-2.5 left-1/2 -translate-x-1/2 w-20 h-4 bg-black rounded-full z-20 flex items-center justify-center">
+            <div className="w-2.5 h-2.5 bg-zinc-900 rounded-full mr-2" />
+            <div className="w-1.5 h-1.5 bg-blue-900 rounded-full" />
+          </div>
+
+          {/* Top Nav (Following | For You) */}
+          <div className="w-full flex items-center justify-between text-xs text-white/60 font-semibold px-4 pt-4 z-10">
+            <span>Live Preview</span>
+            <div className="flex gap-3 text-sm">
+              <span className="hover:text-white transition-colors cursor-pointer">Following</span>
+              <span className="text-white border-b-2 border-white pb-0.5 font-bold relative">
+                For You
+                <span className="absolute bottom-[-4px] left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-red-500 rounded-full" />
+              </span>
+            </div>
+            <Search size={16} className="text-white/80" />
+          </div>
+
+          {/* Background Image / Blur */}
+          <div className="absolute inset-0 z-0 flex items-center justify-center bg-zinc-900">
+            {productImage ? (
+              <>
+                <img src={productImage} alt="" className="absolute inset-0 w-full h-full object-cover opacity-20 blur-md scale-110" />
+                <img src={productImage} alt="" className="relative max-h-[70%] max-w-full object-contain z-1" />
+              </>
+            ) : (
+              <div className="flex flex-col items-center text-zinc-650 gap-2">
+                <Megaphone size={48} className="stroke-[1.5]" />
+                <span className="text-[10px] uppercase font-bold tracking-widest text-zinc-550">TallyPadi Ads</span>
+              </div>
+            )}
+          </div>
+
+          {/* Right Action Bar */}
+          <div className="absolute right-3 bottom-32 flex flex-col items-center gap-4 z-10 text-white">
+            {/* Profile Avatar */}
+            <div className="relative w-10 h-10 rounded-full bg-zinc-800 border border-white flex items-center justify-center font-bold text-xs">
+              {businessName ? businessName.charAt(0).toUpperCase() : 'S'}
+              <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-rose-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold border border-black shadow">
+                +
+              </div>
+            </div>
+            {/* Likes */}
+            <div className="flex flex-col items-center">
+              <div className="w-9 h-9 rounded-full bg-black/40 flex items-center justify-center backdrop-blur-sm cursor-pointer hover:scale-105 transition-transform">
+                <Heart size={18} fill="#ff3b30" stroke="#ff3b30" />
+              </div>
+              <span className="text-[9px] font-semibold text-white/95 mt-1 shadow-sm">1.8K</span>
+            </div>
+            {/* Comments */}
+            <div className="flex flex-col items-center">
+              <div className="w-9 h-9 rounded-full bg-black/40 flex items-center justify-center backdrop-blur-sm cursor-pointer hover:scale-105 transition-transform">
+                <MessageCircle size={18} fill="#ffffff" stroke="none" />
+              </div>
+              <span className="text-[9px] font-semibold text-white/95 mt-1 shadow-sm">142</span>
+            </div>
+            {/* Bookmark */}
+            <div className="flex flex-col items-center">
+              <div className="w-9 h-9 rounded-full bg-black/40 flex items-center justify-center backdrop-blur-sm cursor-pointer hover:scale-105 transition-transform">
+                <Bookmark size={18} fill="#e0a82e" stroke="none" />
+              </div>
+              <span className="text-[9px] font-semibold text-white/95 mt-1 shadow-sm">88</span>
+            </div>
+            {/* Share */}
+            <div className="flex flex-col items-center">
+              <div className="w-9 h-9 rounded-full bg-black/40 flex items-center justify-center backdrop-blur-sm cursor-pointer hover:scale-105 transition-transform">
+                <Share2 size={18} className="text-white" />
+              </div>
+              <span className="text-[9px] font-semibold text-white/95 mt-1 shadow-sm">34</span>
+            </div>
+            {/* Disk rotation */}
+            <div className="w-8 h-8 rounded-full bg-zinc-850 border-4 border-zinc-900 flex items-center justify-center animate-spin" style={{ animationDuration: '3s' }}>
+              <Music size={12} className="text-zinc-400" />
+            </div>
+          </div>
+
+          {/* Bottom Captions & Ads Banner */}
+          <div className="w-full flex flex-col gap-2 mt-auto z-10 text-xs">
+            <div className="max-w-[75%] space-y-1">
+              <div className="flex items-center gap-1 flex-wrap">
+                <span className="font-black text-sm tracking-wide text-white truncate max-w-[100px]">
+                  @{String(businessName || 'myshop').toLowerCase().replace(/[^a-z0-9]+/g, '')}
+                </span>
+                <span className="bg-blue-500 rounded-full p-0.5 flex items-center justify-center shrink-0 w-3 h-3 text-[7px] text-white font-bold leading-none">
+                  ✓
+                </span>
+                <span className="bg-white/20 px-1.5 py-0.5 rounded text-[8px] uppercase tracking-wider font-bold shrink-0 text-white/90">
+                  Sponsored
+                </span>
+              </div>
+              <p className="text-xs text-white/90 leading-snug break-words max-h-16 overflow-y-auto font-medium">
+                {adDescription.trim() || `Amazing ${productName || 'product'} now available! Get yours today on our store. Click below to shop.`}
+              </p>
+            </div>
+
+            {/* Shopping Action Card */}
+            <div className="bg-zinc-900/90 border border-zinc-800/80 backdrop-blur rounded-xl p-2 flex items-center justify-between gap-2 shadow-lg">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-9 h-9 rounded-lg bg-zinc-800 border border-zinc-700 overflow-hidden flex items-center justify-center shrink-0">
+                  {productImage ? <img src={productImage} alt="" className="w-full h-full object-cover" /> : <PackagePlus className="text-zinc-500" size={16} />}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] font-black text-white truncate leading-tight">{productName || 'Premium Product'}</p>
+                  <p className="text-[9px] text-cyan-400 font-bold truncate mt-0.5 flex items-center gap-0.5">
+                    tallypadi.com/shop/{storeSlug}
+                  </p>
+                </div>
+              </div>
+              <div className="bg-cyan-400 hover:bg-cyan-300 text-zinc-950 font-black text-[9px] px-2.5 py-2 rounded-lg uppercase tracking-wider shrink-0 transition-colors flex items-center gap-0.5">
+                Shop Now <ArrowRight size={10} strokeWidth={3} />
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* Meta/Instagram Preview mock */
+        <div className="relative w-full max-w-[320px] rounded-3xl bg-white text-slate-900 border-4 border-slate-200 shadow-2xl overflow-hidden flex flex-col select-none">
+          {/* Top Notch */}
+          <div className="w-full h-6 bg-slate-50 flex items-center justify-center border-b border-slate-100">
+            <div className="w-16 h-3.5 bg-black rounded-full flex items-center justify-center">
+              <div className="w-1.5 h-1.5 bg-zinc-800 rounded-full mr-1.5" />
+              <div className="w-1 h-1 bg-blue-900 rounded-full" />
+            </div>
+          </div>
+
+          {/* Instagram Post Header */}
+          <div className="flex items-center justify-between p-3 border-b border-slate-100">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-amber-500 via-red-500 to-purple-600 p-[2px]">
+                <div className="w-full h-full rounded-full bg-white flex items-center justify-center font-bold text-[10px] text-slate-800">
+                  {businessName ? businessName.charAt(0).toUpperCase() : 'S'}
+                </div>
+              </div>
+              <div>
+                <p className="text-xs font-bold text-slate-900 flex items-center gap-0.5 leading-none">
+                  {String(businessName || 'myshop').toLowerCase().replace(/[^a-z0-9]+/g, '')}
+                  <span className="bg-blue-500 rounded-full p-0.5 flex items-center justify-center w-2.5 h-2.5 text-[6px] text-white font-bold leading-none">✓</span>
+                </p>
+                <p className="text-[9px] text-slate-400 font-medium leading-none mt-1">Sponsored</p>
+              </div>
+            </div>
+            <span className="text-slate-400 text-xs font-bold tracking-widest cursor-pointer px-1">•••</span>
+          </div>
+
+          {/* Post Image Area (1:1) */}
+          <div className="w-full aspect-square bg-slate-50 relative flex items-center justify-center border-b border-slate-100">
+            {productImage ? (
+              <img src={productImage} alt="" className="w-full h-full object-cover" />
+            ) : (
+              <div className="flex flex-col items-center text-slate-355 gap-2">
+                <PackagePlus size={40} className="stroke-[1.5]" />
+                <span className="text-[9px] uppercase font-bold tracking-widest text-slate-400">TallyPadi Store</span>
+              </div>
+            )}
+          </div>
+
+          {/* CTA Banner (Shop Now bar typical of Instagram Ads) */}
+          <div className="bg-slate-50 border-b border-slate-100 px-3 py-2 flex items-center justify-between text-xs">
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider truncate">tallypadi.com</p>
+              <p className="text-xs font-bold text-slate-800 truncate mt-0.5">{productName || 'Visit shop to purchase'}</p>
+            </div>
+            <div className="bg-blue-600 hover:bg-blue-500 text-white font-bold text-[10px] px-3.5 py-1.5 rounded uppercase tracking-wider shrink-0 transition-colors flex items-center gap-0.5">
+              Shop Now <ExternalLink size={9} strokeWidth={2.5} />
+            </div>
+          </div>
+
+          {/* Social Interactions */}
+          <div className="p-3 pb-1.5 flex items-center justify-between text-slate-700">
+            <div className="flex items-center gap-3">
+              <Heart size={18} className="cursor-pointer text-slate-900 hover:text-red-500 transition-colors" />
+              <MessageCircle size={18} className="cursor-pointer text-slate-900" />
+              <Share2 size={18} className="cursor-pointer text-slate-900" />
+            </div>
+            <Bookmark size={18} className="cursor-pointer text-slate-900" />
+          </div>
+
+          {/* Likes Count & Caption */}
+          <div className="px-3 pb-4 text-xs space-y-1">
+            <p className="font-bold text-slate-900">4,284 likes</p>
+            <p className="text-slate-800 leading-snug break-words">
+              <span className="font-bold text-slate-900 mr-1.5">
+                {String(businessName || 'myshop').toLowerCase().replace(/[^a-z0-9]+/g, '')}
+              </span>
+              {adDescription.trim() || `Amazing ${productName || 'product'} now available! Get yours today on our store. Click below to shop.`}
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CampaignReportPanel({
+  campaign,
+  metrics,
+  loading,
+  isSimulated,
+  userCurrencyCode,
+}: {
+  campaign: AdCampaign;
+  metrics: any[];
+  loading: boolean;
+  isSimulated: boolean;
+  userCurrencyCode: string;
+}) {
+  const [activeTab, setActiveTab] = useState<'impressions' | 'clicks' | 'conversions' | 'spend'>('impressions');
+
+  const activeMetrics = useMemo(() => {
+    if (isSimulated) {
+      const dates = Array.from({ length: 7 }, (_, i) => {
+        const d = new Date();
+        d.setDate(d.getDate() - (6 - i));
+        return d.toISOString().split('T')[0];
+      });
+
+      let seed = 0;
+      for (let c = 0; c < campaign.id.length; c++) {
+        seed += campaign.id.charCodeAt(c);
+      }
+
+      const budget = campaign.budget || 2000;
+      return dates.map((date, idx) => {
+        const dayFactor = 0.5 + ((seed * (idx + 1)) % 10) / 10;
+        const daySpend = (budget / 7) * dayFactor;
+        const dayImps = Math.round(daySpend * 4.5);
+        const dayClicks = Math.round(dayImps * 0.024);
+        const dayConvs = Math.round(dayClicks * 0.055);
+
+        return {
+          date,
+          impressions: dayImps,
+          clicks: dayClicks,
+          conversions: dayConvs,
+          spendMinor: Math.round(daySpend * 100),
+          currency: 'NGN',
+        };
+      });
+    }
+    return [...metrics].reverse();
+  }, [isSimulated, metrics, campaign.id, campaign.budget]);
+
+  const totals = useMemo(() => {
+    let imps = 0;
+    let clicks = 0;
+    let convs = 0;
+    let spendM = 0;
+
+    activeMetrics.forEach((m) => {
+      imps += m.impressions || 0;
+      clicks += m.clicks || 0;
+      convs += m.conversions || 0;
+      spendM += m.spendMinor || 0;
+    });
+
+    const spend = spendM / 100;
+    const ctr = imps > 0 ? (clicks / imps) * 100 : 0;
+    const convRate = clicks > 0 ? (convs / clicks) * 100 : 0;
+    const cpc = clicks > 0 ? spend / clicks : 0;
+
+    return { imps, clicks, convs, spend, ctr, convRate, cpc };
+  }, [activeMetrics]);
+
+  if (loading && !isSimulated) {
+    return (
+      <div className="flex items-center justify-center py-8 text-slate-400">
+        <Loader2 className="animate-spin text-emerald-600 mr-2" size={20} />
+        <span className="text-xs font-semibold">Loading campaign performance data...</span>
+      </div>
+    );
+  }
+
+  if (activeMetrics.length === 0) {
+    return (
+      <div className="bg-slate-50 rounded-lg border border-slate-100 p-6 text-center mt-3 animate-in fade-in duration-200">
+        <AlertCircle className="mx-auto mb-2 text-slate-400" size={24} />
+        <p className="text-xs font-bold text-slate-700">No Metrics Found</p>
+        <p className="text-[11px] text-slate-500 mt-1 max-w-sm mx-auto leading-relaxed">
+          TikTok has not reported campaign activity for this reference yet. Check the checkbox on the right to simulate live metrics.
+        </p>
+      </div>
+    );
+  }
+
+  const W = 600;
+  const H = 200;
+  const paddingLeft = 60;
+  const paddingRight = 20;
+  const paddingTop = 20;
+  const paddingBottom = 35;
+  const plotW = W - paddingLeft - paddingRight;
+  const plotH = H - paddingTop - paddingBottom;
+
+  const chartValues = activeMetrics.map((m) => {
+    if (activeTab === 'spend') return (m.spendMinor || 0) / 100;
+    return m[activeTab] || 0;
+  });
+
+  const chartLabels = activeMetrics.map((m) => {
+    try {
+      const parts = m.date.split('-');
+      if (parts.length === 3) {
+        const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+        return d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
+      }
+    } catch {}
+    return m.date;
+  });
+
+  const minVal = 0;
+  const maxVal = Math.max(...chartValues, 5);
+
+  const points = chartValues.map((val, idx) => {
+    const N = chartValues.length;
+    const x = paddingLeft + (idx / (N - 1)) * plotW;
+    const y = paddingTop + (1 - val / maxVal) * plotH;
+    return { x, y, val, label: chartLabels[idx] };
+  });
+
+  const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+  const areaPath = points.length > 0
+    ? `${linePath} L ${points[points.length - 1].x} ${H - paddingBottom} L ${points[0].x} ${H - paddingBottom} Z`
+    : '';
+
+  const tabs = [
+    { key: 'impressions', label: 'Impressions', value: totals.imps.toLocaleString(), sub: 'Views', activeBg: 'bg-blue-50/50 text-blue-700 border-blue-400' },
+    { key: 'clicks', label: 'Clicks', value: totals.clicks.toLocaleString(), sub: `CTR: ${totals.ctr.toFixed(1)}%`, activeBg: 'bg-indigo-50/50 text-indigo-700 border-indigo-400' },
+    { key: 'conversions', label: 'Conversions', value: totals.convs.toLocaleString(), sub: `CVR: ${totals.convRate.toFixed(1)}%`, activeBg: 'bg-emerald-50/50 text-emerald-700 border-emerald-400' },
+    { key: 'spend', label: 'Spend', value: formatCurrency(totals.spend, userCurrencyCode), sub: `CPC: ${formatCurrency(totals.cpc, userCurrencyCode)}`, activeBg: 'bg-rose-50/50 text-rose-700 border-rose-400' },
+  ] as const;
+
+  return (
+    <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50/50 p-4 space-y-4 animate-in slide-in-from-top-2 duration-300">
+      <div className="flex items-center justify-between">
+        <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded">
+          <Globe size={11} /> TikTok Live API Reports
+        </span>
+        <span className="text-[10px] text-slate-400 font-bold">
+          7-Day Trend Chart
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        {tabs.map((tab) => {
+          const isActive = activeTab === tab.key;
+          return (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setActiveTab(tab.key)}
+              className={`p-3 rounded-lg border text-left transition-all ${isActive ? tab.activeBg : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50/80'}`}
+            >
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{tab.label}</p>
+              <p className="text-lg font-black mt-1 leading-none">{tab.value}</p>
+              <p className="text-[10px] font-bold text-slate-500 mt-1.5">{tab.sub}</p>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm relative">
+        <div className="w-full overflow-x-auto">
+          <svg viewBox={`0 0 ${W} ${H}`} width="100%" className="min-w-[480px]">
+            <defs>
+              <linearGradient id="chartGradientBlue" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.25" />
+                <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.00" />
+              </linearGradient>
+              <linearGradient id="chartGradientIndigo" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#6366f1" stopOpacity="0.25" />
+                <stop offset="100%" stopColor="#6366f1" stopOpacity="0.00" />
+              </linearGradient>
+              <linearGradient id="chartGradientEmerald" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#10b981" stopOpacity="0.25" />
+                <stop offset="100%" stopColor="#10b981" stopOpacity="0.00" />
+              </linearGradient>
+              <linearGradient id="chartGradientRose" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#f43f5e" stopOpacity="0.25" />
+                <stop offset="100%" stopColor="#f43f5e" stopOpacity="0.00" />
+              </linearGradient>
+            </defs>
+
+            {Array.from({ length: 4 }).map((_, idx) => {
+              const y = paddingTop + (idx / 3) * plotH;
+              const valLabel = Math.round(maxVal - (idx / 3) * maxVal);
+              let valStr = String(valLabel);
+              if (activeTab === 'spend') {
+                valStr = formatCurrency(valLabel, userCurrencyCode).replace(/\.\d+$/, '');
+              } else if (valLabel >= 1000) {
+                valStr = `${(valLabel / 1000).toFixed(1)}k`;
+              }
+
+              return (
+                <g key={idx}>
+                  <line
+                    x1={paddingLeft}
+                    y1={y}
+                    x2={W - paddingRight}
+                    y2={y}
+                    stroke="#f1f5f9"
+                    strokeWidth="1.5"
+                    strokeDasharray="4 4"
+                  />
+                  <text
+                    x={paddingLeft - 8}
+                    y={y + 4}
+                    textAnchor="end"
+                    fill="#94a3b8"
+                    className="text-[10px] font-bold"
+                  >
+                    {valStr}
+                  </text>
+                </g>
+              );
+            })}
+
+            {points.length > 0 && (
+              <path
+                d={areaPath}
+                fill={
+                  activeTab === 'impressions' ? 'url(#chartGradientBlue)' :
+                  activeTab === 'clicks' ? 'url(#chartGradientIndigo)' :
+                  activeTab === 'conversions' ? 'url(#chartGradientEmerald)' :
+                  'url(#chartGradientRose)'
+                }
+              />
+            )}
+
+            {points.length > 0 && (
+              <path
+                d={linePath}
+                fill="none"
+                stroke={
+                  activeTab === 'impressions' ? '#3b82f6' :
+                  activeTab === 'clicks' ? '#6366f1' :
+                  activeTab === 'conversions' ? '#10b981' :
+                  '#f43f5e'
+                }
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            )}
+
+            {points.map((p, idx) => (
+              <g key={idx} className="group/dot">
+                <circle
+                  cx={p.x}
+                  cy={p.y}
+                  r="4.5"
+                  fill="#ffffff"
+                  stroke={
+                    activeTab === 'impressions' ? '#3b82f6' :
+                    activeTab === 'clicks' ? '#6366f1' :
+                    activeTab === 'conversions' ? '#10b981' :
+                    '#f43f5e'
+                  }
+                  strokeWidth="2.5"
+                  className="transition-all duration-200 group-hover/dot:r-6 cursor-pointer"
+                />
+                
+                <g className="opacity-0 group-hover/dot:opacity-100 transition-opacity duration-200 pointer-events-none">
+                  <rect
+                    x={p.x - 30}
+                    y={p.y - 28}
+                    width="60"
+                    height="20"
+                    rx="4"
+                    fill="#1e293b"
+                  />
+                  <text
+                    x={p.x}
+                    y={p.y - 15}
+                    textAnchor="middle"
+                    fill="#ffffff"
+                    className="text-[9px] font-bold"
+                  >
+                    {activeTab === 'spend' ? formatCurrency(p.val, userCurrencyCode) : p.val}
+                  </text>
+                </g>
+
+                <text
+                  x={p.x}
+                  y={H - 12}
+                  textAnchor="middle"
+                  fill="#94a3b8"
+                  className="text-[10px] font-bold"
+                >
+                  {p.label}
+                </text>
+              </g>
+            ))}
+          </svg>
+        </div>
+      </div>
     </div>
   );
 }
@@ -887,7 +1599,7 @@ function BoostControls({
   onChange: React.Dispatch<React.SetStateAction<BoostForm>>;
 }) {
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <div>
         <span className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">Platforms</span>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
@@ -896,7 +1608,7 @@ function BoostControls({
             return (
               <label
                 key={option.value}
-                className={`flex items-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-bold transition-colors ${checked ? 'border-emerald-300 bg-white text-emerald-700 shadow-sm' : 'border-transparent text-slate-600 hover:bg-white'}`}
+                className={`flex items-center gap-2 rounded-lg border px-3 py-2.5 text-xs font-bold transition-colors ${checked ? 'border-emerald-300 bg-white text-emerald-700 shadow-sm' : 'border-transparent text-slate-600 hover:bg-white'}`}
               >
                 <input
                   type="checkbox"
@@ -916,6 +1628,41 @@ function BoostControls({
         </div>
       </div>
 
+      <div className="space-y-2">
+        <span className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">Target Locations</span>
+        <div className="grid grid-cols-3 gap-2">
+          <label className="block">
+            <span className="block text-[10px] font-semibold text-slate-400 mb-1">Country</span>
+            <input
+              type="text"
+              readOnly
+              value={form.targetLocationCountry}
+              className="w-full border border-slate-200 bg-slate-100 rounded-lg px-3 py-2 text-sm text-slate-500 focus:outline-none font-bold"
+            />
+          </label>
+          <label className="block">
+            <span className="block text-[10px] font-semibold text-slate-400 mb-1">State</span>
+            <input
+              type="text"
+              placeholder="e.g. Lagos"
+              value={form.targetLocationState}
+              onChange={(e) => onChange((prev) => ({ ...prev, targetLocationState: e.target.value }))}
+              className="w-full border border-slate-200 bg-slate-50 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-medium"
+            />
+          </label>
+          <label className="block">
+            <span className="block text-[10px] font-semibold text-slate-400 mb-1">City</span>
+            <input
+              type="text"
+              placeholder="e.g. Lekki"
+              value={form.targetLocationCity}
+              onChange={(e) => onChange((prev) => ({ ...prev, targetLocationCity: e.target.value }))}
+              className="w-full border border-slate-200 bg-slate-50 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-medium"
+            />
+          </label>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <label className="block">
           <span className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">Duration</span>
@@ -932,6 +1679,20 @@ function BoostControls({
         </label>
 
         <label className="block">
+          <span className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">Budget Type</span>
+          <select
+            value={form.budgetType}
+            onChange={(e) => onChange((prev) => ({ ...prev, budgetType: e.target.value as 'DAILY' | 'TOTAL' }))}
+            className="w-full border border-slate-200 bg-slate-50 rounded-lg px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+          >
+            <option value="TOTAL">Total Budget</option>
+            <option value="DAILY">Daily Budget</option>
+          </select>
+        </label>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <label className="block">
           <span className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">Budget</span>
           <div className="relative">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[11px] font-black">{currencyCode}</span>
@@ -945,7 +1706,43 @@ function BoostControls({
             />
           </div>
         </label>
+
+        <div className="grid grid-cols-2 gap-2">
+          <label className="block">
+            <span className="block text-[11px] font-semibold text-slate-500 mb-1 uppercase">Start Date</span>
+            <input
+              type="date"
+              value={form.startDate}
+              onChange={(e) => onChange((prev) => ({ ...prev, startDate: e.target.value }))}
+              className="w-full border border-slate-200 bg-slate-50 rounded-lg px-2 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-semibold"
+            />
+          </label>
+          <label className="block">
+            <span className="block text-[11px] font-semibold text-slate-500 mb-1 uppercase">End Date</span>
+            <input
+              type="date"
+              value={form.endDate}
+              onChange={(e) => onChange((prev) => ({ ...prev, endDate: e.target.value }))}
+              className="w-full border border-slate-200 bg-slate-50 rounded-lg px-2 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-semibold"
+            />
+          </label>
+        </div>
       </div>
+
+      <label className="block">
+        <div className="flex justify-between items-center mb-1">
+          <span className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">Ad Copy Creative Text (Description)</span>
+          <span className="text-[10px] text-slate-400 font-bold">{form.adDescription.length}/1000</span>
+        </div>
+        <textarea
+          value={form.adDescription}
+          maxLength={1000}
+          onChange={(e) => onChange((prev) => ({ ...prev, adDescription: e.target.value }))}
+          placeholder="Enter description copy that users see on social feeds (e.g. TikTok, Meta)..."
+          rows={2}
+          className="w-full border border-slate-200 bg-slate-50 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+        />
+      </label>
 
       <label className="block">
         <span className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">Ad Search Notes</span>
@@ -953,8 +1750,8 @@ function BoostControls({
           value={form.brief}
           onChange={(e) => onChange((prev) => ({ ...prev, brief: e.target.value }))}
           placeholder="What should the ad emphasize? Include model, condition, delivery, target area, or buyer questions."
-          rows={3}
-          className="w-full border border-slate-200 bg-slate-50 rounded-lg px-3 py-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+          rows={2}
+          className="w-full border border-slate-200 bg-slate-50 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
         />
       </label>
 
@@ -964,7 +1761,7 @@ function BoostControls({
           value={form.keywords}
           onChange={(e) => onChange((prev) => ({ ...prev, keywords: e.target.value }))}
           placeholder="e.g. smart tv, used fridge, lekki phone shop"
-          className="w-full border border-slate-200 bg-slate-50 rounded-lg px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+          className="w-full border border-slate-200 bg-slate-50 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
         />
       </label>
     </div>

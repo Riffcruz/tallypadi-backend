@@ -60,6 +60,10 @@ export interface IAdCampaign extends Document {
     brief?: string;
     audience?: string;
     keywords?: string[];
+    budgetType?: 'DAILY' | 'TOTAL';
+    startDate?: string;
+    endDate?: string;
+    adDescription?: string;
   };
   seo?: {
     title?: string;
@@ -157,6 +161,10 @@ const adCampaignSchema = new Schema<IAdCampaign>(
       brief: { type: String, default: '', trim: true, maxlength: 1000 },
       audience: { type: String, default: '', trim: true, maxlength: 300 },
       keywords: [{ type: String, trim: true, maxlength: 60 }],
+      budgetType: { type: String, enum: ['DAILY', 'TOTAL'], default: 'TOTAL' },
+      startDate: { type: String, default: '' },
+      endDate: { type: String, default: '' },
+      adDescription: { type: String, default: '', trim: true, maxlength: 1000 },
     },
     seo: {
       title: { type: String, default: '', trim: true, maxlength: 120 },
