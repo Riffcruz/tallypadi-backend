@@ -476,6 +476,11 @@ export default function LoginPage() {
               Create Free Account
             </Link>
           </p>
+          <div className="mt-4 flex items-center justify-center gap-4 text-xs font-semibold text-slate-400">
+            <Link href="/privacy-policy" className="hover:text-green-600 transition-colors">Privacy Policy</Link>
+            <span className="text-slate-300">•</span>
+            <Link href="/terms-of-service" className="hover:text-green-600 transition-colors">Terms of Service</Link>
+          </div>
         </div>
       </div>
     </div>
