@@ -96,9 +96,11 @@ interface InventoryProduct {
 }
 
 interface AdCampaign {
-  id: string;
+  id?: string;
+  _id?: string;
   status: CampaignStatus;
-  platforms: string[];
+  platforms?: string[];
+  selectedProviders?: string[];
   planId: string;
   planLabel: string;
   durationDays: number;
@@ -1006,11 +1008,11 @@ function AdsManagerContent() {
                           <div className="flex items-center gap-4">
                             <button
                               type="button"
-                              onClick={() => handleExpandCampaign(campaign.id)}
+                              onClick={() => handleExpandCampaign((campaign.id || campaign._id) as string)}
                               className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 hover:text-emerald-700 transition-colors self-start"
                             >
                               <TrendingUp size={14} />
-                              {expandedCampaignId === campaign.id ? 'Hide Performance Report' : 'View Performance Report'}
+                              {expandedCampaignId === (campaign.id || campaign._id) ? 'Hide Performance Report' : 'View Performance Report'}
                             </button>
                             
                             {(campaign as any).previewUrls?.length > 0 && (
@@ -1027,15 +1029,15 @@ function AdsManagerContent() {
                             )}
                           </div>
 
-                          {expandedCampaignId === campaign.id && (
+                          {expandedCampaignId === (campaign.id || campaign._id) && (
                             <label className="flex items-center gap-2 text-xs font-medium text-slate-500 cursor-pointer select-none">
                               <input
                                 type="checkbox"
-                                checked={!!simulationMode[campaign.id]}
-                                onChange={(e) => setSimulationMode((prev) => ({ ...prev, [campaign.id]: e.target.checked }))}
+                                checked={!!simulationMode[(campaign.id || campaign._id) as string]}
+                                onChange={(e) => setSimulationMode((prev) => ({ ...prev, [(campaign.id || campaign._id) as string]: e.target.checked }))}
                                 className="h-3.5 w-3.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500/20"
                               />
-                              Simulate Live {(campaign.platforms && campaign.platforms.length > 0) ? campaign.platforms.map(p => platformLabel(p).replace(' Ads', '').replace('TallyPadi Marketplace Boost', 'TallyPadi')).join(' & ') : 'TikTok'} Metrics (Demo)
+                              Simulate Live {(campaign.selectedProviders?.length || campaign.platforms?.length) ? (campaign.selectedProviders || campaign.platforms || []).map(p => platformLabel(p).replace(' Ads', '').replace('TallyPadi Marketplace Boost', 'TallyPadi')).join(' & ') : 'TikTok'} Metrics (Demo)
                             </label>
                           )}
                         </div>
@@ -1307,8 +1309,9 @@ function CampaignReportPanel({
 }) {
   const [activeTab, setActiveTab] = useState<'impressions' | 'clicks' | 'conversions' | 'spend'>('impressions');
 
-  const platformNames = (campaign.platforms && campaign.platforms.length > 0) 
-    ? campaign.platforms.map(p => platformLabel(p).replace(' Ads', '').replace('TallyPadi Marketplace Boost', 'TallyPadi')).join(' & ')
+  const platformsList = campaign.selectedProviders?.length ? campaign.selectedProviders : campaign.platforms || [];
+  const platformNames = platformsList.length > 0 
+    ? platformsList.map(p => platformLabel(p).replace(' Ads', '').replace('TallyPadi Marketplace Boost', 'TallyPadi')).join(' & ')
     : 'Platform';
 
   const activeMetrics = useMemo(() => {
@@ -1320,8 +1323,9 @@ function CampaignReportPanel({
       });
 
       let seed = 0;
-      for (let c = 0; c < campaign.id.length; c++) {
-        seed += campaign.id.charCodeAt(c);
+      const cid = (campaign.id || campaign._id || 'demo') as string;
+      for (let c = 0; c < cid.length; c++) {
+        seed += cid.charCodeAt(c);
       }
 
       const budget = campaign.budget || 2000;
@@ -1343,7 +1347,7 @@ function CampaignReportPanel({
       });
     }
     return [...metrics].reverse();
-  }, [isSimulated, metrics, campaign.id, campaign.budget]);
+  }, [isSimulated, metrics, campaign.id, campaign._id, campaign.budget]);
 
   const totals = useMemo(() => {
     let imps = 0;
