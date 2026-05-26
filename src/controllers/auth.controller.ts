@@ -150,6 +150,7 @@ export const loginStaffWithOTP = async (req: Request, res: Response) => {
             {
                 id: String(user._id),
                 role: user.role,
+                ownerId: user.ownerId ? String(user.ownerId) : undefined,
             },
             secret,
             {
@@ -170,6 +171,7 @@ export const loginStaffWithOTP = async (req: Request, res: Response) => {
                 email: user.email,
                 businessName: user.businessName,
                 role: user.role,
+                ownerId: user.ownerId ? String(user.ownerId) : undefined,
                 planType: user.planType,
                 subscriptionStatus: user.subscriptionStatus,
                 trialEndsAt: user.trialEndsAt,
@@ -245,6 +247,7 @@ export const loginUser = async (req: Request, res: Response) => {
       {
         id: String(user._id),
         role: user.role || 'OWNER',
+        ownerId: user.ownerId ? String(user.ownerId) : undefined,
       },
       secret,
       {
@@ -272,6 +275,7 @@ export const loginUser = async (req: Request, res: Response) => {
         countryCode: user.countryCode || null,
 
         role: user.role || 'OWNER',
+        ownerId: user.ownerId ? String(user.ownerId) : undefined,
       },
     });
   } catch (err) {
@@ -431,7 +435,11 @@ export const verifyRegistrationOTP = async (req: Request, res: Response) => {
     const secret = process.env.JWT_SECRET;
     if (!secret) throw new Error('JWT_SECRET missing');
 
-    const token = jwt.sign({ id: String(user._id), role: user.role }, secret, {
+    const token = jwt.sign({
+      id: String(user._id),
+      role: user.role,
+      ownerId: user.ownerId ? String(user.ownerId) : undefined,
+    }, secret, {
       expiresIn: '1y',
       algorithm: 'HS256',
       issuer: process.env.JWT_ISSUER || 'tallypadi',
@@ -448,6 +456,7 @@ export const verifyRegistrationOTP = async (req: Request, res: Response) => {
         email: user.email,
         businessName: user.businessName,
         role: user.role,
+        ownerId: user.ownerId ? String(user.ownerId) : undefined,
         planType: user.planType,
         subscriptionStatus: user.subscriptionStatus,
         trialEndsAt: user.trialEndsAt,
