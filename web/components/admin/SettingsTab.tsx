@@ -1,6 +1,6 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { Shield, AlertTriangle, MessageSquare, Users, Save, Loader2, Phone, Globe } from 'lucide-react';
+import { Shield, AlertTriangle, MessageSquare, Users, Save, Loader2, Phone, Globe, Gift } from 'lucide-react';
 import axios from 'axios';
 import Swal from 'sweetalert2';
 
@@ -22,11 +22,17 @@ export interface AdsPlan {
   price: number;
   label: string;
 }
+export interface ReferralProgramSettings {
+  enabled: boolean;
+  minimumFundingAmount: number;
+  rewardPercentage: number;
+}
 export interface SettingsProfile {
   whatsappUrl: string;
   security: SettingsSecurity;
   limits: SettingsLimits;
   adsPlans?: AdsPlan[];
+  referralProgram?: ReferralProgramSettings;
 }
 export default function SettingsTab({ 
   settings, 
@@ -44,6 +50,7 @@ export default function SettingsTab({
         limits: { maxMessageHistory: 5, maxStaffAccounts: 2 },
         smtp: { host: '', port: 465, user: '', pass: '', fromAddress: '', secure: true },
         adsPlans: [] as AdsPlan[],
+        referralProgram: { enabled: true, minimumFundingAmount: 10000, rewardPercentage: 10 },
         ...settings // Overwrite defaults with actual data
     });
     const [saving, setSaving] = useState(false);
@@ -82,6 +89,16 @@ export default function SettingsTab({
         }));
     };
 
+    const handleReferralChange = (key: keyof ReferralProgramSettings, value: string | boolean) => {
+        setLocalSettings((prev) => ({
+            ...prev,
+            referralProgram: {
+                ...(prev.referralProgram || { enabled: true, minimumFundingAmount: 10000, rewardPercentage: 10 }),
+                [key]: typeof value === 'boolean' ? value : Number(value) || 0
+            }
+        }));
+    };
+
     const handleSave = async () => {
         const invalidPlan = (localSettings.adsPlans || []).find((plan) => (
             !String(plan.label || '').trim() ||
@@ -106,7 +123,8 @@ export default function SettingsTab({
                 maxMessageHistory: localSettings.limits.maxMessageHistory,
                 maxStaffAccounts: localSettings.limits.maxStaffAccounts,
                 smtp: localSettings.smtp,
-                adsPlans: localSettings.adsPlans
+                adsPlans: localSettings.adsPlans,
+                referralProgram: localSettings.referralProgram
             }, { headers });
             
             onUpdate();
@@ -333,6 +351,55 @@ export default function SettingsTab({
                           </div>
                         </div>
                       ))}
+                    </div>
+                </div>
+
+                {/* 6. Referral Program */}
+                <div className="space-y-4 mb-8">
+                    <h3 className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-3">Referral Program</h3>
+                    <div className="p-5 bg-slate-900/50 rounded-xl border border-slate-700 space-y-4">
+                        <div className="flex items-center justify-between gap-4">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-amber-500/20 rounded-lg">
+                                    <Gift className="w-5 h-5 text-amber-300" />
+                                </div>
+                                <div>
+                                    <h4 className="font-bold text-white">Affiliate Rewards</h4>
+                                    <p className="text-sm text-slate-400">Credits the referrer&apos;s ads wallet after the referred user&apos;s first qualifying wallet funding.</p>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => handleReferralChange('enabled', !localSettings.referralProgram?.enabled)}
+                                className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${localSettings.referralProgram?.enabled ? 'bg-green-600' : 'bg-gray-600'}`}
+                            >
+                                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${localSettings.referralProgram?.enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                            </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="text-xs text-slate-400 font-bold mb-1 block">Minimum Funding (₦)</label>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    value={localSettings.referralProgram?.minimumFundingAmount ?? 10000}
+                                    onChange={(e) => handleReferralChange('minimumFundingAmount', e.target.value)}
+                                    className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-green-500"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-xs text-slate-400 font-bold mb-1 block">Reward Percentage (%)</label>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    value={localSettings.referralProgram?.rewardPercentage ?? 10}
+                                    onChange={(e) => handleReferralChange('rewardPercentage', e.target.value)}
+                                    className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-green-500"
+                                />
+                            </div>
+                        </div>
                     </div>
                 </div>
                 

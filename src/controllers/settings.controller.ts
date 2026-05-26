@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { User } from '../models/user.model';
 import { AdminSettings } from '../models/adminSettings.model';
+import { queueMarketplaceOwnerRefresh } from '../services/queue.service';
 
 // --- Security Helpers ---
 const sanitizeString = (input: unknown): string | null => {
@@ -29,6 +30,7 @@ export const updateSettings = async (req: AuthReq, res: Response) => {
   try {
     const body = req.body || {};
     const responseData: any = {};
+    let shouldRefreshMarketplaceOwner = false;
 
     // ✅ Get the LOGGED-IN user
     const userId = req.user?.id || (req.user as any)?._id;
@@ -83,6 +85,7 @@ export const updateSettings = async (req: AuthReq, res: Response) => {
         if (safeName !== null && safeName.length <= 100) {
           $set['businessName'] = safeName;
           $set['shopName'] = safeName; // ✅ important (your UI uses shopName)
+          shouldRefreshMarketplaceOwner = true;
         } else if (safeName !== null && safeName.length > 100) {
           return res.status(400).json({ error: 'Business name too long (max 100 chars)' });
         }
@@ -145,6 +148,7 @@ export const updateSettings = async (req: AuthReq, res: Response) => {
           if (loc.state !== undefined) $set['settings.location.state'] = String(loc.state).slice(0, 100);
           if (loc.city !== undefined) $set['settings.location.city'] = String(loc.city).slice(0, 100);
           if (loc.address !== undefined) $set['settings.location.address'] = String(loc.address).slice(0, 300);
+          shouldRefreshMarketplaceOwner = true;
         }
 
         // ✅ Staff Permissions Update
@@ -184,6 +188,7 @@ export const updateSettings = async (req: AuthReq, res: Response) => {
           const safeCurrencyCode = sanitizeString(inputSettings.currencyCode);
           if (safeCurrencyCode) {
             $set['settings.currencyCode'] = safeCurrencyCode.toUpperCase().slice(0, 5);
+            shouldRefreshMarketplaceOwner = true;
           }
         }
 
@@ -228,6 +233,9 @@ export const updateSettings = async (req: AuthReq, res: Response) => {
           subscriptionStatus: (updated as any)?.subscriptionStatus,
           trialEndsAt: (updated as any)?.trialEndsAt,
         };
+        if (shouldRefreshMarketplaceOwner) {
+          queueMarketplaceOwnerRefresh(userId, 'settings-update').catch(() => undefined);
+        }
       } else {
         responseData.user = {
           businessName: (user as any)?.businessName,
@@ -301,5 +309,4 @@ export const updateSettings = async (req: AuthReq, res: Response) => {
     return res.status(500).json({ error: 'Server Error' });
   }
 };
-
 

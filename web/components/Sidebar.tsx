@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard, ShoppingCart, Package, Settings, LogOut, Users,
   BookOpen, ClipboardList, FileText, Banknote, UserPlus, Users2,
-  Store, CreditCard, Globe, Megaphone, Bell, BadgeCheck
+  Store, CreditCard, Globe, Megaphone, Bell, BadgeCheck, Gift
 } from 'lucide-react';
 import { getCookie, removeCookie } from '../utils/cookies';
 
@@ -65,6 +65,7 @@ export default function Sidebar() {
       { href: '/customers',          icon: UserPlus,        label: 'Customers',      key: 'canManageCustomers'},
       { href: '/debtors',            icon: Users,           label: 'Debtors',        key: 'canManageCustomers'},
       { href: '/settings',           icon: Settings,        label: 'Settings',       key: 'canViewSettings'   },
+      { href: '/referrals',          icon: Gift,            label: 'Referrals',      key: 'canViewDashboard'  },
       { href: '/help',               icon: BookOpen,        label: 'Guide'                                    },
     ];
 

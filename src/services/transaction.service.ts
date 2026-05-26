@@ -4,7 +4,7 @@ import { Transaction } from '../models/transaction.model';
 import { DailyStats } from '../models/dailyStats.model';
 import { User } from '../models/user.model';
 import { ParsedResult } from './gemini.service';
-import { queueOutboundMessage } from './queue.service';
+import { queueMarketplaceProductRefresh, queueOutboundMessage } from './queue.service';
 import { ProcessedMessage } from '../models/processedMessage.model';
 import { DraftRestock } from '../models/draftRestock.model';
 import { buildMarketplaceProductSeo } from './marketplaceSeo.service';
@@ -261,6 +261,7 @@ export const processTransaction = async (
       inv.lastUnitPrice = unitPrice;
       inv.marketplaceSeo = buildMarketplaceProductSeo(inv, user);
       await inv.save();
+      queueMarketplaceProductRefresh(inv._id, 'whatsapp-price-update').catch(() => undefined);
 
       parsed.reply_text = `✅ Price updated: *${inv.name}* is now *${unitPrice.toLocaleString()}* each.`;
 
@@ -310,6 +311,7 @@ export const processTransaction = async (
 
       // ✅ Hard delete (removes from inventory list)
       await Inventory.deleteOne({ _id: inv._id, user: userId });
+      queueMarketplaceProductRefresh(inv._id, 'whatsapp-inventory-delete').catch(() => undefined);
 
       parsed.reply_text = `🗑️ Deleted *${inv.name}* from inventory.`;
 
@@ -616,6 +618,7 @@ export const processTransaction = async (
 
       inv.marketplaceSeo = buildMarketplaceProductSeo(inv, user);
       await inv.save();
+      queueMarketplaceProductRefresh(inv._id, 'whatsapp-stock-change').catch(() => undefined);
 
       // ✅ LOW STOCK ALERT
       if (type === 'SALE' && inv.quantity <= 5 && inv.quantity > 0 && user?.phoneNumber) {
@@ -814,6 +817,7 @@ export const deductStockForItems = async (userId: Types.ObjectId, items: {name: 
     inv.quantity = Number(inv.quantity || 0) - qty;
     inv.marketplaceSeo = buildMarketplaceProductSeo(inv, user);
     await inv.save();
+    queueMarketplaceProductRefresh(inv._id, 'whatsapp-sale-stock-change').catch(() => undefined);
   }
 };
 

@@ -20,6 +20,22 @@ import {
   updateProviderCampaignMetrics,
   updateProviderCampaignStatus,
 } from '../services/adCampaign.service';
+import { getProviderAutomationReadiness } from '../services/Campaign/providerCredentials.service';
+import { AD_PROVIDERS } from '../types/ads';
+
+const providerStatusValues = [
+  'PENDING_TALLYPADI_REVIEW',
+  'READY_TO_SUBMIT',
+  'SUBMITTED_TO_PROVIDER',
+  'PROVIDER_REVIEW',
+  'APPROVED_BY_PROVIDER',
+  'RUNNING',
+  'PAUSED',
+  'COMPLETED',
+  'REJECTED_BY_PROVIDER',
+  'FAILED',
+  'CANCELLED',
+] as const;
 
 const getAdminId = (req: Request) => String(req.admin?._id || req.user?.id || '');
 
@@ -122,6 +138,17 @@ export const getAdminAdCampaignById = async (req: Request, res: Response) => {
   }
 };
 
+export const getAdminAdProviderReadiness = async (_req: Request, res: Response) => {
+  try {
+    return res.json({
+      providers: AD_PROVIDERS.map((provider) => getProviderAutomationReadiness(provider)),
+    });
+  } catch (error) {
+    console.error('Admin Ads Provider Readiness Error:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
 const respondWithFreshCampaign = async (res: Response, campaignId: unknown, message: string) => {
   const campaign = await getCampaignDetail(String(campaignId || ''));
   return res.json({ message, campaign });
@@ -184,10 +211,15 @@ export const completeAdminAdCampaign = async (req: Request, res: Response) => {
 
 export const updateAdminProviderCampaignStatus = async (req: Request, res: Response) => {
   try {
+    const status = String(req.body?.status || '');
+    if (!providerStatusValues.includes(status as any)) {
+      return res.status(400).json({ message: 'Invalid provider campaign status' });
+    }
+
     const provider = await updateProviderCampaignStatus({
       providerCampaignId: String(req.params.id || ''),
       adminId: getAdminId(req),
-      status: String(req.body?.status || '') as any,
+      status: status as any,
       rejectionReason: req.body?.rejectionReason || req.body?.reason,
       adminNotes: req.body?.adminNotes,
     });

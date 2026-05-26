@@ -30,6 +30,7 @@ import {
   completeAdminAdCampaign,
   getAdminAdCampaigns,
   getAdminAdCampaignById,
+  getAdminAdProviderReadiness,
   pauseAdminAdCampaign,
   reallocateAdminProviderCampaign,
   refundAdminProviderCampaign,
@@ -47,6 +48,7 @@ import {
   rejectSellerVerificationForAdmin,
   requestSellerReverificationForAdmin,
 } from '../controllers/sellerVerification.controller';
+import { getAdminReferralTransactions } from '../controllers/referral.controller';
 import {
   createAdminBlogPost,
   deleteAdminBlogPost,
@@ -66,6 +68,7 @@ router.get('/analytics', getSystemAnalytics);
 // Ads Review
 router.get('/ads', getAdminAdCampaigns);
 router.get('/ads/campaigns', getAdminAdCampaigns);
+router.get('/ads/provider-readiness', getAdminAdProviderReadiness);
 router.get('/ads/campaigns/:id', getAdminAdCampaignById);
 router.patch('/ads/:id/approve', approveAdminAdCampaign);
 router.patch('/ads/:id/reject', rejectAdminAdCampaign);
@@ -103,6 +106,7 @@ router.put('/settings', updateGlobalSettings);
 
 // User Management
 router.get('/users', getAllUsers);
+router.get('/referrals', getAdminReferralTransactions);
 router.get('/users/:id/details', getUserDeepDive);
 router.post('/users/:id/ads-wallet/top-up', adminTopUpUserAdsWallet);
 

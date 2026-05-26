@@ -15,8 +15,8 @@ module.exports = {
     {
       name: 'tallypadi-api',
       script: 'dist/server.js',
-      instances: 2,             // Scale to 2+ with 'cluster' mode when needed
-      exec_mode: 'fork',
+      instances: process.env.WEB_CONCURRENCY || 2,
+      exec_mode: 'cluster',
       watch: false,
       autorestart: true,
       max_restarts: 10,

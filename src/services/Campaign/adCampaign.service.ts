@@ -26,7 +26,12 @@ import {
   toMajorUnits,
 } from './adBudget.service';
 import { isTransactionUnsupportedError, walletService } from '../wallet.service';
-import { queueAdProviderControl, queueAdProviderMetricsSync, queueAdProviderSubmission } from '../queue.service';
+import {
+  queueAdProviderControl,
+  queueAdProviderMetricsSync,
+  queueAdProviderSubmission,
+  queueMarketplaceProductRefresh,
+} from '../queue.service';
 import {
   AD_PROVIDERS,
   AdProvider,
@@ -285,6 +290,13 @@ export const serializeProviderCampaign = (provider: IProviderCampaign | any) => 
   remainingBudget: toMajorUnits(provider.remainingBudgetWalletMinor || 0),
   walletCurrency: provider.walletCurrency || 'NGN',
   providerBillingCurrency: provider.providerBillingCurrency || null,
+  externalAccountId: provider.externalAccountId || null,
+  externalCampaignId: provider.externalCampaignId || null,
+  externalAdSetId: provider.externalAdSetId || null,
+  externalAdGroupId: provider.externalAdGroupId || null,
+  externalAdId: provider.externalAdId || null,
+  adPreviewUrl: provider.adPreviewUrl || null,
+  providerReviewStatus: provider.providerReviewStatus || null,
   rejectionReason: provider.rejectionReason || null,
   refundStatus: provider.refundStatus || 'NOT_APPLICABLE',
   settlementStatus: provider.settlementStatus || 'PENDING',
@@ -391,6 +403,7 @@ export const serializeAdCampaign = (campaign: IAdCampaign | any, options?: {
     expiresAt: run?.endsAt || campaign.expiresAt || null,
     completedAt: run?.completedAt || campaign.completedAt || null,
     rejectionReason: campaign.rejectionReason ?? null,
+    previewUrls: campaign.previewUrls || [],
     productSnapshot: campaign.productSnapshot || {},
     adDetails: campaign.adDetails || {},
     targetAudience: campaign.targetAudience || campaign.adDetails?.audience || '',
@@ -1039,6 +1052,7 @@ export const approveAdCampaign = async (campaignId: string, adminId: string) => 
           source: 'FALLBACK',
         };
         await Promise.all([product.save({ session }), campaign.save({ session })]);
+        queueMarketplaceProductRefresh(product._id, 'ad-campaign-approved').catch(() => undefined);
       }
 
       await audit({
@@ -1094,18 +1108,19 @@ export const rejectAdCampaign = async (campaignId: string, adminId: string, rawR
   let run: any = null;
   let refundAmountMinor = 0;
 
-  try {
-    await session.withTransaction(async () => {
-      campaign = await AdCampaign.findById(campaignObjectId).session(session);
-      if (!campaign) throw new AdCampaignError('Ad campaign not found', 404);
-      if (!['PENDING_ADMIN_REVIEW', 'PENDING'].includes(campaign.status)) {
-        throw new AdCampaignError('Only campaigns pending TallyPadi review can receive a full rejection refund', 400);
-      }
+  const applyRejection = async (txSession?: ClientSession) => {
+    const sessionOption = txSession ? { session: txSession } : undefined;
+    campaign = await AdCampaign.findById(campaignObjectId).session(txSession || null);
+    if (!campaign) throw new AdCampaignError('Ad campaign not found', 404);
+    if (!['PENDING_ADMIN_REVIEW', 'PENDING'].includes(campaign.status)) {
+      throw new AdCampaignError('Only campaigns pending TallyPadi review can receive a full rejection refund', 400);
+    }
 
-      run = await CampaignRun.findById(campaign.latestRunId).session(session);
-      if (!run) throw new AdCampaignError('Campaign run not found', 404);
-      refundAmountMinor = run.grossBudgetMinor;
+    run = await CampaignRun.findById(campaign.latestRunId).session(txSession || null);
+    if (!run) throw new AdCampaignError('Campaign run not found', 404);
+    refundAmountMinor = run.grossBudgetMinor;
 
+    try {
       await walletService.releaseReserved({
         userId: campaign.user,
         amountMinor: refundAmountMinor,
@@ -1113,39 +1128,61 @@ export const rejectAdCampaign = async (campaignId: string, adminId: string, rawR
         campaignRunId: run._id as any,
         type: 'CAMPAIGN_BUDGET_RELEASED',
         idempotencyKey: `reject-refund:${campaign._id}:${run._id}`,
-        session,
+        session: txSession,
         metadata: { reason },
       });
+    } catch (error: any) {
+      if (String(error?.message || '').toLowerCase().includes('reserved wallet balance is too low')) {
+        throw new AdCampaignError(
+          'This campaign could not be refunded because the reserved wallet balance is missing or already released. Run ads wallet repair, then try rejection again.',
+          409
+        );
+      }
+      throw error;
+    }
 
-      await ProviderCampaign.updateMany(
-        { campaignRun: run._id },
-        { $set: { status: 'CANCELLED', refundStatus: 'REFUNDED' } },
-        { session }
-      );
+    await ProviderCampaign.updateMany(
+      { campaignRun: run._id },
+      { $set: { status: 'CANCELLED', refundStatus: 'REFUNDED' } },
+      sessionOption
+    );
 
-      run.status = 'CANCELLED';
-      run.completedAt = new Date();
-      await run.save({ session });
+    run.status = 'CANCELLED';
+    run.completedAt = new Date();
+    await run.save(sessionOption);
 
-      campaign.status = 'REJECTED_BY_TALLYPADI';
-      campaign.reviewedAt = new Date();
-      campaign.reviewedBy = adminObjectId;
-      campaign.completedAt = new Date();
-      campaign.rejectionReason = reason;
-      campaign.refundAmount = toMajorUnits(refundAmountMinor);
-      campaign.walletCharged = false;
-      await campaign.save({ session });
+    campaign.status = 'REJECTED_BY_TALLYPADI';
+    campaign.reviewedAt = new Date();
+    campaign.reviewedBy = adminObjectId;
+    campaign.completedAt = new Date();
+    campaign.rejectionReason = reason;
+    campaign.refundAmount = toMajorUnits(refundAmountMinor);
+    campaign.walletCharged = false;
+    await campaign.save(sessionOption);
 
-      await audit({
-        adminId: adminObjectId,
-        action: 'Campaign rejected',
-        campaignId: campaign._id as any,
-        campaignRunId: run._id as any,
-        reason,
-        afterValue: { refundAmountMinor },
-        session,
-      });
+    await audit({
+      adminId: adminObjectId,
+      action: 'Campaign rejected',
+      campaignId: campaign._id as any,
+      campaignRunId: run._id as any,
+      reason,
+      afterValue: { refundAmountMinor },
+      session: txSession,
     });
+  };
+
+  try {
+    try {
+      await session.withTransaction(async () => {
+        await applyRejection(session);
+      });
+    } catch (error) {
+      if (!isTransactionUnsupportedError(error)) throw error;
+      campaign = null;
+      run = null;
+      refundAmountMinor = 0;
+      await applyRejection();
+    }
   } finally {
     await session.endSession();
   }
@@ -1187,11 +1224,15 @@ export const completeAdCampaign = async (campaignId: string, adminId?: string) =
       if (!run) throw new AdCampaignError('Campaign run not found', 404);
 
       const providers = await ProviderCampaign.find({ campaignRun: run._id }).session(session);
-      await ProviderCampaign.updateMany(
-        { campaignRun: run._id, status: { $nin: ['REJECTED_BY_PROVIDER', 'FAILED', 'CANCELLED'] } },
-        { $set: { status: 'COMPLETED', settlementStatus: 'RECONCILED' } },
-        { session }
-      );
+      for (const provider of providers) {
+        if (['REJECTED_BY_PROVIDER', 'FAILED', 'CANCELLED'].includes(provider.status)) continue;
+        provider.status = 'COMPLETED';
+        provider.settlementStatus = 'RECONCILED';
+        provider.refundStatus = provider.remainingBudgetWalletMinor > 0 ? 'REFUNDED' : 'NOT_APPLICABLE';
+        provider.remainingBudgetWalletMinor = 0;
+        provider.lastSyncedAt = new Date();
+        await provider.save({ session });
+      }
 
       refundMinor = Math.max(0, run.remainingBudgetMinor + run.safetyReserveMinor + run.fxBufferMinor + run.unallocatedBudgetMinor);
       if (refundMinor > 0) {
@@ -1212,6 +1253,7 @@ export const completeAdCampaign = async (campaignId: string, adminId?: string) =
           { $pull: { boosts: { campaignId: campaign._id } } },
           { session }
         );
+        queueMarketplaceProductRefresh(campaign.product, 'ad-campaign-completed').catch(() => undefined);
       }
 
       run.status = 'COMPLETED';

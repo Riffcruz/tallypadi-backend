@@ -5,6 +5,7 @@ import { Wallet, IWallet } from '../models/wallet.model';
 import { WalletTransaction, WalletTransactionType } from '../models/walletTransaction.model';
 import { activityService } from './activity.service';
 import { toMajorUnits, toMinorUnits } from './adBudget.service';
+import { referralService } from './referral.service';
 
 interface CreditWalletInput {
   userId: string | Types.ObjectId;
@@ -158,6 +159,9 @@ export const walletService = {
 
     const session = await mongoose.startSession();
     let walletBalanceMinor = 0;
+    let referralRewardResult: any = null;
+    let walletTopUpTransactionId: Types.ObjectId | null = null;
+    let walletCurrency = 'NGN';
 
     try {
       await session.withTransaction(async () => {
@@ -179,7 +183,7 @@ export const walletService = {
         wallet.version += 1;
         await wallet.save({ session });
 
-        await createLedgerEntry({
+        const walletTopUpTransaction = await createLedgerEntry({
           userId,
           wallet,
           type: 'ADS_WALLET_TOP_UP',
@@ -196,12 +200,28 @@ export const walletService = {
           },
         });
 
+        walletTopUpTransactionId = walletTopUpTransaction?._id || null;
+        walletCurrency = wallet.currency;
         walletBalanceMinor = wallet.availableBalanceMinor;
         await syncUserWalletMirror(userId, walletBalanceMinor, session);
       });
     } catch (error) {
       if (isDuplicateKeyError(error)) {
         const summary = await this.getWalletSummary(userId);
+        const existingTopUp = await WalletTransaction.findOne({ idempotencyKey: `wallet-topup:${providerReference}` })
+          .select('_id currency')
+          .lean();
+        try {
+          await referralService.processWalletFundingReward({
+            referredUserId: userId,
+            fundingAmountMinor: amountInKobo,
+            fundingWalletTransactionId: existingTopUp?._id || null,
+            paystackReference: providerReference,
+            currency: String(existingTopUp?.currency || 'NGN'),
+          });
+        } catch (referralError) {
+          console.error('Referral reward retry after duplicate wallet funding failed:', referralError);
+        }
         return {
           credited: false,
           amountInNaira: toMajorUnits(amountInKobo),
@@ -230,6 +250,18 @@ export const walletService = {
       }
     );
 
+    try {
+      referralRewardResult = await referralService.processWalletFundingReward({
+        referredUserId: userId,
+        fundingAmountMinor: amountInKobo,
+        fundingWalletTransactionId: walletTopUpTransactionId,
+        paystackReference: providerReference,
+        currency: walletCurrency,
+      });
+    } catch (referralError) {
+      console.error('Referral reward processing failed:', referralError);
+    }
+
     await activityService.recordActivitySafely({
       user: new Types.ObjectId(userId),
       actor: new Types.ObjectId(userId),
@@ -243,6 +275,23 @@ export const walletService = {
         walletBalanceMinor,
       },
     });
+
+    if (referralRewardResult?.rewarded && referralRewardResult.referrerId) {
+      await activityService.recordActivitySafely({
+        user: new Types.ObjectId(referralRewardResult.referrerId),
+        actor: new Types.ObjectId(userId),
+        type: 'REFERRAL_REWARD',
+        title: 'Referral reward earned',
+        message: `You earned ₦${toMajorUnits(referralRewardResult.rewardAmountMinor).toLocaleString()} in ads wallet credit from a referral.`,
+        amount: toMajorUnits(referralRewardResult.rewardAmountMinor),
+        metadata: {
+          reference: providerReference,
+          referredUserId: userId,
+          rewardWalletTransactionId: referralRewardResult.rewardTransaction?._id ? String(referralRewardResult.rewardTransaction._id) : null,
+          walletBalanceMinor: referralRewardResult.walletBalanceMinor,
+        },
+      });
+    }
 
     return {
       credited: true,

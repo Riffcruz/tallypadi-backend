@@ -5,7 +5,7 @@ import { User, IUser } from '../models/user.model';
 import { isSubActive } from '../utils/permissions';
 import { getRelevantUserIds } from './report.service';
 
-import { queuePushNotification } from './queue.service';
+import { queueMarketplaceProductRefresh, queuePushNotification } from './queue.service';
 import { Customer } from '../models/customer.model';
 import { activityService } from './activity.service';
 
@@ -181,6 +181,9 @@ export class SalesService {
         // Concurrency check failed (stock changed between read and write)
         throw new Error("Transaction failed: Stock modified during processing. Please try again.");
       }
+      finalItems.forEach((item) => {
+        queueMarketplaceProductRefresh(item.itemId, 'web-sale-stock-change').catch(() => undefined);
+      });
     }
 
     // 6. Create Transaction
@@ -413,6 +416,9 @@ export class SalesService {
 
     if (bulkOps.length > 0) {
       await Inventory.bulkWrite(bulkOps, { session });
+      returnItems.forEach((item) => {
+        if (item.itemId) queueMarketplaceProductRefresh(item.itemId, 'web-return-stock-change').catch(() => undefined);
+      });
     }
 
     // 4. Create Refund Transaction

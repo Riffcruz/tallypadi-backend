@@ -5,6 +5,7 @@ import { saveImageFromBase64 } from '../utils/image';
 import { Types } from 'mongoose';
 import { parseMessageWithGemini } from '../services/gemini.service';
 import { buildMarketplaceProductSeo } from '../services/marketplaceSeo.service';
+import { queueMarketplaceProductRefresh } from '../services/queue.service';
 
 // --- SKU Generator ---
 // Generates a short unique code like "P-4X9M" for a product
@@ -56,6 +57,10 @@ const formatActiveBoosts = (boosts?: { platform: string; expiresAt: Date; planId
       planId: boost.planId,
       expiresAt: boost.expiresAt,
     }));
+};
+
+const refreshMarketplaceProduct = (productId: unknown, reason: string) => {
+  queueMarketplaceProductRefresh(productId, reason).catch(() => undefined);
 };
 
 // --- Subscription Guard ---
@@ -371,6 +376,8 @@ export const addInventoryItem = async (req: Request, res: Response) => {
       });
     }
 
+    refreshMarketplaceProduct(item._id, 'inventory-add');
+
     return res.json({
       id: item._id,
       name: item.name,
@@ -459,6 +466,7 @@ export const updateInventoryItem = async (req: Request, res: Response) => {
     item.marketplaceSeo = buildMarketplaceProductSeo(item, user);
 
     await item.save();
+    refreshMarketplaceProduct(item._id, 'inventory-update');
 
     return res.json({
       id: item._id,
@@ -557,6 +565,7 @@ export const deleteInventoryItem = async (req: Request, res: Response) => {
     }
 
     await item.deleteOne();
+    refreshMarketplaceProduct(id, 'inventory-delete');
 
     return res.json({ success: true, id });
   } catch (error) {
@@ -625,6 +634,7 @@ export const bulkSaveInventory = async (req: Request, res: Response) => {
     const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     let updatedCount = 0;
     let createdCount = 0;
+    const changedProductIds: string[] = [];
 
     for (const item of items) {
       const name = String(item.name || '').trim();
@@ -645,6 +655,7 @@ export const bulkSaveInventory = async (req: Request, res: Response) => {
         if (sellingPrice > 0) existingItem.lastUnitPrice = sellingPrice;
         existingItem.marketplaceSeo = buildMarketplaceProductSeo(existingItem, user);
         await existingItem.save();
+        changedProductIds.push(String(existingItem._id));
         updatedCount++;
       } else {
         const sku = await generateUniqueSku(user._id);
@@ -656,13 +667,16 @@ export const bulkSaveInventory = async (req: Request, res: Response) => {
           lastUnitPrice: sellingPrice,
           costPrice: costPrice,
         };
-        await Inventory.create({
+        const createdItem = await Inventory.create({
           ...newProduct,
           marketplaceSeo: buildMarketplaceProductSeo(newProduct, user),
         });
+        changedProductIds.push(String(createdItem._id));
         createdCount++;
       }
     }
+
+    changedProductIds.forEach((productId) => refreshMarketplaceProduct(productId, 'inventory-bulk-save'));
 
     return res.json({ success: true, updatedCount, createdCount });
   } catch (error) {

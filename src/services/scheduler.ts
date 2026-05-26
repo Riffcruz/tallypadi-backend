@@ -4,7 +4,7 @@ import { User } from '../models/user.model';
 import { Transaction } from '../models/transaction.model';
 import { Debtor } from '../models/debtor.model';
 import { Inventory } from '../models/inventory.model';
-import { queueOutboundMessage } from './queue.service';
+import { queueMarketplaceFacetsRefresh, queueMarketplaceReconcile, queueOutboundMessage } from './queue.service';
 import { cleanupPdfReports } from './pdf.service';
 import { orderService } from './order.service';
 import { runAdBoostMaintenance } from './adCampaign.service';
@@ -135,6 +135,11 @@ function computeNextSummaryAtUTC(now: Date, offsetMin: number, closingTime: stri
 }
 
 export function startScheduler() {
+  // 0) Marketplace read-model reconciliation (keeps cache/index drift under 1-5 minutes)
+  cron.schedule('*/5 * * * *', async () => {
+    await queueMarketplaceReconcile('scheduled-reconcile');
+  });
+
   // 1) Closing-time summary checker (every minute)
   cron.schedule('* * * * *', async () => {
     const now = new Date();
@@ -324,6 +329,8 @@ export function startScheduler() {
         console.log(
           `📣 Ads maintenance: completed ${result.completedCount}, purged SEO metadata from ${result.campaignMetadataPurged} campaign(s), removed expired boosts from ${result.productBoostsRemoved} product(s).`
         );
+        await queueMarketplaceFacetsRefresh('ads-boost-maintenance');
+        await queueMarketplaceReconcile('ads-boost-maintenance');
       }
     } catch (err) {
       console.error('❌ Ads boost maintenance scheduler error:', err);

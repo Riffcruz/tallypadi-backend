@@ -5,7 +5,6 @@ import axios from 'axios';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
-  Phone,
   Store,
   Lock,
   Eye,
@@ -15,7 +14,8 @@ import {
   ArrowLeft,
   Clock,
   Languages,
-  Mail
+  Mail,
+  Gift
 } from 'lucide-react';
 import { setCookie, getCookie } from '../../utils/cookies';
 
@@ -61,11 +61,18 @@ function buildPhoneIdentifier(input: string, selectedCountryCode: string) {
 
 export default function RegisterPage() {
   const router = useRouter();
+  const [referralCode, setReferralCode] = useState('');
 
   useEffect(() => {
     const token = getCookie('tallyToken');
     if (token) {
       router.replace('/dashboard');
+    }
+
+    if (typeof window !== 'undefined') {
+      const code = new URLSearchParams(window.location.search).get('ref') || '';
+      const cleanCode = code.trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 24);
+      if (cleanCode) setReferralCode(cleanCode);
     }
   }, [router]);
 
@@ -144,7 +151,8 @@ export default function RegisterPage() {
             password: pass,
             closingTime: closingHour,
             language: language,
-            countryCode: countryCode.replace('+', '')
+            countryCode: countryCode.replace('+', ''),
+            referralCode: referralCode || undefined
           },
           { timeout: 20000 }
         );
@@ -157,17 +165,20 @@ export default function RegisterPage() {
       }
 
       setError('Registration failed. Please try again.');
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
       
-      const status = err?.response?.status;
-      const apiError = err?.response?.data?.error;
+      const isAxiosErr = axios.isAxiosError(err);
+      const status = isAxiosErr ? err.response?.status : undefined;
+      const apiError = isAxiosErr ? (err.response?.data as { error?: string } | undefined)?.error : undefined;
+      const code = isAxiosErr ? err.code : undefined;
+      const message = err instanceof Error ? err.message : '';
 
-      if (!err?.response && (err?.code === 'ERR_NETWORK' || err?.message === 'Network Error' || err?.message?.includes('status code 429'))) {
+      if (isAxiosErr && !err.response && (code === 'ERR_NETWORK' || message === 'Network Error' || message.includes('status code 429'))) {
         setError('Network error. Kindly check your internet connection and try again.');
       } else if (status === 429) {
         setError('Too many attempts, please wait a few minutes and try again.');
-      } else if (status >= 500) {
+      } else if (typeof status === 'number' && status >= 500) {
         setError('Server issues. Kindly try again later.');
       } else {
         setError(apiError || 'Registration failed. Please try again.');
@@ -208,6 +219,13 @@ export default function RegisterPage() {
           <div className="mb-6 bg-red-50 border border-red-100 text-red-600 px-4 py-3 rounded-xl text-sm flex items-start">
             <div className="mt-0.5 mr-2">⚠️</div>
             {error}
+          </div>
+        )}
+
+        {referralCode && !otpSent && (
+          <div className="mb-6 flex items-center gap-3 rounded-xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+            <Gift size={18} className="shrink-0" />
+            <span>Referral code applied: {referralCode}</span>
           </div>
         )}
 

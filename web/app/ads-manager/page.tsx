@@ -268,11 +268,10 @@ function AdsManagerContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // Expanded report states and demo simulation logic for TikTok verification requirements
+  // Expanded report states for provider/admin-reported performance metrics
   const [expandedCampaignId, setExpandedCampaignId] = useState<string | null>(null);
   const [metricsLoading, setMetricsLoading] = useState(false);
   const [campaignMetrics, setCampaignMetrics] = useState<any[]>([]);
-  const [simulationMode, setSimulationMode] = useState<Record<string, boolean>>({});
 
   const storeSlug = useMemo(() => {
     return String(user?.businessName || 'my-shop').toLowerCase().replace(/[^a-z0-9]+/g, '-');
@@ -483,18 +482,14 @@ function AdsManagerContent() {
     const budget = validateBoost(form, plan);
     if (!budget) return null;
 
-    // Show SweetAlert simulated synchronization loading state for Step 5 TikTok Ads manager sync
     Swal.fire({
-      title: 'Connecting TikTok Ads Manager',
-      html: 'Synchronizing campaign parameters and targeting criteria with TikTok Ads API...',
+      title: 'Submitting Boost Request',
+      html: 'Reserving wallet budget and sending the campaign for TallyPadi review...',
       allowOutsideClick: false,
       didOpen: () => {
         Swal.showLoading();
       }
     });
-
-    // Wait 2.5 seconds to simulate secure API handoff to TikTok Ads
-    await new Promise((resolve) => setTimeout(resolve, 2500));
 
     const token = getTokenOrRedirect();
     try {
@@ -1009,7 +1004,6 @@ function AdsManagerContent() {
                             campaign={campaign}
                             metrics={campaignMetrics}
                             loading={metricsLoading}
-                            isSimulated={!!simulationMode[campaign.id]}
                             userCurrencyCode={userCurrencyCode}
                           />
                         )}
@@ -1039,17 +1033,6 @@ function AdsManagerContent() {
                             )}
                           </div>
 
-                          {expandedCampaignId === (campaign.id || campaign._id) && (
-                            <label className="flex items-center gap-2 text-xs font-medium text-slate-500 cursor-pointer select-none">
-                              <input
-                                type="checkbox"
-                                checked={!!simulationMode[(campaign.id || campaign._id) as string]}
-                                onChange={(e) => setSimulationMode((prev) => ({ ...prev, [(campaign.id || campaign._id) as string]: e.target.checked }))}
-                                className="h-3.5 w-3.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500/20"
-                              />
-                              Simulate Live {(campaign.selectedProviders?.length || campaign.platforms?.length) ? (campaign.selectedProviders || campaign.platforms || []).map(p => platformLabel(p).replace(' Ads', '').replace('TallyPadi Marketplace Boost', 'TallyPadi')).join(' & ') : 'TikTok'} Metrics (Demo)
-                            </label>
-                          )}
                         </div>
                       </article>
                     );
@@ -1129,15 +1112,12 @@ function LiveAdPreview({
             <Search size={16} className="text-white/80" />
           </div>
 
-          {/* Background Image / Blur */}
-          <div className="absolute inset-0 z-0 flex items-center justify-center bg-zinc-900">
+          {/* Background Image / Solid Fallback */}
+          <div className="absolute inset-0 z-0 flex items-center justify-center bg-zinc-900 overflow-hidden">
             {productImage ? (
-              <>
-                <img src={productImage} alt="" className="absolute inset-0 w-full h-full object-cover opacity-20 blur-md scale-110" />
-                <img src={productImage} alt="" className="relative max-h-[70%] max-w-full object-contain z-1" />
-              </>
+              <img src={productImage} alt="" className="relative max-h-[70%] max-w-full object-contain z-1" />
             ) : (
-              <div className="flex flex-col items-center text-zinc-650 gap-2">
+              <div className="flex flex-col items-center text-zinc-650 gap-2 opacity-50">
                 <Megaphone size={48} className="stroke-[1.5]" />
                 <span className="text-[10px] uppercase font-bold tracking-widest text-zinc-550">TallyPadi Ads</span>
               </div>
@@ -1308,13 +1288,11 @@ function CampaignReportPanel({
   campaign,
   metrics,
   loading,
-  isSimulated,
   userCurrencyCode,
 }: {
   campaign: AdCampaign;
   metrics: any[];
   loading: boolean;
-  isSimulated: boolean;
   userCurrencyCode: string;
 }) {
   const [activeTab, setActiveTab] = useState<'impressions' | 'clicks' | 'conversions' | 'spend'>('impressions');
@@ -1326,45 +1304,8 @@ function CampaignReportPanel({
     : 'Platform';
 
   const activeMetrics = useMemo(() => {
-    if (isSimulated) {
-      const dates = Array.from({ length: 7 }, (_, i) => {
-        const d = new Date();
-        d.setDate(d.getDate() - (6 - i));
-        return d.toISOString().split('T')[0];
-      });
-
-      const allMockMetrics: any[] = [];
-      const budget = (campaign.budget || 2000) / (platformsList.length || 1);
-
-      (platformsList.length ? platformsList : ['TIKTOK']).forEach((platform, pIdx) => {
-        let seed = pIdx * 100;
-        const cid = (campaign.id || campaign._id || 'demo') as string;
-        for (let c = 0; c < cid.length; c++) {
-          seed += cid.charCodeAt(c);
-        }
-
-        dates.forEach((date, idx) => {
-          const dayFactor = 0.5 + ((seed * (idx + 1)) % 10) / 10;
-          const daySpend = (budget / 7) * dayFactor;
-          const dayImps = Math.round(daySpend * 4.5);
-          const dayClicks = Math.round(dayImps * 0.024);
-          const dayConvs = Math.round(dayClicks * 0.055);
-
-          allMockMetrics.push({
-            date,
-            provider: platform,
-            impressions: dayImps,
-            clicks: dayClicks,
-            conversions: dayConvs,
-            spendMinor: Math.round(daySpend * 100),
-            currency: 'NGN',
-          });
-        });
-      });
-      return allMockMetrics;
-    }
     return [...metrics].reverse();
-  }, [isSimulated, metrics, campaign.id, campaign._id, campaign.budget, platformsList]);
+  }, [metrics]);
 
   const filteredMetrics = useMemo(() => {
     if (activePlatformFilter === 'ALL') return activeMetrics;
@@ -1407,7 +1348,7 @@ function CampaignReportPanel({
     return { imps, clicks, convs, spend, ctr, convRate, cpc };
   }, [aggregatedMetrics]);
 
-  if (loading && !isSimulated) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center py-8 text-slate-400">
         <Loader2 className="animate-spin text-emerald-600 mr-2" size={20} />
@@ -1420,9 +1361,9 @@ function CampaignReportPanel({
     return (
       <div className="bg-slate-50 rounded-lg border border-slate-100 p-6 text-center mt-3 animate-in fade-in duration-200">
         <AlertCircle className="mx-auto mb-2 text-slate-400" size={24} />
-        <p className="text-xs font-bold text-slate-700">No Metrics Found</p>
-        <p className="text-[11px] text-slate-500 mt-1 max-w-sm mx-auto leading-relaxed">
-          {platformNames} has not reported campaign activity for this reference yet. Check the checkbox on the right to simulate live metrics.
+          <p className="text-xs font-bold text-slate-700">No Metrics Found</p>
+          <p className="text-[11px] text-slate-500 mt-1 max-w-sm mx-auto leading-relaxed">
+          {platformNames} has not reported campaign activity for this reference yet. Metrics will appear after provider sync or admin reconciliation.
         </p>
       </div>
     );
@@ -1458,7 +1399,7 @@ function CampaignReportPanel({
 
   const points = chartValues.map((val, idx) => {
     const N = chartValues.length;
-    const x = paddingLeft + (idx / (N - 1)) * plotW;
+    const x = N <= 1 ? paddingLeft + plotW / 2 : paddingLeft + (idx / (N - 1)) * plotW;
     const y = paddingTop + (1 - val / maxVal) * plotH;
     return { x, y, val, label: chartLabels[idx] };
   });
@@ -1479,7 +1420,7 @@ function CampaignReportPanel({
     <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50/50 p-4 space-y-4 animate-in slide-in-from-top-2 duration-300">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded w-max">
-          <Globe size={11} /> {platformNames} Live API Reports
+          <Globe size={11} /> {platformNames} Provider Reports
         </span>
         {platformsList.length > 1 && (
           <div className="flex items-center gap-1 bg-slate-200/50 p-1 rounded-lg self-start">

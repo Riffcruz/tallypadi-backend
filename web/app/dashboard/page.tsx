@@ -111,7 +111,7 @@ interface FxRatesResponse {
   updatedAt?: string;
 }
 
-type ActivityType = 'WALLET_FUNDING' | 'AD_BOOST' | 'SUBSCRIPTION' | 'LOW_STOCK' | 'EXPENSE' | 'OTHER';
+type ActivityType = 'WALLET_FUNDING' | 'AD_BOOST' | 'SUBSCRIPTION' | 'REFERRAL_REWARD' | 'LOW_STOCK' | 'EXPENSE' | 'OTHER';
 
 interface ActivityItem {
   id: string;
@@ -148,6 +148,7 @@ const getActivityIcon = (type: ActivityType) => {
   if (type === 'WALLET_FUNDING') return Wallet;
   if (type === 'AD_BOOST') return Megaphone;
   if (type === 'SUBSCRIPTION') return CreditCard;
+  if (type === 'REFERRAL_REWARD') return Coins;
   if (type === 'LOW_STOCK') return AlertCircle;
   if (type === 'EXPENSE') return TrendingDown;
   return Bell;
@@ -157,6 +158,7 @@ const getActivityAccent = (type: ActivityType) => {
   if (type === 'WALLET_FUNDING') return 'bg-emerald-50 text-emerald-700 border-emerald-100';
   if (type === 'AD_BOOST') return 'bg-indigo-50 text-indigo-700 border-indigo-100';
   if (type === 'SUBSCRIPTION') return 'bg-purple-50 text-purple-700 border-purple-100';
+  if (type === 'REFERRAL_REWARD') return 'bg-amber-50 text-amber-700 border-amber-100';
   if (type === 'LOW_STOCK') return 'bg-red-50 text-red-700 border-red-100';
   if (type === 'EXPENSE') return 'bg-orange-50 text-orange-700 border-orange-100';
   return 'bg-slate-50 text-slate-700 border-slate-100';

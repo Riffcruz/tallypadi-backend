@@ -23,6 +23,10 @@ export const verifyMetaWebhook = (req: Request, res: Response) => {
 // 2. Handle Meta Webhook payload
 export const handleMetaWebhook = async (req: Request, res: Response) => {
   try {
+    if (process.env.NODE_ENV === 'production' && req.signatureValid !== true) {
+      return res.sendStatus(401);
+    }
+
     const body = req.body;
     
     if (body.object !== 'page' && body.object !== 'ad_account') {
@@ -63,7 +67,14 @@ export const handleMetaWebhook = async (req: Request, res: Response) => {
              const reason = value.rejection_reason || value.reason || 'Rejected by Meta Ad Review Policies';
              
              // Save Webhook Event Log for idempotency and debugging
-             const idempotencyKey = `meta_ads_rejection_${externalAdId}_${entry.time || Date.now()}`;
+             const stableEventPart = [
+               change.field,
+               reviewStatus,
+               value.rejection_reason || value.reason || '',
+               entry.id || '',
+               entry.time || value.event_time || ''
+             ].map((part) => String(part || '').trim()).join('_');
+             const idempotencyKey = `meta_ads_rejection_${externalAdId}_${stableEventPart}`;
              try {
                 await WebhookEvent.create({
                   provider: 'META_ADS',

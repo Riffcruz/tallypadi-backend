@@ -4,19 +4,10 @@ dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
 import mongoose from 'mongoose';
 import { env } from './config/env';
+import { connectDb } from './config/db';
 
 async function boot() {
-  // ✅ do not buffer queries when disconnected
-  mongoose.set('bufferCommands', false);
-
-  await mongoose.connect(env.mongoUri, {
-    serverSelectionTimeoutMS: 30000,
-    connectTimeoutMS: 30000,
-    socketTimeoutMS: 60000,
-    maxPoolSize: 100,     
-    minPoolSize: 10,
-  } as any);
-
+  await connectDb();
   console.log('✅ Worker connected to MongoDB');
 
   // ✅ start workers ONLY AFTER DB is ready
@@ -33,6 +24,7 @@ async function boot() {
     if (workers.messageWorker) closePromises.push(workers.messageWorker.close());
     if (workers.notificationWorker) closePromises.push(workers.notificationWorker.close());
     if (workers.adAutomationWorker) closePromises.push(workers.adAutomationWorker.close());
+    if (workers.marketplaceIndexWorker) closePromises.push(workers.marketplaceIndexWorker.close());
     
     await Promise.all(closePromises);
     await mongoose.disconnect();

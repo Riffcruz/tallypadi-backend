@@ -86,7 +86,12 @@ const updateGlobalSettingsSchema = z
       durationDays: z.coerce.number().int().min(3).max(30),
       price: z.coerce.number().min(50_000),
       label: z.string().trim().min(1)
-    })).optional()
+    })).optional(),
+    referralProgram: z.object({
+      enabled: z.boolean().optional().default(true),
+      minimumFundingAmount: z.coerce.number().min(0).max(50_000_000).optional().default(10000),
+      rewardPercentage: z.coerce.number().min(0).max(100).optional().default(10),
+    }).optional()
   })
   .strict();
 
@@ -668,7 +673,7 @@ export const updateGlobalSettings = async (req: Request, res: Response) => {
     const parsed = updateGlobalSettingsSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
-    const { autoSuspendOnJailbreak, maxMessageHistory, maxStaffAccounts, whatsappUrl, smtp, adsPlans } = parsed.data;
+    const { autoSuspendOnJailbreak, maxMessageHistory, maxStaffAccounts, whatsappUrl, smtp, adsPlans, referralProgram } = parsed.data;
 
     const updatePayload: any = {};
     if (whatsappUrl !== undefined) updatePayload.whatsappUrl = whatsappUrl;
@@ -677,6 +682,7 @@ export const updateGlobalSettings = async (req: Request, res: Response) => {
     if (maxStaffAccounts !== undefined) updatePayload['limits.maxStaffAccounts'] = maxStaffAccounts;
     if (smtp !== undefined) updatePayload.smtp = smtp;
     if (adsPlans !== undefined) updatePayload.adsPlans = adsPlans;
+    if (referralProgram !== undefined) updatePayload.referralProgram = referralProgram;
 
     const settings = await AdminSettings.findOneAndUpdate({}, { $set: updatePayload }, { new: true, upsert: true });
     res.json({ success: true, settings });

@@ -12,6 +12,12 @@ export interface IAdminSettings extends Document {
     label: string; // e.g. "5 Days Boost"
   }[];
 
+  referralProgram?: {
+    enabled: boolean;
+    minimumFundingAmount: number; // NGN
+    rewardPercentage: number;
+  };
+
   security: {
     autoSuspendOnJailbreak: boolean;
     maxLoginAttempts: number;
@@ -50,6 +56,12 @@ const adminSettingsSchema = new Schema<IAdminSettings>(
       price: { type: Number, required: true },
       label: { type: String, required: true }
     }],
+
+    referralProgram: {
+      enabled: { type: Boolean, default: true },
+      minimumFundingAmount: { type: Number, default: 10000 },
+      rewardPercentage: { type: Number, default: 10 },
+    },
 
     security: {
       autoSuspendOnJailbreak: { type: Boolean, default: true },

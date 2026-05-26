@@ -1,5 +1,4 @@
 import express, { Request, Response, NextFunction } from 'express';
-import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import helmet from 'helmet';
 import cors from 'cors';
@@ -18,7 +17,7 @@ import { authRequired } from './middleware/authRequired';
 import { createBullBoard } from '@bull-board/api';
 import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 import { ExpressAdapter } from '@bull-board/express';
-import { replyQueue, bulkQueue, messageQueue, notificationQueue } from './services/queue.service';
+import { replyQueue, bulkQueue, messageQueue, notificationQueue, marketplaceIndexQueue } from './services/queue.service';
 
 // --- ROUTERS ---
 import whatsappRouter from './routes/whatsapp.routes';
@@ -41,6 +40,7 @@ import adsRouter from './routes/ads.routes';
 import activityRouter from './routes/activity.routes';
 import marketplaceRouter from './routes/marketplace.routes';
 import blogRouter from './routes/blog.routes';
+import referralRouter from './routes/referral.routes';
 
 // --- SERVICES & CONFIG ---
 import {
@@ -56,6 +56,8 @@ import {
 } from './controllers/auth.controller';
 import { startScheduler } from './services/scheduler';
 import { env } from './config/env';
+import { connectDb } from './config/db';
+import { RedisRateLimitStore } from './services/rateLimitRedisStore';
 
 // --- CONTROLLERS ---
 import { getDashboardData } from './controllers/dashboard.controller';
@@ -99,7 +101,7 @@ app.use(helmet());
 const corsOptions: cors.CorsOptions = {
   origin: process.env.NODE_ENV === 'production' ? 'https://tallypadi.com' : true,
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 
 };
@@ -109,6 +111,9 @@ app.options(/.*/, cors(corsOptions));
 
 // Logging
 app.use((req: Request, _res: Response, next: NextFunction) => {
+  if (process.env.NODE_ENV === 'production' && req.originalUrl.startsWith('/api/marketplace')) {
+    return next();
+  }
   console.log(`📨 ${req.method} ${req.originalUrl} from ${req.ip}`);
   next();
 });
@@ -122,11 +127,19 @@ const verifySignature = (req: Request, _res: Response, buf: Buffer) => {
   // ✅ Always store raw body for ANY route that needs HMAC verification later (Paystack, etc.)
   req.rawBody = buf;
 
-  // Only verify WhatsApp signature on WhatsApp webhook routes
-  if ((!req.originalUrl.startsWith('/api/whatsapp') && !req.originalUrl.startsWith('/api/support/webhook')) || req.method !== 'POST') return;
+  const shouldVerifyMetaSignature =
+    req.method === 'POST' &&
+    (
+      req.originalUrl.startsWith('/api/whatsapp') ||
+      req.originalUrl.startsWith('/api/support/webhook') ||
+      req.originalUrl.startsWith('/api/webhook/ads')
+    );
+  if (!shouldVerifyMetaSignature) return;
 
   const header = req.headers['x-hub-signature-256'];
-  const appSecret = process.env.WHATSAPP_APP_SECRET;
+  const appSecret = req.originalUrl.startsWith('/api/webhook/ads')
+    ? (env.ads.meta.appSecret || process.env.WHATSAPP_APP_SECRET)
+    : process.env.WHATSAPP_APP_SECRET;
 
   req.signatureValid = false;
 
@@ -155,18 +168,34 @@ app.use(express.json({ limit: '10mb', verify: verifySignature }));
 // ==========================================
 // 🚦 RATE LIMITERS
 // ==========================================
+const rateLimitStore = (prefix: string) => new RedisRateLimitStore(prefix);
+
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
+  store: rateLimitStore('rl:api'),
+  passOnStoreError: true,
   standardHeaders: true,
   legacyHeaders: false,
   message: 'Too many requests from this IP, please try again after 15 minutes',
+});
+
+const marketplaceLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 600,
+  store: rateLimitStore('rl:marketplace'),
+  passOnStoreError: true,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: 'Marketplace is receiving too many requests from this IP. Please try again shortly.',
 });
 
 // ✅ Login: IP limiter
 const loginLimiterIp = rateLimit({
   windowMs: 3 * 60 * 1000,
   max: 10,
+  store: rateLimitStore('rl:login:ip'),
+  passOnStoreError: true,
   standardHeaders: true,
   legacyHeaders: false,
   message: 'Too many login attempts from this IP. Try again in 3 minutes.',
@@ -174,6 +203,7 @@ const loginLimiterIp = rateLimit({
 
 const normalizeStr = (v: unknown) => String(v || '').trim().toLowerCase();
 const normalizePhoneDigits = (v: unknown) => String(v || '').replace(/[^\d]/g, '');
+const rateLimitIpKey = (req: Request) => ipKeyGenerator(req.ip || '');
 
 const looksLikeEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
 
@@ -181,13 +211,15 @@ const looksLikeEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
 const loginLimiterIdentity = rateLimit({
   windowMs: 3 * 60 * 1000,
   max: 5,
+  store: rateLimitStore('rl:login:identity'),
+  passOnStoreError: true,
   standardHeaders: true,
   legacyHeaders: false,
   message: 'Too many login attempts for this account. Try again in 3 minutes.',
   keyGenerator: (req: Request) => {
     const identifier = normalizeStr(req.body?.identifier || req.body?.email || req.body?.phoneNumber);
 
-    if (!identifier) return `ip:${ipKeyGenerator(req as any)}`;
+    if (!identifier) return `ip:${rateLimitIpKey(req)}`;
 
     if (looksLikeEmail(identifier)) return `email:${identifier}`;
     return `phone:${normalizePhoneDigits(identifier)}`;
@@ -199,13 +231,15 @@ const loginLimiterIdentity = rateLimit({
 const emailLimiter = rateLimit({
   windowMs: 3 * 60 * 1000,
   max: 6,
+  store: rateLimitStore('rl:login:email'),
+  passOnStoreError: true,
   standardHeaders: true,
   legacyHeaders: false,
   message: 'Too many login attempts for this email. Try again in 3 minutes.',
   keyGenerator: (req: Request) => {
     const identifier = normalizeStr(req.body?.identifier || req.body?.email);
     if (identifier && looksLikeEmail(identifier)) return `email:${identifier}`;
-    return `ip:${ipKeyGenerator(req as any)}`;
+    return `ip:${rateLimitIpKey(req)}`;
   },
 });
 
@@ -214,13 +248,15 @@ const emailLimiter = rateLimit({
 const phoneLimiter = rateLimit({
   windowMs: 3 * 60 * 1000,
   max: 6,
+  store: rateLimitStore('rl:login:phone'),
+  passOnStoreError: true,
   standardHeaders: true,
   legacyHeaders: false,
   message: 'Too many login attempts for this phone number. Try again in 3 minutes.',
   keyGenerator: (req: Request) => {
     const identifier = normalizeStr(req.body?.identifier || req.body?.phoneNumber);
-    if (!identifier) return `ip:${ipKeyGenerator(req as any)}`;
-    if (looksLikeEmail(identifier)) return `ip:${ipKeyGenerator(req as any)}`;
+    if (!identifier) return `ip:${rateLimitIpKey(req)}`;
+    if (looksLikeEmail(identifier)) return `ip:${rateLimitIpKey(req)}`;
     return `phone:${normalizePhoneDigits(identifier)}`;
   },
 });
@@ -229,16 +265,20 @@ const phoneLimiter = rateLimit({
 const presignUploadLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 30, // 30 requests per 15 minutes
+  store: rateLimitStore('rl:uploads:presign'),
+  passOnStoreError: true,
   standardHeaders: true,
   legacyHeaders: false,
   message: 'Too many upload presign requests from this IP, please try again after 15 minutes',
-  keyGenerator: (req: Request) => (req.user?.id ? `user:${req.user.id}` : `ip:${ipKeyGenerator(req as any)}`),
+  keyGenerator: (req: Request) => (req.user?.id ? `user:${req.user.id}` : `ip:${rateLimitIpKey(req)}`),
 });
 
 // ✅ Register limiter
 const registerLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 5, // 5 accounts per hour
+  store: rateLimitStore('rl:register'),
+  passOnStoreError: true,
   standardHeaders: true,
   legacyHeaders: false,
   message: 'Too many accounts created from this IP, please try again after an hour',
@@ -248,12 +288,14 @@ const registerLimiter = rateLimit({
 const forgotPasswordLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 10, // 3 attempts per hour
+  store: rateLimitStore('rl:forgot-password'),
+  passOnStoreError: true,
   standardHeaders: true,
   legacyHeaders: false,
   message: 'Too many password reset requests. Please try again in an hour.',
   keyGenerator: (req: Request) => {
     const identifier = normalizeStr(req.body?.identifier);
-    if (!identifier) return `ip:${ipKeyGenerator(req as any)}`;
+    if (!identifier) return `ip:${rateLimitIpKey(req)}`;
     return `fp:${normalizePhoneDigits(identifier)}`;
   },
 });
@@ -261,7 +303,11 @@ const forgotPasswordLimiter = rateLimit({
 
 app.use('/api', (req: Request, res: Response, next: NextFunction) => {
   // Skip rate limit for webhooks
-  if (req.originalUrl.startsWith('/api/whatsapp') || req.originalUrl.startsWith('/api/webhook')) {
+  if (
+    req.originalUrl.startsWith('/api/whatsapp') ||
+    req.originalUrl.startsWith('/api/webhook') ||
+    req.originalUrl.startsWith('/api/marketplace')
+  ) {
     return next();
   }
   return apiLimiter(req, res, next);
@@ -284,7 +330,17 @@ app.use(
 
 app.use('/api/webhook', webhookRoutes);
 app.use('/api/support/webhook', supportWebhookRouter); // ✅ New Support Webhook
-app.use('/api/webhook/ads', adsWebhookRoutes);
+app.use(
+  '/api/webhook/ads',
+  (req: Request, res: Response, next: NextFunction) => {
+    if (process.env.NODE_ENV === 'production' && req.method === 'POST' && req.signatureValid !== true) {
+      console.error('❌ Ads webhook rejected: invalid/missing signature');
+      return res.sendStatus(401);
+    }
+    next();
+  },
+  adsWebhookRoutes
+);
 
 // ==========================================
 // 🧼 SECURITY SANITIZATION
@@ -383,7 +439,7 @@ app.use('/api/payment', paymentRouter);
 app.use('/api/health', healthRouter);
 app.use('/api/orders', authRequired, orderRouter);
 app.use('/api/shop', shopRouter);
-app.use('/api/marketplace', marketplaceRouter);
+app.use('/api/marketplace', marketplaceLimiter, marketplaceRouter);
 app.use('/api/blog', blogRouter);
 app.use('/api/hq', hqRouter);
 app.use('/api/invoices', invoiceRouter);
@@ -391,6 +447,7 @@ app.use('/api/expenses', authRequired, expenseRouter);
 app.use('/api/draft', draftRouter); // Magic Draft Link (no auth required)
 app.use('/api/ads', adsRouter);
 app.use('/api/activities', authRequired, activityRouter);
+app.use('/api/referrals', authRequired, referralRouter);
 
 // --- LIVE SUPPORT ---
 app.use('/api/support', supportRouter);
@@ -406,7 +463,8 @@ createBullBoard({
     new BullMQAdapter(replyQueue),
     new BullMQAdapter(bulkQueue),
     new BullMQAdapter(messageQueue),
-    new BullMQAdapter(notificationQueue)
+    new BullMQAdapter(notificationQueue),
+    new BullMQAdapter(marketplaceIndexQueue)
   ],
   serverAdapter: serverAdapter,
 });
@@ -419,10 +477,12 @@ app.use('/api/admin/queues', serverAdapter.getRouter());
 const adminLimiterPerUser = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 120,
+  store: rateLimitStore('rl:admin'),
+  passOnStoreError: true,
   standardHeaders: true,
   legacyHeaders: false,
   message: 'Too many admin requests, slow down.',
-  keyGenerator: (req: Request) => (req.user?.id ? `admin:${req.user.id}` : `ip:${ipKeyGenerator(req as any)}`),
+  keyGenerator: (req: Request) => (req.user?.id ? `admin:${req.user.id}` : `ip:${rateLimitIpKey(req)}`),
 });
 
 
@@ -448,10 +508,8 @@ if (require.main === module) {
   const server = createServer(app);
   initSocket(server);
 
-  mongoose
-    .connect(env.mongoUri)
+  connectDb()
     .then(() => {
-      console.log('✅ MongoDB Connected (Secured)');
       startScheduler();
 
       const PORT = Number(env.port ?? process.env.PORT ?? 5000);

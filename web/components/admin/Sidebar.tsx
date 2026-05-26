@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { LayoutDashboard, Users, Settings as SettingsIcon, Send, ShieldAlert, Briefcase, Headphones, MessageSquare, Megaphone, BadgeCheck, Newspaper, type LucideIcon } from 'lucide-react';
+import { LayoutDashboard, Users, Settings as SettingsIcon, Send, ShieldAlert, Briefcase, Headphones, MessageSquare, Megaphone, BadgeCheck, Newspaper, Gift, type LucideIcon } from 'lucide-react';
 
 type AdminMenuItem = { id: string; icon: LucideIcon; label: string; href?: string };
 
@@ -11,6 +11,7 @@ export default function Sidebar({ tab, setTab }: { tab: string, setTab: (t: stri
         { id: 'overview', icon: LayoutDashboard, label: 'Overview' },
         { id: 'users', icon: Users, label: 'User Management' },
         { id: 'ads', icon: Megaphone, label: 'Ads Review' },
+        { id: 'referrals', icon: Gift, label: 'Referrals' },
         { id: 'blog', icon: Newspaper, label: 'Blog CMS' },
         { id: 'verifications', icon: BadgeCheck, label: 'Verifications' },
         { id: 'investors', icon: Briefcase, label: 'Investors' },

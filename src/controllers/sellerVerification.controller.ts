@@ -8,6 +8,7 @@ import {
   sendSellerVerificationAdminNotification,
   sendSellerVerificationApprovedEmail,
 } from '../services/email.service';
+import { queueMarketplaceOwnerRefresh } from '../services/queue.service';
 
 const VERIFICATION_CONSENT_VERSION = 'seller-verification-v1';
 const ID_TYPES: SellerIdType[] = ['NIN', 'NATIONAL_ID', 'DRIVERS_LICENSE', 'INTERNATIONAL_PASSPORT', 'GOVERNMENT_ID'];
@@ -51,6 +52,7 @@ const syncUserMarketplaceVerificationStatus = async (userId: Types.ObjectId) => 
         },
       }
     );
+    queueMarketplaceOwnerRefresh(userId, 'seller-verification-sync').catch(() => undefined);
     return;
   }
 
@@ -65,6 +67,7 @@ const syncUserMarketplaceVerificationStatus = async (userId: Types.ObjectId) => 
         },
       }
     );
+    queueMarketplaceOwnerRefresh(userId, 'seller-verification-sync').catch(() => undefined);
     return;
   }
 
@@ -78,6 +81,7 @@ const syncUserMarketplaceVerificationStatus = async (userId: Types.ObjectId) => 
       },
     }
   );
+  queueMarketplaceOwnerRefresh(userId, 'seller-verification-sync').catch(() => undefined);
 };
 
 const publicVerification = (verification: any) => verification ? {
@@ -204,6 +208,7 @@ export const submitSellerVerification = async (req: Request, res: Response) => {
     user.marketplaceVerificationStatus = 'PENDING';
     user.marketplaceVerifiedAt = null;
     await user.save();
+    queueMarketplaceOwnerRefresh(user._id, 'seller-verification-submit').catch(() => undefined);
 
     sendSellerVerificationAdminNotification({
       verificationId: String(verification._id),
@@ -289,6 +294,7 @@ export const approveSellerVerificationForAdmin = async (req: Request, res: Respo
         },
       }
     );
+    queueMarketplaceOwnerRefresh(verification.user, 'seller-verification-approved').catch(() => undefined);
 
     if (seller?.email) {
       sendSellerVerificationApprovedEmail(
@@ -333,6 +339,7 @@ export const rejectSellerVerificationForAdmin = async (req: Request, res: Respon
         },
       }
     );
+    queueMarketplaceOwnerRefresh(verification.user, 'seller-verification-rejected').catch(() => undefined);
 
     return res.json({ message: 'Seller verification rejected.', verification: publicVerification(verification) });
   } catch (error) {
@@ -397,6 +404,7 @@ export const requestSellerReverificationForAdmin = async (req: Request, res: Res
       },
       { new: true }
     ).select('businessName name email');
+    queueMarketplaceOwnerRefresh(verification.user, 'seller-verification-reverify').catch(() => undefined);
 
     if (seller?.email) {
       sendSellerReverificationRequestedEmail(

@@ -14,6 +14,12 @@ import {
   submitProviderCampaignToProvider,
   syncProviderCampaignMetricsFromProvider,
 } from './Campaign/providerAutomation.service';
+import {
+  reconcileMarketplaceListings,
+  refreshMarketplaceFacets,
+  refreshMarketplaceListing,
+  refreshMarketplaceOwnerListings,
+} from './marketplaceIndex.service';
 
 export const replyWorker = new Worker(
   'outbound-replies', // ✅ Fixed: Matches queue.service.ts
@@ -346,4 +352,46 @@ adAutomationWorker.on('completed', (job: import('bullmq').Job) =>
 );
 adAutomationWorker.on('failed', (job: import('bullmq').Job | undefined, err: Error) =>
   console.error(`❌ Ads automation failed [${job?.data?.providerCampaignId}]: ${err.message}`)
+);
+
+// ============================================================
+// WORKER: MARKETPLACE INDEX
+// Keeps the public marketplace read model and cached facets fresh.
+// ============================================================
+export const marketplaceIndexWorker = new Worker(
+  'marketplace-index',
+  async (job: import('bullmq').Job) => {
+    if (job.name === 'refresh-product') {
+      await refreshMarketplaceListing(String(job.data?.productId || ''));
+      return;
+    }
+
+    if (job.name === 'refresh-owner') {
+      await refreshMarketplaceOwnerListings(String(job.data?.ownerId || ''));
+      return;
+    }
+
+    if (job.name === 'refresh-facets') {
+      await refreshMarketplaceFacets();
+      return;
+    }
+
+    if (job.name === 'reconcile-stale') {
+      await reconcileMarketplaceListings();
+      return;
+    }
+
+    console.log(`⚠️ Unknown marketplace index job: ${job.name}`);
+  },
+  {
+    connection: createRedisConnection('worker-marketplace-index') as any,
+    concurrency: 5,
+  }
+);
+
+marketplaceIndexWorker.on('completed', (job: import('bullmq').Job) =>
+  console.log(`🛒 Marketplace index completed: ${job.name}`)
+);
+marketplaceIndexWorker.on('failed', (job: import('bullmq').Job | undefined, err: Error) =>
+  console.error(`❌ Marketplace index failed [${job?.name}]: ${err.message}`)
 );

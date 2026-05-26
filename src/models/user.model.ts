@@ -29,6 +29,13 @@ export interface IUser extends Document {
   // Wallet for Ads & Marketplace
   walletBalance?: number; // In smallest unit (e.g. kobo or cents) or base currency (Naira)
 
+  // Referral / Affiliate Program
+  referralCode?: string;
+  referralCodeCreatedAt?: Date | null;
+  referredBy?: Types.ObjectId | null;
+  referralRegisteredAt?: Date | null;
+  referralVerifiedAt?: Date | null;
+
   // Plan & Staff Fields
   planType?: 'OGA_BOSS' | 'TYCOON';
   // interface
@@ -155,6 +162,12 @@ const userSchema = new Schema<IUser>(
     heroImageUrl: { type: String },
     themeColor: { type: String, default: '#10b981' },
     walletBalance: { type: Number, default: 0 },
+
+    referralCode: { type: String, unique: true, sparse: true, uppercase: true, trim: true, index: true },
+    referralCodeCreatedAt: { type: Date, default: null },
+    referredBy: { type: Schema.Types.ObjectId, ref: 'User', default: null, index: true },
+    referralRegisteredAt: { type: Date, default: null },
+    referralVerifiedAt: { type: Date, default: null },
 
     planType: {
       type: String,

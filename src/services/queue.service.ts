@@ -93,12 +93,26 @@ export const adAutomationQueue = new Queue('ad-automation', {
 });
 
 // ============================================================
+// ✅ MARKETPLACE INDEXING: read model refresh + facet snapshots
+// Queue name: marketplace-index
+// ============================================================
+export const marketplaceIndexQueue = new Queue('marketplace-index', {
+  connection: createRedisConnection('queue-marketplace-index') as any,
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 5000 },
+    removeOnComplete: true,
+    removeOnFail: 1000,
+  },
+});
+
+// ============================================================
 // ✅ HELPERS (Controller uses these)
 // ============================================================
 
 export type OutboundButton = { id: string; title: string };
 
-function safeJobId(id: string) {
+export function safeJobId(id: string) {
   // BullMQ custom id: keep it clean + short
   return String(id || '')
     .replace(/[:\s]/g, '_')        // replace colon + spaces
@@ -124,6 +138,34 @@ export const queueAdProviderMetricsSync = async (providerCampaignId: string, rea
 export const queueAdProviderControl = async (providerCampaignId: string, action: 'PAUSE' | 'STOP' | 'ENABLE', reason = 'merchant-control') => {
   const finalJobId = safeJobId(`ad_control_${action}_${providerCampaignId}_${Date.now()}`);
   await adAutomationQueue.add('control-provider-campaign', { providerCampaignId, action, reason }, { jobId: finalJobId });
+};
+
+const enqueueMarketplaceJob = async (name: string, payload: Record<string, unknown>, jobId: string) => {
+  try {
+    await marketplaceIndexQueue.add(name, payload, { jobId: safeJobId(jobId) });
+  } catch (error: any) {
+    console.error(`❌ Failed to enqueue marketplace job [${name}]:`, error?.message || error);
+  }
+};
+
+export const queueMarketplaceProductRefresh = async (productId: unknown, reason = 'product-change') => {
+  const id = String(productId || '');
+  if (!id) return;
+  await enqueueMarketplaceJob('refresh-product', { productId: id, reason }, `marketplace_product_${id}`);
+};
+
+export const queueMarketplaceOwnerRefresh = async (ownerId: unknown, reason = 'owner-change') => {
+  const id = String(ownerId || '');
+  if (!id) return;
+  await enqueueMarketplaceJob('refresh-owner', { ownerId: id, reason }, `marketplace_owner_${id}_${Date.now()}`);
+};
+
+export const queueMarketplaceFacetsRefresh = async (reason = 'facet-refresh') => {
+  await enqueueMarketplaceJob('refresh-facets', { reason }, 'marketplace_facets_refresh');
+};
+
+export const queueMarketplaceReconcile = async (reason = 'scheduled-reconcile') => {
+  await enqueueMarketplaceJob('reconcile-stale', { reason }, `marketplace_reconcile_${Date.now()}`);
 };
 
 // ✅ Text replies (interactive/fast)

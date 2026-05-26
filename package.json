@@ -9,7 +9,9 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "start:worker": "node dist/worker.js",
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "marketplace:backfill": "npm run build && node dist/scripts/backfill-marketplace-listings.js",
+    "marketplace:load-test": "npm run build && node dist/scripts/load-test-marketplace.js",
+    "test": "npm run build && node --test tests/**/*.test.js",
     "db:reset": "ts-node src/scripts/reset-db.ts"
   },
   "keywords": [],

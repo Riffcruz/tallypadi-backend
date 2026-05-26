@@ -11,7 +11,8 @@ export type WalletTransactionType =
   | 'PROVIDER_ALLOCATION_REFUNDED'
   | 'UNUSED_BUDGET_REFUNDED'
   | 'CAMPAIGN_TOP_UP'
-  | 'ADMIN_ADJUSTMENT';
+  | 'ADMIN_ADJUSTMENT'
+  | 'REFERRAL_REWARD';
 
 export interface IWalletTransaction extends Document {
   user: Types.ObjectId;
@@ -54,6 +55,7 @@ const walletTransactionSchema = new Schema<IWalletTransaction>(
         'UNUSED_BUDGET_REFUNDED',
         'CAMPAIGN_TOP_UP',
         'ADMIN_ADJUSTMENT',
+        'REFERRAL_REWARD',
       ],
       required: true,
       index: true,

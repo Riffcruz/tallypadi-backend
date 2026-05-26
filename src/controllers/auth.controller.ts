@@ -7,6 +7,7 @@ import { sendWhatsAppText, sendWhatsAppTemplate } from '../services/whatsapp.ser
 import { sendRegistrationOTP } from '../services/email.service';
 import { isSubActive, isTycoon } from '../utils/permissions';
 import { PushSubscription } from '../models/pushSubscription.model';
+import { referralService } from '../services/referral.service';
 
 // --- Helpers ---
 const sanitizeString = (input: unknown): string | null => {
@@ -281,7 +282,7 @@ export const loginUser = async (req: Request, res: Response) => {
 
 export const registerUser = async (req: Request, res: Response) => {
   try {
-    const { phoneNumber, businessName, password, closingTime, language, countryCode, email } = req.body;
+    const { phoneNumber, businessName, password, closingTime, language, countryCode, email, referralCode } = req.body;
 
     if (!phoneNumber || !businessName || !password || !email) {
       return res.status(400).json({ error: 'Please provide phone number, email, shop name, and password' });
@@ -358,6 +359,12 @@ export const registerUser = async (req: Request, res: Response) => {
         });
     }
 
+    await referralService.ensureReferralCode(user._id as any);
+    const referralResult = await referralService.attachReferralToUser({
+      referredUserId: user._id as any,
+      referralCode,
+    });
+
     // Send Email OTP
     try {
         await sendRegistrationOTP(emailLower, otp);
@@ -369,6 +376,7 @@ export const registerUser = async (req: Request, res: Response) => {
     return res.status(201).json({
       success: true,
       requiresOtp: true,
+      referralApplied: referralResult.applied,
       message: 'Verification Code sent to your email address.'
     });
 
@@ -414,6 +422,12 @@ export const verifyRegistrationOTP = async (req: Request, res: Response) => {
     user.otpExpires = undefined;
     await user.save();
 
+    try {
+      await referralService.markReferralVerified(user._id as any);
+    } catch (referralError) {
+      console.error('Referral verification update failed:', referralError);
+    }
+
     const secret = process.env.JWT_SECRET;
     if (!secret) throw new Error('JWT_SECRET missing');
 
@@ -437,6 +451,7 @@ export const verifyRegistrationOTP = async (req: Request, res: Response) => {
         planType: user.planType,
         subscriptionStatus: user.subscriptionStatus,
         trialEndsAt: user.trialEndsAt,
+        referralCode: user.referralCode,
       }
     });
   } catch (err) {

@@ -27,6 +27,7 @@ export const env = {
     requestTimeoutMs: Math.max(5000, Number(process.env.ADS_PROVIDER_REQUEST_TIMEOUT_MS || 30000)),
     meta: {
       apiVersion: process.env.META_MARKETING_API_VERSION || 'v22.0',
+      appSecret: process.env.META_APP_SECRET || process.env.WHATSAPP_APP_SECRET || '',
       accessToken: process.env.META_ACCESS_TOKEN || '',
       adAccountId: process.env.META_AD_ACCOUNT_ID || '',
       pageId: process.env.META_PAGE_ID || '',

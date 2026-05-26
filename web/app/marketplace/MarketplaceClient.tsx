@@ -416,9 +416,7 @@ export default function MarketplaceClient() {
       if (selectedState) params.set('state', selectedState);
       if (selectedCity) params.set('city', selectedCity);
 
-      const response = await fetch(`${API_URL}/marketplace?${params.toString()}`, {
-        cache: 'no-store',
-      });
+      const response = await fetch(`${API_URL}/marketplace?${params.toString()}`);
 
       if (!response.ok) {
         throw new Error('Marketplace could not load right now.');

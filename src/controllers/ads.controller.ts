@@ -30,6 +30,7 @@ import {
 
 const MAX_WALLET_FUNDING_NAIRA = Number(process.env.MAX_WALLET_FUNDING_NAIRA || 5_000_000);
 const PAYSTACK_REFERENCE_PATTERN = /^[A-Za-z0-9._=-]{4,120}$/;
+const getAdsManagerCallbackUrl = () => `${env.ads.publicBaseUrl.replace(/\/+$/, '')}/ads-manager`;
 
 const parsePaystackMetadata = (raw: unknown): Record<string, unknown> => {
   if (!raw) return {};
@@ -90,7 +91,7 @@ export const fundWallet = async (req: Request, res: Response) => {
           amountInKobo,
           amountInNaira: amount,
         },
-        callback_url: 'https://tallypadi.com/ads-manager',
+        callback_url: getAdsManagerCallbackUrl(),
       },
       {
         headers: {

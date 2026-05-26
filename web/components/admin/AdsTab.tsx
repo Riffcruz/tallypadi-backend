@@ -26,6 +26,18 @@ type CampaignStatus =
   | 'RUNNING'
   | 'REJECTED';
 type StatusFilter = 'ALL' | 'PENDING' | 'RUNNING' | 'COMPLETED' | 'REJECTED';
+type ProviderCampaignStatus =
+  | 'PENDING_TALLYPADI_REVIEW'
+  | 'READY_TO_SUBMIT'
+  | 'SUBMITTED_TO_PROVIDER'
+  | 'PROVIDER_REVIEW'
+  | 'APPROVED_BY_PROVIDER'
+  | 'RUNNING'
+  | 'PAUSED'
+  | 'COMPLETED'
+  | 'REJECTED_BY_PROVIDER'
+  | 'FAILED'
+  | 'CANCELLED';
 
 interface Advertiser {
   _id?: string;
@@ -59,12 +71,47 @@ interface Reviewer {
   role?: string;
 }
 
+interface AdminProviderCampaign {
+  id: string;
+  provider: string;
+  label?: string;
+  status: ProviderCampaignStatus;
+  fulfillmentMode?: 'MANUAL' | 'AUTO';
+  allocatedBudget?: number;
+  spent?: number;
+  remainingBudget?: number;
+  remainingBudgetWalletMinor?: number;
+  impressions?: number;
+  clicks?: number;
+  views?: number;
+  conversions?: number;
+  externalCampaignId?: string | null;
+  externalAdId?: string | null;
+  adPreviewUrl?: string | null;
+  providerReviewStatus?: string | null;
+  rejectionReason?: string | null;
+  refundStatus?: string;
+  settlementStatus?: string;
+  providerError?: string | null;
+  lastSyncedAt?: string | null;
+}
+
+interface ProviderReadiness {
+  provider: string;
+  canSubmitAutomatically: boolean;
+  fulfillmentMode: 'AUTO' | 'MANUAL';
+  missing: string[];
+  reason?: string;
+}
+
 interface AdminAdCampaign {
   id: string;
   user: Advertiser | string | null;
   product: AdminProduct | string | null;
   status: CampaignStatus;
   platforms: string[];
+  selectedProviders?: string[];
+  providerCampaigns?: AdminProviderCampaign[];
   planLabel: string;
   durationDays: number;
   basePrice: number;
@@ -107,6 +154,20 @@ interface AdminAdCampaign {
     source?: 'AI' | 'FALLBACK' | null;
   };
 }
+
+const providerStatusOptions: ProviderCampaignStatus[] = [
+  'PENDING_TALLYPADI_REVIEW',
+  'READY_TO_SUBMIT',
+  'SUBMITTED_TO_PROVIDER',
+  'PROVIDER_REVIEW',
+  'APPROVED_BY_PROVIDER',
+  'RUNNING',
+  'PAUSED',
+  'COMPLETED',
+  'REJECTED_BY_PROVIDER',
+  'FAILED',
+  'CANCELLED',
+];
 
 const statuses: StatusFilter[] = ['ALL', 'PENDING', 'RUNNING', 'COMPLETED', 'REJECTED'];
 
@@ -182,6 +243,8 @@ export default function AdsTab({ adminToken }: { adminToken: string }) {
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [actionId, setActionId] = useState<string | null>(null);
+  const [providerActionId, setProviderActionId] = useState<string | null>(null);
+  const [providerReadiness, setProviderReadiness] = useState<ProviderReadiness[]>([]);
 
   const headers = useMemo(() => ({
     Authorization: `Bearer ${adminToken}`,
@@ -196,9 +259,15 @@ export default function AdsTab({ adminToken }: { adminToken: string }) {
   const fetchAds = async (nextStatus = status) => {
     setLoading(true);
     try {
-      const res = await axios.get(`${API_URL}/admin/ads?status=${nextStatus}&limit=100`, { headers });
+      const [res, readinessRes] = await Promise.all([
+        axios.get(`${API_URL}/admin/ads?status=${nextStatus}&limit=100`, { headers }),
+        axios.get(`${API_URL}/admin/ads/provider-readiness`, { headers }).catch(() => null),
+      ]);
       setCampaigns(res.data?.campaigns || []);
       setCounts(res.data?.counts || {});
+      if (readinessRes?.data?.providers) {
+        setProviderReadiness(readinessRes.data.providers);
+      }
     } catch (error: unknown) {
       const data = axios.isAxiosError(error) ? error.response?.data as { message?: string } | undefined : undefined;
       console.error('Fetch admin ads error:', data || error);
@@ -208,7 +277,14 @@ export default function AdsTab({ adminToken }: { adminToken: string }) {
     }
   };
 
-  const runAction = async (campaignId: string, action: 'approve' | 'complete' | 'reject') => {
+  const upsertCampaign = (freshCampaign?: AdminAdCampaign) => {
+    if (!freshCampaign?.id) return;
+    setCampaigns((prev) => prev.map((campaign) => (
+      campaign.id === freshCampaign.id ? freshCampaign : campaign
+    )));
+  };
+
+  const runAction = async (campaignId: string, action: 'approve' | 'complete' | 'reject' | 'pause' | 'resume') => {
     let body: Record<string, string> = {};
     if (action === 'reject') {
       const result = await Swal.fire({
@@ -223,13 +299,36 @@ export default function AdsTab({ adminToken }: { adminToken: string }) {
       if (!result.isConfirmed) return;
       body = { reason: String(result.value || '').trim() || 'Rejected by admin' };
     }
+    if (action === 'pause') {
+      const result = await Swal.fire({
+        title: 'Pause Campaign',
+        input: 'textarea',
+        inputLabel: 'Reason',
+        inputPlaceholder: 'Why is this campaign being paused?',
+        showCancelButton: true,
+        confirmButtonText: 'Pause',
+        confirmButtonColor: '#475569',
+      });
+      if (!result.isConfirmed) return;
+      body = { reason: String(result.value || '').trim() || 'Paused by admin' };
+    }
+    if (action === 'complete') {
+      const result = await Swal.fire({
+        title: 'Complete Campaign?',
+        text: 'This reconciles unused budget and closes the campaign.',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Complete',
+        confirmButtonColor: '#475569',
+      });
+      if (!result.isConfirmed) return;
+    }
 
     setActionId(campaignId);
     try {
-      const res = await axios.patch(`${API_URL}/admin/ads/${campaignId}/${action}`, body, { headers });
-      setCampaigns((prev) => prev.map((campaign) => (
-        campaign.id === campaignId ? res.data.campaign : campaign
-      )));
+      const endpoint = `${API_URL}/admin/ads/campaigns/${campaignId}/${action}`;
+      const res = await axios.post(endpoint, body, { headers });
+      upsertCampaign(res.data?.campaign);
       await fetchAds(status);
       Swal.fire('Done', res.data?.message || 'Ad campaign updated.', 'success');
     } catch (error: unknown) {
@@ -238,6 +337,143 @@ export default function AdsTab({ adminToken }: { adminToken: string }) {
       Swal.fire('Error', data?.message || 'Action failed.', 'error');
     } finally {
       setActionId(null);
+    }
+  };
+
+  const runProviderStatusUpdate = async (campaign: AdminAdCampaign, provider: AdminProviderCampaign) => {
+    const inputOptions = providerStatusOptions.reduce((acc, value) => {
+      acc[value] = value.replace(/_/g, ' ');
+      return acc;
+    }, {} as Record<string, string>);
+
+    const result = await Swal.fire({
+      title: `Update ${provider.label || platformLabel(provider.provider)}`,
+      input: 'select',
+      inputOptions,
+      inputValue: provider.status,
+      showCancelButton: true,
+      confirmButtonText: 'Update Status',
+    });
+    if (!result.isConfirmed) return;
+
+    setProviderActionId(provider.id);
+    try {
+      const res = await axios.post(`${API_URL}/admin/ads/provider-campaigns/${provider.id}/status`, {
+        status: result.value,
+      }, { headers });
+      upsertCampaign(res.data?.campaign);
+      await fetchAds(status);
+      Swal.fire('Done', res.data?.message || 'Provider status updated.', 'success');
+    } catch (error: unknown) {
+      const data = axios.isAxiosError(error) ? error.response?.data as { message?: string } | undefined : undefined;
+      Swal.fire('Error', data?.message || `Failed to update ${campaign.productSnapshot?.name || 'provider campaign'}.`, 'error');
+    } finally {
+      setProviderActionId(null);
+    }
+  };
+
+  const runProviderMetricsUpdate = async (provider: AdminProviderCampaign) => {
+    const result = await Swal.fire({
+      title: `Update ${provider.label || platformLabel(provider.provider)} Metrics`,
+      html: `
+        <input id="impressions" class="swal2-input" type="number" min="0" placeholder="Impressions" value="${provider.impressions || 0}">
+        <input id="clicks" class="swal2-input" type="number" min="0" placeholder="Clicks" value="${provider.clicks || 0}">
+        <input id="views" class="swal2-input" type="number" min="0" placeholder="Views" value="${provider.views || 0}">
+        <input id="conversions" class="swal2-input" type="number" min="0" placeholder="Conversions" value="${provider.conversions || 0}">
+        <input id="spent" class="swal2-input" type="number" min="0" step="0.01" placeholder="Spent" value="${provider.spent || 0}">
+      `,
+      focusConfirm: false,
+      showCancelButton: true,
+      confirmButtonText: 'Save Metrics',
+      preConfirm: () => {
+        const read = (id: string) => Number((document.getElementById(id) as HTMLInputElement | null)?.value || 0);
+        return {
+          impressions: read('impressions'),
+          clicks: read('clicks'),
+          views: read('views'),
+          conversions: read('conversions'),
+          spent: read('spent'),
+        };
+      },
+    });
+    if (!result.isConfirmed) return;
+
+    setProviderActionId(provider.id);
+    try {
+      const res = await axios.post(`${API_URL}/admin/ads/provider-campaigns/${provider.id}/metrics`, result.value, { headers });
+      upsertCampaign(res.data?.campaign);
+      await fetchAds(status);
+      Swal.fire('Done', res.data?.message || 'Provider metrics updated.', 'success');
+    } catch (error: unknown) {
+      const data = axios.isAxiosError(error) ? error.response?.data as { message?: string } | undefined : undefined;
+      Swal.fire('Error', data?.message || 'Failed to update provider metrics.', 'error');
+    } finally {
+      setProviderActionId(null);
+    }
+  };
+
+  const runProviderSimpleAction = async (
+    campaign: AdminAdCampaign,
+    provider: AdminProviderCampaign,
+    action: 'refund' | 'resubmit' | 'reallocate'
+  ) => {
+    let body: Record<string, unknown> = {};
+    if (action === 'refund') {
+      const result = await Swal.fire({
+        title: 'Refund Provider Balance?',
+        text: `Refund ${formatCurrency(provider.remainingBudget || 0)} from ${provider.label || platformLabel(provider.provider)} to the merchant wallet.`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Refund',
+        confirmButtonColor: '#059669',
+      });
+      if (!result.isConfirmed) return;
+    }
+
+    if (action === 'resubmit') {
+      const result = await Swal.fire({
+        title: 'Resubmit Provider Campaign',
+        input: 'textarea',
+        inputLabel: 'Notes',
+        inputPlaceholder: 'What changed before resubmission?',
+        showCancelButton: true,
+        confirmButtonText: 'Resubmit',
+      });
+      if (!result.isConfirmed) return;
+      body = { notes: String(result.value || '').trim() };
+    }
+
+    if (action === 'reallocate') {
+      const targetProviderCampaignIds = (campaign.providerCampaigns || [])
+        .filter((candidate) => candidate.id !== provider.id)
+        .filter((candidate) => ['RUNNING', 'READY_TO_SUBMIT', 'PROVIDER_REVIEW', 'APPROVED_BY_PROVIDER'].includes(candidate.status))
+        .map((candidate) => candidate.id);
+      if (!targetProviderCampaignIds.length) {
+        Swal.fire('No target provider', 'There is no active or runnable provider campaign to receive this balance.', 'info');
+        return;
+      }
+      const result = await Swal.fire({
+        title: 'Reallocate Balance?',
+        text: `Move ${formatCurrency(provider.remainingBudget || 0)} across ${targetProviderCampaignIds.length} runnable provider campaign(s).`,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'Reallocate',
+      });
+      if (!result.isConfirmed) return;
+      body = { targetProviderCampaignIds };
+    }
+
+    setProviderActionId(provider.id);
+    try {
+      const res = await axios.post(`${API_URL}/admin/ads/provider-campaigns/${provider.id}/${action}`, body, { headers });
+      upsertCampaign(res.data?.campaign);
+      await fetchAds(status);
+      Swal.fire('Done', res.data?.message || 'Provider campaign updated.', 'success');
+    } catch (error: unknown) {
+      const data = axios.isAxiosError(error) ? error.response?.data as { message?: string } | undefined : undefined;
+      Swal.fire('Error', data?.message || 'Provider action failed.', 'error');
+    } finally {
+      setProviderActionId(null);
     }
   };
 
@@ -259,6 +495,15 @@ export default function AdsTab({ adminToken }: { adminToken: string }) {
     if (filter === 'ALL') return counts.ALL || campaigns.length;
     return statusGroups[filter].reduce((sum, item) => sum + (counts[item] || 0), 0);
   };
+
+  const readinessByProvider = useMemo(() => {
+    return providerReadiness.reduce((acc, item) => {
+      acc[item.provider] = item;
+      return acc;
+    }, {} as Record<string, ProviderReadiness>);
+  }, [providerReadiness]);
+
+  const manualOnlyProviders = providerReadiness.filter((item) => item.provider !== 'TALLYPADI_MARKETPLACE_BOOST' && !item.canSubmitAutomatically);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -298,6 +543,23 @@ export default function AdsTab({ adminToken }: { adminToken: string }) {
           );
         })}
       </div>
+
+      {manualOnlyProviders.length > 0 && (
+        <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 p-4">
+          <p className="text-xs font-black uppercase tracking-wider text-amber-300">Provider Automation Needs Attention</p>
+          <div className="mt-2 grid grid-cols-1 lg:grid-cols-3 gap-2">
+            {manualOnlyProviders.map((item) => (
+              <div key={item.provider} className="rounded-lg border border-amber-500/20 bg-slate-950/30 p-3">
+                <p className="text-sm font-black text-amber-100">{platformLabel(item.provider)}</p>
+                <p className="mt-1 text-xs leading-5 text-amber-100/80">{item.reason || 'Manual fulfillment required.'}</p>
+                {item.missing.length > 0 && (
+                  <p className="mt-2 text-[11px] font-bold text-amber-200 break-words">Missing: {item.missing.join(', ')}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="bg-slate-800 rounded-2xl border border-slate-700 shadow-xl overflow-hidden">
         <div className="p-4 border-b border-slate-700 flex flex-col lg:flex-row gap-3 lg:items-center lg:justify-between">
@@ -464,6 +726,16 @@ export default function AdsTab({ adminToken }: { adminToken: string }) {
                         </div>
                       )}
 
+                      <ProviderCampaignPanel
+                        campaign={campaign}
+                        currencyCode={currencyCode}
+                        providerActionId={providerActionId}
+                        readinessByProvider={readinessByProvider}
+                        onStatusUpdate={runProviderStatusUpdate}
+                        onMetricsUpdate={runProviderMetricsUpdate}
+                        onProviderAction={runProviderSimpleAction}
+                      />
+
                       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mt-4">
                         <Detail label="Budget" value={formatCurrency(campaign.budget, currencyCode)} />
                         <Detail label="Minimum" value={formatCurrency(campaign.basePrice, currencyCode)} />
@@ -493,13 +765,32 @@ export default function AdsTab({ adminToken }: { adminToken: string }) {
                         </>
                       )}
                       {['RUNNING', 'ACTIVE', 'PARTIALLY_ACTIVE', 'STARTING_SOON', 'ACTIVE_WITH_PENDING_CHANGES', 'PAUSED'].includes(campaign.status) && (
-                        <ActionButton
-                          label="Complete"
-                          icon={StopCircle}
-                          loading={actionId === campaign.id}
-                          className="bg-slate-700 hover:bg-slate-600 text-white border border-slate-600"
-                          onClick={() => runAction(campaign.id, 'complete')}
-                        />
+                        <>
+                          {campaign.status === 'PAUSED' ? (
+                            <ActionButton
+                              label="Resume"
+                              icon={PlayCircle}
+                              loading={actionId === campaign.id}
+                              className="bg-emerald-600 hover:bg-emerald-500 text-white"
+                              onClick={() => runAction(campaign.id, 'resume')}
+                            />
+                          ) : (
+                            <ActionButton
+                              label="Pause"
+                              icon={StopCircle}
+                              loading={actionId === campaign.id}
+                              className="bg-amber-600 hover:bg-amber-500 text-white"
+                              onClick={() => runAction(campaign.id, 'pause')}
+                            />
+                          )}
+                          <ActionButton
+                            label="Complete"
+                            icon={CheckCircle2}
+                            loading={actionId === campaign.id}
+                            className="bg-slate-700 hover:bg-slate-600 text-white border border-slate-600"
+                            onClick={() => runAction(campaign.id, 'complete')}
+                          />
+                        </>
                       )}
                     </div>
                   </div>
@@ -519,6 +810,125 @@ function Detail({ label, value }: { label: string; value: string }) {
       <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</p>
       <p className="mt-1 text-xs font-bold text-slate-200 break-words">{value}</p>
     </div>
+  );
+}
+
+function ProviderCampaignPanel({
+  campaign,
+  currencyCode,
+  providerActionId,
+  readinessByProvider,
+  onStatusUpdate,
+  onMetricsUpdate,
+  onProviderAction,
+}: {
+  campaign: AdminAdCampaign;
+  currencyCode: string;
+  providerActionId: string | null;
+  readinessByProvider: Record<string, ProviderReadiness>;
+  onStatusUpdate: (campaign: AdminAdCampaign, provider: AdminProviderCampaign) => void;
+  onMetricsUpdate: (provider: AdminProviderCampaign) => void;
+  onProviderAction: (campaign: AdminAdCampaign, provider: AdminProviderCampaign, action: 'refund' | 'resubmit' | 'reallocate') => void;
+}) {
+  const providers = campaign.providerCampaigns || [];
+  if (!providers.length) return null;
+
+  return (
+    <div className="mt-3 rounded-lg border border-slate-700 bg-slate-950/40 p-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Provider Operations</p>
+          <p className="mt-1 text-xs text-slate-400">Track fulfillment, metrics, refunds, and resubmission per channel.</p>
+        </div>
+      </div>
+
+      <div className="mt-3 grid grid-cols-1 xl:grid-cols-2 gap-3">
+        {providers.map((provider) => {
+          const readiness = readinessByProvider[provider.provider];
+          const isBusy = providerActionId === provider.id;
+          const canRefund = Number(provider.remainingBudget || 0) > 0 && provider.refundStatus !== 'REFUNDED';
+          const canReallocate = canRefund && (campaign.providerCampaigns || []).some((candidate) => (
+            candidate.id !== provider.id &&
+            ['RUNNING', 'READY_TO_SUBMIT', 'PROVIDER_REVIEW', 'APPROVED_BY_PROVIDER'].includes(candidate.status)
+          ));
+          const canResubmit = ['REJECTED_BY_PROVIDER', 'FAILED', 'CANCELLED', 'READY_TO_SUBMIT'].includes(provider.status);
+
+          return (
+            <div key={provider.id} className="rounded-lg border border-slate-700 bg-slate-900 p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-black text-white">{provider.label || platformLabel(provider.provider)}</p>
+                  <p className="mt-1 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                    {provider.fulfillmentMode || 'MANUAL'} · {provider.status.replace(/_/g, ' ')}
+                  </p>
+                </div>
+                <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-black ${readiness?.canSubmitAutomatically ? 'bg-emerald-500/10 text-emerald-300' : 'bg-amber-500/10 text-amber-300'}`}>
+                  {readiness?.canSubmitAutomatically ? 'AUTO READY' : 'MANUAL'}
+                </span>
+              </div>
+
+              {provider.providerError && (
+                <p className="mt-2 rounded border border-amber-500/20 bg-amber-500/10 px-2 py-1.5 text-xs text-amber-100">{provider.providerError}</p>
+              )}
+              {provider.rejectionReason && (
+                <p className="mt-2 rounded border border-red-500/20 bg-red-500/10 px-2 py-1.5 text-xs text-red-100">{provider.rejectionReason}</p>
+              )}
+
+              <div className="mt-3 grid grid-cols-3 gap-2">
+                <Detail label="Allocated" value={formatCurrency(provider.allocatedBudget || 0, currencyCode)} />
+                <Detail label="Spent" value={formatCurrency(provider.spent || 0, currencyCode)} />
+                <Detail label="Remaining" value={formatCurrency(provider.remainingBudget || 0, currencyCode)} />
+              </div>
+
+              <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                <Detail label="Impressions" value={String(provider.impressions || 0)} />
+                <Detail label="Clicks" value={String(provider.clicks || 0)} />
+                <Detail label="Views" value={String(provider.views || 0)} />
+                <Detail label="Conv." value={String(provider.conversions || 0)} />
+              </div>
+
+              <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-slate-400">
+                <span>Refund: {provider.refundStatus || 'N/A'}</span>
+                <span>Settlement: {provider.settlementStatus || 'PENDING'}</span>
+                <span>External: {provider.externalCampaignId ? provider.externalCampaignId.slice(-16) : 'Not linked'}</span>
+                <span>Synced: {formatDate(provider.lastSyncedAt)}</span>
+              </div>
+
+              <div className="mt-3 flex flex-wrap gap-2">
+                <MiniActionButton label="Status" loading={isBusy} onClick={() => onStatusUpdate(campaign, provider)} />
+                <MiniActionButton label="Metrics" loading={isBusy} onClick={() => onMetricsUpdate(provider)} />
+                <MiniActionButton label="Refund" loading={isBusy} disabled={!canRefund} onClick={() => onProviderAction(campaign, provider, 'refund')} />
+                <MiniActionButton label="Reallocate" loading={isBusy} disabled={!canReallocate} onClick={() => onProviderAction(campaign, provider, 'reallocate')} />
+                <MiniActionButton label="Resubmit" loading={isBusy} disabled={!canResubmit} onClick={() => onProviderAction(campaign, provider, 'resubmit')} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function MiniActionButton({
+  label,
+  loading,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  loading: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={loading || disabled}
+      onClick={onClick}
+      className="inline-flex items-center justify-center rounded-md border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-[11px] font-bold text-slate-200 hover:bg-slate-700 disabled:opacity-40"
+    >
+      {loading ? <Loader2 size={12} className="animate-spin" /> : label}
+    </button>
   );
 }
 

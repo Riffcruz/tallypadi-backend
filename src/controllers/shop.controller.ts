@@ -11,6 +11,7 @@ import {
   getVerificationBadge,
 } from '../services/marketplaceTrust.service';
 import { getMarketplaceProductSeo } from '../services/marketplaceSeo.service';
+import { queueMarketplaceOwnerRefresh } from '../services/queue.service';
 
 const PUBLIC_SHOP_CACHE = 'public, max-age=30, s-maxage=120, stale-while-revalidate=300';
 
@@ -261,6 +262,7 @@ export const updateShopSettings = async (req: Request, res: Response): Promise<a
     }
 
     await user.save();
+    queueMarketplaceOwnerRefresh(user._id, 'shop-settings-update').catch(() => undefined);
 
     return res.json({
       message: 'Shop settings updated',

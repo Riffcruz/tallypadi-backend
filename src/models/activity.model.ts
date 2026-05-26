@@ -4,6 +4,7 @@ export type ActivityType =
   | 'WALLET_FUNDING'
   | 'AD_BOOST'
   | 'SUBSCRIPTION'
+  | 'REFERRAL_REWARD'
   | 'LOW_STOCK'
   | 'EXPENSE'
   | 'OTHER';
@@ -28,7 +29,7 @@ const activitySchema = new Schema<IActivity>(
     actor: { type: Schema.Types.ObjectId, ref: 'User', default: null, index: true },
     type: {
       type: String,
-      enum: ['WALLET_FUNDING', 'AD_BOOST', 'SUBSCRIPTION', 'LOW_STOCK', 'EXPENSE', 'OTHER'],
+      enum: ['WALLET_FUNDING', 'AD_BOOST', 'SUBSCRIPTION', 'REFERRAL_REWARD', 'LOW_STOCK', 'EXPENSE', 'OTHER'],
       required: true,
       index: true,
     },
