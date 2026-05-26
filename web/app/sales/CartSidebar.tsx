@@ -288,28 +288,6 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess, on
     setCart((prev) => prev.map((item) => (item.id === id ? { ...item, sellPrice: val } : item)));
   };
 
-  const applyCalculatorQty = (id: string, quantity: number) => {
-    setCart((prev) => prev.map((item) => (item.id === id ? { ...item, sellQty: Math.max(1, Math.floor(quantity || 1)) } : item)));
-  };
-
-  const applyCalculatorPrice = (id: string, price: number) => {
-    setCart((prev) => prev.map((item) => (item.id === id ? { ...item, sellPrice: Math.max(0, Number(price) || 0) } : item)));
-  };
-
-  const applyCalculatorBoth = (id: string, quantity: number, price: number) => {
-    setCart((prev) =>
-      prev.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              sellQty: Math.max(1, Math.floor(quantity || 1)),
-              sellPrice: Math.max(0, Number(price) || 0),
-            }
-          : item
-      )
-    );
-  };
-
   const remove = (id: string) => setCart((prev) => prev.filter((i) => i.id !== id));
 
   const handleShareReceipt = async () => {
@@ -500,13 +478,11 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess, on
       </div>
 
       <SalesCalculator
-        cart={cart}
+        total={total}
+        netTotal={netTotal}
         currencyCode={user?.currencyCode}
         locale={user?.locale}
         discountAmount={discountAmount}
-        onApplyQty={applyCalculatorQty}
-        onApplyPrice={applyCalculatorPrice}
-        onApplyBoth={applyCalculatorBoth}
         onApplyDiscount={(amount) => setDiscountAmount(Math.max(0, Number(amount) || 0))}
       />
 
