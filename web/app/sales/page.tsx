@@ -204,7 +204,7 @@ const handleAddToCart = (item: InventoryItem) => {
       </div>
 
       {/* Main Content */}
-      <main className="relative z-10 flex-1 md:ml-64 p-4 md:p-8 min-h-screen">
+      <main className="relative z-10 min-h-screen w-full min-w-0 max-w-full overflow-x-hidden p-4 md:pl-72 md:pr-8 md:py-8">
         
         {/* Header Section */}
         <header className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-6">
@@ -271,8 +271,8 @@ const handleAddToCart = (item: InventoryItem) => {
 
         {/* Content Area */}
         {activeTab === 'new' ? (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 relative animate-in fade-in slide-in-from-bottom-2 duration-500">
-            <div className="lg:col-span-2">
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 xl:gap-8 relative animate-in fade-in slide-in-from-bottom-2 duration-500">
+            <div className="min-w-0 xl:col-span-2">
               <ProductGrid 
                 user={user} 
                 onAddToCart={handleAddToCart} 
@@ -280,7 +280,7 @@ const handleAddToCart = (item: InventoryItem) => {
               />
             </div>
 
-            <div className="lg:col-span-1">
+            <div className="min-w-0 xl:col-span-1">
               <CartSidebar 
                 cart={cart} 
                 setCart={setCart} 

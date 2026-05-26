@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { CartItem, UserProfile } from './page';
 import { getCookie } from '../../utils/cookies';
+import SalesCalculator from './SalesCalculator';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 
@@ -287,6 +288,28 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess, on
     setCart((prev) => prev.map((item) => (item.id === id ? { ...item, sellPrice: val } : item)));
   };
 
+  const applyCalculatorQty = (id: string, quantity: number) => {
+    setCart((prev) => prev.map((item) => (item.id === id ? { ...item, sellQty: Math.max(1, Math.floor(quantity || 1)) } : item)));
+  };
+
+  const applyCalculatorPrice = (id: string, price: number) => {
+    setCart((prev) => prev.map((item) => (item.id === id ? { ...item, sellPrice: Math.max(0, Number(price) || 0) } : item)));
+  };
+
+  const applyCalculatorBoth = (id: string, quantity: number, price: number) => {
+    setCart((prev) =>
+      prev.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              sellQty: Math.max(1, Math.floor(quantity || 1)),
+              sellPrice: Math.max(0, Number(price) || 0),
+            }
+          : item
+      )
+    );
+  };
+
   const remove = (id: string) => setCart((prev) => prev.filter((i) => i.id !== id));
 
   const handleShareReceipt = async () => {
@@ -439,7 +462,7 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess, on
   const prefix = currencyPrefix(user?.currencyCode);
 
   return (
-    <div className="relative bg-white rounded-3xl border border-slate-200 shadow-xl shadow-slate-900/5 flex flex-col h-[calc(100vh-6rem)] sticky top-4 overflow-hidden">
+    <div className="relative flex w-full min-w-0 flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl shadow-slate-900/5 xl:sticky xl:top-4 xl:h-[calc(100vh-6rem)]">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-emerald-500/10 to-transparent" />
 
       {/* Header */}
@@ -475,6 +498,17 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess, on
           )}
         </div>
       </div>
+
+      <SalesCalculator
+        cart={cart}
+        currencyCode={user?.currencyCode}
+        locale={user?.locale}
+        discountAmount={discountAmount}
+        onApplyQty={applyCalculatorQty}
+        onApplyPrice={applyCalculatorPrice}
+        onApplyBoth={applyCalculatorBoth}
+        onApplyDiscount={(amount) => setDiscountAmount(Math.max(0, Number(amount) || 0))}
+      />
 
       {/* Cart Items List */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-thin scrollbar-thumb-slate-200">

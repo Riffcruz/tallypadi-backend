@@ -394,7 +394,7 @@ export default function SettingsPage() {
         <Sidebar />
       </div>
 
-      <main className="flex-1 md:ml-64 p-4 md:p-8 overflow-x-hidden min-h-screen w-full">
+      <main className="min-h-screen w-full min-w-0 max-w-full overflow-x-hidden p-4 md:py-8 md:pl-72 md:pr-8">
         {/* Header */}
         <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div className="flex items-center gap-3 w-full md:w-auto">

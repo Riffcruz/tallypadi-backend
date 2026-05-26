@@ -345,7 +345,7 @@ export default function StaffPage() {
         <Sidebar />
       </div>
 
-      <main className="relative z-10 flex-1 md:ml-64 p-4 md:p-8 min-h-screen">
+      <main className="relative z-10 min-h-screen w-full min-w-0 max-w-full overflow-x-hidden p-4 md:py-8 md:pl-72 md:pr-8">
         <header className="flex items-center gap-4 mb-8">
           <button
             onClick={() => setIsMobileMenuOpen(true)}

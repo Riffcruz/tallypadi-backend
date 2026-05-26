@@ -194,7 +194,7 @@ export default function ExpensesPage() {
         <Sidebar />
       </div>
 
-      <main className="flex-1 md:ml-64 p-4 md:p-8 w-full max-w-full overflow-x-hidden">
+      <main className="w-full min-w-0 max-w-full overflow-x-hidden p-4 md:py-8 md:pl-72 md:pr-8">
         {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
           <div className="flex items-center gap-3">

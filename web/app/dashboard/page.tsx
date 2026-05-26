@@ -499,7 +499,7 @@ const topTransactions = filteredTransactions.slice(0, 6);
       </div>
 
       {/* Main */}
-      <main className="flex-1 lg:ml-64 p-4 lg:p-8 w-full max-w-full min-h-screen overflow-x-hidden">
+      <main className="min-h-screen w-full min-w-0 max-w-full overflow-x-hidden p-4 lg:py-8 lg:pl-72 lg:pr-8">
         {/* Header */}
         <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-8">
           <div className="flex items-center gap-4 min-w-0">

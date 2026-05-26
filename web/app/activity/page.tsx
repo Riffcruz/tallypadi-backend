@@ -179,7 +179,7 @@ export default function ActivityPage() {
         <Sidebar />
       </div>
 
-      <main className="flex-1 md:ml-64 p-4 md:p-8 min-h-screen w-full">
+      <main className="min-h-screen w-full min-w-0 max-w-full overflow-x-hidden p-4 md:py-8 md:pl-72 md:pr-8">
         <header className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <button
@@ -208,7 +208,7 @@ export default function ActivityPage() {
         </header>
 
         {activities.length > 0 && (
-          <div className="mb-6 grid grid-cols-2 md:grid-cols-5 gap-3">
+          <div className="mb-6 grid grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6 gap-3">
             {(['WALLET_FUNDING', 'AD_BOOST', 'SUBSCRIPTION', 'REFERRAL_REWARD', 'LOW_STOCK', 'EXPENSE'] as ActivityType[]).map((type) => {
               const Icon = getActivityIcon(type);
               return (

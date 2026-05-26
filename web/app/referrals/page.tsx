@@ -103,7 +103,7 @@ export default function ReferralsPage() {
         <Sidebar />
       </div>
 
-      <main className="md:ml-64">
+      <main className="w-full min-w-0 max-w-full overflow-x-hidden md:pl-64">
         <div className="sticky top-0 z-20 flex items-center justify-between border-b border-slate-200 bg-white/90 px-4 py-3 backdrop-blur md:hidden">
           <button
             type="button"
@@ -159,7 +159,7 @@ export default function ReferralsPage() {
                 </div>
               </section>
 
-              <section className="grid gap-4 md:grid-cols-3">
+              <section className="grid gap-4 lg:grid-cols-3">
                 {stats.map((item) => (
                   <div key={item.label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                     <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">

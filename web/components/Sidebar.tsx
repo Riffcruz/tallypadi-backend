@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
@@ -99,10 +100,18 @@ export default function Sidebar() {
     <div className="w-full md:w-64 bg-white h-full md:h-[100dvh] border-r border-gray-200 flex flex-col fixed left-0 top-0 z-10">
 
       {/* Brand Header */}
-      <div className="p-6 border-b border-gray-100 flex items-center gap-2 shrink-0">
-        <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center text-white font-bold text-xl">T</div>
+      <div className="px-6 py-5 border-b border-gray-100 shrink-0">
         <div className="min-w-0">
-          <span className="font-bold text-xl text-emerald-700">TallyPadi</span>
+          <Link href="/dashboard" className="relative block h-11 w-[160px] max-w-full" aria-label="TallyPadi dashboard">
+            <Image
+              src="/tallypadi-logo.png"
+              alt="TallyPadi logo"
+              fill
+              priority
+              sizes="160px"
+              className="object-contain object-left"
+            />
+          </Link>
           {verificationStatus === 'VERIFIED' && (
             <div className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-sky-50 px-2.5 py-1 text-[11px] font-black text-sky-700 ring-1 ring-sky-100">
               <BadgeCheck size={13} fill="currentColor" />

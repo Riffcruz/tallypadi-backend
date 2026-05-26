@@ -276,7 +276,7 @@ export default function ProductGrid({ user, onAddToCart, currencyCode }: Product
       {/* --- Content --- */}
       <div className="flex-1 pt-5">
         {loading ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
             {[...Array(9)].map((_, i) => (
               <div
                 key={i}
@@ -308,7 +308,7 @@ export default function ProductGrid({ user, onAddToCart, currencyCode }: Product
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 pb-24">
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 pb-24">
             {inventory.map((item, index) => {
               const tone = stockTone(item.stock);
 
@@ -421,7 +421,7 @@ export default function ProductGrid({ user, onAddToCart, currencyCode }: Product
             {hasMore && (
               <div 
                 ref={observerTarget} 
-                className="col-span-2 sm:col-span-3 py-8 flex flex-col items-center justify-center gap-3"
+                className="col-span-2 lg:col-span-3 py-8 flex flex-col items-center justify-center gap-3"
               >
                 <Loader2 className="w-8 h-8 animate-spin text-emerald-500" />
                 <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Loading fast...</span>
@@ -429,7 +429,7 @@ export default function ProductGrid({ user, onAddToCart, currencyCode }: Product
             )}
             
             {!hasMore && inventory.length > 0 && (
-              <div className="col-span-2 sm:col-span-3 py-8 flex items-center justify-center">
+              <div className="col-span-2 lg:col-span-3 py-8 flex items-center justify-center">
                 <span className="text-xs font-bold text-slate-300 uppercase tracking-widest">End of catalog</span>
               </div>
             )}

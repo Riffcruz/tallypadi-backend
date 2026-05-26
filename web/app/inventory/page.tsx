@@ -830,7 +830,7 @@ export default function InventoryPage() {
         <Sidebar />
       </div>
 
-      <main className="relative z-10 flex-1 md:ml-64 p-4 md:p-8 min-h-screen w-full">
+      <main className="relative z-10 min-h-screen w-full min-w-0 max-w-full overflow-x-hidden p-4 md:py-8 md:pl-72 md:pr-8">
         {/* Header */}
         <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
           <div className="flex items-start md:items-center justify-between gap-3">
@@ -1237,7 +1237,7 @@ export default function InventoryPage() {
                         <h4 className="text-sm font-black text-emerald-900 uppercase tracking-widest">Restock Alerts</h4>
                       </div>
                       
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                         <div className="space-y-1.5">
                            <label className="text-xs font-extrabold text-emerald-700 uppercase tracking-wider ml-1">Low Stock At</label>
                            <input
@@ -2056,7 +2056,7 @@ export default function InventoryPage() {
                    <Sparkles className="w-4 h-4 text-emerald-600" />
                    <p className="text-xs font-extrabold text-emerald-800 uppercase tracking-widest">Restock Configuration</p>
                  </div>
-                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
                    <div>
                      <label className="block text-xs font-extrabold text-emerald-700 mb-1">Alert At Quantity</label>
                      <input

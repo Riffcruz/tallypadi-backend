@@ -404,7 +404,7 @@ export default function OnlineStorePage() {
         <Sidebar />
       </div>
 
-      <main className="flex-1 md:ml-64 p-4 md:p-8 overflow-x-hidden min-h-screen w-full">
+      <main className="min-h-screen w-full min-w-0 max-w-full overflow-x-hidden p-4 md:py-8 md:pl-72 md:pr-8">
         <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div className="flex items-center gap-3 w-full md:w-auto">
             <button onClick={() => setIsMobileMenuOpen(true)} className="p-2 -ml-2 text-gray-600 hover:bg-white hover:shadow-sm rounded-lg md:hidden transition-all">
@@ -517,7 +517,7 @@ export default function OnlineStorePage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-4 sm:grid-cols-8 gap-3">
+                <div className="grid grid-cols-4 lg:grid-cols-8 gap-3">
                   {THEME_COLORS.map((color) => {
                     const isActive = themeColor === color.hex;
                     return (
