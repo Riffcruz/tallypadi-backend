@@ -100,20 +100,20 @@ export default function Sidebar() {
     <div className="w-full md:w-64 bg-white h-full md:h-[100dvh] border-r border-gray-200 flex flex-col fixed left-0 top-0 z-10">
 
       {/* Brand Header */}
-      <div className="px-6 py-5 border-b border-gray-100 shrink-0">
-        <div className="min-w-0">
-          <Link href="/dashboard" className="relative block h-11 w-[160px] max-w-full" aria-label="TallyPadi dashboard">
+      <div className="px-4 py-4 border-b border-gray-100 shrink-0">
+        <div className="min-w-0 rounded-2xl border border-emerald-950/10 bg-[#07120d] p-3 shadow-sm shadow-emerald-950/10">
+          <Link href="/dashboard" className="relative block h-10 w-[172px] max-w-full" aria-label="TallyPadi dashboard">
             <Image
               src="/tallypadi-logo.png"
               alt="TallyPadi logo"
               fill
               priority
-              sizes="160px"
+              sizes="172px"
               className="object-contain object-left"
             />
           </Link>
           {verificationStatus === 'VERIFIED' && (
-            <div className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-sky-50 px-2.5 py-1 text-[11px] font-black text-sky-700 ring-1 ring-sky-100">
+            <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-black text-sky-100 ring-1 ring-white/10">
               <BadgeCheck size={13} fill="currentColor" />
               Verified ID
             </div>
