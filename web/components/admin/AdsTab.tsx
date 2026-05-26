@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
-import { CheckCircle2, Clock3, Loader2, Megaphone, Phone, PlayCircle, RefreshCcw, Search, StopCircle, Wallet, XCircle, type LucideIcon } from 'lucide-react';
+import { ChevronDown, ChevronRight, CheckCircle2, Clock3, Loader2, Megaphone, Phone, PlayCircle, RefreshCcw, Search, StopCircle, Wallet, XCircle, type LucideIcon } from 'lucide-react';
 import Swal from 'sweetalert2';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
@@ -245,6 +245,7 @@ export default function AdsTab({ adminToken }: { adminToken: string }) {
   const [actionId, setActionId] = useState<string | null>(null);
   const [providerActionId, setProviderActionId] = useState<string | null>(null);
   const [providerReadiness, setProviderReadiness] = useState<ProviderReadiness[]>([]);
+  const [expandedCampaignId, setExpandedCampaignId] = useState<string | null>(null);
 
   const headers = useMemo(() => ({
     Authorization: `Bearer ${adminToken}`,
@@ -582,17 +583,69 @@ export default function AdsTab({ adminToken }: { adminToken: string }) {
         ) : filteredCampaigns.length === 0 ? (
           <div className="py-16 text-center text-slate-400">No {statusMeta[status].label.toLowerCase()} ads found.</div>
         ) : (
-          <div className="divide-y divide-slate-700">
+          <div className="space-y-3 p-3">
             {filteredCampaigns.map((campaign) => {
               const advertiser = getAdvertiser(campaign.user);
               const product = getProduct(campaign.product);
               const currencyCode = String(advertiser.currencyCode || advertiser.settings?.currencyCode || 'NGN').toUpperCase();
               const meta = statusMeta[campaign.status] || statusMeta.RUNNING;
               const Icon = meta.icon;
+              const isExpanded = expandedCampaignId === campaign.id;
+              const ChevronIcon = isExpanded ? ChevronDown : ChevronRight;
+              const providerCount = campaign.providerCampaigns?.length || campaign.platforms.length;
 
               return (
-                <article key={campaign.id} className="p-5 hover:bg-slate-700/20 transition-colors">
-                  <div className="flex flex-col 2xl:flex-row gap-5 2xl:items-start 2xl:justify-between">
+                <article key={campaign.id} className="rounded-xl border border-slate-700 bg-slate-800/90 shadow-sm transition-colors hover:border-slate-600 hover:bg-slate-700/30">
+                  <button
+                    type="button"
+                    onClick={() => setExpandedCampaignId(isExpanded ? null : campaign.id)}
+                    aria-expanded={isExpanded}
+                    className="grid w-full grid-cols-[auto_1fr_auto] items-center gap-3 px-4 py-3 text-left md:grid-cols-[auto_minmax(0,1.4fr)_minmax(140px,0.7fr)_minmax(120px,0.55fr)_minmax(120px,0.55fr)_auto]"
+                  >
+                    <div className="h-12 w-12 overflow-hidden rounded-md border border-slate-700 bg-slate-900 flex items-center justify-center">
+                      {campaign.productSnapshot?.image ? (
+                        <img src={campaign.productSnapshot.image} alt="" className="h-full w-full object-cover" />
+                      ) : (
+                        <Megaphone size={20} className="text-slate-500" />
+                      )}
+                    </div>
+
+                    <div className="min-w-0">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-bold ${meta.className}`}>
+                          <Icon size={12} />
+                          {meta.label}
+                        </span>
+                        <h3 className="truncate text-sm font-black text-white">
+                          {campaign.productSnapshot?.name || product.name || 'Product boost'}
+                        </h3>
+                      </div>
+                      <p className="mt-1 truncate text-xs text-slate-400">
+                        {advertiser.businessName || advertiser.name || 'Unknown user'} · {campaign.planLabel} · {providerCount} channel{providerCount === 1 ? '' : 's'}
+                      </p>
+                    </div>
+
+                    <div className="hidden min-w-0 md:block">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Budget</p>
+                      <p className="truncate text-xs font-bold text-slate-200">{formatCurrency(campaign.budget, currencyCode)}</p>
+                    </div>
+
+                    <div className="hidden min-w-0 md:block">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Requested</p>
+                      <p className="truncate text-xs font-bold text-slate-200">{formatDate(campaign.requestedAt)}</p>
+                    </div>
+
+                    <div className="hidden min-w-0 md:block">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Advertiser</p>
+                      <p className="truncate text-xs font-bold text-slate-200">{advertiser.phoneNumber || advertiser.email || advertiser.shopSlug || 'No contact'}</p>
+                    </div>
+
+                    <ChevronIcon className="text-slate-500" size={18} />
+                  </button>
+
+                  {isExpanded && (
+                    <div className="border-t border-slate-700 px-5 py-5">
+                      <div className="flex flex-col 2xl:flex-row gap-5 2xl:items-start 2xl:justify-between">
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2 mb-3">
                         <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold ${meta.className}`}>
@@ -794,6 +847,8 @@ export default function AdsTab({ adminToken }: { adminToken: string }) {
                       )}
                     </div>
                   </div>
+                    </div>
+                  )}
                 </article>
               );
             })}
