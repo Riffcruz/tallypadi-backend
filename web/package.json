@@ -13,6 +13,8 @@
     "country-state-city": "^3.2.1",
     "date-fns": "^4.1.0",
     "html5-qrcode": "^2.3.8",
+    "jodit": "^4.12.2",
+    "jodit-react": "^5.3.21",
     "jspdf": "^3.0.4",
     "jspdf-autotable": "^5.0.2",
     "lucide-react": "^0.575.0",

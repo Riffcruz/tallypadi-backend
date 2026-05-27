@@ -1,6 +1,9 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import axios from 'axios';
+import dynamic from 'next/dynamic';
+
+const JoditEditor = dynamic(() => import('jodit-react'), { ssr: false });
 import { MessageSquare, Send, Smartphone, Bell, Image as ImageIcon, Mail, Plus, Trash2, List } from 'lucide-react';
 import Swal from 'sweetalert2';
 
@@ -226,11 +229,22 @@ export default function BroadcastTab({ headers }: { headers: Record<string, stri
                                         </div>
                                      </div>
                                      <div>
-                                        <div className="flex justify-between items-end mb-1">
-                                            <label className="block text-xs font-bold text-slate-400">Pure HTML Body</label>
-                                            <span className="text-[10px] text-slate-500 font-mono bg-slate-800 px-1.5 rounded">Variables: ##name##, ##usershopname##, ##phonenumber##</span>
+                                        <div className="flex justify-between items-end mb-2">
+                                            <label className="block text-xs font-bold text-slate-400">Advanced HTML Editor</label>
+                                            <span className="text-[10px] text-slate-500 font-mono bg-slate-800 px-1.5 py-0.5 rounded">Variables: ##name##, ##usershopname##, ##phonenumber##</span>
                                         </div>
-                                        <textarea value={templateHtml} onChange={e=>setTemplateHtml(e.target.value)} rows={6} className="w-full font-mono text-xs bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500" placeholder="<html><body><h1>Hi ##name##</h1></body></html>"></textarea>
+                                        <div className="text-black prose-sm max-w-none rounded-lg overflow-hidden border border-slate-600 focus-within:border-indigo-500 transition-colors">
+                                            <JoditEditor
+                                                value={templateHtml}
+                                                config={{
+                                                    theme: 'dark',
+                                                    placeholder: 'Start designing your email template...',
+                                                    minHeight: 400,
+                                                }}
+                                                onBlur={newContent => setTemplateHtml(newContent)}
+                                                onChange={() => {}}
+                                            />
+                                        </div>
                                      </div>
                                      <button onClick={handleSaveTemplate} className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg transition-colors text-sm">Save & Store Template</button>
                                  </div>
