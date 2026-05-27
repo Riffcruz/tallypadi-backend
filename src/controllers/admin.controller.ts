@@ -91,7 +91,8 @@ const updateGlobalSettingsSchema = z
       enabled: z.boolean().optional().default(true),
       minimumFundingAmount: z.coerce.number().min(0).max(50_000_000).optional().default(10000),
       rewardPercentage: z.coerce.number().min(0).max(100).optional().default(10),
-    }).optional()
+    }).optional(),
+    globalEmailTemplate: z.string().optional()
   })
   .strict();
 
@@ -673,7 +674,7 @@ export const updateGlobalSettings = async (req: Request, res: Response) => {
     const parsed = updateGlobalSettingsSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
-    const { autoSuspendOnJailbreak, maxMessageHistory, maxStaffAccounts, whatsappUrl, smtp, adsPlans, referralProgram } = parsed.data;
+    const { autoSuspendOnJailbreak, maxMessageHistory, maxStaffAccounts, whatsappUrl, smtp, adsPlans, referralProgram, globalEmailTemplate } = parsed.data;
 
     const updatePayload: any = {};
     if (whatsappUrl !== undefined) updatePayload.whatsappUrl = whatsappUrl;
@@ -683,6 +684,7 @@ export const updateGlobalSettings = async (req: Request, res: Response) => {
     if (smtp !== undefined) updatePayload.smtp = smtp;
     if (adsPlans !== undefined) updatePayload.adsPlans = adsPlans;
     if (referralProgram !== undefined) updatePayload.referralProgram = referralProgram;
+    if (globalEmailTemplate !== undefined) updatePayload.globalEmailTemplate = globalEmailTemplate;
 
     const settings = await AdminSettings.findOneAndUpdate({}, { $set: updatePayload }, { new: true, upsert: true });
     res.json({ success: true, settings });
@@ -740,6 +742,10 @@ export const broadcastMessage = async (req: Request, res: Response) => {
       }).catch(err => console.error('Failed to trigger global PWA broadcast:', err));
     }
 
+    // Fetch Admin Settings for global layout wrapper
+    const settings = await AdminSettings.findOne().lean();
+    const globalEmailTemplate = settings?.globalEmailTemplate;
+
     // Async Dispatch Loop
     (async () => {
       for (const u of recipients) {
@@ -788,6 +794,11 @@ export const broadcastMessage = async (req: Request, res: Response) => {
              }
 
              if (personalizedSubject && personalizedHtml) {
+                 // Wrap with Global Email Template
+                 if (globalEmailTemplate && globalEmailTemplate.includes('{{message}}')) {
+                     personalizedHtml = globalEmailTemplate.replace('{{message}}', personalizedHtml);
+                 }
+
                  await sendBroadcastEmail(u.email, personalizedSubject, personalizedHtml);
                  
                  // Throttle internally per email strictly

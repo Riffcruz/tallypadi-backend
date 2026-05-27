@@ -42,6 +42,8 @@ export interface IAdminSettings extends Document {
     secure: boolean;
   };
   
+  globalEmailTemplate?: string;
+
   updatedAt: Date;
 }
 
@@ -85,6 +87,11 @@ const adminSettingsSchema = new Schema<IAdminSettings>(
       pass: { type: String, default: '' },
       fromAddress: { type: String, default: 'notifications@tallypadi.com' },
       secure: { type: Boolean, default: true }
+    },
+    
+    globalEmailTemplate: { 
+      type: String, 
+      default: '<div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; padding: 20px; border-radius: 8px;">\n  <div style="text-align: center; margin-bottom: 20px;">\n    <h1 style="color: #1e293b; margin: 0;">TallyPadi</h1>\n  </div>\n  <div style="color: #334155; line-height: 1.6;">\n    {{message}}\n  </div>\n  <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e2e8f0; text-align: center; color: #94a3b8; font-size: 12px;">\n    &copy; TallyPadi. All rights reserved.\n  </div>\n</div>'
     }
   },
   { timestamps: true }

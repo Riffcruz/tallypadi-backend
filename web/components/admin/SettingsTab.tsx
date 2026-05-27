@@ -1,8 +1,11 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { Shield, AlertTriangle, MessageSquare, Users, Save, Loader2, Phone, Globe, Gift } from 'lucide-react';
+import { Shield, AlertTriangle, MessageSquare, Users, Save, Loader2, Phone, Globe, Gift, LayoutTemplate } from 'lucide-react';
 import axios from 'axios';
 import Swal from 'sweetalert2';
+import dynamic from 'next/dynamic';
+
+const JoditEditor = dynamic(() => import('jodit-react'), { ssr: false });
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 const MIN_AD_PLAN_DAYS = 3;
@@ -33,6 +36,7 @@ export interface SettingsProfile {
   limits: SettingsLimits;
   adsPlans?: AdsPlan[];
   referralProgram?: ReferralProgramSettings;
+  globalEmailTemplate?: string;
 }
 export default function SettingsTab({ 
   settings, 
@@ -51,6 +55,7 @@ export default function SettingsTab({
         smtp: { host: '', port: 465, user: '', pass: '', fromAddress: '', secure: true },
         adsPlans: [] as AdsPlan[],
         referralProgram: { enabled: true, minimumFundingAmount: 10000, rewardPercentage: 10 },
+        globalEmailTemplate: '<div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; padding: 20px; border-radius: 8px;">\n  <div style="text-align: center; margin-bottom: 20px;">\n    <h1 style="color: #1e293b; margin: 0;">TallyPadi</h1>\n  </div>\n  <div style="color: #334155; line-height: 1.6;">\n    {{message}}\n  </div>\n  <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e2e8f0; text-align: center; color: #94a3b8; font-size: 12px;">\n    &copy; TallyPadi. All rights reserved.\n  </div>\n</div>',
         ...settings // Overwrite defaults with actual data
     });
     const [saving, setSaving] = useState(false);
@@ -124,7 +129,8 @@ export default function SettingsTab({
                 maxStaffAccounts: localSettings.limits.maxStaffAccounts,
                 smtp: localSettings.smtp,
                 adsPlans: localSettings.adsPlans,
-                referralProgram: localSettings.referralProgram
+                referralProgram: localSettings.referralProgram,
+                globalEmailTemplate: localSettings.globalEmailTemplate
             }, { headers });
             
             onUpdate();
@@ -399,6 +405,35 @@ export default function SettingsTab({
                                     className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-green-500"
                                 />
                             </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* 7. Global Email Layout Wrapper */}
+                <div className="space-y-4 mb-8">
+                    <h3 className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-3">Global Email Layout Wrapper</h3>
+                    <div className="p-5 bg-slate-900/50 rounded-xl border border-slate-700 space-y-4">
+                        <div className="flex items-center gap-3 mb-2">
+                            <div className="p-2 bg-indigo-500/20 rounded-lg">
+                                <LayoutTemplate className="w-5 h-5 text-indigo-400" />
+                            </div>
+                            <div>
+                                <h4 className="font-bold text-white">General Template (Header & Footer)</h4>
+                                <p className="text-xs text-slate-400 mt-1">This HTML template wraps around all your broadcast emails. <br/>Use <code className="bg-slate-800 px-1 py-0.5 rounded text-indigo-300">{"{{message}}"}</code> placeholder to dictate where the email body goes.</p>
+                            </div>
+                        </div>
+
+                        <div className="text-black prose-sm max-w-none rounded-lg overflow-hidden border border-slate-600 focus-within:border-indigo-500 transition-colors">
+                            <JoditEditor
+                                value={localSettings.globalEmailTemplate || ''}
+                                config={{
+                                    theme: 'dark',
+                                    placeholder: 'Start designing your global email wrapper...',
+                                    minHeight: 400,
+                                }}
+                                onBlur={newContent => setLocalSettings(prev => ({ ...prev, globalEmailTemplate: newContent }))}
+                                onChange={() => {}}
+                            />
                         </div>
                     </div>
                 </div>
