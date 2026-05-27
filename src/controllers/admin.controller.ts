@@ -9,6 +9,7 @@ import { AdminSettings } from '../models/adminSettings.model';
 import { AdminAuditLog } from '../models/adminAuditLog.model';
 import { EmailTemplate } from '../models/emailTemplate.model';
 import { sendBroadcastEmail } from '../services/email.service';
+import { queueBroadcastMessage, broadcastQueue } from '../services/queue.service';
 import { DailyStats } from '../models/dailyStats.model';
 import { ProcessedMessage } from '../models/processedMessage.model';
 import { Debtor } from '../models/debtor.model';
@@ -746,83 +747,80 @@ export const broadcastMessage = async (req: Request, res: Response) => {
     const settings = await AdminSettings.findOne().lean();
     const globalEmailTemplate = settings?.globalEmailTemplate;
 
-    // Async Dispatch Loop
-    (async () => {
-      for (const u of recipients) {
-        try {
-          // Send WhatsApp
-          if (sendWhatsapp && u.phoneNumber && message) {
-            if (mediaId && mediaType) {
-              await sendWhatsAppMediaById({
-                to: u.phoneNumber,
-                mediaId,
-                type: mediaType as any,
-                caption: message
-              });
-            } else {
-              await sendWhatsAppText(u.phoneNumber, message);
-            }
-          }
-
-          // Send Email
-          if (sendEmail && u.email) {
-             let personalizedSubject = '';
-             let personalizedHtml = '';
-
-             if (template) {
-                 personalizedSubject = (parsed.data.emailSubject || template.subject)
-                     .replace(/##usershopname##/g, u.businessName || 'Your Shop')
-                     .replace(/##phonenumber##/g, u.phoneNumber || '')
-                     .replace(/##name##/g, u.name || 'Partner');
-
-                 personalizedHtml = template.htmlBody
-                     .replace(/##usershopname##/g, u.businessName || 'Your Shop')
-                     .replace(/##phonenumber##/g, u.phoneNumber || '')
-                     .replace(/##name##/g, u.name || 'Partner');
-             } else if (parsed.data.emailSubject && message) {
-                 personalizedSubject = parsed.data.emailSubject
-                     .replace(/##usershopname##/g, u.businessName || 'Your Shop')
-                     .replace(/##phonenumber##/g, u.phoneNumber || '')
-                     .replace(/##name##/g, u.name || 'Partner');
-
-                 let pMsg = message
-                     .replace(/##usershopname##/g, u.businessName || 'Your Shop')
-                     .replace(/##phonenumber##/g, u.phoneNumber || '')
-                     .replace(/##name##/g, u.name || 'Partner');
-                 
-                 personalizedHtml = `<div style="font-family: sans-serif; white-space: pre-wrap;">${pMsg}</div>`;
-             }
-
-             if (personalizedSubject && personalizedHtml) {
-                 // Wrap with Global Email Template
-                 if (globalEmailTemplate && globalEmailTemplate.includes('{{message}}')) {
-                     personalizedHtml = globalEmailTemplate.replace('{{message}}', personalizedHtml);
-                 }
-
-                 await sendBroadcastEmail(u.email, personalizedSubject, personalizedHtml);
-                 
-                 // Throttle internally per email strictly
-                 if (emailDelayMs > 0) {
-                     await new Promise(r => setTimeout(r, emailDelayMs));
-                 }
-             }
-          }
-
-          if (sendWhatsapp && !sendEmail) {
-             // Default WhatsApp limit
-             await new Promise((r) => setTimeout(r, 150));
-          }
-
-        } catch (e) {
-          console.error(`Failed executing broadcast slice for ${u.phoneNumber || u.email}`);
-        }
-      }
-    })();
+    // Replace Async Dispatch Loop with Broadcast Queue
+    for (const u of recipients) {
+      const jobPayload = {
+        sendEmail,
+        sendWhatsapp,
+        mediaId,
+        mediaType,
+        message,
+        emailSubject: parsed.data.emailSubject || template?.subject || '',
+        templateHtml: template?.htmlBody || '',
+        globalEmailTemplate,
+        emailDelayMs,
+        apiBaseUrl: process.env.API_BASE_URL || 'https://tallypadi.com/api'
+      };
+      
+      // Dispatch individually to Queue
+      await queueBroadcastMessage(u, jobPayload);
+    }
 
     res.json({ success: true, message: `Broadcast queued to ${recipients.length} recipients.` });
   } catch (error) {
     console.error('Broadcast Error:', error);
     res.status(500).json({ error: 'Broadcast Error' });
+  }
+};
+
+// -------------------------
+// BROADCAST QUEUE MANAGEMENT
+// -------------------------
+export const getBroadcastQueueStatus = async (_req: Request, res: Response) => {
+  try {
+    const [waiting, active, completed, failed, isPaused] = await Promise.all([
+      broadcastQueue.getWaitingCount(),
+      broadcastQueue.getActiveCount(),
+      broadcastQueue.getCompletedCount(),
+      broadcastQueue.getFailedCount(),
+      broadcastQueue.isPaused()
+    ]);
+    res.json({ waiting, active, completed, failed, isPaused });
+  } catch (error) {
+    console.error('Queue Status Error:', error);
+    res.status(500).json({ error: 'Failed to get queue status' });
+  }
+};
+
+export const pauseBroadcastQueue = async (_req: Request, res: Response) => {
+  try {
+    await broadcastQueue.pause();
+    res.json({ success: true, message: 'Queue paused successfully.' });
+  } catch (error) {
+    console.error('Pause Queue Error:', error);
+    res.status(500).json({ error: 'Failed to pause queue' });
+  }
+};
+
+export const resumeBroadcastQueue = async (_req: Request, res: Response) => {
+  try {
+    await broadcastQueue.resume();
+    res.json({ success: true, message: 'Queue resumed successfully.' });
+  } catch (error) {
+    console.error('Resume Queue Error:', error);
+    res.status(500).json({ error: 'Failed to resume queue' });
+  }
+};
+
+export const clearBroadcastQueue = async (_req: Request, res: Response) => {
+  try {
+    await broadcastQueue.drain();
+    await broadcastQueue.clean(0, 0, 'failed');
+    await broadcastQueue.clean(0, 0, 'completed');
+    res.json({ success: true, message: 'Queue cleared successfully.' });
+  } catch (error) {
+    console.error('Clear Queue Error:', error);
+    res.status(500).json({ error: 'Failed to clear queue' });
   }
 };
 

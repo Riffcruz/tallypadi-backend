@@ -4,12 +4,14 @@ import axios from 'axios';
 import dynamic from 'next/dynamic';
 
 const JoditEditor = dynamic(() => import('jodit-react'), { ssr: false });
-import { MessageSquare, Send, Smartphone, Bell, Image as ImageIcon, Mail, Plus, Trash2, List } from 'lucide-react';
+import { MessageSquare, Send, Smartphone, Bell, Image as ImageIcon, Mail, Plus, Trash2, List, Activity, PauseCircle, PlayCircle, Trash } from 'lucide-react';
 import Swal from 'sweetalert2';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 
 export default function BroadcastTab({ headers }: { headers: Record<string, string> }) {
+    const [viewMode, setViewMode] = useState<'compose' | 'queue'>('compose');
+    
     const [msg, setMsg] = useState('');
     const [target, setTarget] = useState('active_24h');
     
@@ -32,9 +34,32 @@ export default function BroadcastTab({ headers }: { headers: Record<string, stri
     const [templateHtml, setTemplateHtml] = useState('');
     const [isCreatingTemplate, setIsCreatingTemplate] = useState(false);
 
+    // Queue Management
+    const [queueStats, setQueueStats] = useState({ waiting: 0, active: 0, completed: 0, failed: 0, isPaused: false });
+
     useEffect(() => {
         loadTemplates();
-    }, []);
+        if (viewMode === 'queue') fetchQueueStatus();
+    }, [viewMode]);
+
+    const fetchQueueStatus = async () => {
+        try {
+            const res = await axios.get(`${API_URL}/admin/broadcast/queue`, { headers });
+            setQueueStats(res.data);
+        } catch (e) {
+            console.error('Failed to fetch queue status', e);
+        }
+    };
+
+    const handleQueueAction = async (action: 'pause' | 'resume' | 'clear') => {
+        try {
+            await axios.post(`${API_URL}/admin/broadcast/queue/${action}`, {}, { headers });
+            Swal.fire('Success', `Queue action '${action}' successful`, 'success');
+            fetchQueueStatus();
+        } catch (e) {
+            Swal.fire('Error', `Failed to execute ${action}`, 'error');
+        }
+    };
 
     const loadTemplates = async () => {
         try {
@@ -141,11 +166,67 @@ export default function BroadcastTab({ headers }: { headers: Record<string, stri
     return (
         <div className="max-w-4xl mx-auto animate-in fade-in duration-300 pb-20">
             <div className="bg-slate-800 p-8 rounded-2xl border border-slate-700 shadow-lg">
-                <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
-                    <MessageSquare className="text-purple-400" /> Mass Broadcast Console
-                </h2>
+                <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                        <MessageSquare className="text-purple-400" /> Mass Broadcast Console
+                    </h2>
+                    <div className="flex bg-slate-900 rounded-lg p-1 border border-slate-700">
+                        <button onClick={() => setViewMode('compose')} className={`px-4 py-2 text-sm font-bold rounded-md transition-colors ${viewMode === 'compose' ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white'}`}>Compose</button>
+                        <button onClick={() => setViewMode('queue')} className={`px-4 py-2 text-sm font-bold rounded-md transition-colors flex items-center gap-2 ${viewMode === 'queue' ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white'}`}>
+                            <Activity className="w-4 h-4" /> Queue
+                        </button>
+                    </div>
+                </div>
+
+                {viewMode === 'queue' && (
+                    <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-700 text-center">
+                                <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Waiting</p>
+                                <p className="text-3xl font-black text-amber-400">{queueStats.waiting}</p>
+                            </div>
+                            <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-700 text-center">
+                                <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Processing</p>
+                                <p className="text-3xl font-black text-blue-400">{queueStats.active}</p>
+                            </div>
+                            <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-700 text-center">
+                                <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Sent</p>
+                                <p className="text-3xl font-black text-green-400">{queueStats.completed}</p>
+                            </div>
+                            <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-700 text-center">
+                                <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Failed</p>
+                                <p className="text-3xl font-black text-red-400">{queueStats.failed}</p>
+                            </div>
+                        </div>
+
+                        <div className="flex gap-4 p-4 bg-slate-900/50 rounded-xl border border-slate-700 items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className={`w-3 h-3 rounded-full ${queueStats.isPaused ? 'bg-red-500 animate-pulse' : 'bg-green-500'}`} />
+                                <span className="font-bold text-white">{queueStats.isPaused ? 'Queue is Paused' : 'Queue is Running'}</span>
+                            </div>
+                            <div className="flex gap-3">
+                                {queueStats.isPaused ? (
+                                    <button onClick={() => handleQueueAction('resume')} className="flex items-center gap-2 bg-green-500/20 text-green-400 hover:bg-green-500/30 px-4 py-2 rounded-lg font-bold transition">
+                                        <PlayCircle className="w-4 h-4" /> Resume Queue
+                                    </button>
+                                ) : (
+                                    <button onClick={() => handleQueueAction('pause')} className="flex items-center gap-2 bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 px-4 py-2 rounded-lg font-bold transition">
+                                        <PauseCircle className="w-4 h-4" /> Pause Queue
+                                    </button>
+                                )}
+                                <button onClick={() => handleQueueAction('clear')} className="flex items-center gap-2 bg-red-500/20 text-red-400 hover:bg-red-500/30 px-4 py-2 rounded-lg font-bold transition">
+                                    <Trash className="w-4 h-4" /> Clear Queue
+                                </button>
+                                <button onClick={fetchQueueStatus} className="flex items-center gap-2 bg-slate-700 text-white hover:bg-slate-600 px-4 py-2 rounded-lg font-bold transition">
+                                    Refresh Stats
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
                 
-                <div className="space-y-8">
+                {viewMode === 'compose' && (
+                <div className="space-y-8 animate-in slide-in-from-left-4 duration-300">
                     {/* Delivery Methods */}
                     <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-700">
                         <label className="block text-xs font-bold text-slate-400 uppercase mb-4">Delivery Channels</label>
@@ -231,7 +312,7 @@ export default function BroadcastTab({ headers }: { headers: Record<string, stri
                                      <div>
                                         <div className="flex justify-between items-end mb-2">
                                             <label className="block text-xs font-bold text-slate-400">Advanced HTML Editor</label>
-                                            <span className="text-[10px] text-slate-500 font-mono bg-slate-800 px-1.5 py-0.5 rounded">Variables: ##name##, ##usershopname##, ##phonenumber##</span>
+                                            <span className="text-[10px] text-slate-500 font-mono bg-slate-800 px-1.5 py-0.5 rounded">Variables: ##name##, ##usershopname##, ##phonenumber##, {"{{unsubscribe_link}}"}</span>
                                         </div>
                                         <div className="text-black prose-sm max-w-none rounded-lg overflow-hidden border border-slate-600 focus-within:border-indigo-500 transition-colors">
                                             <JoditEditor
@@ -345,6 +426,7 @@ export default function BroadcastTab({ headers }: { headers: Record<string, stri
                         <Send size={18} /> Launch Mass Campaign
                     </button>
                 </div>
+                )}
             </div>
         </div>
     );

@@ -1,7 +1,7 @@
 // src/services/queue.worker.ts
 import { Worker } from 'bullmq'; // ✅ Switched to BullMQ
 import { createRedisConnection } from './queue.service'; // ✅ Factory for dedicated connections
-import { sendWhatsAppText, sendWhatsAppButtons, sendWhatsAppList, sendWhatsAppDocumentBuffer, sendWhatsAppFlow, sendTypingIndicator, sendWhatsAppCtaUrl } from './whatsapp.service';
+import { sendWhatsAppText, sendWhatsAppButtons, sendWhatsAppList, sendWhatsAppDocumentBuffer, sendWhatsAppFlow, sendTypingIndicator, sendWhatsAppCtaUrl, sendWhatsAppMediaById } from './whatsapp.service';
 import { generateSaleReceiptPdfBuffer } from '../controllers/receipt.controller';
 import { Invoice } from '../models/invoice.model';
 import { generateInvoicePdf } from './invoice.pdf.service';
@@ -20,6 +20,7 @@ import {
   refreshMarketplaceListing,
   refreshMarketplaceOwnerListings,
 } from './marketplaceIndex.service';
+import { sendBroadcastEmail } from './email.service';
 
 export const replyWorker = new Worker(
   'outbound-replies', // ✅ Fixed: Matches queue.service.ts
@@ -394,4 +395,100 @@ marketplaceIndexWorker.on('completed', (job: import('bullmq').Job) =>
 );
 marketplaceIndexWorker.on('failed', (job: import('bullmq').Job | undefined, err: Error) =>
   console.error(`❌ Marketplace index failed [${job?.name}]: ${err.message}`)
+);
+
+// ============================================================
+// WORKER: BROADCAST
+// Handles mass email and WhatsApp broadcasts
+// ============================================================
+export const broadcastWorker = new Worker(
+  'broadcast-queue',
+  async (job: import('bullmq').Job) => {
+    if (job.name === 'send-broadcast') {
+      const { recipient: u, jobPayload } = job.data;
+      const { sendEmail, sendWhatsapp, mediaId, mediaType, message, emailSubject, emailDelayMs, templateHtml, globalEmailTemplate, apiBaseUrl } = jobPayload;
+
+      // Unsubscribe check
+      if (sendEmail && u.email) {
+        // Double check from DB directly in case they unsubscribed recently
+        const freshUser = await User.findById(u._id).lean();
+        if (freshUser && freshUser.emailSubscribed === false) {
+          // Skip email for this user
+        } else {
+          let personalizedSubject = '';
+          let personalizedHtml = '';
+
+          if (templateHtml) {
+             personalizedSubject = emailSubject
+                 .replace(/##usershopname##/g, u.businessName || 'Your Shop')
+                 .replace(/##phonenumber##/g, u.phoneNumber || '')
+                 .replace(/##name##/g, u.name || 'Partner');
+
+             personalizedHtml = templateHtml
+                 .replace(/##usershopname##/g, u.businessName || 'Your Shop')
+                 .replace(/##phonenumber##/g, u.phoneNumber || '')
+                 .replace(/##name##/g, u.name || 'Partner');
+          } else if (emailSubject && message) {
+             personalizedSubject = emailSubject
+                 .replace(/##usershopname##/g, u.businessName || 'Your Shop')
+                 .replace(/##phonenumber##/g, u.phoneNumber || '')
+                 .replace(/##name##/g, u.name || 'Partner');
+
+             let pMsg = message
+                 .replace(/##usershopname##/g, u.businessName || 'Your Shop')
+                 .replace(/##phonenumber##/g, u.phoneNumber || '')
+                 .replace(/##name##/g, u.name || 'Partner');
+             
+             personalizedHtml = `<div style="font-family: sans-serif; white-space: pre-wrap;">${pMsg}</div>`;
+          }
+
+          if (personalizedSubject && personalizedHtml) {
+             // Inject Unsubscribe Link
+             const unsubLink = `${apiBaseUrl || 'https://tallypadi.com/api'}/public/unsubscribe?email=${encodeURIComponent(u.email)}`;
+             personalizedHtml = personalizedHtml.replace(/{{unsubscribe_link}}/g, unsubLink);
+
+             // Wrap with Global Email Template
+             if (globalEmailTemplate && globalEmailTemplate.includes('{{message}}')) {
+                 personalizedHtml = globalEmailTemplate.replace('{{message}}', personalizedHtml);
+             }
+
+             await sendBroadcastEmail(u.email, personalizedSubject, personalizedHtml);
+             
+             // Throttle internally per email strictly
+             if (emailDelayMs > 0) {
+                 await new Promise(r => setTimeout(r, emailDelayMs));
+             }
+          }
+        }
+      }
+
+      // WhatsApp Broadcast
+      if (sendWhatsapp && u.phoneNumber && message) {
+        if (mediaId && mediaType) {
+          await sendWhatsAppMediaById({
+            to: u.phoneNumber,
+            mediaId,
+            type: mediaType as any,
+            caption: message
+          });
+        } else {
+          await sendWhatsAppText(u.phoneNumber, message);
+        }
+      }
+      return;
+    }
+
+    console.log(`⚠️ Unknown broadcast job: ${job.name}`);
+  },
+  {
+    connection: createRedisConnection('worker-broadcast') as any,
+    concurrency: 1, // Single concurrency to strictly respect emailDelayMs throttling
+  }
+);
+
+broadcastWorker.on('completed', (job: import('bullmq').Job) => {
+  // console.log(`✅ Broadcast sent: ${job.data?.recipient?.email || job.data?.recipient?.phoneNumber}`);
+});
+broadcastWorker.on('failed', (job: import('bullmq').Job | undefined, err: Error) =>
+  console.error(`❌ Broadcast failed [${job?.data?.recipient?.email}]: ${err.message}`)
 );

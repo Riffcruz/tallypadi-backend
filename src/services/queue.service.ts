@@ -79,6 +79,20 @@ export const notificationQueue = new Queue('push-notifications', {
 });
 
 // ============================================================
+// ✅ BROADCAST: Mass Email and WhatsApp messages
+// Queue name: broadcast-queue
+// ============================================================
+export const broadcastQueue = new Queue('broadcast-queue', {
+  connection: createRedisConnection('queue-broadcast') as any,
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 10000 },
+    removeOnComplete: true,
+    removeOnFail: 1000,
+  },
+});
+
+// ============================================================
 // ✅ ADS AUTOMATION: Provider submission and reconciliation
 // Queue name: ad-automation
 // ============================================================
@@ -178,6 +192,18 @@ export const queueOutboundMessage = async (phoneNumber: string, message: string,
 export const queueOutboundBulk = async (phoneNumber: string, message: string, jobId?: string) => {
   const finalJobId = safeJobId(jobId || `bulk_${phoneNumber}_${Date.now()}`);
   await bulkQueue.add('send-text', { phoneNumber, message }, { jobId: finalJobId });
+};
+
+// ============================================================
+// ✅ BROADCAST JOBS
+// ============================================================
+export const queueBroadcastMessage = async (
+  recipient: any,
+  jobPayload: any,
+  jobId?: string
+) => {
+  const finalJobId = safeJobId(jobId || `bcast_${recipient._id}_${Date.now()}`);
+  await broadcastQueue.add('send-broadcast', { recipient, jobPayload }, { jobId: finalJobId });
 };
 
 // ============================================================

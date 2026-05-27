@@ -3,6 +3,7 @@ import { Schema, model, Document, Types } from 'mongoose';
 export interface IUser extends Document {
   phoneNumber: string;
   email?: string;
+  emailSubscribed?: boolean;
   password?: string;
 
   registrationStage?: 'EMAIL' | 'PASSWORD' | 'SHOP_NAME_SELECTION' | 'SHOP_NAME_INPUT' | 'COMPLETED' | 'OTP_PENDING';
@@ -121,6 +122,7 @@ const userSchema = new Schema<IUser>(
     phoneNumber: { type: String, required: true, unique: true },
 
     email: { type: String, unique: true, sparse: true },
+    emailSubscribed: { type: Boolean, default: true },
     password: { type: String, select: false },
 
     registrationStage: {

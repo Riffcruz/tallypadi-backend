@@ -9,6 +9,10 @@ import {
   manageUser,
   getUserDeepDive,
   broadcastMessage,
+  getBroadcastQueueStatus,
+  pauseBroadcastQueue,
+  resumeBroadcastQueue,
+  clearBroadcastQueue,
   getGlobalSettings,
   updateGlobalSettings,
   adminTopUpUserAdsWallet,
@@ -133,6 +137,10 @@ router.use('/chat', chatRoutes);   // -> /api/chat/send
 
 // Tools
 router.post('/broadcast', broadcastMessage);
+router.get('/broadcast/queue', getBroadcastQueueStatus);
+router.post('/broadcast/queue/pause', pauseBroadcastQueue);
+router.post('/broadcast/queue/resume', resumeBroadcastQueue);
+router.post('/broadcast/queue/clear', clearBroadcastQueue);
 router.get('/email-templates', getEmailTemplates);
 router.post('/email-templates', createEmailTemplate);
 router.delete('/email-templates/:id', deleteEmailTemplate);
