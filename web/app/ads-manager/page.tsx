@@ -646,8 +646,8 @@ function AdsManagerContent() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 xl:grid-cols-[360px_1fr] gap-6">
-            <section className="space-y-6">
+          <div className="grid grid-cols-1 2xl:grid-cols-[360px_minmax(0,1fr)] gap-6">
+            <section className="min-w-0 space-y-6">
               <div className="bg-white border border-slate-200 rounded-lg p-6 shadow-sm">
                 <div className="flex items-center gap-3 mb-6">
                   <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
@@ -704,19 +704,19 @@ function AdsManagerContent() {
               </div>
             </section>
 
-            <section className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <section className="min-w-0 space-y-6">
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                 <button
                   type="button"
                   onClick={() => setActiveBoostModal('new')}
                   disabled={!isTycoon}
-                  className="group rounded-lg border border-blue-100 bg-white p-5 text-left shadow-sm transition-all hover:border-blue-200 hover:shadow-md disabled:opacity-50"
+                  className="group min-w-0 rounded-lg border border-blue-100 bg-white p-5 text-left shadow-sm transition-all hover:border-blue-200 hover:shadow-md disabled:opacity-50"
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
                       <PackagePlus size={20} />
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <h2 className="text-base font-black text-slate-900">Create New Campaign</h2>
                       <p className="text-xs font-medium text-slate-500">Add a new product and submit it for ads review.</p>
                     </div>
@@ -727,13 +727,13 @@ function AdsManagerContent() {
                   type="button"
                   onClick={() => setActiveBoostModal('existing')}
                   disabled={!isTycoon}
-                  className="group rounded-lg border border-emerald-100 bg-white p-5 text-left shadow-sm transition-all hover:border-emerald-200 hover:shadow-md disabled:opacity-50"
+                  className="group min-w-0 rounded-lg border border-emerald-100 bg-white p-5 text-left shadow-sm transition-all hover:border-emerald-200 hover:shadow-md disabled:opacity-50"
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
                       <Search size={20} />
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <h2 className="text-base font-black text-slate-900">Use Existing Product</h2>
                       <p className="text-xs font-medium text-slate-500">Pick a product already in inventory and boost it.</p>
                     </div>
@@ -931,13 +931,13 @@ function AdsManagerContent() {
                 </div>
               )}
 
-              <div className="bg-white border border-slate-200 rounded-lg shadow-sm">
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-6 border-b border-slate-100">
+              <div className="min-w-0 overflow-hidden bg-white border border-slate-200 rounded-lg shadow-sm">
+                <div className="flex flex-col justify-between gap-4 p-4 sm:p-6 border-b border-slate-100">
                   <div>
                     <h2 className="text-base font-bold text-slate-900">Boost Requests & History</h2>
                     <p className="text-xs text-slate-500 mt-1">Pending, active, completed, and rejected ads boosts</p>
                   </div>
-                  <div className="grid grid-cols-2 sm:flex gap-2">
+                  <div className="grid w-full grid-cols-2 lg:grid-cols-5 gap-2">
                     {(['ALL', 'PENDING', 'RUNNING', 'COMPLETED', 'REJECTED'] as StatusFilter[]).map((status) => {
                       const config = statusCopy[status];
                       const Icon = config.icon;
@@ -945,18 +945,18 @@ function AdsManagerContent() {
                         <button
                           key={status}
                           onClick={() => setStatusFilter(status)}
-                          className={`flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-xs font-bold transition-colors ${statusFilter === status ? config.className : 'border-slate-200 text-slate-500 hover:bg-slate-50'}`}
+                          className={`flex min-w-0 items-center justify-center gap-2 rounded-lg border px-2 py-2 text-xs font-bold transition-colors ${statusFilter === status ? config.className : 'border-slate-200 text-slate-500 hover:bg-slate-50'}`}
                         >
-                          <Icon size={14} />
-                          {status === 'RUNNING' ? 'Active' : config.label.replace(' Review', '')}
-                          <span className="rounded-full bg-white/70 px-1.5 py-0.5">{getStatusCount(status)}</span>
+                          <Icon size={14} className="shrink-0" />
+                          <span className="min-w-0 truncate">{status === 'RUNNING' ? 'Active' : config.label.replace(' Review', '')}</span>
+                          <span className="shrink-0 rounded-full bg-white/70 px-1.5 py-0.5">{getStatusCount(status)}</span>
                         </button>
                       );
                     })}
                   </div>
                 </div>
 
-                <div className="p-6 space-y-3">
+                <div className="p-4 sm:p-6 space-y-3">
                   {visibleCampaigns.length === 0 ? (
                     <div className="rounded-lg border border-dashed border-slate-200 p-8 text-center">
                       <AlertCircle className="mx-auto mb-3 text-slate-300" size={28} />
@@ -966,8 +966,8 @@ function AdsManagerContent() {
                     const config = statusCopy[campaign.status] || statusCopy.RUNNING;
                     const Icon = config.icon;
                     return (
-                      <article key={campaign.id} className="rounded-lg border border-slate-200 p-4">
-                        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+                      <article key={campaign.id} className="min-w-0 rounded-lg border border-slate-200 p-4">
+                        <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4">
                           <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2 mb-2">
                               <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold ${config.className}`}>
@@ -986,7 +986,7 @@ function AdsManagerContent() {
                               <p className="text-sm text-red-600 mt-2">Reason: {campaign.rejectionReason}</p>
                             )}
                           </div>
-                          <div className="md:text-right shrink-0">
+                          <div className="xl:text-right shrink-0">
                             <p className="text-2xl font-black text-slate-900">{formatCurrency(campaign.budget, userCurrencyCode)}</p>
                             <p className="text-xs text-slate-500">{campaign.planLabel}</p>
                           </div>
