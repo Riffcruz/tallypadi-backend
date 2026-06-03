@@ -400,13 +400,19 @@ export const processTransaction = async (
         { upsert: true }
       );
 
-      // ✅ SYNC FRONTEND: Update Debtor balance immediately
-      const oldDebtor = await Debtor.findByIdAndUpdate(debtorId, { $inc: { totalDebt: -amt } });
+      // ✅ SYNC FRONTEND: Update Debtor balance by the amount actually matched
+      const oldDebtor = await Debtor.findById(debtorId);
       const oldBalance = oldDebtor ? toNumber(oldDebtor.totalDebt) : 0;
+      const newBalance = Math.max(0, oldBalance - toNumber(r.applied));
+      await Debtor.findByIdAndUpdate(debtorId, {
+        $set: {
+          totalDebt: newBalance,
+          ...(newBalance <= 0 ? { dueDateReminderSent: false, dueDate: null } : {}),
+        },
+      });
 
       if (r.applied <= 0) {
         if (oldBalance > 0) {
-           const newBalance = oldBalance - amt;
            const status = newBalance <= 0 ? "✨ Fully settled!" : `📉 Remaining: ${newBalance.toLocaleString()}`;
            parsed.reply_text = `✅ Payment recorded for *${displayName}*.\n${status}`;
         } else {

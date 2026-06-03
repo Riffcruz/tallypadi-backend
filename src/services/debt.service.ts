@@ -3,7 +3,7 @@ import { Transaction } from '../models/transaction.model';
 
 export async function applyPaymentToDebts(
   shopUserId: string | Types.ObjectId,
-  debtorId: Types.ObjectId,
+  debtorId: string | Types.ObjectId,
   amount: number
 ) {
   let remaining = Number(amount || 0);
@@ -17,7 +17,7 @@ export async function applyPaymentToDebts(
   const debts = await Transaction.find({
     user: shopUserId,
     type: 'SALE',
-    paymentStatus: 'CREDIT',
+    paymentStatus: { $in: ['CREDIT', 'PARTIAL'] },
     isUndone: { $ne: true },
     balance: { $gt: 0 },
     debtorId: debtorId,
@@ -39,6 +39,9 @@ export async function applyPaymentToDebts(
       tx.paymentStatus = 'PAID';
       tx.settledAt = new Date();
       clearedCount += 1;
+    } else {
+      tx.paymentStatus = 'PARTIAL';
+      tx.settledAt = null;
     }
 
     await tx.save();

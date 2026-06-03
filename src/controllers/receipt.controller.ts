@@ -85,6 +85,72 @@ function fitTextWidth(doc: PdfDoc, text: string, maxWidth: number, maxSize: numb
   return size;
 }
 
+const finiteNumber = (value: unknown, fallback = 0) => {
+  const n = Number(value ?? fallback);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+export function getReceiptPaymentSummary(tx: any, computedTotal = 0) {
+  const total = Math.max(0, finiteNumber(tx?.totalMoney, computedTotal));
+  const discount = Math.max(0, finiteNumber(tx?.discount, 0));
+  const status = String(tx?.paymentStatus || '').toUpperCase();
+
+  const hasBalance = tx?.balance !== undefined && tx?.balance !== null;
+  let outstanding = hasBalance ? Math.max(0, finiteNumber(tx.balance, 0)) : 0;
+
+  const hasAmountPaid = tx?.amountPaid !== undefined && tx?.amountPaid !== null;
+  const paid = hasAmountPaid
+    ? Math.max(0, finiteNumber(tx.amountPaid, 0))
+    : status === 'CREDIT'
+      ? 0
+      : Math.max(0, total - outstanding);
+
+  if (!hasBalance) {
+    outstanding = Math.max(0, total - paid);
+  }
+
+  if (status === 'CREDIT' && paid <= 0 && outstanding <= 0 && total > 0) {
+    outstanding = total;
+  }
+
+  if (status === 'PARTIAL' && outstanding <= 0 && total > paid) {
+    outstanding = total - paid;
+  }
+
+  return { total, discount, paid, outstanding };
+}
+
+export function buildReceiptContactLines(user: any) {
+  const lines: string[] = [];
+  const phone = String(user?.phoneNumber || '').trim();
+  const location = user?.settings?.location || {};
+  const addressParts = [
+    location.address,
+    location.city,
+    location.state,
+    location.country,
+  ]
+    .map((part) => String(part || '').trim())
+    .filter(Boolean);
+
+  if (phone) lines.push(`Phone/WhatsApp: ${phone}`);
+  if (addressParts.length > 0) lines.push(`Address: ${addressParts.join(', ')}`);
+
+  return lines;
+}
+
+async function resolveReceiptBusinessUser(requester: any, tx: any) {
+  const creator = tx?.user && typeof tx.user === 'object' ? tx.user : null;
+  const ownerId = creator?.ownerId || requester?.ownerId;
+
+  if (ownerId) {
+    const owner = await User.findById(ownerId).lean();
+    if (owner) return owner;
+  }
+
+  return requester;
+}
+
 // ✅ Register fonts
 function registerFonts(doc: PdfDoc) {
   const candidates = [
@@ -151,6 +217,7 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
   tx: any;
   format: 'A4' | 'thermal';
   exactHeight?: number;
+  contactLines?: string[];
 }) {
   const {
     saleId,
@@ -163,7 +230,8 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
     regFont,
     boldFont,
     tx,
-    format
+    format,
+    contactLines = []
   } = payload;
 
   const currencyDisplay = hasSymbolFont ? 'symbol' : 'code';
@@ -411,9 +479,12 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
   // --- TOTALS ---
   y += 16;
 
-  const totalMoney = Number(tx.totalMoney ?? computedTotal ?? 0);
-  const discount = Number(tx.discount ?? 0);
-  const netTotal = Number(tx.amountPaid ?? totalMoney - discount);
+  const paymentSummary = getReceiptPaymentSummary(tx, computedTotal);
+  const totalMoney = paymentSummary.total;
+  const discount = paymentSummary.discount;
+  const netTotal = paymentSummary.paid;
+  const outstanding = paymentSummary.outstanding;
+  const hasOutstanding = outstanding > 0;
   const pointsEarned = Number(tx.pointsEarned ?? 0);
 
   if (isThermal) {
@@ -428,9 +499,20 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
         y += 14;
       }
       
-      doc.font(boldFont).fontSize(12).fillColor(THEME_INVOICE.dark);
-      doc.text(`TOTAL: ${formatMoney(netTotal)}`, margin, y, { align: 'right', width: contentW });
-      y += 20;
+      if (hasOutstanding) {
+        doc.font(regFont).fontSize(10).fillColor(THEME_INVOICE.dark);
+        doc.text(`Total: ${formatMoney(totalMoney)}`, margin, y, { align: 'right', width: contentW });
+        y += 14;
+        doc.text(`Total paid: ${formatMoney(netTotal)}`, margin, y, { align: 'right', width: contentW });
+        y += 14;
+        doc.font(boldFont).fontSize(11).fillColor(THEME_INVOICE.alert);
+        doc.text(`Outstanding: ${formatMoney(outstanding)}`, margin, y, { align: 'right', width: contentW });
+        y += 20;
+      } else {
+        doc.font(boldFont).fontSize(12).fillColor(THEME_INVOICE.dark);
+        doc.text(`TOTAL: ${formatMoney(netTotal)}`, margin, y, { align: 'right', width: contentW });
+        y += 20;
+      }
       
       if (pointsEarned > 0) {
         doc.font(boldFont).fontSize(9).fillColor(THEME_INVOICE.dark); // using dark instead of primary to ensure thermal printer contrast
@@ -438,8 +520,8 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
         y += 16;
       }
   } else {
-      const boxLines = 1 + (discount > 0 ? 2 : 0) + (pointsEarned > 0 ? 1 : 0);
-      const totalsBoxH = 50 + (boxLines * 16);
+      const boxLines = (discount > 0 ? 2 : 0) + (hasOutstanding ? 4 : 2) + (pointsEarned > 0 ? 1 : 0);
+      const totalsBoxH = 34 + (boxLines * 16);
       const totalsBoxW = Math.min(260, contentW);
       const totalsBoxX = pageW - margin - totalsBoxW;
 
@@ -457,13 +539,25 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
           currentY += 16;
       }
 
-      doc.fillColor(THEME_INVOICE.muted).font(boldFont).fontSize(9).text('TOTAL PAID', totalsBoxX + 16, currentY);
-      currentY += 14;
-      doc.fillColor(THEME_INVOICE.dark).font(boldFont).fontSize(18).text(formatMoney(netTotal), totalsBoxX + 16, currentY, {
-        width: totalsBoxW - 32,
-        align: 'right',
-      });
-      currentY += 24;
+      if (hasOutstanding) {
+          doc.fillColor(THEME_INVOICE.muted).font(regFont).fontSize(10).text('Total:', totalsBoxX + 16, currentY);
+          doc.fillColor(THEME_INVOICE.dark).font(regFont).fontSize(10).text(formatMoney(totalMoney), totalsBoxX + 16, currentY, { width: totalsBoxW - 32, align: 'right' });
+          currentY += 18;
+          doc.fillColor(THEME_INVOICE.muted).font(regFont).fontSize(10).text('Total paid:', totalsBoxX + 16, currentY);
+          doc.fillColor(THEME_INVOICE.dark).font(boldFont).fontSize(10).text(formatMoney(netTotal), totalsBoxX + 16, currentY, { width: totalsBoxW - 32, align: 'right' });
+          currentY += 18;
+          doc.fillColor(THEME_INVOICE.alert).font(boldFont).fontSize(10).text('Outstanding:', totalsBoxX + 16, currentY);
+          doc.fillColor(THEME_INVOICE.alert).font(boldFont).fontSize(12).text(formatMoney(outstanding), totalsBoxX + 16, currentY, { width: totalsBoxW - 32, align: 'right' });
+          currentY += 22;
+      } else {
+          doc.fillColor(THEME_INVOICE.muted).font(boldFont).fontSize(9).text('TOTAL PAID', totalsBoxX + 16, currentY);
+          currentY += 14;
+          doc.fillColor(THEME_INVOICE.dark).font(boldFont).fontSize(18).text(formatMoney(netTotal), totalsBoxX + 16, currentY, {
+            width: totalsBoxW - 32,
+            align: 'right',
+          });
+          currentY += 24;
+      }
 
       if (pointsEarned > 0) {
           doc.fillColor(THEME_INVOICE.primary).font(boldFont).fontSize(10).text(`★ Loyalty Points Earned: ${pointsEarned}`, totalsBoxX + 16, currentY, { width: totalsBoxW - 32, align: 'right' });
@@ -480,6 +574,13 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
       doc.font(regFont).fontSize(8).fillColor(THEME_INVOICE.muted);
       doc.text(`Served by: ${cashierName}`, margin, y, { align: 'center', width: contentW });
       y += 12;
+      contactLines.forEach((line) => {
+        doc.font(regFont).fontSize(7).fillColor(THEME_INVOICE.muted);
+        const lineH = doc.heightOfString(line, { width: contentW, align: 'center' });
+        doc.text(line, margin, y, { align: 'center', width: contentW });
+        y += lineH + 4;
+      });
+      doc.font(regFont).fontSize(8).fillColor(THEME_INVOICE.muted);
       doc.text('Thank you. Powered by TallyPadi.com', margin, y, { align: 'center', width: contentW });
       y += 20; // Final bottom margin cushion
   } else {
@@ -487,15 +588,22 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
       const footerY = y;
       doc.fontSize(9).fillColor(THEME_INVOICE.muted).text('Thank you.', 0, footerY - 15, { align: 'center' });
       doc.fontSize(8).text(`Served by: ${cashierName}  |  Generated by TallyPadi.com`, 0, footerY + 2, { align: 'center' });
-      y += 30; // buffer 
+      y = footerY + 15;
+      const contactText = contactLines.join(' | ');
+      if (contactText) {
+        doc.font(regFont).fontSize(7).fillColor(THEME_INVOICE.muted);
+        doc.text(contactText, margin, y, { width: contentW, align: 'center' });
+        y += doc.heightOfString(contactText, { width: contentW, align: 'center' }) + 8;
+      }
+      y += 15; // buffer
   }
 
   return y;
 }
 
 export const generateSaleReceiptPdfBuffer = async (userId: string, saleId: string, format: 'A4' | 'thermal' = 'A4') => {
-  const user: any = await User.findById(userId).lean();
-  if (!user) throw new Error('User not found');
+  const requester: any = await User.findById(userId).lean();
+  if (!requester) throw new Error('User not found');
 
   const tx: any = await Transaction.findOne({
     _id: saleId,
@@ -508,12 +616,15 @@ export const generateSaleReceiptPdfBuffer = async (userId: string, saleId: strin
 
   if (!tx) throw new Error('Sale not found');
 
-  const offsetMinutes = user?.settings?.utcOffsetMinutes ?? 60;
-  const businessName = String(user?.businessName || user?.shopName || 'My Shop');
+  const businessUser: any = await resolveReceiptBusinessUser(requester, tx);
 
-  const userCountry = String(user?.countryCode || 'NG').toUpperCase();
-  const currencyCode = String(user?.currencyCode || COUNTRY_CURRENCY_CODE[userCountry] || 'NGN').toUpperCase();
-  const locale = String(user?.locale || 'en-NG');
+  const offsetMinutes = businessUser?.settings?.utcOffsetMinutes ?? requester?.settings?.utcOffsetMinutes ?? 60;
+  const businessName = String(businessUser?.businessName || businessUser?.shopName || requester?.businessName || requester?.shopName || 'My Shop');
+  const contactLines = buildReceiptContactLines(businessUser);
+
+  const userCountry = String(businessUser?.countryCode || requester?.countryCode || 'NG').toUpperCase();
+  const currencyCode = String(businessUser?.currencyCode || businessUser?.settings?.currencyCode || COUNTRY_CURRENCY_CODE[userCountry] || 'NGN').toUpperCase();
+  const locale = String(businessUser?.locale || requester?.locale || 'en-NG');
 
   const when = new Date(tx.timestamp || tx.createdAt || Date.now());
   const receiptDate = fmtDDMMYYYY_HHMM(when, offsetMinutes);
@@ -524,7 +635,7 @@ export const generateSaleReceiptPdfBuffer = async (userId: string, saleId: strin
     const { regFont: dReg, boldFont: dBold, hasNoto: dNoto } = registerFonts(dummyDoc);
     exactHeight = renderReceiptPdf(dummyDoc, {
       saleId, receiptNo, businessName, receiptDate, currencyCode, locale, 
-      hasSymbolFont: dNoto, regFont: dReg, boldFont: dBold, tx, format
+      hasSymbolFont: dNoto, regFont: dReg, boldFont: dBold, tx, format, contactLines
     });
 
   const doc = new PDFDocument({
@@ -559,7 +670,8 @@ export const generateSaleReceiptPdfBuffer = async (userId: string, saleId: strin
     boldFont,
     tx,
     format,
-    exactHeight
+    exactHeight,
+    contactLines
   });
 
   doc.end();
@@ -610,12 +722,15 @@ export const generateSaleReceiptPdf = async (req: Request | any, res: Response) 
 
     if (!isAuthorized) return res.status(404).json({ error: 'Sale not found' });
 
-    const offsetMinutes = user?.settings?.utcOffsetMinutes ?? 60;
-    const businessName = String(user?.businessName || user?.shopName || 'My Shop');
+    const businessUser: any = await resolveReceiptBusinessUser(user, tx);
 
-    const userCountry = String(user?.countryCode || 'NG').toUpperCase();
-    const currencyCode = String(user?.currencyCode || COUNTRY_CURRENCY_CODE[userCountry] || 'NGN').toUpperCase();
-    const locale = String(user?.locale || 'en-NG');
+    const offsetMinutes = businessUser?.settings?.utcOffsetMinutes ?? user?.settings?.utcOffsetMinutes ?? 60;
+    const businessName = String(businessUser?.businessName || businessUser?.shopName || user?.businessName || user?.shopName || 'My Shop');
+    const contactLines = buildReceiptContactLines(businessUser);
+
+    const userCountry = String(businessUser?.countryCode || user?.countryCode || 'NG').toUpperCase();
+    const currencyCode = String(businessUser?.currencyCode || businessUser?.settings?.currencyCode || COUNTRY_CURRENCY_CODE[userCountry] || 'NGN').toUpperCase();
+    const locale = String(businessUser?.locale || user?.locale || 'en-NG');
 
     const when = new Date(tx.timestamp || tx.createdAt || Date.now());
     const receiptDate = fmtDDMMYYYY_HHMM(when, offsetMinutes);
@@ -630,7 +745,7 @@ export const generateSaleReceiptPdf = async (req: Request | any, res: Response) 
     const { regFont: dReg, boldFont: dBold, hasNoto: dNoto } = registerFonts(dummyDoc);
     exactHeight = renderReceiptPdf(dummyDoc, {
       saleId, receiptNo, businessName, receiptDate, currencyCode, locale, 
-      hasSymbolFont: dNoto, regFont: dReg, boldFont: dBold, tx, format
+      hasSymbolFont: dNoto, regFont: dReg, boldFont: dBold, tx, format, contactLines
     });
 
     const doc = new PDFDocument({
@@ -657,7 +772,8 @@ export const generateSaleReceiptPdf = async (req: Request | any, res: Response) 
       boldFont,
       tx,
       format,
-      exactHeight
+      exactHeight,
+      contactLines
     });
 
     doc.end();

@@ -5,6 +5,34 @@ import { DailyStats } from '../models/dailyStats.model';
 import mongoose from 'mongoose';
 import { applyPaymentToDebts } from '../services/debt.service';
 
+const asMoney = (value: unknown, fallback = 0) => {
+  const n = Number(value ?? fallback);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+export const calculateDebtorTotalFromHistory = (history: any[] = []) => {
+  return history.reduce((sum, tx) => {
+    if (tx?.type !== 'SALE') return sum;
+
+    const hasStoredBalance = tx.balance !== undefined && tx.balance !== null;
+    const balance = hasStoredBalance
+      ? asMoney(tx.balance)
+      : asMoney(tx.totalMoney) - asMoney(tx.amountPaid);
+
+    return sum + Math.max(0, balance);
+  }, 0);
+};
+
+export const getLastProductStrFromHistory = (history: any[] = []) => {
+  const lastSale = history.find((tx) => tx?.type === 'SALE');
+  const items = Array.isArray(lastSale?.items) ? lastSale.items : [];
+
+  return items
+    .map((item: any) => String(item?.name || '').trim())
+    .filter(Boolean)
+    .join(', ');
+};
+
 // 1. GET ALL DEBTORS (Includes financial summary & last items)
 export const getDebtors = async (req: Request | any, res: Response) => {
   try {
@@ -14,7 +42,7 @@ export const getDebtors = async (req: Request | any, res: Response) => {
     const debtors = await Debtor.aggregate([
       { $match: { user: new mongoose.Types.ObjectId(userId) } },
       
-      // Join Transactions to calculate total debt balance
+      // Join Transactions to calculate current debt balance and last purchase
       {
         $lookup: {
           from: 'transactions',
@@ -36,73 +64,26 @@ export const getDebtors = async (req: Request | any, res: Response) => {
           as: 'history'
         }
       },
-      
-      {
-        $addFields: {
-          // Balance Calculation: (Sales/Credits) - (Payments Received)
-          totalDebt: {
-            $reduce: {
-              input: '$history',
-              initialValue: 0,
-              in: {
-                $cond: [
-                  { 
-                    $or: [
-                      { $eq: ['$$this.type', 'DEBT_PAYMENT'] },
-                      { $eq: ['$$this.type', 'PAYMENT_RECEIVED'] }
-                    ]
-                  },
-                  { $subtract: ['$$value', { $ifNull: ['$$this.amountPaid', 0] }] },
-                  { $add: ['$$value', { $ifNull: ['$$this.totalMoney', 0] }] }
-                ]
-              }
-            }
-          },
-          // Identify the most recent Sale to show what was bought
-          lastSale: {
-            $arrayElemAt: [
-              { 
-                $filter: { 
-                  input: '$history', 
-                  as: 'tx', 
-                  cond: { 
-                    $and: [
-                      { $ne: ['$$tx.type', 'DEBT_PAYMENT'] },
-                      { $ne: ['$$tx.type', 'PAYMENT_RECEIVED'] }
-                    ]
-                  } 
-                } 
-              }, 
-              0 
-            ]
-          }
-        }
-      },
-      
-      {
-        $addFields: {
-          // Clean string for UI: "Item A, Item B"
-          lastProductStr: {
-            $reduce: {
-              input: '$lastSale.items',
-              initialValue: '',
-              in: {
-                $cond: [
-                  { $eq: ['$$value', ''] },
-                  '$$this.name',
-                  { $concat: ['$$value', ', ', '$$this.name'] }
-                ]
-              }
-            }
-          }
-        }
-      },
-      
-      { $project: { history: 0, lastSale: 0 } },
-      { $sort: { totalDebt: -1, updatedAt: -1 } }
     ]);
 
-    res.json(debtors);
+    const summarizedDebtors = debtors
+      .map((debtor) => {
+        const { history = [], ...rest } = debtor;
+        const lastProductStr = getLastProductStrFromHistory(history) || rest.lastProductStr || '';
+
+        return {
+          ...rest,
+          totalDebt: calculateDebtorTotalFromHistory(history),
+          lastProductStr,
+        };
+      })
+      .sort((a, b) => {
+        const debtDelta = asMoney(b.totalDebt) - asMoney(a.totalDebt);
+        if (debtDelta !== 0) return debtDelta;
+        return new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime();
+      });
+
+    res.json(summarizedDebtors);
   } catch (error) {
     console.error('Get Debtors Error:', error);
     res.status(500).json({ error: 'Failed to fetch debtors' });
@@ -249,14 +230,13 @@ export const recordDebtPayment = async (req: Request | any, res: Response) => {
     );
 
     // ✅ Sync frontend data + reset reminder state when debt is cleared
-    const newBalance = Math.max(0, debtor.totalDebt - paymentAmount);
+    const newBalance = Math.max(0, Number(debtor.totalDebt || 0) - Number(r.applied || 0));
     const reminderReset = newBalance <= 0
       ? { dueDateReminderSent: false, dueDate: null } // ← clear reminder so it can fire on future debts
       : {};
 
     await Debtor.findByIdAndUpdate(debtorId, {
-      $inc: { totalDebt: -paymentAmount },
-      $set: reminderReset,
+      $set: { totalDebt: newBalance, ...reminderReset },
     });
 
     res.json({ success: true, transaction: tx });

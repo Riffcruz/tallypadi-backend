@@ -1890,7 +1890,7 @@ What's included in Oga Boss Plan:
            const debts = await Transaction.find({
                 user: shopId,
                 type: 'SALE',
-                paymentStatus: 'CREDIT',
+                paymentStatus: { $in: ['CREDIT', 'PARTIAL'] },
                 isUndone: { $ne: true },
                 balance: { $gt: 0 },
                 debtorId: debtor._id,
@@ -1962,10 +1962,14 @@ What's included in Oga Boss Plan:
            const res = await applyPaymentToDebts(shopId, debtorId, amount);
 
            // Update Debtor Total
-           await Debtor.findByIdAndUpdate(debtorId, { $inc: { totalDebt: -res.applied } });
-
            const updatedDebtor = await Debtor.findById(debtorId);
-           const newBalance = updatedDebtor?.totalDebt || 0;
+           const newBalance = Math.max(0, Number(updatedDebtor?.totalDebt || 0) - Number(res.applied || 0));
+           await Debtor.findByIdAndUpdate(debtorId, {
+             $set: {
+               totalDebt: newBalance,
+               ...(newBalance <= 0 ? { dueDateReminderSent: false, dueDate: null } : {}),
+             },
+           });
 
            await queueOutboundMessage(from, `${debtorName} paid off ${res.applied.toLocaleString(locale)} naira.\n\nBalance: ${newBalance.toLocaleString(locale)} naira.`);
            return;
