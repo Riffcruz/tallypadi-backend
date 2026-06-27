@@ -2544,11 +2544,7 @@ Tap a button below to subscribe:`;
         // ───────────────────────────────────────────────────────────────────
 
         const { parseMessageWithGemini } = await import('../services/gemini.service');
-        parsed = await parseMessageWithGemini(
-            rawText, currentLang, contextHistory, imageBuffer, imageMime,
-            undefined,  // inventoryContext (not used here)
-            { maxRetries: 1, timeoutMs: 25000 }  // ✅ Reduced: 2 attempts × 25s = 50s max (was 4 × 45s = 180s)
-        );
+        parsed = await parseMessageWithGemini(rawText, currentLang, contextHistory, imageBuffer, imageMime);
         parsed = allowlistParsed(parsed);
         parsed = normalizeSettingsUpdate(parsed);
     }

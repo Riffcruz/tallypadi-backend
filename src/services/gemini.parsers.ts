@@ -28,7 +28,10 @@ export const sanitizeInput = (input: string): string => {
   s = s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, ' ');
   s = s.replace(/<\/?[^>]+>/g, ' ');
   s = s.replace(/\b(system prompt|ignore previous|developer mode)\b/gi, ' ');
-  return s.replace(/\s+/g, ' ').trim();
+  // Replace multiple spaces/tabs with a single space
+  s = s.replace(/[ \t]+/g, ' ');
+  // Replace multiple newlines with a single newline, and trim
+  return s.replace(/\n\s*\n/g, '\n').trim();
 };
 
 // ─── Extract JSON object from Gemini response ────────────────
