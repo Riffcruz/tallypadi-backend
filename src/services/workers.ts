@@ -154,6 +154,57 @@ export const replyWorker = new Worker(
         return;
     }
 
+    // ✅ NEW: Send Invoice PDF + Follow-up Buttons (combined — guaranteed ordering)
+    if (job.name === 'send-invoice-pdf-with-buttons') {
+        const { phoneNumber, invoiceId, buttonBodyText, buttons } = job.data as {
+            phoneNumber: string;
+            invoiceId: string;
+            buttonBodyText: string;
+            buttons: { id: string; title: string }[];
+        };
+
+        try {
+            const inv = await Invoice.findById(invoiceId);
+            if (!inv) return;
+
+            // Need user/business name
+            const user = await User.findById(inv.user);
+            let businessName = 'My Shop';
+            let countryCode = 'NG';
+
+            if (user) {
+                if (user.role === 'STAFF' && user.ownerId) {
+                    const owner = await User.findById(user.ownerId);
+                    businessName = owner?.businessName || 'My Shop';
+                    countryCode = owner?.countryCode || 'NG';
+                } else {
+                    businessName = user.businessName || 'My Shop';
+                    countryCode = user.countryCode || 'NG';
+                }
+            }
+
+            // Generate + Send PDF first
+            const pdfBuffer = await generateInvoicePdf(inv, businessName, countryCode);
+
+            sendTypingIndicator(phoneNumber).catch(() => {});
+            await sendWhatsAppDocumentBuffer({
+                to: phoneNumber,
+                buffer: pdfBuffer,
+                filename: `invoice-${inv.invoiceNumber}.pdf`,
+                caption: `📄 Invoice #${inv.invoiceNumber}`,
+            });
+
+            // THEN send buttons (guaranteed to arrive after PDF)
+            if (buttons?.length) {
+                await sendWhatsAppButtons(phoneNumber, buttonBodyText, buttons);
+            }
+
+        } catch (e) {
+            console.error('Failed to send invoice PDF with buttons:', e);
+        }
+        return;
+    }
+
 
     if (job.name === 'send-reg-error') {
       const { phoneNumber, errorMsg, flowId } = job.data;

@@ -41,10 +41,14 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 }
 
 // ─── Retry with exponential backoff ─────────────────────────
-async function generateWithRetry(parts: (string | import('@google/generative-ai').Part)[], retries = 3) {
+async function generateWithRetry(
+  parts: (string | import('@google/generative-ai').Part)[],
+  retries = 3,
+  timeoutMs = 45000
+) {
   for (let i = 0; i <= retries; i++) {
     try {
-      const result = await withTimeout(model.generateContent(parts), 45000);
+      const result = await withTimeout(model.generateContent(parts), timeoutMs);
       return result;
     } catch (err: unknown) {
       if (i === retries) throw err;
@@ -266,7 +270,11 @@ export const parseMessageWithGemini = async (
   imageBuffer?: string,
   imageMimeType?: string,
   inventoryContext?: InventorySnapshotItem[], // ← capped at 50 in buildInventoryContext
+  options?: { maxRetries?: number; timeoutMs?: number },
 ): Promise<ParsedResult> => {
+  const maxRetries = options?.maxRetries ?? 3;
+  const timeoutMs = options?.timeoutMs ?? 45000;
+
   const stripped = stripWhatsAppExportLine(message);
   const safeMessage = sanitizeInput(stripped);
 
@@ -297,7 +305,7 @@ export const parseMessageWithGemini = async (
   }
 
   try {
-    const result = await generateWithRetry(parts);
+    const result = await generateWithRetry(parts, maxRetries, timeoutMs);
     const text = result.response.text();
     const cleanJson = extractJsonObject(text);
     return safeParsedResult(JSON.parse(cleanJson));

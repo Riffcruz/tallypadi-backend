@@ -456,6 +456,35 @@ export async function queueInvoicePdf(
   );
 }
 
+// ============================================================
+// ✅ Invoice PDF + Buttons (COMBINED — guaranteed ordering)
+// Worker must handle job.name === 'send-invoice-pdf-with-buttons'
+// Sends PDF first, THEN follow-up buttons in the same job.
+// ============================================================
+export async function queueInvoicePdfWithButtons(
+  phoneNumber: string,
+  invoiceId: string,
+  buttonBodyText: string,
+  buttons: OutboundButton[],
+  jobId?: string
+) {
+  const safeButtons = (buttons || [])
+    .slice(0, 3)
+    .map((b) => ({
+      id: String(b?.id || '').slice(0, 256),
+      title: String(b?.title || '').slice(0, 20),
+    }))
+    .filter((b) => b.id && b.title);
+
+  const finalJobId = safeJobId(jobId || `invoice_btn_${phoneNumber}_${invoiceId}_${Date.now()}`);
+
+  await replyQueue.add(
+    'send-invoice-pdf-with-buttons',
+    { phoneNumber, invoiceId, buttonBodyText: String(buttonBodyText || '').slice(0, 1024), buttons: safeButtons },
+    { jobId: finalJobId }
+  );
+}
+
 export const publishSocketEvent = async (room: string, event: string, data: unknown) => {
   try {
     await connection.publish('socket-events', JSON.stringify({ room, event, data }));

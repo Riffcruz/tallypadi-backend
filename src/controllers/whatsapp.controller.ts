@@ -32,6 +32,7 @@ import {
   queueWelcomeResponse,
   queueSaleReceipt,
   queueInvoicePdf,
+  queueInvoicePdfWithButtons,  // ✅ combined PDF + buttons (guaranteed ordering)
   queueOutboundList,
   queueOutboundFlow,
   queueRegistrationComplete
@@ -240,7 +241,7 @@ const getMediaBuffer = async (mediaId: string): Promise<{ data: string; mimeType
     });
 
     const base64Data = Buffer.from(mediaRes.data).toString('base64');
-    return { data: base64Data, mimeType: mediaRes.headers['content-type'] };
+    return { data: base64Data, mimeType: String(mediaRes.headers['content-type'] || 'application/octet-stream') };
   } catch (error) {
     console.error('❌ Failed to download media:', error);
     return null;
@@ -2543,7 +2544,11 @@ Tap a button below to subscribe:`;
         // ───────────────────────────────────────────────────────────────────
 
         const { parseMessageWithGemini } = await import('../services/gemini.service');
-        parsed = await parseMessageWithGemini(rawText, currentLang, contextHistory, imageBuffer, imageMime);
+        parsed = await parseMessageWithGemini(
+            rawText, currentLang, contextHistory, imageBuffer, imageMime,
+            undefined,  // inventoryContext (not used here)
+            { maxRetries: 1, timeoutMs: 25000 }  // ✅ Reduced: 2 attempts × 25s = 50s max (was 4 × 45s = 180s)
+        );
         parsed = allowlistParsed(parsed);
         parsed = normalizeSettingsUpdate(parsed);
     }
@@ -3893,14 +3898,16 @@ Tap a button below to subscribe:`;
                   description: parsed.order_params?.description || 'Goods/Services'
               });
 
-              // 6. Send PDF directly (via Queue to avoid storage issues)
-              await queueInvoicePdf(from, String(inv._id));
-
-              // 7. Send Interactive Buttons
-              await sendWhatsAppButtons3(from, `Invoice for *${inv.customerName}* (${symbol}${totalAmount.toLocaleString(locale)})\nWhat next?`, [
-                  { id: invoiceBtnId('PAID', String(inv._id)), title: '✅ Mark Paid' },
-                  { id: invoiceBtnId('CANCEL', String(inv._id)), title: '🚫 Cancel' }
-              ]);
+              // 6. Send PDF + Buttons in ONE queued job (guaranteed ordering: PDF first, then buttons)
+              await queueInvoicePdfWithButtons(
+                  from,
+                  String(inv._id),
+                  `Invoice for *${inv.customerName}* (${symbol}${totalAmount.toLocaleString(locale)})\nWhat next?`,
+                  [
+                      { id: invoiceBtnId('PAID', String(inv._id)), title: '✅ Mark Paid' },
+                      { id: invoiceBtnId('CANCEL', String(inv._id)), title: '🚫 Cancel' }
+                  ]
+              );
 
           } catch (e) {
               console.error("Create Invoice Error:", e);

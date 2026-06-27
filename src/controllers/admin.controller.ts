@@ -207,12 +207,12 @@ export const getSystemAnalytics = async (req: Request, res: Response) => {
     else if (range === 'month') startDate.setMonth(now.getMonth() - 1);
     else startDate.setHours(0, 0, 0, 0);
 
-    const activeFilter = { subscriptionStatus: { $in: ['active', 'trial'] }, role: 'OWNER' };
+    const activeFilter = { subscriptionStatus: { $in: ['active', 'trial'] as const }, role: 'OWNER' };
 
     const [totalUsers, tycoonUsers, ogaBossUsers, activeUsers24h] = await Promise.all([
       User.countDocuments({ role: 'OWNER' }),
-      User.countDocuments({ ...activeFilter, planType: 'TYCOON' }),
-      User.countDocuments({ ...activeFilter, planType: 'OGA_BOSS' }),
+      User.countDocuments({ ...activeFilter, planType: 'TYCOON' } as any),
+      User.countDocuments({ ...activeFilter, planType: 'OGA_BOSS' } as any),
       User.countDocuments({ updatedAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } }),
     ]);
 
