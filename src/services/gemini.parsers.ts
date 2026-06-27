@@ -318,6 +318,57 @@ export function fallbackParse(message: string): ParsedResult | null {
     }
   }
 
+  // Invoice fast path (Skip Gemini bottleneck)
+  const invoiceRegex = /^invoice\s+for\s+([^\r\n]+)([\s\S]*)/i;
+  const invoiceMatch = raw.match(invoiceRegex);
+  if (invoiceMatch) {
+    const customer_name = sanitizeInput(invoiceMatch[1].trim());
+    const body = invoiceMatch[2].trim();
+
+    if (body) {
+      const items: ParsedItem[] = [];
+      let total_money = 0;
+
+      const lines = body.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+      for (const line of lines) {
+        // Strip leading numbers like "1. ", "- ", etc.
+        let name = line.replace(/^(\d+[\.\)]|[-*])\s*/, '').trim();
+        if (!name) continue;
+
+        let unit_price = 0;
+        // Extract price from the end of the line
+        const priceMatch = name.match(/([₦$€£₵]?\s*[\d,]+(?:\.\d+)?\s*(?:k|m|thousand|million)?)\s*$/i);
+        if (priceMatch) {
+          const parsedPrice = parseMoney(priceMatch[1]);
+          if (parsedPrice != null && parsedPrice > 0) {
+            unit_price = parsedPrice;
+            name = name.slice(0, -priceMatch[0].length).trim();
+          }
+        }
+
+        items.push({
+          name: name || 'Item',
+          qty: 1, // Default qty to 1 for generic text lines
+          unit: '',
+          unit_price: unit_price,
+          cost_price: null,
+          category: null
+        });
+        total_money += unit_price;
+      }
+
+      if (items.length > 0) {
+        return safeParsedResult({
+          intent: 'CREATE_INVOICE',
+          customer_name,
+          items,
+          total_money: total_money > 0 ? total_money : null,
+          reply_text: '📄 Generating invoice...'
+        });
+      }
+    }
+  }
+
   // Sale regex fast path
   const saleRegex =
     /(?:i|we)?\s*\b(?:sold|sell)\b\s+(\d+(?:\.\d+)?)\s*(bags?|pcs?|pieces?|cartons?|packs?|sachets?|bottles?|rolls?|liters?|ltrs?|kg)?\s*(?:of)?\s+(.+?)\s+(?:for|at|price)\s+([₦$€£₵]?\s*[\d,]+(?:\s*(?:k|m|thousand|million))?)(?:\s*(?:naira|dollars?|cedis?|pounds?|shillings?|rand|ngn|usd|ghs|gbp|eur))?\s*(each|per|\/each|\/per|total)?\b/i;
