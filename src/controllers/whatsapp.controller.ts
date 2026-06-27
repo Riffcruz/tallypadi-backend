@@ -2543,6 +2543,12 @@ Tap a button below to subscribe:`;
         }
         // ───────────────────────────────────────────────────────────────────
 
+        // ─── Instant feedback to prevent perceived bottleneck ──────────────
+        if (/^invoice\s+for/i.test(rawText.trim())) {
+            sendWhatsAppText(from, "⏳ Analyzing invoice details. This may take a few seconds...").catch(() => {});
+        }
+        // ───────────────────────────────────────────────────────────────────
+
         const { parseMessageWithGemini } = await import('../services/gemini.service');
         parsed = await parseMessageWithGemini(rawText, currentLang, contextHistory, imageBuffer, imageMime);
         parsed = allowlistParsed(parsed);
