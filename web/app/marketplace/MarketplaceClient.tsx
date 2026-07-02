@@ -177,11 +177,10 @@ function FilterPanel({
         <button
           type="button"
           onClick={() => onCategoryChange('')}
-          className={`flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-left text-sm font-bold transition ${
-            !selectedCategory
+          className={`flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-left text-sm font-bold transition ${!selectedCategory
               ? 'border-emerald-300 bg-emerald-50 text-emerald-900'
               : 'border-stone-200 bg-white text-stone-700 hover:border-emerald-200 hover:bg-emerald-50/60'
-          }`}
+            }`}
         >
           <span>All categories</span>
         </button>
@@ -190,11 +189,10 @@ function FilterPanel({
             key={category.id}
             type="button"
             onClick={() => onCategoryChange(category.id)}
-            className={`flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-left text-sm font-bold transition ${
-              selectedCategory === category.id
+            className={`flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-left text-sm font-bold transition ${selectedCategory === category.id
                 ? 'border-emerald-300 bg-emerald-50 text-emerald-900'
                 : 'border-stone-200 bg-white text-stone-700 hover:border-emerald-200 hover:bg-emerald-50/60'
-            }`}
+              }`}
           >
             <span>{category.label}</span>
             {category.count !== undefined && (
@@ -260,9 +258,8 @@ function ProductCard({ product }: { product: MarketplaceProduct }) {
 
   return (
     <article
-      className={`group flex h-full flex-col overflow-hidden rounded-lg border bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg ${
-        product.isBoosted ? 'border-amber-300 shadow-amber-100' : 'border-stone-200'
-      }`}
+      className={`group flex h-full flex-col overflow-hidden rounded-lg border bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg ${product.isBoosted ? 'border-amber-300 shadow-amber-100' : 'border-stone-200'
+        }`}
     >
       <Link href={productUrl} className="relative block aspect-[4/3] overflow-hidden bg-emerald-50">
         {product.image ? (
@@ -479,7 +476,7 @@ export default function MarketplaceClient() {
         <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
           <div className="flex flex-col justify-center">
             <div className="mb-4 inline-flex w-fit items-center gap-2 rounded-lg border border-emerald-300/30 bg-emerald-800/70 px-3 py-1.5 text-xs font-black uppercase tracking-[0.16em] text-emerald-100">
-              <Sparkles size={14} />
+              {/* <Sparkles size={14} /> */}
               Smart sorted marketplace
             </div>
             <h1 className="max-w-3xl text-3xl font-black leading-tight tracking-tight sm:text-4xl lg:text-5xl">
