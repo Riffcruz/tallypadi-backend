@@ -330,8 +330,7 @@ function HeroSection({ whatsappLink }: { whatsappLink: string }) {
       <div className="relative z-10 mx-auto grid max-w-[1480px] lg:grid-cols-[48%_52%]">
         <div className="relative px-5 pb-10 pt-8 sm:px-10 lg:px-20 lg:pb-8 lg:pt-14">
           <div className="pointer-events-none absolute -left-28 top-12 h-52 w-52 rounded-full bg-emerald-400/10 blur-3xl lg:hidden" />
-          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-800/20 bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-900">
-            <BadgeCheck size={14} />
+          <div className="inline-flex items-center gap-2 border border-emerald-800/20 bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-900">
             The Complete Shop on WhatsApp
           </div>
 
