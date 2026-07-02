@@ -178,8 +178,8 @@ function FilterPanel({
           type="button"
           onClick={() => onCategoryChange('')}
           className={`flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-left text-sm font-bold transition ${!selectedCategory
-              ? 'border-emerald-300 bg-emerald-50 text-emerald-900'
-              : 'border-stone-200 bg-white text-stone-700 hover:border-emerald-200 hover:bg-emerald-50/60'
+            ? 'border-emerald-300 bg-emerald-50 text-emerald-900'
+            : 'border-stone-200 bg-white text-stone-700 hover:border-emerald-200 hover:bg-emerald-50/60'
             }`}
         >
           <span>All categories</span>
@@ -190,8 +190,8 @@ function FilterPanel({
             type="button"
             onClick={() => onCategoryChange(category.id)}
             className={`flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-left text-sm font-bold transition ${selectedCategory === category.id
-                ? 'border-emerald-300 bg-emerald-50 text-emerald-900'
-                : 'border-stone-200 bg-white text-stone-700 hover:border-emerald-200 hover:bg-emerald-50/60'
+              ? 'border-emerald-300 bg-emerald-50 text-emerald-900'
+              : 'border-stone-200 bg-white text-stone-700 hover:border-emerald-200 hover:bg-emerald-50/60'
               }`}
           >
             <span>{category.label}</span>
@@ -307,12 +307,12 @@ function ProductCard({ product }: { product: MarketplaceProduct }) {
 
         <div className="mt-auto space-y-3 border-t border-stone-100 pt-3">
           <div className="min-w-0">
-            <div className="flex items-center gap-1.5 text-sm font-bold text-stone-800">
-              <Store size={14} className="text-emerald-700" />
+            <div className="flex items-center gap-1 text-sm font-bold text-stone-800">
+              <Store size={14} className="shrink-0 text-emerald-700" />
               <span className="truncate">{product.shop.name}</span>
               {product.shop.verification?.verified && (
-                <span title={product.shop.verification.label || 'Verified seller'} className="inline-flex shrink-0 text-sky-600">
-                  <BadgeCheck size={15} fill="currentColor" className="text-sky-600" />Verified seller
+                <span title={product.shop.verification.label || 'Verified'} className="inline-flex shrink-0 text-blue-500">
+                  <BadgeCheck size={16} fill="currentColor" stroke="white" />
                 </span>
               )}
             </div>
