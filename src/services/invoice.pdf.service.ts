@@ -51,7 +51,9 @@ export const generateInvoicePdf = async (
   format: 'A4' | 'thermal' = 'A4',
   staffName: string = 'Staff',
   logoWidth: number = 250,
-  logoHeight: number = 60
+  logoHeight: number = 60,
+  logoBgColor: string = '#ffffff',
+  logoBgEnabled: boolean = false
 ): Promise<Buffer> => {
   // Determine currency
   const currencyCode = COUNTRY_CURRENCY_CODE[countryCode.toUpperCase()] || 'NGN';
@@ -364,6 +366,11 @@ export const generateInvoicePdf = async (
        if (logoPath) {
          try {
            if (Buffer.isBuffer(logoPath) || (typeof logoPath === 'string' && fs.existsSync(logoPath))) {
+             if (logoBgEnabled && logoBgColor) {
+               doc.save();
+               doc.roundedRect(logoBox.x, logoBox.y, logoBox.w, logoBox.h, 6).fill(logoBgColor);
+               doc.restore();
+             }
              doc.image(logoPath, logoBox.x, logoBox.y, { fit: [logoBox.w, logoBox.h], align: 'right', valign: 'center' });
              hasRenderedLogo = true;
            }

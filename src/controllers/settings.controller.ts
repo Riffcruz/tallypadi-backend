@@ -156,6 +156,20 @@ export const updateSettings = async (req: AuthReq, res: Response) => {
           if (!isNaN(h) && h > 0) $set['settings.logoHeight'] = Math.min(h, 500);
         }
 
+        if (inputSettings.logoBgColor !== undefined) {
+          const color = sanitizeString(inputSettings.logoBgColor);
+          if (color && /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(color)) {
+            $set['settings.logoBgColor'] = color;
+          }
+        }
+
+        if (inputSettings.logoBgEnabled !== undefined) {
+          const isEnabled = validateBoolean(inputSettings.logoBgEnabled);
+          if (isEnabled !== undefined) {
+            $set['settings.logoBgEnabled'] = isEnabled;
+          }
+        }
+
         // ✅ Location Settings Update
         if (inputSettings.location && typeof inputSettings.location === 'object') {
           const loc = inputSettings.location;

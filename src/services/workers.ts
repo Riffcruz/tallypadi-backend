@@ -143,12 +143,16 @@ export const replyWorker = new Worker(
             let logoUrl = user?.settings?.logoUrl;
             let logoWidth = user?.settings?.logoWidth || 250;
             let logoHeight = user?.settings?.logoHeight || 60;
+            let logoBgColor = user?.settings?.logoBgColor || '#ffffff';
+            let logoBgEnabled = user?.settings?.logoBgEnabled ?? false;
             
             if (user && user.role === 'STAFF' && user.ownerId) {
                 const owner = await User.findById(user.ownerId).lean();
                 logoUrl = (owner as any)?.settings?.logoUrl;
                 logoWidth = (owner as any)?.settings?.logoWidth || 250;
                 logoHeight = (owner as any)?.settings?.logoHeight || 60;
+                logoBgColor = (owner as any)?.settings?.logoBgColor || '#ffffff';
+                logoBgEnabled = (owner as any)?.settings?.logoBgEnabled ?? false;
             }
 
             if (logoUrl) {
@@ -161,7 +165,7 @@ export const replyWorker = new Worker(
             }
 
             // Generate File (Buffer)
-            const pdfBuffer = await generateInvoicePdf(inv, businessName, countryCode, logoBuffer, 'A4', 'Staff', logoWidth, logoHeight);
+            const pdfBuffer = await generateInvoicePdf(inv, businessName, countryCode, logoBuffer, 'A4', 'Staff', logoWidth, logoHeight, logoBgColor, logoBgEnabled);
             
             sendTypingIndicator(phoneNumber).catch(() => {});
             await sendWhatsAppDocumentBuffer({
@@ -211,12 +215,16 @@ export const replyWorker = new Worker(
             let logoUrl = user?.settings?.logoUrl;
             let logoWidth = user?.settings?.logoWidth || 250;
             let logoHeight = user?.settings?.logoHeight || 60;
+            let logoBgColor = user?.settings?.logoBgColor || '#ffffff';
+            let logoBgEnabled = user?.settings?.logoBgEnabled ?? false;
             
             if (user && user.role === 'STAFF' && user.ownerId) {
                 const owner = await User.findById(user.ownerId).lean();
                 logoUrl = (owner as any)?.settings?.logoUrl;
                 logoWidth = (owner as any)?.settings?.logoWidth || 250;
                 logoHeight = (owner as any)?.settings?.logoHeight || 60;
+                logoBgColor = (owner as any)?.settings?.logoBgColor || '#ffffff';
+                logoBgEnabled = (owner as any)?.settings?.logoBgEnabled ?? false;
             }
 
             if (logoUrl) {
@@ -229,7 +237,7 @@ export const replyWorker = new Worker(
             }
 
             // Generate + Send PDF first
-            const pdfBuffer = await generateInvoicePdf(inv, businessName, countryCode, logoBuffer, 'A4', 'Staff', logoWidth, logoHeight);
+            const pdfBuffer = await generateInvoicePdf(inv, businessName, countryCode, logoBuffer, 'A4', 'Staff', logoWidth, logoHeight, logoBgColor, logoBgEnabled);
 
             sendTypingIndicator(phoneNumber).catch(() => {});
             await sendWhatsAppDocumentBuffer({

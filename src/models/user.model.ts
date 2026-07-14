@@ -62,6 +62,8 @@ export interface IUser extends Document {
     logoUrl?: string; // Brand logo for PDF receipts/invoices
     logoWidth?: number; // Logo width in PDF points/pixels
     logoHeight?: number; // Logo height in PDF points/pixels
+    logoBgColor?: string; // Hex color for transparent logos
+    logoBgEnabled?: boolean; // Whether to draw logoBgColor behind the logo
     location?: {
       country: string;
       state: string;
@@ -218,6 +220,8 @@ const userSchema = new Schema<IUser>(
       logoUrl: { type: String, default: '' },
       logoWidth: { type: Number, default: 250 },
       logoHeight: { type: Number, default: 60 },
+      logoBgColor: { type: String, default: '#ffffff' },
+      logoBgEnabled: { type: Boolean, default: false },
       location: {
         country: { type: String, default: 'NG' },
         state: { type: String, default: '' },

@@ -63,6 +63,8 @@ export default function SettingsPage() {
   const [uploadingLogo, setUploadingLogo] = useState(false); // Brand logo upload state
   const [logoWidth, setLogoWidth] = useState(250); // Brand logo width
   const [logoHeight, setLogoHeight] = useState(60); // Brand logo height
+  const [logoBgColor, setLogoBgColor] = useState('#ffffff'); // Logo background color
+  const [logoBgEnabled, setLogoBgEnabled] = useState(false); // Whether to apply logo background
 
   const [closingTime, setClosingTime] = useState('');
   const [language, setLanguage] = useState('');
@@ -133,6 +135,8 @@ export default function SettingsPage() {
     setLogoUrl(userData?.settings?.logoUrl || '');
     setLogoWidth(userData?.settings?.logoWidth ?? 250);
     setLogoHeight(userData?.settings?.logoHeight ?? 60);
+    setLogoBgColor(userData?.settings?.logoBgColor || '#ffffff');
+    setLogoBgEnabled(userData?.settings?.logoBgEnabled ?? false);
     setClosingTime(userData?.settings?.closingTime || '20:00');
     setLanguage(userData?.settings?.language || 'English');
     setCurrencyCode(userData?.settings?.currencyCode || userData?.currencyCode || 'NGN');
@@ -227,6 +231,8 @@ export default function SettingsPage() {
             logoUrl,
             logoWidth,
             logoHeight,
+            logoBgColor,
+            logoBgEnabled,
             location: {
                country: countryCode,
                state: stateCode,
@@ -847,7 +853,7 @@ export default function SettingsPage() {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-              {/* Left Column: Upload & Fine-tune dimensions (6 cols) */}
+              {/* Left Column: Upload & Fine-tune dimensions & Background color (6 cols) */}
               <div className="lg:col-span-6 space-y-6">
                 <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-100 flex items-center gap-4">
                   {logoUrl ? (
@@ -889,7 +895,7 @@ export default function SettingsPage() {
                 </div>
 
                 {logoUrl && (
-                  <div className="space-y-5">
+                  <div className="space-y-4">
                     {/* Width Adjustment */}
                     <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-100">
                       <div className="flex justify-between items-center mb-2">
@@ -955,6 +961,68 @@ export default function SettingsPage() {
                         className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-600"
                       />
                     </div>
+
+                    {/* Background Color Settings (New) */}
+                    <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-100 space-y-3">
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <span className="text-xs font-semibold text-gray-700 block">Logo Background Frame</span>
+                          <span className="text-[10px] text-gray-400">Apply a solid colored frame behind transparent logos</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setLogoBgEnabled(!logoBgEnabled)}
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                            logoBgEnabled ? 'bg-emerald-600' : 'bg-gray-200'
+                          }`}
+                        >
+                          <span
+                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                              logoBgEnabled ? 'translate-x-6' : 'translate-x-1'
+                            }`}
+                          />
+                        </button>
+                      </div>
+
+                      {logoBgEnabled && (
+                        <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center gap-4 animate-in fade-in duration-200">
+                          {/* Color picker */}
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="color"
+                              value={logoBgColor}
+                              onChange={(e) => setLogoBgColor(e.target.value)}
+                              className="w-8 h-8 rounded-lg cursor-pointer border border-slate-200 overflow-hidden"
+                            />
+                            <span className="text-xs font-bold text-gray-700 uppercase">{logoBgColor}</span>
+                          </div>
+
+                          {/* Quick Swatches */}
+                          <div className="flex items-center gap-1.5">
+                            {[
+                              { label: 'White', value: '#ffffff' },
+                              { label: 'Cream', value: '#fdf6e2' },
+                              { label: 'Slate', value: '#f8fafc' },
+                              { label: 'Navy', value: '#1e3a8a' },
+                              { label: 'Charcoal', value: '#1e293b' },
+                            ].map((swatch) => (
+                              <button
+                                key={swatch.value}
+                                type="button"
+                                onClick={() => setLogoBgColor(swatch.value)}
+                                className={`w-6 h-6 rounded-full border shadow-sm transition-all hover:scale-105 active:scale-95 ${
+                                  logoBgColor.toLowerCase() === swatch.value.toLowerCase()
+                                    ? 'border-emerald-600 ring-1 ring-emerald-600 scale-105'
+                                    : 'border-slate-200'
+                                }`}
+                                style={{ backgroundColor: swatch.value }}
+                                title={swatch.label}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -990,8 +1058,13 @@ export default function SettingsPage() {
                       <div className="flex items-center justify-end">
                         {logoUrl ? (
                           <div 
-                            className="border border-emerald-100 bg-white rounded-lg flex items-center justify-center p-1 shadow-sm transition-all duration-150 ease-out"
-                            style={{ width: `${logoWidth * 0.45}px`, height: `${logoHeight * 0.45}px` }}
+                            className="border rounded-lg flex items-center justify-center p-1 shadow-sm transition-all duration-150 ease-out"
+                            style={{ 
+                              width: `${logoWidth * 0.45}px`, 
+                              height: `${logoHeight * 0.45}px`,
+                              backgroundColor: logoBgEnabled ? logoBgColor : 'transparent',
+                              borderColor: logoBgEnabled ? logoBgColor : '#e2e8f0'
+                            }}
                           >
                             <img src={logoUrl} alt="Mock PDF logo" className="object-contain w-full h-full" />
                           </div>

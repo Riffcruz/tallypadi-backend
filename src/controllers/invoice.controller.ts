@@ -145,12 +145,16 @@ export const getInvoicePdf = async (req: AuthReq, res: Response) => {
         let logoUrl = creator?.settings?.logoUrl;
         let logoWidth = creator?.settings?.logoWidth || 250;
         let logoHeight = creator?.settings?.logoHeight || 60;
+        let logoBgColor = creator?.settings?.logoBgColor || '#ffffff';
+        let logoBgEnabled = creator?.settings?.logoBgEnabled ?? false;
         
         if (creator && creator.role === 'STAFF' && creator.ownerId) {
              const owner = await User.findById(creator.ownerId).lean();
              logoUrl = (owner as any)?.settings?.logoUrl;
              logoWidth = (owner as any)?.settings?.logoWidth || 250;
              logoHeight = (owner as any)?.settings?.logoHeight || 60;
+             logoBgColor = (owner as any)?.settings?.logoBgColor || '#ffffff';
+             logoBgEnabled = (owner as any)?.settings?.logoBgEnabled ?? false;
         }
 
         if (logoUrl) {
@@ -170,7 +174,9 @@ export const getInvoicePdf = async (req: AuthReq, res: Response) => {
             format as 'A4' | 'thermal',
             creator?.name || 'Staff',
             logoWidth,
-            logoHeight
+            logoHeight,
+            logoBgColor,
+            logoBgEnabled
         );
 
         res.set({

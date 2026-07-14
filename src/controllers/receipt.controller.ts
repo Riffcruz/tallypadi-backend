@@ -222,6 +222,8 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
   logoBuffer?: Buffer;
   logoWidth?: number;
   logoHeight?: number;
+  logoBgColor?: string;
+  logoBgEnabled?: boolean;
 }) {
   const {
     saleId,
@@ -239,6 +241,8 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
     logoBuffer,
     logoWidth = 250,
     logoHeight = 60,
+    logoBgColor = '#ffffff',
+    logoBgEnabled = false,
   } = payload;
 
   const currencyDisplay = hasSymbolFont ? 'symbol' : 'code';
@@ -344,10 +348,16 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
       doc.fillColor(THEME_INVOICE.muted).font(regFont).fontSize(9).text('Payment Confirmation', margin, y + 16);
 
       // Logo / badge (right)
+      // Logo / badge (right)
       const logoBox = { w: logoWidth, h: logoHeight, x: pageW - margin - logoWidth, y: 40 }; // simplified y
       let hasRenderedLogo = false;
       if (logoBuffer) {
         try {
+          if (logoBgEnabled && logoBgColor) {
+            doc.save();
+            doc.roundedRect(logoBox.x, logoBox.y, logoBox.w, logoBox.h, 6).fill(logoBgColor);
+            doc.restore();
+          }
           doc.image(logoBuffer, logoBox.x, logoBox.y, { fit: [logoBox.w, logoBox.h], align: 'right', valign: 'center' });
           hasRenderedLogo = true;
         } catch (err) {
@@ -655,6 +665,8 @@ export const generateSaleReceiptPdfBuffer = async (userId: string, saleId: strin
   const logoUrl = businessUser?.settings?.logoUrl || requester?.settings?.logoUrl;
   const logoWidth = businessUser?.settings?.logoWidth || requester?.settings?.logoWidth || 250;
   const logoHeight = businessUser?.settings?.logoHeight || requester?.settings?.logoHeight || 60;
+  const logoBgColor = businessUser?.settings?.logoBgColor || requester?.settings?.logoBgColor || '#ffffff';
+  const logoBgEnabled = businessUser?.settings?.logoBgEnabled ?? requester?.settings?.logoBgEnabled ?? false;
   
   if (logoUrl) {
     try {
@@ -670,7 +682,7 @@ export const generateSaleReceiptPdfBuffer = async (userId: string, saleId: strin
     const { regFont: dReg, boldFont: dBold, hasNoto: dNoto } = registerFonts(dummyDoc);
     exactHeight = renderReceiptPdf(dummyDoc, {
       saleId, receiptNo, businessName, receiptDate, currencyCode, locale, 
-      hasSymbolFont: dNoto, regFont: dReg, boldFont: dBold, tx, format, contactLines, logoBuffer, logoWidth, logoHeight
+      hasSymbolFont: dNoto, regFont: dReg, boldFont: dBold, tx, format, contactLines, logoBuffer, logoWidth, logoHeight, logoBgColor, logoBgEnabled
     });
 
   const doc = new PDFDocument({
@@ -709,7 +721,9 @@ export const generateSaleReceiptPdfBuffer = async (userId: string, saleId: strin
     contactLines,
     logoBuffer,
     logoWidth,
-    logoHeight
+    logoHeight,
+    logoBgColor,
+    logoBgEnabled
   });
 
   doc.end();
@@ -782,6 +796,8 @@ export const generateSaleReceiptPdf = async (req: Request | any, res: Response) 
     const logoUrl = businessUser?.settings?.logoUrl || user?.settings?.logoUrl;
     const logoWidth = businessUser?.settings?.logoWidth || user?.settings?.logoWidth || 250;
     const logoHeight = businessUser?.settings?.logoHeight || user?.settings?.logoHeight || 60;
+    const logoBgColor = businessUser?.settings?.logoBgColor || user?.settings?.logoBgColor || '#ffffff';
+    const logoBgEnabled = businessUser?.settings?.logoBgEnabled ?? user?.settings?.logoBgEnabled ?? false;
     
     if (logoUrl) {
       try {
@@ -798,7 +814,7 @@ export const generateSaleReceiptPdf = async (req: Request | any, res: Response) 
     const { regFont: dReg, boldFont: dBold, hasNoto: dNoto } = registerFonts(dummyDoc);
     exactHeight = renderReceiptPdf(dummyDoc, {
       saleId, receiptNo, businessName, receiptDate, currencyCode, locale, 
-      hasSymbolFont: dNoto, regFont: dReg, boldFont: dBold, tx, format, contactLines, logoBuffer, logoWidth, logoHeight
+      hasSymbolFont: dNoto, regFont: dReg, boldFont: dBold, tx, format, contactLines, logoBuffer, logoWidth, logoHeight, logoBgColor, logoBgEnabled
     });
 
     const doc = new PDFDocument({
@@ -829,7 +845,9 @@ export const generateSaleReceiptPdf = async (req: Request | any, res: Response) 
       contactLines,
       logoBuffer,
       logoWidth,
-      logoHeight
+      logoHeight,
+      logoBgColor,
+      logoBgEnabled
     });
 
     doc.end();
