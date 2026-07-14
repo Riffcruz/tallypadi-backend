@@ -66,6 +66,8 @@ module.exports = {
       script: 'npm',
       args: 'start',
       cwd: './web',
+      instances: 1,
+      exec_mode: 'fork',
       watch: false,
       autorestart: true,
       env: {

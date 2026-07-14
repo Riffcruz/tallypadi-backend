@@ -349,7 +349,18 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
 
       // Logo / badge (right)
       // Logo / badge (right)
-      const logoBox = { w: logoWidth, h: logoHeight, x: pageW - margin - logoWidth, y: 40 }; // simplified y
+      let actualLogoW = logoWidth || 250;
+      let actualLogoH = logoHeight || 60;
+      
+      // Ensure logo doesn't exceed page width (crucial for thermal receipts)
+      const maxLogoW = pageW - (margin * 2);
+      if (actualLogoW > maxLogoW) {
+        const scale = maxLogoW / actualLogoW;
+        actualLogoW = maxLogoW;
+        actualLogoH = actualLogoH * scale;
+      }
+      
+      const logoBox = { w: actualLogoW, h: actualLogoH, x: pageW - margin - actualLogoW, y: 40 };
       let hasRenderedLogo = false;
       if (logoBuffer) {
         try {
@@ -366,7 +377,9 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
       }
       
       if (!hasRenderedLogo) {
-        const defaultBox = { w: 62, h: 62, x: pageW - margin - 62, y: 38 };
+        // Fallback placeholder
+        const defaultW = Math.min(62, maxLogoW);
+        const defaultBox = { w: defaultW, h: 62, x: pageW - margin - defaultW, y: 38 };
         doc.roundedRect(defaultBox.x, defaultBox.y, defaultBox.w, defaultBox.h, 10).fill(THEME_INVOICE.primary);
         doc.fillColor(THEME_INVOICE.white).font(boldFont).fontSize(16).text('TP', defaultBox.x, defaultBox.y + 20, {
           width: defaultBox.w,

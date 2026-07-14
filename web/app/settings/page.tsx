@@ -29,7 +29,11 @@ import {
   Bell,
   Pencil,
   ClipboardList,
+  Image,
   Palette,
+  MapPin,
+  Building,
+  CreditCard,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { getCookie } from '../../utils/cookies';
@@ -897,128 +901,169 @@ export default function SettingsPage() {
                 {logoUrl && (
                   <div className="space-y-4">
                     {/* Width Adjustment */}
-                    <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-100">
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="text-xs font-semibold text-gray-600">Logo Print Width</span>
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setLogoWidth((w) => Math.max(100, w - 10))}
-                            className="w-7 h-7 bg-white hover:bg-slate-100 text-gray-600 border border-slate-200 rounded-lg flex items-center justify-center text-sm font-bold transition-colors active:scale-95 cursor-pointer"
-                          >
-                            -
-                          </button>
-                          <span className="text-xs font-bold text-gray-800 w-12 text-center">{logoWidth}px</span>
-                          <button
-                            type="button"
-                            onClick={() => setLogoWidth((w) => Math.min(300, w + 10))}
-                            className="w-7 h-7 bg-white hover:bg-slate-100 text-gray-600 border border-slate-200 rounded-lg flex items-center justify-center text-sm font-bold transition-colors active:scale-95 cursor-pointer"
-                          >
-                            +
-                          </button>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+                      {/* Logo Width */}
+                      <div className="bg-white/50 border border-slate-200/60 p-5 rounded-2xl shadow-sm backdrop-blur-sm transition-all hover:shadow-md">
+                        <div className="flex justify-between items-center mb-4">
+                          <div className="flex flex-col">
+                            <span className="text-sm font-bold text-slate-800">Print Width</span>
+                            <span className="text-[10px] text-slate-500 font-medium tracking-wide uppercase">Horizontal Size</span>
+                          </div>
+                          <div className="flex items-center bg-slate-100/80 rounded-lg p-1 border border-slate-200/50">
+                            <button
+                              type="button"
+                              onClick={() => setLogoWidth((w) => Math.max(100, w - 10))}
+                              className="w-8 h-8 rounded-md bg-white text-slate-600 shadow-sm hover:text-emerald-600 hover:shadow flex items-center justify-center text-lg font-bold transition-all active:scale-95"
+                            >
+                              -
+                            </button>
+                            <div className="w-16 text-center text-sm font-black text-slate-700 font-mono">
+                              {logoWidth}<span className="text-[10px] text-slate-400 ml-0.5">px</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setLogoWidth((w) => Math.min(300, w + 10))}
+                              className="w-8 h-8 rounded-md bg-white text-slate-600 shadow-sm hover:text-emerald-600 hover:shadow flex items-center justify-center text-lg font-bold transition-all active:scale-95"
+                            >
+                              +
+                            </button>
+                          </div>
                         </div>
+                        <input
+                          type="range"
+                          min="100"
+                          max="300"
+                          step="10"
+                          value={logoWidth}
+                          onChange={(e) => setLogoWidth(Number(e.target.value))}
+                          className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-500 hover:accent-emerald-400 transition-all"
+                        />
                       </div>
-                      <input
-                        type="range"
-                        min="100"
-                        max="300"
-                        step="10"
-                        value={logoWidth}
-                        onChange={(e) => setLogoWidth(Number(e.target.value))}
-                        className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-600"
-                      />
+
+                      {/* Logo Height */}
+                      <div className="bg-white/50 border border-slate-200/60 p-5 rounded-2xl shadow-sm backdrop-blur-sm transition-all hover:shadow-md">
+                        <div className="flex justify-between items-center mb-4">
+                          <div className="flex flex-col">
+                            <span className="text-sm font-bold text-slate-800">Print Height</span>
+                            <span className="text-[10px] text-slate-500 font-medium tracking-wide uppercase">Vertical Size</span>
+                          </div>
+                          <div className="flex items-center bg-slate-100/80 rounded-lg p-1 border border-slate-200/50">
+                            <button
+                              type="button"
+                              onClick={() => setLogoHeight((h) => Math.max(30, h - 5))}
+                              className="w-8 h-8 rounded-md bg-white text-slate-600 shadow-sm hover:text-emerald-600 hover:shadow flex items-center justify-center text-lg font-bold transition-all active:scale-95"
+                            >
+                              -
+                            </button>
+                            <div className="w-16 text-center text-sm font-black text-slate-700 font-mono">
+                              {logoHeight}<span className="text-[10px] text-slate-400 ml-0.5">px</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setLogoHeight((h) => Math.min(120, h + 5))}
+                              className="w-8 h-8 rounded-md bg-white text-slate-600 shadow-sm hover:text-emerald-600 hover:shadow flex items-center justify-center text-lg font-bold transition-all active:scale-95"
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+                        <input
+                          type="range"
+                          min="30"
+                          max="120"
+                          step="5"
+                          value={logoHeight}
+                          onChange={(e) => setLogoHeight(Number(e.target.value))}
+                          className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-500 hover:accent-emerald-400 transition-all"
+                        />
+                      </div>
                     </div>
 
-                    {/* Height Adjustment */}
-                    <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-100">
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="text-xs font-semibold text-gray-600">Logo Print Height</span>
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setLogoHeight((h) => Math.max(30, h - 5))}
-                            className="w-7 h-7 bg-white hover:bg-slate-100 text-gray-600 border border-slate-200 rounded-lg flex items-center justify-center text-sm font-bold transition-colors active:scale-95 cursor-pointer"
-                          >
-                            -
-                          </button>
-                          <span className="text-xs font-bold text-gray-800 w-12 text-center">{logoHeight}px</span>
-                          <button
-                            type="button"
-                            onClick={() => setLogoHeight((h) => Math.min(120, h + 5))}
-                            className="w-7 h-7 bg-white hover:bg-slate-100 text-gray-600 border border-slate-200 rounded-lg flex items-center justify-center text-sm font-bold transition-colors active:scale-95 cursor-pointer"
-                          >
-                            +
-                          </button>
+                    {/* Background Color Settings (Premium Redesign) */}
+                    <div className="mt-6 bg-gradient-to-br from-slate-50 to-slate-100/50 p-6 rounded-2xl border border-slate-200/80 shadow-inner">
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div className="flex items-start gap-3">
+                          <div className={`p-2.5 rounded-xl ${logoBgEnabled ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-500'} transition-colors`}>
+                            <Image size={20} />
+                          </div>
+                          <div>
+                            <span className="text-sm font-bold text-slate-800 block">Transparent Logo Background</span>
+                            <span className="text-xs text-slate-500 mt-0.5 block leading-relaxed">
+                              Apply a solid colored frame behind logos with transparent backgrounds.
+                            </span>
+                          </div>
                         </div>
-                      </div>
-                      <input
-                        type="range"
-                        min="30"
-                        max="120"
-                        step="5"
-                        value={logoHeight}
-                        onChange={(e) => setLogoHeight(Number(e.target.value))}
-                        className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-600"
-                      />
-                    </div>
-
-                    {/* Background Color Settings (New) */}
-                    <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-100 space-y-3">
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <span className="text-xs font-semibold text-gray-700 block">Logo Background Frame</span>
-                          <span className="text-[10px] text-gray-400">Apply a solid colored frame behind transparent logos</span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setLogoBgEnabled(!logoBgEnabled)}
-                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
-                            logoBgEnabled ? 'bg-emerald-600' : 'bg-gray-200'
-                          }`}
-                        >
-                          <span
-                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                              logoBgEnabled ? 'translate-x-6' : 'translate-x-1'
-                            }`}
+                        
+                        <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                          <input 
+                            type="checkbox" 
+                            className="sr-only peer" 
+                            checked={logoBgEnabled}
+                            onChange={() => setLogoBgEnabled(!logoBgEnabled)} 
                           />
-                        </button>
+                          <div className="w-14 h-7 bg-slate-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-emerald-300/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-emerald-500 shadow-inner"></div>
+                        </label>
                       </div>
 
                       {logoBgEnabled && (
-                        <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center gap-4 animate-in fade-in duration-200">
-                          {/* Color picker */}
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="color"
-                              value={logoBgColor}
-                              onChange={(e) => setLogoBgColor(e.target.value)}
-                              className="w-8 h-8 rounded-lg cursor-pointer border border-slate-200 overflow-hidden"
-                            />
-                            <span className="text-xs font-bold text-gray-700 uppercase">{logoBgColor}</span>
+                        <div className="mt-5 pt-5 border-t border-slate-200/70 flex flex-col sm:flex-row sm:items-center gap-6 animate-in fade-in slide-in-from-top-2 duration-300">
+                          {/* Color Picker Interface */}
+                          <div className="flex-1 flex items-center gap-4 bg-white p-3 rounded-xl border border-slate-200/60 shadow-sm">
+                            <div className="relative group">
+                              <input
+                                type="color"
+                                value={logoBgColor}
+                                onChange={(e) => setLogoBgColor(e.target.value)}
+                                className="w-12 h-12 rounded-xl cursor-pointer border-0 p-0 overflow-hidden bg-transparent shadow-sm opacity-0 absolute inset-0 z-10"
+                                title="Choose custom color"
+                              />
+                              <div 
+                                className="w-12 h-12 rounded-xl border-2 border-white shadow-md flex items-center justify-center transition-transform group-hover:scale-105"
+                                style={{ backgroundColor: logoBgColor }}
+                              >
+                                <Palette size={16} className={['#ffffff', '#fdf6e2', '#f8fafc'].includes(logoBgColor.toLowerCase()) ? 'text-slate-400' : 'text-white/80'} />
+                              </div>
+                            </div>
+                            
+                            <div className="flex flex-col">
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Hex Color</span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-black text-slate-700 font-mono tracking-wide">{logoBgColor.toUpperCase()}</span>
+                              </div>
+                            </div>
                           </div>
 
-                          {/* Quick Swatches */}
-                          <div className="flex items-center gap-1.5">
-                            {[
-                              { label: 'White', value: '#ffffff' },
-                              { label: 'Cream', value: '#fdf6e2' },
-                              { label: 'Slate', value: '#f8fafc' },
-                              { label: 'Navy', value: '#1e3a8a' },
-                              { label: 'Charcoal', value: '#1e293b' },
-                            ].map((swatch) => (
-                              <button
-                                key={swatch.value}
-                                type="button"
-                                onClick={() => setLogoBgColor(swatch.value)}
-                                className={`w-6 h-6 rounded-full border shadow-sm transition-all hover:scale-105 active:scale-95 ${
-                                  logoBgColor.toLowerCase() === swatch.value.toLowerCase()
-                                    ? 'border-emerald-600 ring-1 ring-emerald-600 scale-105'
-                                    : 'border-slate-200'
-                                }`}
-                                style={{ backgroundColor: swatch.value }}
-                                title={swatch.label}
-                              />
-                            ))}
+                          {/* Refined Quick Swatches */}
+                          <div className="flex flex-col gap-1.5 shrink-0">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pl-1">Quick Select</span>
+                            <div className="flex items-center gap-2.5 p-2 bg-white rounded-xl border border-slate-200/60 shadow-sm">
+                              {[
+                                { label: 'White', value: '#ffffff' },
+                                { label: 'Soft Cream', value: '#fdf6e2' },
+                                { label: 'Light Slate', value: '#f8fafc' },
+                                { label: 'Navy Blue', value: '#1e3a8a' },
+                                { label: 'Deep Charcoal', value: '#1e293b' },
+                              ].map((swatch) => (
+                                <button
+                                  key={swatch.value}
+                                  type="button"
+                                  onClick={() => setLogoBgColor(swatch.value)}
+                                  className={`w-8 h-8 rounded-full shadow-sm transition-all relative overflow-hidden group ${
+                                    logoBgColor.toLowerCase() === swatch.value.toLowerCase()
+                                      ? 'ring-2 ring-offset-2 ring-emerald-500 scale-110 z-10'
+                                      : 'ring-1 ring-slate-200/50 hover:scale-110 hover:ring-slate-300'
+                                  }`}
+                                  style={{ backgroundColor: swatch.value }}
+                                  title={swatch.label}
+                                >
+                                  {logoBgColor.toLowerCase() === swatch.value.toLowerCase() && (
+                                    <div className="absolute inset-0 flex items-center justify-center bg-black/10">
+                                      <div className="w-1.5 h-1.5 rounded-full bg-white shadow-sm" />
+                                    </div>
+                                  )}
+                                </button>
+                              ))}
+                            </div>
                           </div>
                         </div>
                       )}

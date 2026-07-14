@@ -361,7 +361,16 @@ export const generateInvoicePdf = async (
       doc.fillColor(THEME.muted).font('Regular').fontSize(9).text('Professional billing document', margin, headerTop + 44);
 
        // Logo / badge (right)
-       const logoBox = { w: logoWidth, h: logoHeight, x: pageWidth - margin - logoWidth, y: headerTop - 2 };
+       let actualLogoW = logoWidth || 250;
+       let actualLogoH = logoHeight || 60;
+       const maxLogoW = pageWidth - (margin * 2);
+       if (actualLogoW > maxLogoW) {
+         const scale = maxLogoW / actualLogoW;
+         actualLogoW = maxLogoW;
+         actualLogoH = actualLogoH * scale;
+       }
+       
+       const logoBox = { w: actualLogoW, h: actualLogoH, x: pageWidth - margin - actualLogoW, y: headerTop - 2 };
        let hasRenderedLogo = false;
        if (logoPath) {
          try {
