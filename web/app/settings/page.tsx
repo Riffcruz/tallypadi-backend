@@ -29,7 +29,7 @@ import {
   Bell,
   Pencil,
   ClipboardList,
-  Image,
+  Image as ImageIcon,
   Palette,
   MapPin,
   Building,
@@ -984,7 +984,7 @@ export default function SettingsPage() {
                       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                         <div className="flex items-start gap-3">
                           <div className={`p-2.5 rounded-xl ${logoBgEnabled ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-500'} transition-colors`}>
-                            <Image size={20} />
+                            <ImageIcon size={20} />
                           </div>
                           <div>
                             <span className="text-sm font-bold text-slate-800 block">Transparent Logo Background</span>
