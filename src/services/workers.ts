@@ -141,9 +141,14 @@ export const replyWorker = new Worker(
             // Fetch brand logo
             let logoBuffer: Buffer | undefined;
             let logoUrl = user?.settings?.logoUrl;
+            let logoWidth = user?.settings?.logoWidth ?? 250;
+            let logoHeight = user?.settings?.logoHeight ?? 60;
+            
             if (user && user.role === 'STAFF' && user.ownerId) {
                 const owner = await User.findById(user.ownerId).lean();
                 logoUrl = (owner as any)?.settings?.logoUrl;
+                logoWidth = (owner as any)?.settings?.logoWidth ?? 250;
+                logoHeight = (owner as any)?.settings?.logoHeight ?? 60;
             }
 
             if (logoUrl) {
@@ -156,7 +161,7 @@ export const replyWorker = new Worker(
             }
 
             // Generate File (Buffer)
-            const pdfBuffer = await generateInvoicePdf(inv, businessName, countryCode, logoBuffer);
+            const pdfBuffer = await generateInvoicePdf(inv, businessName, countryCode, logoBuffer, 'A4', 'Staff', logoWidth, logoHeight);
             
             sendTypingIndicator(phoneNumber).catch(() => {});
             await sendWhatsAppDocumentBuffer({
@@ -204,9 +209,14 @@ export const replyWorker = new Worker(
             // Fetch brand logo
             let logoBuffer: Buffer | undefined;
             let logoUrl = user?.settings?.logoUrl;
+            let logoWidth = user?.settings?.logoWidth ?? 250;
+            let logoHeight = user?.settings?.logoHeight ?? 60;
+            
             if (user && user.role === 'STAFF' && user.ownerId) {
                 const owner = await User.findById(user.ownerId).lean();
                 logoUrl = (owner as any)?.settings?.logoUrl;
+                logoWidth = (owner as any)?.settings?.logoWidth ?? 250;
+                logoHeight = (owner as any)?.settings?.logoHeight ?? 60;
             }
 
             if (logoUrl) {
@@ -219,7 +229,7 @@ export const replyWorker = new Worker(
             }
 
             // Generate + Send PDF first
-            const pdfBuffer = await generateInvoicePdf(inv, businessName, countryCode, logoBuffer);
+            const pdfBuffer = await generateInvoicePdf(inv, businessName, countryCode, logoBuffer, 'A4', 'Staff', logoWidth, logoHeight);
 
             sendTypingIndicator(phoneNumber).catch(() => {});
             await sendWhatsAppDocumentBuffer({

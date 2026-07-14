@@ -49,7 +49,9 @@ export const generateInvoicePdf = async (
   countryCode: string = 'NG',
   logoPath?: string | Buffer,
   format: 'A4' | 'thermal' = 'A4',
-  staffName: string = 'Staff'
+  staffName: string = 'Staff',
+  logoWidth: number = 250,
+  logoHeight: number = 60
 ): Promise<Buffer> => {
   // Determine currency
   const currencyCode = COUNTRY_CURRENCY_CODE[countryCode.toUpperCase()] || 'NGN';
@@ -356,13 +358,13 @@ export const generateInvoicePdf = async (
       doc.fillColor(THEME.text).font('Regular').fontSize(11).text('INVOICE', margin, headerTop + 28);
       doc.fillColor(THEME.muted).font('Regular').fontSize(9).text('Professional billing document', margin, headerTop + 44);
 
-      // Logo / badge (right)
-       const logoBox = { w: 62, h: 62, x: pageWidth - margin - 62, y: headerTop - 2 };
+       // Logo / badge (right)
+       const logoBox = { w: logoWidth, h: logoHeight, x: pageWidth - margin - logoWidth, y: headerTop - 2 };
        let hasRenderedLogo = false;
        if (logoPath) {
          try {
            if (Buffer.isBuffer(logoPath) || (typeof logoPath === 'string' && fs.existsSync(logoPath))) {
-             doc.image(logoPath, logoBox.x, logoBox.y, { width: logoBox.w, height: logoBox.h });
+             doc.image(logoPath, logoBox.x, logoBox.y, { fit: [logoBox.w, logoBox.h], align: 'right', valign: 'center' });
              hasRenderedLogo = true;
            }
          } catch (err) {
@@ -371,9 +373,10 @@ export const generateInvoicePdf = async (
        }
        
        if (!hasRenderedLogo) {
-         doc.roundedRect(logoBox.x, logoBox.y, logoBox.w, logoBox.h, 10).fill(THEME.primary);
-         doc.fillColor(THEME.white).font('Bold').fontSize(16).text('TP', logoBox.x, logoBox.y + 20, {
-           width: logoBox.w,
+         const defaultBox = { w: 62, h: 62, x: pageWidth - margin - 62, y: headerTop - 2 };
+         doc.roundedRect(defaultBox.x, defaultBox.y, defaultBox.w, defaultBox.h, 10).fill(THEME.primary);
+         doc.fillColor(THEME.white).font('Bold').fontSize(16).text('TP', defaultBox.x, defaultBox.y + 20, {
+           width: defaultBox.w,
            align: 'center',
          });
        }

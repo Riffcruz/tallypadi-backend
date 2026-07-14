@@ -60,6 +60,8 @@ export interface IUser extends Document {
     currencyCode?: string; // e.g. NGN, USD, GHS
     smartMatchingEnabled?: boolean;
     logoUrl?: string; // Brand logo for PDF receipts/invoices
+    logoWidth?: number; // Logo width in PDF points/pixels
+    logoHeight?: number; // Logo height in PDF points/pixels
     location?: {
       country: string;
       state: string;
@@ -214,6 +216,8 @@ const userSchema = new Schema<IUser>(
       currencyCode: { type: String, default: 'NGN' },
       smartMatchingEnabled: { type: Boolean, default: true },
       logoUrl: { type: String, default: '' },
+      logoWidth: { type: Number, default: 250 },
+      logoHeight: { type: Number, default: 60 },
       location: {
         country: { type: String, default: 'NG' },
         state: { type: String, default: '' },

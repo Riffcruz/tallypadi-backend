@@ -60,6 +60,8 @@ export default function SettingsPage() {
   const [uploadingHero, setUploadingHero] = useState(false); // ✅ Upload state
   const [logoUrl, setLogoUrl] = useState(''); // Brand logo
   const [uploadingLogo, setUploadingLogo] = useState(false); // Brand logo upload state
+  const [logoWidth, setLogoWidth] = useState(250); // Brand logo width
+  const [logoHeight, setLogoHeight] = useState(60); // Brand logo height
 
   const [closingTime, setClosingTime] = useState('');
   const [language, setLanguage] = useState('');
@@ -128,6 +130,8 @@ export default function SettingsPage() {
     setShopDescription(userData?.shopDescription || '');
     setHeroImageUrl(userData?.heroImageUrl || '');
     setLogoUrl(userData?.settings?.logoUrl || '');
+    setLogoWidth(userData?.settings?.logoWidth ?? 250);
+    setLogoHeight(userData?.settings?.logoHeight ?? 60);
     setClosingTime(userData?.settings?.closingTime || '20:00');
     setLanguage(userData?.settings?.language || 'English');
     setCurrencyCode(userData?.settings?.currencyCode || userData?.currencyCode || 'NGN');
@@ -220,6 +224,8 @@ export default function SettingsPage() {
             pdfReportsEnabled: pdfEnabled,
             smartMatchingEnabled,
             logoUrl,
+            logoWidth,
+            logoHeight,
             location: {
                country: countryCode,
                state: stateCode,
@@ -827,42 +833,104 @@ export default function SettingsPage() {
             {/* Custom Brand Logo */}
             <div className="mt-6 border-t border-gray-100 pt-6">
               <h3 className="font-semibold text-gray-900 text-sm mb-3">Custom Brand Logo</h3>
-              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                {logoUrl ? (
-                  <div className="relative w-20 h-20 bg-slate-50 rounded-2xl border border-gray-150 flex items-center justify-center overflow-hidden group shadow-sm">
-                    <img src={logoUrl} alt="Brand Logo" className="object-contain w-full h-full p-1" />
-                    <button
-                      type="button"
-                      onClick={() => setLogoUrl('')}
-                      className="absolute inset-0 bg-black/40 flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                ) : (
-                  <label className="w-20 h-20 bg-slate-50 border border-dashed border-gray-300 rounded-2xl flex flex-col items-center justify-center cursor-pointer text-gray-400 hover:text-gray-600 hover:border-gray-400 transition-all hover:bg-slate-100/50 shadow-sm">
-                    {uploadingLogo ? (
-                      <Loader2 size={18} className="animate-spin text-emerald-600" />
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Left side: Upload & Dimension inputs */}
+                <div className="space-y-4">
+                  <div className="flex items-center gap-4">
+                    {logoUrl ? (
+                      <div className="relative w-20 h-20 bg-slate-50 rounded-2xl border border-gray-150 flex items-center justify-center overflow-hidden group shadow-sm">
+                        <img src={logoUrl} alt="Brand Logo" className="object-contain w-full h-full p-1" />
+                        <button
+                          type="button"
+                          onClick={() => setLogoUrl('')}
+                          className="absolute inset-0 bg-black/40 flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
                     ) : (
-                      <>
-                        <Camera size={18} />
-                        <span className="text-[10px] font-bold mt-1">UPLOAD</span>
-                      </>
+                      <label className="w-20 h-20 bg-slate-50 border border-dashed border-gray-300 rounded-2xl flex flex-col items-center justify-center cursor-pointer text-gray-400 hover:text-gray-600 hover:border-gray-400 transition-all hover:bg-slate-100/50 shadow-sm">
+                        {uploadingLogo ? (
+                          <Loader2 size={18} className="animate-spin text-emerald-600" />
+                        ) : (
+                          <>
+                            <Camera size={18} />
+                            <span className="text-[10px] font-bold mt-1">UPLOAD</span>
+                          </>
+                        )}
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          onChange={handleLogoUpload}
+                          disabled={uploadingLogo}
+                          className="hidden"
+                        />
+                      </label>
                     )}
-                    <input
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp"
-                      onChange={handleLogoUpload}
-                      disabled={uploadingLogo}
-                      className="hidden"
-                    />
-                  </label>
-                )}
-                <div className="flex-1">
-                  <p className="text-xs font-semibold text-gray-700">Receipt & Invoice Branding</p>
-                  <p className="text-[11px] text-gray-400 mt-0.5 leading-relaxed max-w-sm">
-                    Upload your shop logo. It will automatically scale to fit nicely in the header box of your PDF documents. Allowed formats: PNG, JPG, WEBP.
-                  </p>
+                    <div className="flex-1">
+                      <p className="text-xs font-semibold text-gray-700">Receipt & Invoice Logo</p>
+                      <p className="text-[10px] text-gray-400 mt-0.5 leading-relaxed">
+                        PNG, JPG, or WEBP. Uploading scales and compresses the image to save bandwidth.
+                      </p>
+                    </div>
+                  </div>
+
+                  {logoUrl && (
+                    <div className="space-y-3 pt-2">
+                      <div>
+                        <div className="flex justify-between text-xs font-semibold text-gray-500 mb-1">
+                          <span>Logo Width</span>
+                          <span className="text-gray-700 font-bold">{logoWidth}px</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="100"
+                          max="300"
+                          step="10"
+                          value={logoWidth}
+                          onChange={(e) => setLogoWidth(Number(e.target.value))}
+                          className="w-full h-1 bg-gray-150 rounded-lg appearance-none cursor-pointer accent-emerald-600"
+                        />
+                      </div>
+
+                      <div>
+                        <div className="flex justify-between text-xs font-semibold text-gray-500 mb-1">
+                          <span>Logo Height</span>
+                          <span className="text-gray-700 font-bold">{logoHeight}px</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="30"
+                          max="120"
+                          step="5"
+                          value={logoHeight}
+                          onChange={(e) => setLogoHeight(Number(e.target.value))}
+                          className="w-full h-1 bg-gray-150 rounded-lg appearance-none cursor-pointer accent-emerald-600"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Right side: Live Preview */}
+                <div className="flex flex-col justify-center border border-dashed border-gray-200 rounded-2xl p-4 bg-slate-50/50">
+                  <span className="text-[10px] font-bold text-gray-400 mb-2 uppercase tracking-wider">Live Document Preview</span>
+                  <div className="flex items-center justify-center min-h-[140px] border border-gray-150 bg-white rounded-xl shadow-inner relative overflow-hidden p-2">
+                    {logoUrl ? (
+                      <div 
+                        className="transition-all duration-150 ease-out border border-slate-100 flex items-center justify-center"
+                        style={{ width: `${logoWidth}px`, height: `${logoHeight}px` }}
+                      >
+                        <img src={logoUrl} alt="Logo Live Preview" className="object-contain w-full h-full animate-in zoom-in-95" />
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center gap-1 text-gray-300">
+                        <Camera size={24} />
+                        <span className="text-[11px] font-bold">Upload a logo to preview size</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

@@ -146,6 +146,16 @@ export const updateSettings = async (req: AuthReq, res: Response) => {
           $set['settings.logoUrl'] = safeUrl ? safeUrl.slice(0, 500) : '';
         }
 
+        if (inputSettings.logoWidth !== undefined) {
+          const w = Number(inputSettings.logoWidth);
+          if (!isNaN(w) && w > 0) $set['settings.logoWidth'] = Math.min(w, 500);
+        }
+
+        if (inputSettings.logoHeight !== undefined) {
+          const h = Number(inputSettings.logoHeight);
+          if (!isNaN(h) && h > 0) $set['settings.logoHeight'] = Math.min(h, 500);
+        }
+
         // ✅ Location Settings Update
         if (inputSettings.location && typeof inputSettings.location === 'object') {
           const loc = inputSettings.location;

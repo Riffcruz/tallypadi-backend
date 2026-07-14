@@ -220,6 +220,8 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
   exactHeight?: number;
   contactLines?: string[];
   logoBuffer?: Buffer;
+  logoWidth?: number;
+  logoHeight?: number;
 }) {
   const {
     saleId,
@@ -235,6 +237,8 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
     format,
     contactLines = [],
     logoBuffer,
+    logoWidth = 250,
+    logoHeight = 60,
   } = payload;
 
   const currencyDisplay = hasSymbolFont ? 'symbol' : 'code';
@@ -340,11 +344,11 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
       doc.fillColor(THEME_INVOICE.muted).font(regFont).fontSize(9).text('Payment Confirmation', margin, y + 16);
 
       // Logo / badge (right)
-      const logoBox = { w: 62, h: 62, x: pageW - margin - 62, y: 38 }; // simplified y
+      const logoBox = { w: logoWidth, h: logoHeight, x: pageW - margin - logoWidth, y: 40 }; // simplified y
       let hasRenderedLogo = false;
       if (logoBuffer) {
         try {
-          doc.image(logoBuffer, logoBox.x, logoBox.y, { fit: [logoBox.w, logoBox.h], align: 'center', valign: 'center' });
+          doc.image(logoBuffer, logoBox.x, logoBox.y, { fit: [logoBox.w, logoBox.h], align: 'right', valign: 'center' });
           hasRenderedLogo = true;
         } catch (err) {
           console.warn('[Receipt PDF] Failed to render brand logo:', err);
@@ -352,9 +356,10 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
       }
       
       if (!hasRenderedLogo) {
-        doc.roundedRect(logoBox.x, logoBox.y, logoBox.w, logoBox.h, 10).fill(THEME_INVOICE.primary);
-        doc.fillColor(THEME_INVOICE.white).font(boldFont).fontSize(16).text('TP', logoBox.x, logoBox.y + 20, {
-          width: logoBox.w,
+        const defaultBox = { w: 62, h: 62, x: pageW - margin - 62, y: 38 };
+        doc.roundedRect(defaultBox.x, defaultBox.y, defaultBox.w, defaultBox.h, 10).fill(THEME_INVOICE.primary);
+        doc.fillColor(THEME_INVOICE.white).font(boldFont).fontSize(16).text('TP', defaultBox.x, defaultBox.y + 20, {
+          width: defaultBox.w,
           align: 'center',
         });
       }
@@ -648,6 +653,9 @@ export const generateSaleReceiptPdfBuffer = async (userId: string, saleId: strin
   // Fetch brand logo
   let logoBuffer: Buffer | undefined;
   const logoUrl = businessUser?.settings?.logoUrl || requester?.settings?.logoUrl;
+  const logoWidth = businessUser?.settings?.logoWidth ?? requester?.settings?.logoWidth ?? 250;
+  const logoHeight = businessUser?.settings?.logoHeight ?? requester?.settings?.logoHeight ?? 60;
+  
   if (logoUrl) {
     try {
       const response = await axios.get(logoUrl, { responseType: 'arraybuffer', timeout: 5000 });
@@ -662,7 +670,7 @@ export const generateSaleReceiptPdfBuffer = async (userId: string, saleId: strin
     const { regFont: dReg, boldFont: dBold, hasNoto: dNoto } = registerFonts(dummyDoc);
     exactHeight = renderReceiptPdf(dummyDoc, {
       saleId, receiptNo, businessName, receiptDate, currencyCode, locale, 
-      hasSymbolFont: dNoto, regFont: dReg, boldFont: dBold, tx, format, contactLines, logoBuffer
+      hasSymbolFont: dNoto, regFont: dReg, boldFont: dBold, tx, format, contactLines, logoBuffer, logoWidth, logoHeight
     });
 
   const doc = new PDFDocument({
@@ -699,7 +707,9 @@ export const generateSaleReceiptPdfBuffer = async (userId: string, saleId: strin
     format,
     exactHeight,
     contactLines,
-    logoBuffer
+    logoBuffer,
+    logoWidth,
+    logoHeight
   });
 
   doc.end();
@@ -770,6 +780,9 @@ export const generateSaleReceiptPdf = async (req: Request | any, res: Response) 
     // Fetch brand logo
     let logoBuffer: Buffer | undefined;
     const logoUrl = businessUser?.settings?.logoUrl || user?.settings?.logoUrl;
+    const logoWidth = businessUser?.settings?.logoWidth ?? user?.settings?.logoWidth ?? 250;
+    const logoHeight = businessUser?.settings?.logoHeight ?? user?.settings?.logoHeight ?? 60;
+    
     if (logoUrl) {
       try {
         const response = await axios.get(logoUrl, { responseType: 'arraybuffer', timeout: 5000 });
@@ -785,7 +798,7 @@ export const generateSaleReceiptPdf = async (req: Request | any, res: Response) 
     const { regFont: dReg, boldFont: dBold, hasNoto: dNoto } = registerFonts(dummyDoc);
     exactHeight = renderReceiptPdf(dummyDoc, {
       saleId, receiptNo, businessName, receiptDate, currencyCode, locale, 
-      hasSymbolFont: dNoto, regFont: dReg, boldFont: dBold, tx, format, contactLines, logoBuffer
+      hasSymbolFont: dNoto, regFont: dReg, boldFont: dBold, tx, format, contactLines, logoBuffer, logoWidth, logoHeight
     });
 
     const doc = new PDFDocument({
@@ -814,7 +827,9 @@ export const generateSaleReceiptPdf = async (req: Request | any, res: Response) 
       format,
       exactHeight,
       contactLines,
-      logoBuffer
+      logoBuffer,
+      logoWidth,
+      logoHeight
     });
 
     doc.end();

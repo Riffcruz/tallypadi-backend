@@ -143,9 +143,14 @@ export const getInvoicePdf = async (req: AuthReq, res: Response) => {
 
         let logoBuffer: Buffer | undefined;
         let logoUrl = creator?.settings?.logoUrl;
+        let logoWidth = creator?.settings?.logoWidth ?? 250;
+        let logoHeight = creator?.settings?.logoHeight ?? 60;
+        
         if (creator && creator.role === 'STAFF' && creator.ownerId) {
              const owner = await User.findById(creator.ownerId).lean();
              logoUrl = (owner as any)?.settings?.logoUrl;
+             logoWidth = (owner as any)?.settings?.logoWidth ?? 250;
+             logoHeight = (owner as any)?.settings?.logoHeight ?? 60;
         }
 
         if (logoUrl) {
@@ -163,7 +168,9 @@ export const getInvoicePdf = async (req: AuthReq, res: Response) => {
             countryCode,
             logoBuffer,
             format as 'A4' | 'thermal',
-            creator?.name || 'Staff'
+            creator?.name || 'Staff',
+            logoWidth,
+            logoHeight
         );
 
         res.set({
