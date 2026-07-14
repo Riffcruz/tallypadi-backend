@@ -63,7 +63,7 @@ module.exports = {
     // ─────────────────────────────────────────────
     {
       name: 'tallypadi-web',
-      script: 'npm',
+      script: './node_modules/next/dist/bin/next',
       args: 'start',
       cwd: './web',
       instances: 1,
