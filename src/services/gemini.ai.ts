@@ -10,7 +10,8 @@
 //   50 are sent and old/stale items are excluded.
 // ============================================================
 
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
+import axios from 'axios';
 import { env } from '../config/env';
 import getSystemPrompt from './gemini.prompt';
 import {
@@ -23,12 +24,51 @@ import {
 import type { ParsedResult, InventorySnapshotItem } from './gemini.types';
 
 // ─── Model init ─────────────────────────────────────────────
-const genAI = new GoogleGenerativeAI(env.geminiApiKey);
+const ai = new GoogleGenAI({ apiKey: env.geminiApiKey });
 
-const model = genAI.getGenerativeModel({
-  model: env.geminiModel,
-  generationConfig: { responseMimeType: 'application/json' },
-});
+// ─── Cache Management ────────────────────────────────────────
+interface CacheInfo {
+  name: string;
+  expiresAt: number;
+}
+const cachedPrompts = new Map<string, CacheInfo>();
+
+async function getOrCreateCache(userLanguage: string): Promise<string | null> {
+  const lang = String(userLanguage).toUpperCase();
+  const existing = cachedPrompts.get(lang);
+  const now = Date.now();
+
+  // If we have a cache that is valid for at least another 5 minutes, use it
+  if (existing && existing.expiresAt > now + 5 * 60 * 1000) {
+    return existing.name;
+  }
+
+  try {
+    const systemPrompt = getSystemPrompt(userLanguage);
+    console.log(`[Gemini Caching] Creating context cache for language ${lang}...`);
+    
+    const cache = await ai.caches.create({
+      model: env.geminiModel, // 'gemini-2.0-flash-001'
+      config: {
+        displayName: `tallypadi-prompt-${lang.toLowerCase()}`,
+        systemInstruction: systemPrompt,
+        ttl: '3600s', // 1 hour TTL
+      },
+    });
+
+    if (!cache.name) {
+      throw new Error('Cache name not returned by Google Gen AI API');
+    }
+
+    const expiresAt = now + 3600 * 1000;
+    cachedPrompts.set(lang, { name: cache.name, expiresAt });
+    console.log(`[Gemini Caching] Cache created successfully: ${cache.name}. Expires in 1 hour.`);
+    return cache.name;
+  } catch (error) {
+    console.warn('[Gemini Caching] Failed to create context cache, falling back to non-cached request:', error);
+    return null;
+  }
+}
 
 // ─── Timeout wrapper ─────────────────────────────────────────
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
@@ -42,13 +82,13 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 
 // ─── Retry with exponential backoff ─────────────────────────
 async function generateWithRetry(
-  parts: (string | import('@google/generative-ai').Part)[],
+  params: Parameters<typeof ai.models.generateContent>[0],
   retries = 3,
   timeoutMs = 45000
 ) {
   for (let i = 0; i <= retries; i++) {
     try {
-      const result = await withTimeout(model.generateContent(parts), timeoutMs);
+      const result = await withTimeout(ai.models.generateContent(params), timeoutMs);
       return result;
     } catch (err: unknown) {
       if (i === retries) throw err;
@@ -62,83 +102,118 @@ async function generateWithRetry(
   throw new Error('Gemini retries failed');
 }
 
-// ─── Guidance message (dynamic help) ────────────────────────
+// ─── Local LLM Fallback (Ollama) ────────────────────────────
+async function parseMessageWithLocalLLM(
+  userPrompt: string,
+  systemPrompt: string
+): Promise<ParsedResult | null> {
+  const ollamaUrl = env.ollamaUrl || 'http://localhost:11434';
+  const modelName = env.ollamaModel || 'qwen2.5:7b';
+
+  try {
+    console.log(`[Ollama Fallback] Querying local model "${modelName}" at ${ollamaUrl}...`);
+    const response = await axios.post(`${ollamaUrl}/api/generate`, {
+      model: modelName,
+      system: systemPrompt,
+      prompt: userPrompt,
+      format: 'json',
+      stream: false,
+    }, {
+      timeout: 35000, // 35s timeout for local CPU/GPU inference
+    });
+
+    const responseText = response.data?.response;
+    if (!responseText) {
+      console.warn('[Ollama Fallback] Empty response returned from local model');
+      return null;
+    }
+
+    const cleanJson = extractJsonObject(responseText);
+    return safeParsedResult(JSON.parse(cleanJson));
+  } catch (error) {
+    console.error('[Ollama Fallback] Local LLM execution failed:', error);
+    return null;
+  }
+}
+
+// ─── Static Guidance Map ────────────────────────────────────
+const GUIDANCE_MAP: Record<string, Record<string, string>> = {
+  ENGLISH: {
+    RECORD_INVENTORY: "📦 Add new items to your stock. Just type what you bought.\nExample: 'Add 20 sneakers' or 'Restock 15 bags of rice'",
+    RECORD_SALE: "💰 Record a cash sale instantly. Just type what you sold.\nExample: 'Sold 2 rice 5000' or '2 bread sold at 500'",
+    RECORD_CREDIT: "💳 Record a sale on credit/debt. Include the customer name.\nExample: 'Sold 2 shoes to Emeka on credit' or 'Ada owes 10k for gown'",
+    DELETE_STOCK: "🗑️ Remove an item completely from your stock list.\nExample: 'delete sneakers' or 'remove bread from stock'",
+    SET_STOCK: "📝 Correct the exact quantity of stock currently on hand.\nExample: 'set rice stock to 20' or 'rice remaining is 12'",
+    SET_PRICE: "🏷️ Update your selling price and cost price separately.\nExample: 'set shoe selling price to 15000 and cost price to 10000'",
+    MANAGE_STAFF: "👥 Add a staff member's phone number to grant them access.\nExample: 'Add staff John 08012345678' or 'New staff 08123456789'",
+    CREATE_INVOICE: "📄 Generate a professional PDF invoice for a customer.\nExample: 'Create invoice for Amina' or 'Invoice for GTBank branding'",
+    EXPENSE: "💸 Record money spent on business expenses.\nExample: 'Spent 5000 on fuel' or 'Transport to market 1500'"
+  },
+  PIDGIN: {
+    RECORD_INVENTORY: "📦 Add new items to your stock. Just type wetin you buy.\nExample: 'Add 20 sneakers' or 'Restock 15 bags of rice'",
+    RECORD_SALE: "💰 Record cash sale sharp-sharp. Just type wetin you sell.\nExample: 'Sold 2 rice 5000' or '2 bread sold at 500'",
+    RECORD_CREDIT: "💳 Record credit sale for customer wey never pay. Put dia name.\nExample: 'Sold 2 shoes to Emeka on credit' or 'Ada owes 10k for gown'",
+    DELETE_STOCK: "🗑️ Comot item completely from your stock list.\nExample: 'delete sneakers' or 'remove bread from stock'",
+    SET_STOCK: "📝 Correct the exact number of stock wey you get now.\nExample: 'set rice stock to 20' or 'rice remaining is 12'",
+    SET_PRICE: "🏷️ Change the selling price and cost price separate.\nExample: 'set shoe selling price to 15000 and cost price to 10000'",
+    MANAGE_STAFF: "👥 Add your staff phone number make dem fit login.\nExample: 'Add staff John 08012345678' or 'New staff 08123456789'",
+    CREATE_INVOICE: "📄 Do professional PDF invoice send to customer.\nExample: 'Create invoice for Amina' or 'Invoice for GTBank branding'",
+    EXPENSE: "💸 Write down money wey you spend for business.\nExample: 'Spent 5000 on fuel' or 'Transport to market 1500'"
+  }
+};
+
+// ─── Guidance message (dynamic help - now optimized to static) ───
 export const generateGuidanceMessage = async (
   intent: string,
   userLanguage: string = 'English'
 ): Promise<string> => {
-  const prompt = `
-You are TallyPadi, a helpful business assistant.
-User Language: ${userLanguage.toUpperCase()}
+  const lang = String(userLanguage).toUpperCase();
+  const normalizedIntent = String(intent).toUpperCase();
 
-Task: Explain clearly and briefly how to use the feature related to "${intent}".
-**CRITICAL RULES:**
-1. DO NOT mention the technical intent name.
-2. Speak like a human to a shop owner. Be natural and cool.
-3. Use "stock" instead of "inventory" where applicable.
-4. Give 2 clear natural language examples of exactly what they should type.
-
-INTENT CONTEXT:
-- RECORD_INVENTORY: Adding new items to stock.
-- RECORD_SALE: Recording a cash sale.
-- RECORD_CREDIT: Recording a sale on credit.
-- DELETE_STOCK: Removing an item from the list.
-- SET_STOCK: Correcting the exact quantity of stock.
-- SET_PRICE: Setting the selling price and cost price. Instructions must explicitly show how to update Cost Price AND Selling Price separately (e.g. "set [item] selling price to X and cost price to Y").
-- MANAGE_STAFF: Adding a staff member number.
-- CREATE_INVOICE: Generating a PDF invoice.
-- EXPENSE: Recording money spent.
-
-Format: Under 3 lines. Use emojis. Examples must be natural user input.
-Output: Return ONLY the explanation text.
-`;
-
-  try {
-    const result = await model.generateContent({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: { responseMimeType: 'text/plain' },
-    });
-    return result.response.text().replace(/\\n/g, '\n').trim();
-  } catch (error) {
-    console.error('Gemini Guidance Error:', error);
-    if (intent === 'RECORD_SALE') return 'To record a sale, simply type what you sold. Example: Sold 2 rice 5000';
-    if (intent === 'RECORD_INVENTORY') return 'To add stock, just type it. Example: Add 20 sneakers';
-    if (intent === 'EXPENSE') return "To record expense: 'Spent 5000 on fuel' or 'Transport 2k'";
-    return 'Please tell me what you want to do clearly.';
+  const guidance = GUIDANCE_MAP[lang]?.[normalizedIntent] || GUIDANCE_MAP['ENGLISH']?.[normalizedIntent];
+  if (guidance) {
+    return guidance;
   }
+
+  // Fallback if intent is not found in static maps
+  if (normalizedIntent === 'RECORD_SALE') return 'To record a sale, simply type what you sold. Example: Sold 2 rice 5000';
+  if (normalizedIntent === 'RECORD_INVENTORY') return 'To add stock, just type it. Example: Add 20 sneakers';
+  if (normalizedIntent === 'EXPENSE') return "To record expense: 'Spent 5000 on fuel' or 'Transport 2k'";
+  return 'Please tell me what you want to do clearly.';
 };
 
-// ─── Welcome message ─────────────────────────────────────────
+// ─── Randomized Welcome Message Variations ────────────────────────
+const WELCOME_VARIATIONS = [
+  // Type 1: Standard
+  (lang: string) => lang === 'PIDGIN'
+    ? `✅ Registration Complete\n\n🌐 Web Access\nLogin here to manage your shop on the web:\nhttps://tallypadi.com/login`
+    : `✅ Registration Complete\n\n🌐 Web Access\nLogin here to manage your shop on the web:\nhttps://tallypadi.com/login`,
+  
+  // Type 2: Desktop/Dashboard focused
+  (lang: string) => lang === 'PIDGIN'
+    ? `✅ Registration Complete\n\n🌐 Web Access\nManage your inventory and track sales on big screen. Login here:\nhttps://tallypadi.com/login`
+    : `✅ Registration Complete\n\n🌐 Web Access\nManage your inventory and track sales on a larger screen. Login here:\nhttps://tallypadi.com/login`,
+
+  // Type 3: Dashboards
+  (lang: string) => lang === 'PIDGIN'
+    ? `✅ Registration Complete\n\n🌐 Web Access\nYou fit access your business dashboard on the web too. Click here to login:\nhttps://tallypadi.com/login`
+    : `✅ Registration Complete\n\n🌐 Web Access\nYou can also access your business dashboard on the web. Click here to login:\nhttps://tallypadi.com/login`,
+
+  // Type 4: Features focus
+  (lang: string) => lang === 'PIDGIN'
+    ? `✅ Registration Complete\n\n🌐 Web Access\nTrack profit, check fine reports, and manage staff on the web:\nhttps://tallypadi.com/login`
+    : `✅ Registration Complete\n\n🌐 Web Access\nTrack your profits, view detailed reports, and manage staff on the web:\nhttps://tallypadi.com/login`,
+
+  // Type 5: Spacious / Professional Command center
+  (lang: string) => lang === 'PIDGIN'
+    ? `✅ Registration Complete\n\n🌐 Web Access\nAccess your full business command center from your browser:\nhttps://tallypadi.com/login`
+    : `✅ Registration Complete\n\n🌐 Web Access\nAccess your full business command center from your browser:\nhttps://tallypadi.com/login`
+];
+
 export const generateWelcomeMessage = async (userLanguage: string = 'English'): Promise<string> => {
-  const prompt = `
-You are TallyPadi, a professional business assistant.
-The user just registered successfully.
-User Language: ${userLanguage.toUpperCase()}
-
-Task: Write a concise confirmation message for "Registration Complete".
-Do NOT include trial info or pricing. Just confirmation and web access link.
-
-Required Content:
-1. Header: "✅ Registration Complete"
-2. (Gap)
-3. "🌐 Web Access"
-4. "Login here to manage your shop on the web:"
-5. Link: https://tallypadi.com/login
-
-Tone: Professional, spacious.
-Output: Return ONLY the message text.
-`;
-
-  try {
-    const result = await model.generateContent({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: { responseMimeType: 'text/plain' },
-    });
-    return result.response.text().replace(/\\n/g, '\n');
-  } catch (error) {
-    console.error('Gemini Welcome Message Error:', error);
-    return `✅ Registration Complete\n\n🌐 Web Access\nLogin here to manage your shop on the web:\nhttps://tallypadi.com/login`;
-  }
+  const lang = String(userLanguage).toUpperCase();
+  const randomIndex = Math.floor(Math.random() * WELCOME_VARIATIONS.length);
+  return WELCOME_VARIATIONS[randomIndex](lang);
 };
 
 export interface AdSeoMetadataInput {
@@ -221,11 +296,13 @@ Advertiser keywords: ${(input.adKeywords || []).join(', ') || 'Not supplied'}
 `;
 
   try {
-    const result = await model.generateContent({
+    const result = await ai.models.generateContent({
+      model: env.geminiModel,
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: { responseMimeType: 'application/json' },
+      config: { responseMimeType: 'application/json' },
     });
-    const parsed = JSON.parse(extractJsonObject(result.response.text()));
+    const responseText = result.text || '';
+    const parsed = JSON.parse(extractJsonObject(responseText));
 
     const keywords: string[] = Array.isArray(parsed?.keywords)
       ? parsed.keywords
@@ -288,29 +365,69 @@ export const parseMessageWithGemini = async (
     }
   }
 
-  // 2️⃣ Gemini path (with history + capped inventory context)
+  // 2️⃣ Gemini path (with history + capped inventory context + context caching)
+  const cacheName = await getOrCreateCache(userLanguage);
+  
   const recentHistory = history.slice(-5);
-  const basePrompt = getSystemPrompt(userLanguage, new Date().toISOString(), recentHistory);
   const inventorySnippet = buildInventoryContext(inventoryContext);
 
-  let userPrompt = `${basePrompt}${inventorySnippet}\n\nUSER MESSAGE: "${safeMessage}"\n\nReturn JSON only.`;
+  let userPrompt = `[CONTEXT]
+Current Date: ${new Date().toISOString()}
+Conversation History:
+${recentHistory.map((msg, i) => `[Turn ${i + 1}]: ${msg}`).join('\n')}
+${inventorySnippet}
+
+[USER MESSAGE]
+"${safeMessage}"
+
+Return JSON only.`;
 
   if (imageMimeType && imageMimeType.startsWith('audio/')) {
     userPrompt += '\n\n🔊 AUDIO INSTRUCTION: The user has sent a voice note. Listen carefully and extract intent/data as if it were written text. Ignore the text "Analyze this audio".';
   }
 
-  const parts: (string | import('@google/generative-ai').Part)[] = [userPrompt];
+  const contents: any[] = [{ role: 'user', parts: [{ text: userPrompt }] }];
   if (imageBuffer && imageMimeType) {
-    parts.push({ inlineData: { data: imageBuffer, mimeType: imageMimeType } });
+    contents[0].parts.push({ inlineData: { data: imageBuffer, mimeType: imageMimeType } });
   }
 
+  const generateParams: Parameters<typeof ai.models.generateContent>[0] = {
+    model: env.geminiModel,
+    contents,
+    config: cacheName
+      ? {
+          responseMimeType: 'application/json',
+          cachedContent: cacheName,
+        }
+      : {
+          responseMimeType: 'application/json',
+          systemInstruction: getSystemPrompt(userLanguage),
+        },
+  };
+
   try {
-    const result = await generateWithRetry(parts, maxRetries, timeoutMs);
-    const text = result.response.text();
-    const cleanJson = extractJsonObject(text);
+    const result = await generateWithRetry(generateParams, maxRetries, timeoutMs);
+    const responseText = result.text || '';
+    const cleanJson = extractJsonObject(responseText);
     return safeParsedResult(JSON.parse(cleanJson));
   } catch (error) {
     console.error('❌ Gemini Error:', error);
+    
+    // Fallback to local LLM (Ollama)
+    try {
+      console.log('🔄 Attempting fallback to local LLM (Ollama)...');
+      const localResult = await parseMessageWithLocalLLM(
+        userPrompt,
+        getSystemPrompt(userLanguage)
+      );
+      if (localResult) {
+        console.log('✅ Fallback to local LLM succeeded!');
+        return localResult;
+      }
+    } catch (fallbackError) {
+      console.error('❌ Local LLM Fallback failed:', fallbackError);
+    }
+
     return safeParsedResult({
       intent: 'UNKNOWN',
       reply_text: 'Network weak. Please try again or use format: "Sold 2 rice 5000"',

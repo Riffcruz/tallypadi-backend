@@ -17,7 +17,7 @@ export interface ITransaction extends Document {
   user: Types.ObjectId | IUser; // Shop owner - Updated to allow populated User object
   
   // Business logic types
-  type: 'SALE' | 'RESTOCK' | 'ADJUSTMENT' | 'PAYMENT_RECEIVED' | 'DEBT_PAYMENT' | 'TRANSFER';
+  type: 'SALE' | 'RESTOCK' | 'ADJUSTMENT' | 'PAYMENT_RECEIVED' | 'DEBT_PAYMENT' | 'TRANSFER' | 'REFUND';
   paymentStatus: 'PAID' | 'CREDIT' | 'PARTIAL';
 
   // Goods details
@@ -67,7 +67,7 @@ const transactionSchema = new Schema<ITransaction>(
     },
     type: { 
       type: String, 
-      enum: ['SALE', 'RESTOCK', 'ADJUSTMENT', 'PAYMENT_RECEIVED', 'DEBT_PAYMENT', 'TRANSFER'], 
+      enum: ['SALE', 'RESTOCK', 'ADJUSTMENT', 'PAYMENT_RECEIVED', 'DEBT_PAYMENT', 'TRANSFER', 'REFUND'], 
       required: true,
       index: true
     },

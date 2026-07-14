@@ -57,5 +57,25 @@ module.exports = {
       merge_logs: true,
       log_date_format: 'YYYY-MM-DD HH:mm:ss',
     },
+
+    // ─────────────────────────────────────────────
+    // 3. Web Frontend (Next.js)
+    // ─────────────────────────────────────────────
+    {
+      name: 'tallypadi-web',
+      script: 'npm',
+      args: 'start',
+      cwd: './web',
+      watch: false,
+      autorestart: true,
+      env: {
+        NODE_ENV: 'production',
+        PORT: 3000,
+      },
+      error_file: './logs/web-error.log',
+      out_file: './logs/web-out.log',
+      merge_logs: true,
+      log_date_format: 'YYYY-MM-DD HH:mm:ss',
+    },
   ],
 };
