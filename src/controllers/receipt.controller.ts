@@ -653,8 +653,8 @@ export const generateSaleReceiptPdfBuffer = async (userId: string, saleId: strin
   // Fetch brand logo
   let logoBuffer: Buffer | undefined;
   const logoUrl = businessUser?.settings?.logoUrl || requester?.settings?.logoUrl;
-  const logoWidth = businessUser?.settings?.logoWidth ?? requester?.settings?.logoWidth ?? 250;
-  const logoHeight = businessUser?.settings?.logoHeight ?? requester?.settings?.logoHeight ?? 60;
+  const logoWidth = businessUser?.settings?.logoWidth || requester?.settings?.logoWidth || 250;
+  const logoHeight = businessUser?.settings?.logoHeight || requester?.settings?.logoHeight || 60;
   
   if (logoUrl) {
     try {
@@ -780,8 +780,8 @@ export const generateSaleReceiptPdf = async (req: Request | any, res: Response) 
     // Fetch brand logo
     let logoBuffer: Buffer | undefined;
     const logoUrl = businessUser?.settings?.logoUrl || user?.settings?.logoUrl;
-    const logoWidth = businessUser?.settings?.logoWidth ?? user?.settings?.logoWidth ?? 250;
-    const logoHeight = businessUser?.settings?.logoHeight ?? user?.settings?.logoHeight ?? 60;
+    const logoWidth = businessUser?.settings?.logoWidth || user?.settings?.logoWidth || 250;
+    const logoHeight = businessUser?.settings?.logoHeight || user?.settings?.logoHeight || 60;
     
     if (logoUrl) {
       try {

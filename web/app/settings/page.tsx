@@ -29,6 +29,7 @@ import {
   Bell,
   Pencil,
   ClipboardList,
+  Palette,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { getCookie } from '../../utils/cookies';
@@ -830,110 +831,196 @@ export default function SettingsPage() {
               </button>
             </div>
 
-            {/* Custom Brand Logo */}
-            <div className="mt-6 border-t border-gray-100 pt-6">
-              <h3 className="font-semibold text-gray-900 text-sm mb-3">Custom Brand Logo</h3>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Left side: Upload & Dimension inputs */}
-                <div className="space-y-4">
-                  <div className="flex items-center gap-4">
-                    {logoUrl ? (
-                      <div className="relative w-20 h-20 bg-slate-50 rounded-2xl border border-gray-150 flex items-center justify-center overflow-hidden group shadow-sm">
-                        <img src={logoUrl} alt="Brand Logo" className="object-contain w-full h-full p-1" />
-                        <button
-                          type="button"
-                          onClick={() => setLogoUrl('')}
-                          className="absolute inset-0 bg-black/40 flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    ) : (
-                      <label className="w-20 h-20 bg-slate-50 border border-dashed border-gray-300 rounded-2xl flex flex-col items-center justify-center cursor-pointer text-gray-400 hover:text-gray-600 hover:border-gray-400 transition-all hover:bg-slate-100/50 shadow-sm">
-                        {uploadingLogo ? (
-                          <Loader2 size={18} className="animate-spin text-emerald-600" />
-                        ) : (
-                          <>
-                            <Camera size={18} />
-                            <span className="text-[10px] font-bold mt-1">UPLOAD</span>
-                          </>
-                        )}
-                        <input
-                          type="file"
-                          accept="image/jpeg,image/png,image/webp"
-                          onChange={handleLogoUpload}
-                          disabled={uploadingLogo}
-                          className="hidden"
-                        />
-                      </label>
-                    )}
-                    <div className="flex-1">
-                      <p className="text-xs font-semibold text-gray-700">Receipt & Invoice Logo</p>
-                      <p className="text-[10px] text-gray-400 mt-0.5 leading-relaxed">
-                        PNG, JPG, or WEBP. Uploading scales and compresses the image to save bandwidth.
-                      </p>
-                    </div>
-                  </div>
+            </div>
+          </div>
 
-                  {logoUrl && (
-                    <div className="space-y-3 pt-2">
-                      <div>
-                        <div className="flex justify-between text-xs font-semibold text-gray-500 mb-1">
-                          <span>Logo Width</span>
-                          <span className="text-gray-700 font-bold">{logoWidth}px</span>
-                        </div>
-                        <input
-                          type="range"
-                          min="100"
-                          max="300"
-                          step="10"
-                          value={logoWidth}
-                          onChange={(e) => setLogoWidth(Number(e.target.value))}
-                          className="w-full h-1 bg-gray-150 rounded-lg appearance-none cursor-pointer accent-emerald-600"
-                        />
-                      </div>
+          {/* Brand Logo & Formatting Card */}
+          <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-gray-100 mt-6">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-2 bg-emerald-50 rounded-xl text-emerald-600">
+                <Palette size={20} />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">Receipt & Invoice Branding</h2>
+                <p className="text-xs text-gray-400">Add your custom logo and adjust print dimensions</p>
+              </div>
+            </div>
 
-                      <div>
-                        <div className="flex justify-between text-xs font-semibold text-gray-500 mb-1">
-                          <span>Logo Height</span>
-                          <span className="text-gray-700 font-bold">{logoHeight}px</span>
-                        </div>
-                        <input
-                          type="range"
-                          min="30"
-                          max="120"
-                          step="5"
-                          value={logoHeight}
-                          onChange={(e) => setLogoHeight(Number(e.target.value))}
-                          className="w-full h-1 bg-gray-150 rounded-lg appearance-none cursor-pointer accent-emerald-600"
-                        />
-                      </div>
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+              {/* Left Column: Upload & Fine-tune dimensions (6 cols) */}
+              <div className="lg:col-span-6 space-y-6">
+                <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-100 flex items-center gap-4">
+                  {logoUrl ? (
+                    <div className="relative w-24 h-24 bg-white rounded-xl border border-gray-200 flex items-center justify-center overflow-hidden group shadow-sm">
+                      <img src={logoUrl} alt="Brand Logo" className="object-contain w-full h-full p-1.5" />
+                      <button
+                        type="button"
+                        onClick={() => setLogoUrl('')}
+                        className="absolute inset-0 bg-red-600/90 flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity rounded-xl"
+                      >
+                        <Trash2 size={18} />
+                      </button>
                     </div>
+                  ) : (
+                    <label className="w-24 h-24 bg-white border-2 border-dashed border-slate-200 rounded-xl flex flex-col items-center justify-center cursor-pointer text-gray-400 hover:text-emerald-600 hover:border-emerald-500 transition-all hover:bg-slate-50 shadow-sm">
+                      {uploadingLogo ? (
+                        <Loader2 size={24} className="animate-spin text-emerald-600" />
+                      ) : (
+                        <>
+                          <Camera size={24} className="mb-1 text-slate-400" />
+                          <span className="text-[10px] font-bold tracking-wider">UPLOAD LOGO</span>
+                        </>
+                      )}
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        onChange={handleLogoUpload}
+                        disabled={uploadingLogo}
+                        className="hidden"
+                      />
+                    </label>
                   )}
+                  <div className="flex-1">
+                    <h4 className="text-sm font-bold text-gray-800">Business Logo Image</h4>
+                    <p className="text-[11px] text-gray-400 mt-1 leading-relaxed">
+                      Upload your brand logo (PNG, JPG, or WEBP). Your logo is compressed client-side before upload to keep file size small.
+                    </p>
+                  </div>
                 </div>
 
-                {/* Right side: Live Preview */}
-                <div className="flex flex-col justify-center border border-dashed border-gray-200 rounded-2xl p-4 bg-slate-50/50">
-                  <span className="text-[10px] font-bold text-gray-400 mb-2 uppercase tracking-wider">Live Document Preview</span>
-                  <div className="flex items-center justify-center min-h-[140px] border border-gray-150 bg-white rounded-xl shadow-inner relative overflow-hidden p-2">
-                    {logoUrl ? (
-                      <div 
-                        className="transition-all duration-150 ease-out border border-slate-100 flex items-center justify-center"
-                        style={{ width: `${logoWidth}px`, height: `${logoHeight}px` }}
-                      >
-                        <img src={logoUrl} alt="Logo Live Preview" className="object-contain w-full h-full animate-in zoom-in-95" />
+                {logoUrl && (
+                  <div className="space-y-5">
+                    {/* Width Adjustment */}
+                    <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-100">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-xs font-semibold text-gray-600">Logo Print Width</span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setLogoWidth((w) => Math.max(100, w - 10))}
+                            className="w-7 h-7 bg-white hover:bg-slate-100 text-gray-600 border border-slate-200 rounded-lg flex items-center justify-center text-sm font-bold transition-colors active:scale-95 cursor-pointer"
+                          >
+                            -
+                          </button>
+                          <span className="text-xs font-bold text-gray-800 w-12 text-center">{logoWidth}px</span>
+                          <button
+                            type="button"
+                            onClick={() => setLogoWidth((w) => Math.min(300, w + 10))}
+                            className="w-7 h-7 bg-white hover:bg-slate-100 text-gray-600 border border-slate-200 rounded-lg flex items-center justify-center text-sm font-bold transition-colors active:scale-95 cursor-pointer"
+                          >
+                            +
+                          </button>
+                        </div>
                       </div>
-                    ) : (
-                      <div className="flex flex-col items-center gap-1 text-gray-300">
-                        <Camera size={24} />
-                        <span className="text-[11px] font-bold">Upload a logo to preview size</span>
+                      <input
+                        type="range"
+                        min="100"
+                        max="300"
+                        step="10"
+                        value={logoWidth}
+                        onChange={(e) => setLogoWidth(Number(e.target.value))}
+                        className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-600"
+                      />
+                    </div>
+
+                    {/* Height Adjustment */}
+                    <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-100">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-xs font-semibold text-gray-600">Logo Print Height</span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setLogoHeight((h) => Math.max(30, h - 5))}
+                            className="w-7 h-7 bg-white hover:bg-slate-100 text-gray-600 border border-slate-200 rounded-lg flex items-center justify-center text-sm font-bold transition-colors active:scale-95 cursor-pointer"
+                          >
+                            -
+                          </button>
+                          <span className="text-xs font-bold text-gray-800 w-12 text-center">{logoHeight}px</span>
+                          <button
+                            type="button"
+                            onClick={() => setLogoHeight((h) => Math.min(120, h + 5))}
+                            className="w-7 h-7 bg-white hover:bg-slate-100 text-gray-600 border border-slate-200 rounded-lg flex items-center justify-center text-sm font-bold transition-colors active:scale-95 cursor-pointer"
+                          >
+                            +
+                          </button>
+                        </div>
                       </div>
+                      <input
+                        type="range"
+                        min="30"
+                        max="120"
+                        step="5"
+                        value={logoHeight}
+                        onChange={(e) => setLogoHeight(Number(e.target.value))}
+                        className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-600"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Right Column: Mini Document Header Live Mockup (6 cols) */}
+              <div className="lg:col-span-6">
+                <div className="flex flex-col h-full bg-slate-50 rounded-2xl p-5 border border-slate-150 shadow-inner">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-[10px] font-bold text-slate-400 tracking-wider uppercase">Live Document Header Mockup</span>
+                    {logoUrl && (
+                      <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
+                        Active Custom Logo
+                      </span>
                     )}
+                  </div>
+
+                  {/* Document Header representation */}
+                  <div className="flex-1 bg-white border border-slate-200 rounded-xl p-6 shadow-sm min-h-[160px] flex flex-col justify-between relative overflow-hidden">
+                    {/* Header Strip background representation (light blue/gray) */}
+                    <div className="absolute inset-x-0 top-0 h-[80px] bg-slate-50/70 border-b border-slate-100 z-0" />
+
+                    <div className="z-10 flex items-start justify-between gap-4">
+                      {/* Left Side: Mock Shop details */}
+                      <div className="space-y-1">
+                        <div className="font-extrabold text-slate-900 text-sm tracking-tight truncate max-w-[150px] uppercase">
+                          {businessName || 'My Business Name'}
+                        </div>
+                        <div className="text-[10px] font-bold text-slate-400">INVOICE</div>
+                        <div className="text-[8px] text-slate-400">Professional billing document</div>
+                      </div>
+
+                      {/* Right Side: Mock logo drawing box */}
+                      <div className="flex items-center justify-end">
+                        {logoUrl ? (
+                          <div 
+                            className="border border-emerald-100 bg-white rounded-lg flex items-center justify-center p-1 shadow-sm transition-all duration-150 ease-out"
+                            style={{ width: `${logoWidth * 0.45}px`, height: `${logoHeight * 0.45}px` }}
+                          >
+                            <img src={logoUrl} alt="Mock PDF logo" className="object-contain w-full h-full" />
+                          </div>
+                        ) : (
+                          <div className="w-[50px] h-[50px] bg-teal-700 text-white rounded-lg flex items-center justify-center font-black text-xs shadow-md">
+                            TP
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Bottom: Mock Invoice metadata card */}
+                    <div className="z-10 mt-6 pt-4 border-t border-dashed border-slate-100 flex justify-between items-center text-[8px] text-slate-400">
+                      <div>
+                        <span className="font-semibold text-slate-500">ISSUED TO: </span>
+                        Guest Customer
+                      </div>
+                      <div>
+                        <span className="font-semibold text-slate-500">DATE: </span>
+                        14 July 2026
+                      </div>
+                      <div>
+                        <span className="font-semibold text-slate-500">INVOICE NO: </span>
+                        #INV-035107
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
 
           </div>
 
