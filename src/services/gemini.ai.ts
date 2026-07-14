@@ -119,7 +119,7 @@ async function parseMessageWithLocalLLM(
       format: 'json',
       stream: false,
     }, {
-      timeout: 35000, // 35s timeout for local CPU/GPU inference
+      timeout: 90000, // 90s timeout for local CPU/GPU inference
     });
 
     const responseText = response.data?.response;
