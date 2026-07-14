@@ -1,5 +1,6 @@
 // src/services/queue.worker.ts
 import { Worker } from 'bullmq'; // ✅ Switched to BullMQ
+import axios from 'axios';
 import { createRedisConnection } from './queue.service'; // ✅ Factory for dedicated connections
 import { sendWhatsAppText, sendWhatsAppButtons, sendWhatsAppList, sendWhatsAppDocumentBuffer, sendWhatsAppFlow, sendTypingIndicator, sendWhatsAppCtaUrl, sendWhatsAppMediaById } from './whatsapp.service';
 import { generateSaleReceiptPdfBuffer } from '../controllers/receipt.controller';
@@ -137,8 +138,25 @@ export const replyWorker = new Worker(
                 }
             }
 
+            // Fetch brand logo
+            let logoBuffer: Buffer | undefined;
+            let logoUrl = user?.settings?.logoUrl;
+            if (user && user.role === 'STAFF' && user.ownerId) {
+                const owner = await User.findById(user.ownerId).lean();
+                logoUrl = (owner as any)?.settings?.logoUrl;
+            }
+
+            if (logoUrl) {
+                try {
+                    const response = await axios.get(logoUrl, { responseType: 'arraybuffer', timeout: 5000 });
+                    logoBuffer = Buffer.from(response.data);
+                } catch (err) {
+                    console.warn('[Worker Invoice PDF] Failed to fetch brand logo:', err);
+                }
+            }
+
             // Generate File (Buffer)
-            const pdfBuffer = await generateInvoicePdf(inv, businessName, countryCode);
+            const pdfBuffer = await generateInvoicePdf(inv, businessName, countryCode, logoBuffer);
             
             sendTypingIndicator(phoneNumber).catch(() => {});
             await sendWhatsAppDocumentBuffer({
@@ -183,8 +201,25 @@ export const replyWorker = new Worker(
                 }
             }
 
+            // Fetch brand logo
+            let logoBuffer: Buffer | undefined;
+            let logoUrl = user?.settings?.logoUrl;
+            if (user && user.role === 'STAFF' && user.ownerId) {
+                const owner = await User.findById(user.ownerId).lean();
+                logoUrl = (owner as any)?.settings?.logoUrl;
+            }
+
+            if (logoUrl) {
+                try {
+                    const response = await axios.get(logoUrl, { responseType: 'arraybuffer', timeout: 5000 });
+                    logoBuffer = Buffer.from(response.data);
+                } catch (err) {
+                    console.warn('[Worker Invoice PDF] Failed to fetch brand logo:', err);
+                }
+            }
+
             // Generate + Send PDF first
-            const pdfBuffer = await generateInvoicePdf(inv, businessName, countryCode);
+            const pdfBuffer = await generateInvoicePdf(inv, businessName, countryCode, logoBuffer);
 
             sendTypingIndicator(phoneNumber).catch(() => {});
             await sendWhatsAppDocumentBuffer({

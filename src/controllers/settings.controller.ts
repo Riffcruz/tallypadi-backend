@@ -141,6 +141,11 @@ export const updateSettings = async (req: AuthReq, res: Response) => {
           }
         }
 
+        if (inputSettings.logoUrl !== undefined) {
+          const safeUrl = sanitizeString(inputSettings.logoUrl);
+          $set['settings.logoUrl'] = safeUrl ? safeUrl.slice(0, 500) : '';
+        }
+
         // ✅ Location Settings Update
         if (inputSettings.location && typeof inputSettings.location === 'object') {
           const loc = inputSettings.location;

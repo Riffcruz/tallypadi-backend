@@ -58,6 +58,8 @@ export default function SettingsPage() {
   const [shopDescription, setShopDescription] = useState(''); // ✅ Shop Desc
   const [heroImageUrl, setHeroImageUrl] = useState(''); // ✅ Hero Image
   const [uploadingHero, setUploadingHero] = useState(false); // ✅ Upload state
+  const [logoUrl, setLogoUrl] = useState(''); // Brand logo
+  const [uploadingLogo, setUploadingLogo] = useState(false); // Brand logo upload state
 
   const [closingTime, setClosingTime] = useState('');
   const [language, setLanguage] = useState('');
@@ -125,6 +127,7 @@ export default function SettingsPage() {
     setShopSlug(userData?.shopSlug || '');
     setShopDescription(userData?.shopDescription || '');
     setHeroImageUrl(userData?.heroImageUrl || '');
+    setLogoUrl(userData?.settings?.logoUrl || '');
     setClosingTime(userData?.settings?.closingTime || '20:00');
     setLanguage(userData?.settings?.language || 'English');
     setCurrencyCode(userData?.settings?.currencyCode || userData?.currencyCode || 'NGN');
@@ -216,6 +219,7 @@ export default function SettingsPage() {
             currencyCode,
             pdfReportsEnabled: pdfEnabled,
             smartMatchingEnabled,
+            logoUrl,
             location: {
                country: countryCode,
                state: stateCode,
@@ -257,6 +261,89 @@ export default function SettingsPage() {
       );
     } finally {
       setSaving(false);
+    }
+  };
+
+  const resizeAndCompressImage = (
+    file: File,
+    maxWidth: number,
+    maxHeight: number,
+    quality: number
+  ): Promise<File> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > maxWidth) {
+              height = Math.round((height * maxWidth) / width);
+              width = maxWidth;
+            }
+          } else {
+            if (height > maxHeight) {
+              width = Math.round((width * maxHeight) / height);
+              height = maxHeight;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            return reject(new Error('Canvas context not available'));
+          }
+
+          ctx.drawImage(img, 0, 0, width, height);
+
+          canvas.toBlob(
+            (blob) => {
+              if (!blob) {
+                return reject(new Error('Blob generation failed'));
+              }
+              const compressedFile = new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", {
+                type: 'image/jpeg',
+                lastModified: Date.now(),
+              });
+              resolve(compressedFile);
+            },
+            'image/jpeg',
+            quality
+          );
+        };
+        img.onerror = (err) => reject(err);
+      };
+      reader.onerror = (err) => reject(err);
+    });
+  };
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const token = getTokenOrRedirect();
+    if (!token) return;
+
+    setUploadingLogo(true);
+    try {
+       console.log('Original size:', (file.size / 1024).toFixed(2), 'KB');
+       const compressedFile = await resizeAndCompressImage(file, 250, 250, 0.85);
+       console.log('Compressed size:', (compressedFile.size / 1024).toFixed(2), 'KB');
+       
+       const url = await uploadToR2(compressedFile, token);
+       setLogoUrl(url);
+    } catch (err) {
+       console.error(err);
+       Swal.fire('Error', 'Failed to upload logo image', 'error');
+    } finally {
+       setUploadingLogo(false);
     }
   };
 
@@ -735,6 +822,49 @@ export default function SettingsPage() {
                   }`}
                 />
               </button>
+            </div>
+
+            {/* Custom Brand Logo */}
+            <div className="mt-6 border-t border-gray-100 pt-6">
+              <h3 className="font-semibold text-gray-900 text-sm mb-3">Custom Brand Logo</h3>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                {logoUrl ? (
+                  <div className="relative w-20 h-20 bg-slate-50 rounded-2xl border border-gray-150 flex items-center justify-center overflow-hidden group shadow-sm">
+                    <img src={logoUrl} alt="Brand Logo" className="object-contain w-full h-full p-1" />
+                    <button
+                      type="button"
+                      onClick={() => setLogoUrl('')}
+                      className="absolute inset-0 bg-black/40 flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                ) : (
+                  <label className="w-20 h-20 bg-slate-50 border border-dashed border-gray-300 rounded-2xl flex flex-col items-center justify-center cursor-pointer text-gray-400 hover:text-gray-600 hover:border-gray-400 transition-all hover:bg-slate-100/50 shadow-sm">
+                    {uploadingLogo ? (
+                      <Loader2 size={18} className="animate-spin text-emerald-600" />
+                    ) : (
+                      <>
+                        <Camera size={18} />
+                        <span className="text-[10px] font-bold mt-1">UPLOAD</span>
+                      </>
+                    )}
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      onChange={handleLogoUpload}
+                      disabled={uploadingLogo}
+                      className="hidden"
+                    />
+                  </label>
+                )}
+                <div className="flex-1">
+                  <p className="text-xs font-semibold text-gray-700">Receipt & Invoice Branding</p>
+                  <p className="text-[11px] text-gray-400 mt-0.5 leading-relaxed max-w-sm">
+                    Upload your shop logo. It will automatically scale to fit nicely in the header box of your PDF documents. Allowed formats: PNG, JPG, WEBP.
+                  </p>
+                </div>
+              </div>
             </div>
 
           </div>

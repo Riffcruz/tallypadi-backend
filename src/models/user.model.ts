@@ -59,6 +59,7 @@ export interface IUser extends Document {
     staffTransactionReport?: boolean;
     currencyCode?: string; // e.g. NGN, USD, GHS
     smartMatchingEnabled?: boolean;
+    logoUrl?: string; // Brand logo for PDF receipts/invoices
     location?: {
       country: string;
       state: string;
@@ -212,7 +213,7 @@ const userSchema = new Schema<IUser>(
       staffTransactionReport: { type: Boolean, default: true },
       currencyCode: { type: String, default: 'NGN' },
       smartMatchingEnabled: { type: Boolean, default: true },
-
+      logoUrl: { type: String, default: '' },
       location: {
         country: { type: String, default: 'NG' },
         state: { type: String, default: '' },

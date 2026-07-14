@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { Request, Response } from 'express';
+import axios from 'axios';
 import { User, IUser } from '../models/user.model';
 import { Invoice } from '../models/invoice.model';
 import { Transaction } from '../models/transaction.model';
@@ -115,7 +116,7 @@ export const getInvoicePdf = async (req: AuthReq, res: Response) => {
         if (!viewer) return res.status(401).json({ error: 'User not found' });
 
         // Security Check
-        const creator = inv.user as { _id?: unknown, role?: string, ownerId?: unknown, name?: string, businessName?: string, countryCode?: string };
+        const creator = inv.user as any;
         const creatorShopId = getShopId(creator);
         const viewerShopId = getShopId(viewer as unknown as { _id?: unknown, role?: string, ownerId?: unknown });
 
@@ -140,11 +141,27 @@ export const getInvoicePdf = async (req: AuthReq, res: Response) => {
 
         const { format } = req.query;
 
+        let logoBuffer: Buffer | undefined;
+        let logoUrl = creator?.settings?.logoUrl;
+        if (creator && creator.role === 'STAFF' && creator.ownerId) {
+             const owner = await User.findById(creator.ownerId).lean();
+             logoUrl = (owner as any)?.settings?.logoUrl;
+        }
+
+        if (logoUrl) {
+             try {
+                  const response = await axios.get(logoUrl, { responseType: 'arraybuffer', timeout: 5000 });
+                  logoBuffer = Buffer.from(response.data);
+             } catch (err) {
+                  console.warn('[Invoice PDF] Failed to fetch brand logo:', err);
+             }
+        }
+
         const pdfBuffer = await generateInvoicePdf(
             inv as Parameters<typeof generateInvoicePdf>[0],
             businessName,
             countryCode,
-            undefined,
+            logoBuffer,
             format as 'A4' | 'thermal',
             creator?.name || 'Staff'
         );

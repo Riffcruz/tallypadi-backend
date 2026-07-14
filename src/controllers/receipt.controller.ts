@@ -1,6 +1,7 @@
 // src/controllers/receipt.controller.ts
 
 import { Request, Response } from 'express';
+import axios from 'axios';
 import PDFDocument from 'pdfkit';
 import path from 'path';
 import fs from 'fs';
@@ -218,6 +219,7 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
   format: 'A4' | 'thermal';
   exactHeight?: number;
   contactLines?: string[];
+  logoBuffer?: Buffer;
 }) {
   const {
     saleId,
@@ -231,7 +233,8 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
     boldFont,
     tx,
     format,
-    contactLines = []
+    contactLines = [],
+    logoBuffer,
   } = payload;
 
   const currencyDisplay = hasSymbolFont ? 'symbol' : 'code';
@@ -338,11 +341,23 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
 
       // Logo / badge (right)
       const logoBox = { w: 62, h: 62, x: pageW - margin - 62, y: 38 }; // simplified y
-      doc.roundedRect(logoBox.x, logoBox.y, logoBox.w, logoBox.h, 10).fill(THEME_INVOICE.primary);
-      doc.fillColor(THEME_INVOICE.white).font(boldFont).fontSize(16).text('TP', logoBox.x, logoBox.y + 20, {
-        width: logoBox.w,
-        align: 'center',
-      });
+      let hasRenderedLogo = false;
+      if (logoBuffer) {
+        try {
+          doc.image(logoBuffer, logoBox.x, logoBox.y, { fit: [logoBox.w, logoBox.h], align: 'center', valign: 'center' });
+          hasRenderedLogo = true;
+        } catch (err) {
+          console.warn('[Receipt PDF] Failed to render brand logo:', err);
+        }
+      }
+      
+      if (!hasRenderedLogo) {
+        doc.roundedRect(logoBox.x, logoBox.y, logoBox.w, logoBox.h, 10).fill(THEME_INVOICE.primary);
+        doc.fillColor(THEME_INVOICE.white).font(boldFont).fontSize(16).text('TP', logoBox.x, logoBox.y + 20, {
+          width: logoBox.w,
+          align: 'center',
+        });
+      }
 
       // Meta card
       const cardY = 120;
@@ -630,12 +645,24 @@ export const generateSaleReceiptPdfBuffer = async (userId: string, saleId: strin
   const receiptDate = fmtDDMMYYYY_HHMM(when, offsetMinutes);
   const receiptNo = makeReceiptNo(saleId, when, offsetMinutes);
 
+  // Fetch brand logo
+  let logoBuffer: Buffer | undefined;
+  const logoUrl = businessUser?.settings?.logoUrl || requester?.settings?.logoUrl;
+  if (logoUrl) {
+    try {
+      const response = await axios.get(logoUrl, { responseType: 'arraybuffer', timeout: 5000 });
+      logoBuffer = Buffer.from(response.data);
+    } catch (err) {
+      console.warn('[Receipt PDF] Failed to fetch brand logo:', err);
+    }
+  }
+
     let exactHeight: number | undefined;
     const dummyDoc = new PDFDocument({ autoFirstPage: false }) as unknown as PdfDoc;
     const { regFont: dReg, boldFont: dBold, hasNoto: dNoto } = registerFonts(dummyDoc);
     exactHeight = renderReceiptPdf(dummyDoc, {
       saleId, receiptNo, businessName, receiptDate, currencyCode, locale, 
-      hasSymbolFont: dNoto, regFont: dReg, boldFont: dBold, tx, format, contactLines
+      hasSymbolFont: dNoto, regFont: dReg, boldFont: dBold, tx, format, contactLines, logoBuffer
     });
 
   const doc = new PDFDocument({
@@ -671,7 +698,8 @@ export const generateSaleReceiptPdfBuffer = async (userId: string, saleId: strin
     tx,
     format,
     exactHeight,
-    contactLines
+    contactLines,
+    logoBuffer
   });
 
   doc.end();
@@ -739,13 +767,25 @@ export const generateSaleReceiptPdf = async (req: Request | any, res: Response) 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename=Receipt_${saleId}${format === 'thermal' ? '_thermal' : ''}.pdf`);
 
+    // Fetch brand logo
+    let logoBuffer: Buffer | undefined;
+    const logoUrl = businessUser?.settings?.logoUrl || user?.settings?.logoUrl;
+    if (logoUrl) {
+      try {
+        const response = await axios.get(logoUrl, { responseType: 'arraybuffer', timeout: 5000 });
+        logoBuffer = Buffer.from(response.data);
+      } catch (err) {
+        console.warn('[Receipt PDF] Failed to fetch brand logo:', err);
+      }
+    }
+
     // ALWAYS CALCULATE EXACT HEIGHT FOR CONTINUOUS SCROLL
     let exactHeight: number | undefined;
     const dummyDoc = new PDFDocument({ autoFirstPage: false }) as unknown as PdfDoc;
     const { regFont: dReg, boldFont: dBold, hasNoto: dNoto } = registerFonts(dummyDoc);
     exactHeight = renderReceiptPdf(dummyDoc, {
       saleId, receiptNo, businessName, receiptDate, currencyCode, locale, 
-      hasSymbolFont: dNoto, regFont: dReg, boldFont: dBold, tx, format, contactLines
+      hasSymbolFont: dNoto, regFont: dReg, boldFont: dBold, tx, format, contactLines, logoBuffer
     });
 
     const doc = new PDFDocument({
@@ -773,7 +813,8 @@ export const generateSaleReceiptPdf = async (req: Request | any, res: Response) 
       tx,
       format,
       exactHeight,
-      contactLines
+      contactLines,
+      logoBuffer
     });
 
     doc.end();

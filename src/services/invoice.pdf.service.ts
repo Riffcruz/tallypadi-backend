@@ -47,7 +47,7 @@ export const generateInvoicePdf = async (
   invoice: IInvoice,
   businessName: string,
   countryCode: string = 'NG',
-  logoPath?: string,
+  logoPath?: string | Buffer,
   format: 'A4' | 'thermal' = 'A4',
   staffName: string = 'Staff'
 ): Promise<Buffer> => {
@@ -357,16 +357,26 @@ export const generateInvoicePdf = async (
       doc.fillColor(THEME.muted).font('Regular').fontSize(9).text('Professional billing document', margin, headerTop + 44);
 
       // Logo / badge (right)
-      const logoBox = { w: 62, h: 62, x: pageWidth - margin - 62, y: headerTop - 2 };
-      if (logoPath && fs.existsSync(logoPath)) {
-        doc.image(logoPath, logoBox.x, logoBox.y, { width: logoBox.w, height: logoBox.h });
-      } else {
-        doc.roundedRect(logoBox.x, logoBox.y, logoBox.w, logoBox.h, 10).fill(THEME.primary);
-        doc.fillColor(THEME.white).font('Bold').fontSize(16).text('TP', logoBox.x, logoBox.y + 20, {
-          width: logoBox.w,
-          align: 'center',
-        });
-      }
+       const logoBox = { w: 62, h: 62, x: pageWidth - margin - 62, y: headerTop - 2 };
+       let hasRenderedLogo = false;
+       if (logoPath) {
+         try {
+           if (Buffer.isBuffer(logoPath) || (typeof logoPath === 'string' && fs.existsSync(logoPath))) {
+             doc.image(logoPath, logoBox.x, logoBox.y, { width: logoBox.w, height: logoBox.h });
+             hasRenderedLogo = true;
+           }
+         } catch (err) {
+           console.warn('[Invoice PDF] Failed to render brand logo:', err);
+         }
+       }
+       
+       if (!hasRenderedLogo) {
+         doc.roundedRect(logoBox.x, logoBox.y, logoBox.w, logoBox.h, 10).fill(THEME.primary);
+         doc.fillColor(THEME.white).font('Bold').fontSize(16).text('TP', logoBox.x, logoBox.y + 20, {
+           width: logoBox.w,
+           align: 'center',
+         });
+       }
 
       // Meta card (Issued to / Date / Invoice no)
       const cardY = 120;
