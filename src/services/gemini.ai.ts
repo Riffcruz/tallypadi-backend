@@ -84,7 +84,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 async function generateWithRetry(
   params: Parameters<typeof ai.models.generateContent>[0],
   retries = 3,
-  timeoutMs = 45000
+  timeoutMs = 90000
 ) {
   for (let i = 0; i <= retries; i++) {
     try {
@@ -350,7 +350,7 @@ export const parseMessageWithGemini = async (
   options?: { maxRetries?: number; timeoutMs?: number },
 ): Promise<ParsedResult> => {
   const maxRetries = options?.maxRetries ?? 3;
-  const timeoutMs = options?.timeoutMs ?? 45000;
+  const timeoutMs = options?.timeoutMs ?? 90000;
 
   const stripped = stripWhatsAppExportLine(message);
   const safeMessage = sanitizeInput(stripped);
@@ -413,6 +413,7 @@ Return JSON only.`;
   } catch (error) {
     console.error('❌ Gemini Error:', error);
     
+    /* TEMPORARILY DISABLED LOCAL LLM FALLBACK
     // Fallback to local LLM (Ollama)
     try {
       console.log('🔄 Attempting fallback to local LLM (Ollama)...');
@@ -427,6 +428,7 @@ Return JSON only.`;
     } catch (fallbackError) {
       console.error('❌ Local LLM Fallback failed:', fallbackError);
     }
+    */
 
     return safeParsedResult({
       intent: 'UNKNOWN',

@@ -628,7 +628,8 @@ Distinct from "Sales" (which are immediate).
 - ACTION: Generate a PDF invoice.
 - EXTRACTION RULES:
   - customer_name: MUST be extracted.
-  - items: Extract items (name, qty, price).
+  - items: Extract items (name, qty, unit_price). 
+    - ✅ SPEED HINT: For messy pasted lists (e.g., "8k x2pcs", "Workmanship 50k"), do NOT overthink or validate the math. Just quickly extract "8k" as unit_price 8000, "x2pcs" as qty 2, and "Workmanship" as qty 1, unit_price 50000.
   - total_money: Extract total if explicitly stated, otherwise computed from items.
   - description: Optional description of service/goods.
 - Output:
