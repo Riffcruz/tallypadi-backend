@@ -7,13 +7,13 @@ export const env = {
   whatsappToken: process.env.WHATSAPP_TOKEN as string,
   whatsappPhoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID as string,
   geminiApiKey: process.env.GEMINI_API_KEY as string,
-  geminiModel: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+  geminiModel: process.env.GEMINI_MODEL || 'gemini-1.5-flash',
   ollamaUrl: process.env.OLLAMA_URL || 'http://localhost:11434',
   ollamaModel: process.env.OLLAMA_MODEL || 'qwen2.5:7b',
   webhookVerifyToken: process.env.WEBHOOK_VERIFY_TOKEN as string,
   paystackSecretKey: process.env.PAYSTACK_SECRET_KEY as string,
   appBaseUrl: process.env.APP_BASE_URL || 'http://localhost:3000',
-  
+
   // Cloudflare R2
   cfAccountId: process.env.CF_ACCOUNT_ID as string,
   r2AccessKeyId: process.env.R2_ACCESS_KEY_ID as string,
