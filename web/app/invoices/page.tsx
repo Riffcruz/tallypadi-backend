@@ -165,7 +165,64 @@ export default function InvoicesPage() {
         const fileURL = URL.createObjectURL(file);
         
         Swal.close();
-        window.open(fileURL, '_blank');
+
+        const fileName = `TallyPadi_Invoice_${id}.pdf`;
+
+        // Check if Web Share API with files is supported
+        let shared = false;
+        try {
+          const shareFile = new File([file], fileName, { type: 'application/pdf' });
+          if (navigator.canShare && navigator.canShare({ files: [shareFile] }) && navigator.share) {
+            await navigator.share({
+              title: 'TallyPadi Invoice',
+              text: `Invoice ${fileName}`,
+              files: [shareFile]
+            });
+            shared = true;
+          }
+        } catch (shareErr) {
+          console.warn('File share failed, falling back to window open/download', shareErr);
+        }
+
+        if (!shared) {
+          if (navigator.share) {
+            try {
+              await navigator.share({
+                title: 'TallyPadi Invoice',
+                text: `Invoice ${fileName}`,
+                url: fileURL
+              });
+              shared = true;
+            } catch (shareErr) {
+              console.warn('URL share failed, falling back to window open', shareErr);
+            }
+          }
+        }
+
+        if (!shared) {
+          // Fallback: Ask user if they want to preview (open) or download
+          const result = await Swal.fire({
+            title: 'Invoice PDF Ready',
+            text: 'Choose an action below:',
+            icon: 'success',
+            showCancelButton: true,
+            confirmButtonText: 'Preview',
+            cancelButtonText: 'Download',
+            confirmButtonColor: '#0F766E',
+            cancelButtonColor: '#1e293b'
+          });
+
+          if (result.isConfirmed) {
+            window.open(fileURL, '_blank');
+          } else if (result.dismiss === Swal.DismissReason.cancel) {
+            const link = document.createElement('a');
+            link.href = fileURL;
+            link.download = fileName;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+          }
+        }
         
         // Clean up
         setTimeout(() => URL.revokeObjectURL(fileURL), 60000); 

@@ -114,40 +114,85 @@ export default function SalesHistory({ user }: { user: UserProfile | null }) {
       link.remove();
     };
 
+    const doShare = async () => {
+      try {
+        const file = new File([blob], fileName, { type: 'application/pdf' });
+        if (navigator.canShare && navigator.canShare({ files: [file] }) && navigator.share) {
+          await navigator.share({
+            title: 'TallyPadi Receipt',
+            text: `Receipt ${fileName}`,
+            files: [file],
+          });
+          return true;
+        }
+      } catch (err) {
+        console.warn('Native share failed', err);
+      }
+      if (navigator.share) {
+        try {
+          await navigator.share({
+            title: 'TallyPadi Receipt',
+            text: `Receipt ${fileName}`,
+            url: url,
+          });
+          return true;
+        } catch (err) {
+          console.warn('Native URL share failed', err);
+        }
+      }
+      // Clipboard fallback
+      try {
+        await navigator.clipboard.writeText(url);
+        Swal.fire({
+          toast: true,
+          icon: 'success',
+          title: 'Link copied to clipboard',
+          position: 'top-end',
+          showConfirmButton: false,
+          timer: 2000,
+        });
+      } catch {
+        Swal.fire('Error', 'Sharing not supported on this browser/device.', 'error');
+      }
+      return false;
+    };
+
     const doPreview = () => openPdfInNewTab(url);
+
+    const buttonsHtml = `
+      <div class="flex flex-col gap-2 w-full mt-3">
+        <button id="swal-btn-share" class="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold flex items-center justify-center gap-2">
+          Share (WhatsApp, etc.)
+        </button>
+        <div class="flex gap-2 w-full">
+          <button id="swal-btn-preview" class="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-900 rounded-xl font-bold">
+            Preview
+          </button>
+          <button id="swal-btn-download" class="flex-1 py-2.5 bg-slate-900 hover:bg-black text-white rounded-xl font-bold">
+            Download
+          </button>
+        </div>
+      </div>
+    `;
 
     const result = await Swal.fire({
       icon: 'success',
       title: 'PDF is ready ✅',
-      html: `<p style="margin:0;color:#475569;font-size:13px">Would you like to preview it, download it, or both?</p>`,
-      showCancelButton: true,
-      showDenyButton: true,
-      confirmButtonText: 'Preview',
-      denyButtonText: 'Download',
-      cancelButtonText: 'Both',
-      confirmButtonColor: '#0F766E',
-      denyButtonColor: '#111827',
-      cancelButtonColor: '#64748b',
-      reverseButtons: true,
-      focusConfirm: false,
-    });
-
-    if (result.isConfirmed) doPreview();
-    else if (result.isDenied) doDownload();
-    else {
-      doPreview();
-      doDownload();
-    }
-
-    Swal.fire({
-      toast: true,
-      icon: 'success',
-      title: 'Done',
-      text: result.isConfirmed ? 'Opened preview.' : result.isDenied ? 'Download started.' : 'Preview + download started.',
-      position: 'top-end',
+      html: buttonsHtml,
       showConfirmButton: false,
-      timer: 2400,
-      timerProgressBar: true,
+      showCancelButton: true,
+      cancelButtonText: 'Close',
+      cancelButtonColor: '#64748b',
+      focusCancel: true,
+      didOpen: () => {
+        const shareBtn = document.getElementById('swal-btn-share');
+        const previewBtn = document.getElementById('swal-btn-preview');
+        const downloadBtn = document.getElementById('swal-btn-download');
+
+        if (shareBtn) shareBtn.onclick = () => { doShare(); Swal.close(); };
+        if (previewBtn) previewBtn.onclick = () => { doPreview(); Swal.close(); };
+        if (downloadBtn) downloadBtn.onclick = () => { doDownload(); Swal.close(); };
+      }
     });
 
     // ✅ cleanup later
