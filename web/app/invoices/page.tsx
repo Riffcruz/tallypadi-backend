@@ -167,64 +167,87 @@ export default function InvoicesPage() {
         Swal.close();
 
         const fileName = `TallyPadi_Invoice_${id}.pdf`;
+        
+        // Present action choices: Share (WhatsApp), Preview, Download
+        const whatsappText = encodeURIComponent(`Hello, here is your invoice from TallyPadi: ${fileName}`);
+        
+        const buttonsHtml = `
+          <div class="flex flex-col gap-2.5 w-full mt-3">
+            <button id="invoice-btn-wa" class="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-all">
+              💬 Share on WhatsApp
+            </button>
+            <div class="flex gap-2 w-full">
+              <button id="invoice-btn-preview" class="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-900 rounded-xl font-bold active:scale-[0.98] transition-all">
+                Preview
+              </button>
+              <button id="invoice-btn-download" class="flex-1 py-2.5 bg-slate-900 hover:bg-black text-white rounded-xl font-bold active:scale-[0.98] transition-all">
+                Download
+              </button>
+            </div>
+          </div>
+        `;
 
-        // Check if Web Share API with files is supported
-        let shared = false;
-        try {
-          const shareFile = new File([file], fileName, { type: 'application/pdf' });
-          if (navigator.canShare && navigator.canShare({ files: [shareFile] }) && navigator.share) {
-            await navigator.share({
-              title: 'TallyPadi Invoice',
-              text: `Invoice ${fileName}`,
-              files: [shareFile]
-            });
-            shared = true;
-          }
-        } catch (shareErr) {
-          console.warn('File share failed, falling back to window open/download', shareErr);
-          shared = false;
-        }
+        await Swal.fire({
+          icon: 'success',
+          title: 'Invoice PDF Ready! ✅',
+          html: buttonsHtml,
+          showConfirmButton: false,
+          showCancelButton: true,
+          cancelButtonText: 'Close',
+          cancelButtonColor: '#64748b',
+          focusCancel: true,
+          didOpen: () => {
+            const waBtn = document.getElementById('invoice-btn-wa');
+            const previewBtn = document.getElementById('invoice-btn-preview');
+            const downloadBtn = document.getElementById('invoice-btn-download');
 
-        if (!shared) {
-          if (navigator.share) {
-            try {
-              await navigator.share({
-                title: 'TallyPadi Invoice',
-                text: `Invoice ${fileName}`,
-                url: fileURL
-              });
-              shared = true;
-            } catch (shareErr) {
-              console.warn('URL share failed, falling back to window open', shareErr);
-              // Do not set shared = true so it triggers the fallback Swal modal
+            if (waBtn) {
+              waBtn.onclick = async () => {
+                Swal.close();
+                // 1. First try native share sheet
+                let shared = false;
+                try {
+                  const shareFile = new File([file], fileName, { type: 'application/pdf' });
+                  if (navigator.canShare && navigator.canShare({ files: [shareFile] }) && navigator.share) {
+                    await navigator.share({
+                      title: 'TallyPadi Invoice',
+                      text: `Invoice ${fileName}`,
+                      files: [shareFile]
+                    });
+                    shared = true;
+                  }
+                } catch (shareErr) {
+                  console.warn('Native file sharing failed', shareErr);
+                }
+
+                if (!shared) {
+                  // 2. WhatsApp Web/App fallback link
+                  const waUrl = `https://api.whatsapp.com/send?text=${whatsappText}`;
+                  window.open(waUrl, '_blank');
+                }
+              };
+            }
+
+            if (previewBtn) {
+              previewBtn.onclick = () => {
+                Swal.close();
+                window.open(fileURL, '_blank');
+              };
+            }
+
+            if (downloadBtn) {
+              downloadBtn.onclick = () => {
+                Swal.close();
+                const link = document.createElement('a');
+                link.href = fileURL;
+                link.download = fileName;
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+              };
             }
           }
-        }
-
-        if (!shared) {
-          // Fallback: Ask user if they want to preview (open) or download
-          const result = await Swal.fire({
-            title: 'Invoice PDF Ready',
-            text: 'Choose an action below:',
-            icon: 'success',
-            showCancelButton: true,
-            confirmButtonText: 'Preview',
-            cancelButtonText: 'Download',
-            confirmButtonColor: '#0F766E',
-            cancelButtonColor: '#1e293b'
-          });
-
-          if (result.isConfirmed) {
-            window.open(fileURL, '_blank');
-          } else if (result.dismiss === Swal.DismissReason.cancel) {
-            const link = document.createElement('a');
-            link.href = fileURL;
-            link.download = fileName;
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-          }
-        }
+        });
         
         // Clean up
         setTimeout(() => URL.revokeObjectURL(fileURL), 60000); 

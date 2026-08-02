@@ -140,6 +140,15 @@ export default function SalesHistory({ user }: { user: UserProfile | null }) {
           console.warn('Native URL share failed', err);
         }
       }
+      // Fallback: Share to WhatsApp directly via send API
+      try {
+        const whatsappText = encodeURIComponent(`Hello, here is your receipt from TallyPadi: ${fileName}`);
+        const waUrl = `https://api.whatsapp.com/send?text=${whatsappText}`;
+        window.open(waUrl, '_blank');
+        return true;
+      } catch (waErr) {
+        console.warn('WhatsApp Link share failed', waErr);
+      }
       // Clipboard fallback
       try {
         await navigator.clipboard.writeText(url);
