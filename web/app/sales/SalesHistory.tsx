@@ -619,7 +619,7 @@ export default function SalesHistory({ user }: { user: UserProfile | null }) {
   return (
     <div className="w-full space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       {/* --- HEADER & CONTROLS --- */}
-      <div className="bg-white p-4 md:p-5 rounded-3xl border border-gray-200 shadow-sm flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 md:gap-6">
+      <div className="bg-white p-4 md:p-5 rounded-3xl border border-gray-200 shadow-sm flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4 md:gap-6">
         <div className="flex items-center gap-3 md:gap-4">
           <div className="w-10 h-10 md:w-12 md:h-12 rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-100 flex items-center justify-center text-emerald-600 shadow-sm shrink-0">
             <Receipt className="w-5 h-5 md:w-6 h-6" />
@@ -633,7 +633,7 @@ export default function SalesHistory({ user }: { user: UserProfile | null }) {
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto items-stretch sm:items-end">
+        <div className="flex flex-col sm:flex-row gap-3 w-full xl:w-auto items-stretch sm:items-end">
           <div className="bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 rounded-2xl p-1.5 border border-blue-100 shadow-sm flex-1 sm:flex-none">
             <div className="flex flex-col sm:flex-row items-center gap-2 bg-white/80 backdrop-blur-sm rounded-xl p-2 border border-blue-50/50">
               <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-lg shadow-sm shrink-0">
@@ -673,11 +673,11 @@ export default function SalesHistory({ user }: { user: UserProfile | null }) {
             </div>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex gap-2 w-full sm:w-auto shrink-0">
             <button
               onClick={fetchHistory}
               disabled={loading}
-              className="flex-1 px-4 py-3 bg-gray-900 hover:bg-black text-white font-bold text-xs rounded-2xl shadow-lg shadow-gray-200 active:scale-95 transition-all disabled:opacity-70 flex items-center justify-center gap-2"
+              className="flex-1 sm:flex-none px-4 py-3 bg-gray-900 hover:bg-black text-white font-bold text-xs rounded-2xl shadow-lg shadow-gray-200 active:scale-95 transition-all disabled:opacity-70 flex items-center justify-center gap-2"
             >
               {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Filter className="w-3 h-3" />}
               Filter
@@ -686,7 +686,7 @@ export default function SalesHistory({ user }: { user: UserProfile | null }) {
             <button
               onClick={downloadPDF}
               disabled={pdfLoading || loading}
-              className={`flex-1 px-4 py-3 font-bold text-xs rounded-2xl shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 whitespace-nowrap ${
+              className={`flex-1 sm:flex-none px-4 py-3 font-bold text-xs rounded-2xl shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 whitespace-nowrap ${
                 user?.planType === 'TYCOON'
                   ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-emerald-200'
                   : 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed'
@@ -698,14 +698,12 @@ export default function SalesHistory({ user }: { user: UserProfile | null }) {
               ) : user?.planType === 'TYCOON' ? (
                 <>
                   <FileDown className="w-3 h-3" />
-                  <span className="hidden sm:inline">Download PDF</span>
-                  <span className="sm:hidden">PDF</span>
+                  <span>Download Report</span>
                 </>
               ) : (
                 <>
                   <Lock className="w-3 h-3" />
-                  <span className="hidden sm:inline">Download PDF</span>
-                  <span className="sm:hidden">PDF</span>
+                  <span>Download Report</span>
                 </>
               )}
             </button>
