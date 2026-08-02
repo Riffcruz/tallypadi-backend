@@ -182,6 +182,7 @@ export default function InvoicesPage() {
           }
         } catch (shareErr) {
           console.warn('File share failed, falling back to window open/download', shareErr);
+          shared = false;
         }
 
         if (!shared) {
@@ -195,6 +196,7 @@ export default function InvoicesPage() {
               shared = true;
             } catch (shareErr) {
               console.warn('URL share failed, falling back to window open', shareErr);
+              // Do not set shared = true so it triggers the fallback Swal modal
             }
           }
         }
