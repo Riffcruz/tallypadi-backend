@@ -33,41 +33,11 @@ interface CacheInfo {
 }
 const cachedPrompts = new Map<string, CacheInfo>();
 
-async function getOrCreateCache(userLanguage: string): Promise<string | null> {
-  const lang = String(userLanguage).toUpperCase();
-  const existing = cachedPrompts.get(lang);
-  const now = Date.now();
-
-  // If we have a cache that is valid for at least another 5 minutes, use it
-  if (existing && existing.expiresAt > now + 5 * 60 * 1000) {
-    return existing.name;
-  }
-
-  try {
-    const systemPrompt = getSystemPrompt(userLanguage);
-    console.log(`[Gemini Caching] Creating context cache for language ${lang}...`);
-    
-    const cache = await ai.caches.create({
-      model: env.geminiModel, // 'gemini-2.0-flash-001'
-      config: {
-        displayName: `tallypadi-prompt-${lang.toLowerCase()}`,
-        systemInstruction: systemPrompt,
-        ttl: '3600s', // 1 hour TTL
-      },
-    });
-
-    if (!cache.name) {
-      throw new Error('Cache name not returned by Google Gen AI API');
-    }
-
-    const expiresAt = now + 3600 * 1000;
-    cachedPrompts.set(lang, { name: cache.name, expiresAt });
-    console.log(`[Gemini Caching] Cache created successfully: ${cache.name}. Expires in 1 hour.`);
-    return cache.name;
-  } catch (error) {
-    console.warn('[Gemini Caching] Failed to create context cache, falling back to non-cached request:', error);
-    return null;
-  }
+// Context caching is disabled — the @google/genai v2 SDK only supports
+// caching for a small subset of versioned model IDs. Since the model ID
+// in use may change, we pass the system prompt directly on every request.
+async function getOrCreateCache(_userLanguage: string): Promise<string | null> {
+  return null;
 }
 
 // ─── Timeout wrapper ─────────────────────────────────────────
@@ -394,15 +364,10 @@ Return JSON only.`;
   const generateParams: Parameters<typeof ai.models.generateContent>[0] = {
     model: env.geminiModel,
     contents,
-    config: cacheName
-      ? {
-          responseMimeType: 'application/json',
-          cachedContent: cacheName,
-        }
-      : {
-          responseMimeType: 'application/json',
-          systemInstruction: getSystemPrompt(userLanguage),
-        },
+    config: {
+      responseMimeType: 'application/json',
+      systemInstruction: getSystemPrompt(userLanguage),
+    },
   };
 
   try {
