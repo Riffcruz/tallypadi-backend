@@ -7,7 +7,7 @@ export const env = {
   whatsappToken: process.env.WHATSAPP_TOKEN as string,
   whatsappPhoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID as string,
   geminiApiKey: process.env.GEMINI_API_KEY as string,
-  geminiModel: process.env.GEMINI_MODEL || 'gemini-1.5-flash-latest',
+  geminiModel: process.env.GEMINI_MODEL || 'gemini-1.5-flash-001',
   ollamaUrl: process.env.OLLAMA_URL || 'http://localhost:11434',
   ollamaModel: process.env.OLLAMA_MODEL || 'qwen2.5:7b',
   webhookVerifyToken: process.env.WEBHOOK_VERIFY_TOKEN as string,
