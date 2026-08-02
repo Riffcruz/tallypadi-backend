@@ -1,7 +1,7 @@
 // ============================================================
 // gemini.ai.ts — Gemini API executor
-// Handles: model init, timeout, retry, guidance helpers,
-// and the main parseMessageWithGemini entry point.
+// Migrated to Interactions API (ai.interactions.create)
+// as per Google's recommendation for all new development.
 //
 // 🔑 Inventory Context:
 //   Pass up to 50 recent items as `inventoryContext` to help
@@ -26,20 +26,6 @@ import type { ParsedResult, InventorySnapshotItem } from './gemini.types';
 // ─── Model init ─────────────────────────────────────────────
 const ai = new GoogleGenAI({ apiKey: env.geminiApiKey });
 
-// ─── Cache Management ────────────────────────────────────────
-interface CacheInfo {
-  name: string;
-  expiresAt: number;
-}
-const cachedPrompts = new Map<string, CacheInfo>();
-
-// Context caching is disabled — the @google/genai v2 SDK only supports
-// caching for a small subset of versioned model IDs. Since the model ID
-// in use may change, we pass the system prompt directly on every request.
-async function getOrCreateCache(_userLanguage: string): Promise<string | null> {
-  return null;
-}
-
 // ─── Timeout wrapper ─────────────────────────────────────────
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -51,14 +37,18 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 }
 
 // ─── Retry with exponential backoff ─────────────────────────
-async function generateWithRetry(
-  params: Parameters<typeof ai.models.generateContent>[0],
+async function interactionsWithRetry(
+  params: Parameters<typeof ai.interactions.create>[0] & { stream?: false },
   retries = 3,
   timeoutMs = 90000
 ) {
   for (let i = 0; i <= retries; i++) {
     try {
-      const result = await withTimeout(ai.models.generateContent(params), timeoutMs);
+      // Explicitly non-streaming so TypeScript resolves to GoogleGenAIInteraction
+      const result = await withTimeout(
+        ai.interactions.create({ ...params, stream: false }),
+        timeoutMs
+      );
       return result;
     } catch (err: unknown) {
       if (i === retries) throw err;
@@ -266,12 +256,14 @@ Advertiser keywords: ${(input.adKeywords || []).join(', ') || 'Not supplied'}
 `;
 
   try {
-    const result = await ai.models.generateContent({
-      model: env.geminiModel,
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      config: { responseMimeType: 'application/json' },
+    // Use Interactions API for SEO generation too
+    const result = await ai.interactions.create({
+      model: env.geminiModel as any,
+      input: prompt,
+      store: false,
+      stream: false,
     });
-    const responseText = result.text || '';
+    const responseText = (result as any).output_text || '';
     const parsed = JSON.parse(extractJsonObject(responseText));
 
     const keywords: string[] = Array.isArray(parsed?.keywords)
@@ -310,6 +302,8 @@ function buildInventoryContext(items?: InventorySnapshotItem[]): string {
 }
 
 // ─── Main entry point ─────────────────────────────────────────
+// Uses the Interactions API (ai.interactions.create) with store:false
+// for stateless behaviour identical to the old generateContent flow.
 export const parseMessageWithGemini = async (
   message: string,
   userLanguage: string = 'English',
@@ -335,9 +329,7 @@ export const parseMessageWithGemini = async (
     }
   }
 
-  // 2️⃣ Gemini path (with history + capped inventory context + context caching)
-  const cacheName = await getOrCreateCache(userLanguage);
-  
+  // 2️⃣ Build prompt
   const recentHistory = history.slice(-5);
   const inventorySnippet = buildInventoryContext(inventoryContext);
 
@@ -356,28 +348,38 @@ Return JSON only.`;
     userPrompt += '\n\n🔊 AUDIO INSTRUCTION: The user has sent a voice note. Listen carefully and extract intent/data as if it were written text. Ignore the text "Analyze this audio".';
   }
 
-  const contents: any[] = [{ role: 'user', parts: [{ text: userPrompt }] }];
+  // 3️⃣ Build input — support multimodal (image / audio inlineData)
+  let interactionInput: any = userPrompt;
   if (imageBuffer && imageMimeType) {
-    contents[0].parts.push({ inlineData: { data: imageBuffer, mimeType: imageMimeType } });
+    // Interactions API accepts Content[] as input just like generateContent
+    interactionInput = [
+      {
+        role: 'user',
+        parts: [
+          { text: userPrompt },
+          { inlineData: { data: imageBuffer, mimeType: imageMimeType } },
+        ],
+      },
+    ];
   }
 
-  const generateParams: Parameters<typeof ai.models.generateContent>[0] = {
-    model: env.geminiModel,
-    contents,
-    config: {
-      responseMimeType: 'application/json',
-      systemInstruction: getSystemPrompt(userLanguage),
-    },
+  // 4️⃣ Call Interactions API — explicitly non-streaming
+  const interactionParams = {
+    model: env.geminiModel as any,
+    input: interactionInput,
+    store: false as const,       // stateless — no server-side history storage
+    stream: false as const,      // force non-streaming overload
+    system_instruction: getSystemPrompt(userLanguage),
   };
 
   try {
-    const result = await generateWithRetry(generateParams, maxRetries, timeoutMs);
-    const responseText = result.text || '';
+    const result = await interactionsWithRetry(interactionParams, maxRetries, timeoutMs);
+    const responseText = (result as any).output_text || '';
     const cleanJson = extractJsonObject(responseText);
     return safeParsedResult(JSON.parse(cleanJson));
   } catch (error) {
     console.error('❌ Gemini Error:', error);
-    
+
     /* TEMPORARILY DISABLED LOCAL LLM FALLBACK
     // Fallback to local LLM (Ollama)
     try {
