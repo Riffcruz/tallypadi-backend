@@ -10,6 +10,9 @@ const asMoney = (value: unknown, fallback = 0) => {
   return Number.isFinite(n) ? n : fallback;
 };
 
+const getShopOwnerId = (req: Request | any) =>
+  String(req.user?.role || '').toUpperCase() === 'STAFF' ? req.user?.ownerId : req.user?.id;
+
 export const calculateDebtorTotalFromHistory = (history: any[] = []) => {
   return history.reduce((sum, tx) => {
     if (tx?.type !== 'SALE') return sum;
@@ -36,7 +39,7 @@ export const getLastProductStrFromHistory = (history: any[] = []) => {
 // 1. GET ALL DEBTORS (Includes financial summary & last items)
 export const getDebtors = async (req: Request | any, res: Response) => {
   try {
-    const userId = req.user?.id;
+    const userId = getShopOwnerId(req);
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
     const debtors = await Debtor.aggregate([
@@ -93,7 +96,7 @@ export const getDebtors = async (req: Request | any, res: Response) => {
 // 2. CREATE DEBTOR (Supports optional Opening Balance)
 export const createDebtor = async (req: Request | any, res: Response) => {
   try {
-    const userId = req.user?.id;
+    const userId = getShopOwnerId(req);
     const { displayName, aliases, initialDebt, initialProduct } = req.body;
 
     if (!displayName) return res.status(400).json({ error: 'Name is required' });
@@ -142,7 +145,7 @@ export const createDebtor = async (req: Request | any, res: Response) => {
 // 3. UPDATE DEBTOR
 export const updateDebtor = async (req: Request | any, res: Response) => {
   try {
-    const userId = req.user?.id;
+    const userId = getShopOwnerId(req);
     const { id } = req.params;
     const { displayName, aliases, phone, dueDate } = req.body;
 
@@ -176,7 +179,7 @@ export const updateDebtor = async (req: Request | any, res: Response) => {
 // 4. DELETE DEBTOR
 export const deleteDebtor = async (req: Request | any, res: Response) => {
   try {
-    const userId = req.user?.id;
+    const userId = getShopOwnerId(req);
     const { id } = req.params;
     
     const result = await Debtor.deleteOne({ _id: id, user: userId });
@@ -191,7 +194,7 @@ export const deleteDebtor = async (req: Request | any, res: Response) => {
 // 5. RECORD DEBT PAYMENT
 export const recordDebtPayment = async (req: Request | any, res: Response) => {
   try {
-    const userId = req.user?.id;
+    const userId = getShopOwnerId(req);
     const { debtorId, amount, date } = req.body;
 
     if (!debtorId || !amount) {

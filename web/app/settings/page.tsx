@@ -101,6 +101,7 @@ export default function SettingsPage() {
   };
 
   const isTycoon = String(user?.planType || '').toUpperCase() === 'TYCOON';
+  const isStaffReadOnly = String(user?.role || '').toUpperCase() === 'STAFF';
 
   // ✅ Helper: Parse trialEndsAt safely (it may come as ISO string)
   const trialEndsAtMs = useMemo(() => {
@@ -178,6 +179,10 @@ export default function SettingsPage() {
         });
 
         const userData = res.data?.user || {};
+        if (String(userData?.role || '').toUpperCase() === 'STAFF' && userData?.settings?.staffPermissions?.canViewSettings !== true) {
+          router.replace('/sales');
+          return;
+        }
         hydrateFromDashboard(userData);
 
       } catch (err) {
@@ -212,6 +217,7 @@ export default function SettingsPage() {
   };
 
   const handleSave = async () => {
+    if (isStaffReadOnly) return;
     const token = getTokenOrRedirect();
     if (!token) return;
 
@@ -384,6 +390,7 @@ export default function SettingsPage() {
   };
 
   const handleSaveShop = async () => {
+    if (isStaffReadOnly) return;
     const token = getTokenOrRedirect();
     if (!token) return;
 
@@ -528,7 +535,13 @@ export default function SettingsPage() {
           </div>
         </header>
 
-        <div className="max-w-4xl space-y-8 mx-auto md:mx-0">
+        {isStaffReadOnly && (
+          <div className="mb-6 max-w-4xl rounded-2xl border border-blue-200 bg-blue-50 px-5 py-4 text-sm font-semibold text-blue-800">
+            Read-only access. Only the shop owner can change store settings.
+          </div>
+        )}
+
+        <div className={`max-w-4xl space-y-8 mx-auto md:mx-0 ${isStaffReadOnly ? 'pointer-events-none' : ''}`}>
           {/* General Settings Card */}
           <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-gray-100">
             <div className="flex items-center gap-3 mb-6">
@@ -1143,7 +1156,7 @@ export default function SettingsPage() {
           </div>
 
           {/* Save Button */}
-          <div className="flex justify-end pt-2">
+          {!isStaffReadOnly && <div className="flex justify-end pt-2">
             <button
               onClick={handleSave}
               disabled={saving}
@@ -1152,7 +1165,7 @@ export default function SettingsPage() {
               {saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
               <span>Save Changes</span>
             </button>
-          </div>
+          </div>}
 
         </div>
       </main>

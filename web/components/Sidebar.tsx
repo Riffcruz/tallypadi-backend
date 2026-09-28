@@ -31,6 +31,17 @@ export default function Sidebar() {
 
     const token = getCookie('tallyToken');
     if (!token) return;
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api'}/dashboard`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => {
+        if (!data?.user) return;
+        setUser(data.user);
+        sessionStorage.setItem('tallyUser', JSON.stringify(data.user));
+      })
+      .catch(() => undefined);
+
     fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api'}/shop/verification`, {
       headers: { Authorization: `Bearer ${token}` },
     })
@@ -75,8 +86,14 @@ export default function Sidebar() {
     // Staff Permission Filtering
     if (user.role === 'STAFF') {
       const perms = (user.settings as { staffPermissions?: Record<string, boolean> })?.staffPermissions || {};
+      const defaults: Record<string, boolean> = {
+        canViewDashboard: false,
+        canManageInventory: true,
+        canManageCustomers: true,
+        canViewSettings: false,
+      };
       return baseItems.filter(item => {
-        if (item.key) return perms[item.key] === true;
+        if (item.key) return perms[item.key] ?? defaults[item.key] ?? false;
         return true; // No key = always show (Sales, Orders, Guide)
       });
     }
@@ -125,7 +142,7 @@ export default function Sidebar() {
       <nav className="flex-1 p-4 overflow-y-auto">
 
         {/* ── MENU Group ── */}
-        <div className="mb-6">
+        {user?.role !== 'STAFF' && <div className="mb-6">
           <p className="px-4 mb-2 text-[10px] font-black tracking-widest text-gray-400 uppercase">Menu</p>
           <div className="space-y-1">
             {menuItems.map((item) => (
@@ -139,7 +156,7 @@ export default function Sidebar() {
               </Link>
             ))}
           </div>
-        </div>
+        </div>}
 
         {/* ── ADMIN Group ── */}
         <div className="mb-6">

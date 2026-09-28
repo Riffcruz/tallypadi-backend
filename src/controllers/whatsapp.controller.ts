@@ -59,6 +59,7 @@ import {
   getSalesComparison,
 } from '../services/report.service';
 import { generatePdfReport } from '../services/pdf.service';
+import { STAFF_PERMISSION_DEFAULTS, StaffPermission } from '../middleware/staffPermission';
 import { toUserLocalDate } from '../utils/dates';
 
 // =====================================================
@@ -2609,6 +2610,35 @@ Tap a button below to subscribe:`;
 
     // Always use UTC range for services (prevents empty results)
     const { startUtc, endUtc } = getUtcRangeForUser(offsetMinutes, startDate, endDate);
+
+    if (actor.role === 'STAFF') {
+      const permissionByIntent: Partial<Record<string, StaffPermission>> = {
+        RECORD_INVENTORY: 'canManageInventory',
+        RESTOCK: 'canManageInventory',
+        SET_STOCK: 'canManageInventory',
+        DELETED_STOCK: 'canManageInventory',
+        DELETE_ALL_INVENTORY: 'canManageInventory',
+        DEFINE_PRICE: 'canManageInventory',
+        REPORT_RECENT: 'canViewSalesHistory',
+        REPORT_SALES: 'canViewReports',
+        REPORT_STOCK: 'canViewReports',
+        REPORT_FULL: 'canViewReports',
+        REPORT_EXPENSE: 'canViewReports',
+        DOWNLOAD_REPORT: 'canViewReports',
+        REPORT_DEBTS: 'canManageCustomers',
+        DEBT_PAYMENT: 'canManageCustomers',
+        SHOW_SETTINGS: 'canViewSettings',
+      };
+      const requiredPermission = permissionByIntent[String(parsed.intent || '')];
+      if (requiredPermission) {
+        const configured = owner?.settings?.staffPermissions?.[requiredPermission];
+        const permissionAllowed = typeof configured === 'boolean' ? configured : STAFF_PERMISSION_DEFAULTS[requiredPermission];
+        if (!permissionAllowed) {
+          await queueOutboundMessage(from, '❌ Your shop owner has not enabled this staff permission.');
+          return;
+        }
+      }
+    }
 
     // =====================================================
     // 🚦 ROUTING

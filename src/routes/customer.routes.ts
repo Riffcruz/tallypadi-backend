@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authRequired } from '../middleware/authRequired';
+import { requireStaffPermission } from '../middleware/staffPermission';
 import {
   getCustomers,
   createCustomer,
@@ -11,6 +12,7 @@ const router = Router();
 
 // All customer CRM routes require authentication (Owner or Staff)
 router.use(authRequired);
+router.use(requireStaffPermission('canManageCustomers'));
 
 router.get('/', getCustomers);
 router.post('/', createCustomer);

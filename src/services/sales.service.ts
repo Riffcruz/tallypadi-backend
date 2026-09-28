@@ -251,7 +251,9 @@ export class SalesService {
     const user = await User.findById(userId);
     if (!user) throw new Error("User not found");
 
-    const scope = user.role === 'OWNER' ? 'SHOP' : 'OWN';
+    // This method is exposed only through the sales-history permission gate.
+    // Permitted staff should see the shop history described by that permission.
+    const scope = user.role === 'OWNER' || user.role === 'STAFF' ? 'SHOP' : 'OWN';
     const relevantIds = await getRelevantUserIds(user, scope);
 
     const { startDate, endDate, page = 1, limit = 20 } = queryDetails;

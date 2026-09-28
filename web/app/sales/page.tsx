@@ -53,6 +53,10 @@ export interface UserProfile {
   locale?: string;
   role?: string;
   settings?: {
+    staffPermissions?: {
+      canViewSalesHistory?: boolean;
+      canViewReports?: boolean;
+    };
     royalty?: {
       enabled: boolean;
       pointsPerPurchase: number;
@@ -79,6 +83,8 @@ export default function SalesPage() {
   const [showZReport, setShowZReport] = useState(false);
   const [physicalCash, setPhysicalCash] = useState('');
   const [submittingZReport, setSubmittingZReport] = useState(false);
+  const canViewHistory = user?.role !== 'STAFF' || user?.settings?.staffPermissions?.canViewSalesHistory === true;
+  const canViewReports = user?.role !== 'STAFF' || user?.settings?.staffPermissions?.canViewReports === true;
 
   useEffect(() => {
     const token = getCookie('tallyToken');
@@ -235,18 +241,18 @@ const handleAddToCart = (item: InventoryItem) => {
                     <Clock className="w-4 h-4" /> {heldCarts.length} Held
                  </button>
               )}
-              <button 
+              {canViewReports && <button
                 onClick={() => setShowZReport(true)}
                 className="hidden sm:flex items-center gap-2 px-3 pl-2 py-1.5 bg-slate-900 text-white font-bold text-xs uppercase tracking-wide rounded-lg hover:bg-black transition-colors"
               >
                  <ShieldAlert className="w-4 h-4 text-emerald-400" /> Close Register
-              </button>
+              </button>}
             </div>
           </div>
 
           {/* Segmented Tab Control */}
           <div className="flex p-1.5 bg-gray-200/50 backdrop-blur-sm rounded-xl border border-gray-200 w-full lg:w-auto">
-            <button
+            {canViewHistory && <button
               onClick={() => setActiveTab('new')}
               className={`flex-1 lg:flex-none flex items-center justify-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all duration-200 ${
                 activeTab === 'new' 
@@ -255,7 +261,7 @@ const handleAddToCart = (item: InventoryItem) => {
               }`}
             >
               <ShoppingCart className="w-4 h-4" /> New Sale
-            </button>
+            </button>}
             <button
               onClick={() => setActiveTab('history')}
               className={`flex-1 lg:flex-none flex items-center justify-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all duration-200 ${

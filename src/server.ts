@@ -60,6 +60,7 @@ import { env } from './config/env';
 import { connectDb } from './config/db';
 import { RedisRateLimitStore } from './services/rateLimitRedisStore';
 import { getJwtSecret } from './config/jwt';
+import { requireOwnerAccount, requireStaffPermission } from './middleware/staffPermission';
 
 // --- CONTROLLERS ---
 import { getDashboardData } from './controllers/dashboard.controller';
@@ -308,7 +309,11 @@ app.use('/api', (req: Request, res: Response, next: NextFunction) => {
   if (
     req.originalUrl.startsWith('/api/whatsapp') ||
     req.originalUrl.startsWith('/api/webhook') ||
-    req.originalUrl.startsWith('/api/marketplace')
+    req.originalUrl.startsWith('/api/marketplace') ||
+    // Admin API calls have their own authenticated, per-user limiter below.
+    // Keep the queue routes on the global limiter because Bull Board is mounted
+    // separately from adminRouter.
+    (req.originalUrl.startsWith('/api/admin') && !req.originalUrl.startsWith('/api/admin/queues'))
   ) {
     return next();
   }
@@ -399,42 +404,42 @@ app.get('/api/dashboard', authRequired, getDashboardData);
 app.get('/api/inventory', authRequired, getInventory);
 app.get('/api/inventory/categories', authRequired, getCategories);
 app.get('/api/inventory/:id', authRequired, getInventoryItem);
-app.post('/api/inventory', authRequired, addInventoryItem);
-app.post('/api/inventory/bulk-parse', authRequired, bulkParseInventory);
-app.post('/api/inventory/bulk-save', authRequired, bulkSaveInventory);
-app.put('/api/inventory/:id', authRequired, updateInventoryItem);
-app.delete('/api/inventory/:id', authRequired, deleteInventoryItem);
+app.post('/api/inventory', authRequired, requireStaffPermission('canManageInventory'), addInventoryItem);
+app.post('/api/inventory/bulk-parse', authRequired, requireStaffPermission('canManageInventory'), bulkParseInventory);
+app.post('/api/inventory/bulk-save', authRequired, requireStaffPermission('canManageInventory'), bulkSaveInventory);
+app.put('/api/inventory/:id', authRequired, requireStaffPermission('canManageInventory'), updateInventoryItem);
+app.delete('/api/inventory/:id', authRequired, requireStaffPermission('canManageInventory'), deleteInventoryItem);
 
 // --- UPLOADS ---
 app.post('/api/uploads/presign', authRequired, presignUploadLimiter, presignUpload); // R2 presigned upload endpoint
 
 // --- SALES ---
 app.post('/api/sales', authRequired, recordSale);
-app.get('/api/sales', authRequired, getSalesHistory);
-app.get('/api/sales/report', authRequired, generateSalesReport);
-app.post('/api/sales/close-register', authRequired, closeRegister);
+app.get('/api/sales', authRequired, requireStaffPermission('canViewSalesHistory'), getSalesHistory);
+app.get('/api/sales/report', authRequired, requireStaffPermission('canViewReports'), generateSalesReport);
+app.post('/api/sales/close-register', authRequired, requireStaffPermission('canViewReports'), closeRegister);
 
 // --- DEBTORS ---
-app.get('/api/debtors', authRequired, getDebtors);
-app.post('/api/debtors', authRequired, createDebtor);
-app.put('/api/debtors/:id', authRequired, updateDebtor);
-app.delete('/api/debtors/:id', authRequired, deleteDebtor);
+app.get('/api/debtors', authRequired, requireStaffPermission('canManageCustomers'), getDebtors);
+app.post('/api/debtors', authRequired, requireStaffPermission('canManageCustomers'), createDebtor);
+app.put('/api/debtors/:id', authRequired, requireStaffPermission('canManageCustomers'), updateDebtor);
+app.delete('/api/debtors/:id', authRequired, requireStaffPermission('canManageCustomers'), deleteDebtor);
 
 // --- CUSTOMERS & CRM ---
 app.use('/api/customers', customerRouter);
 
 // --- DEBTOR PAYMENTS ---
-app.post('/api/debtors/payment', authRequired, recordDebtPayment);
+app.post('/api/debtors/payment', authRequired, requireStaffPermission('canManageCustomers'), recordDebtPayment);
 
 app.get('/api/sales/:saleId/receipt', authRequired, generateSaleReceiptPdf);
 
 // --- SETTINGS & STAFF ---
-app.put('/api/settings', authRequired, updateSettings);
+app.put('/api/settings', authRequired, requireOwnerAccount, updateSettings);
 app.get('/api/admin/settings', getGlobalSettings); // Public config (OK if intentional)
-app.get('/api/staff', authRequired, getStaff);
-app.post('/api/staff', authRequired, addStaff);
-app.put('/api/staff/:id', authRequired, updateStaff);
-app.delete('/api/staff/:id', authRequired, removeStaff);
+app.get('/api/staff', authRequired, requireOwnerAccount, getStaff);
+app.post('/api/staff', authRequired, requireOwnerAccount, addStaff);
+app.put('/api/staff/:id', authRequired, requireOwnerAccount, updateStaff);
+app.delete('/api/staff/:id', authRequired, requireOwnerAccount, removeStaff);
 
 // --- BILLING & SYSTEM ---
 app.use('/api/payment', paymentRouter);
@@ -515,7 +520,9 @@ app.use('/api/admin/queues', bullBoardCookieAuth, authRequired, verifyAdmin, ser
 // --- ADMIN (SITE OWNER) ---
 const adminLimiterPerUser = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 120,
+  // The admin SPA loads several datasets per screen and some tabs poll for
+  // status updates. This remains bounded per authenticated admin account.
+  max: 600,
   store: rateLimitStore('rl:admin'),
   passOnStoreError: true,
   standardHeaders: true,

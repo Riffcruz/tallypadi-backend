@@ -99,6 +99,34 @@ const getAuthUser = async (req: Request) => {
   return await User.findById(userId);
 };
 
+type InventoryAccessUser = {
+  _id: Types.ObjectId;
+  role?: string;
+  ownerId?: Types.ObjectId | null;
+  subscriptionStatus?: string;
+  trialEndsAt?: Date | string | null;
+  businessName?: string | null;
+  countryCode?: string | null;
+  marketplaceVerificationStatus?: string | null;
+  settings?: {
+    currencyCode?: string | null;
+    location?: {
+      country?: string | null;
+      state?: string | null;
+      city?: string | null;
+      address?: string | null;
+    } | null;
+  } | null;
+};
+
+const getInventoryOwnerId = (user: InventoryAccessUser): Types.ObjectId =>
+  user.role === 'STAFF' && user.ownerId ? user.ownerId : user._id;
+
+const getInventoryPlanUser = async (user: InventoryAccessUser): Promise<InventoryAccessUser | null> => {
+  if (user.role === 'STAFF' && user.ownerId) return User.findById(user.ownerId);
+  return user;
+};
+
 // GET all inventory items (with optional pagination & search)
 export const getInventory = async (req: Request, res: Response) => {
   try {
@@ -244,7 +272,7 @@ export const getCategories = async (req: Request, res: Response) => {
     const user = await getAuthUser(req);
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
 
-    const categories = await Inventory.distinct('category', { user: user._id });
+    const categories = await Inventory.distinct('category', { user: getInventoryOwnerId(user) });
     // Filter out null/empty strings just in case
     const cleanCategories = categories.filter((c) => c && typeof c === 'string' && c.trim() !== '');
 
@@ -264,7 +292,7 @@ export const getInventoryItem = async (req: Request, res: Response) => {
 
     const { id } = req.params;
 
-    const item = await Inventory.findOne({ _id: id, user: user._id });
+    const item = await Inventory.findOne({ _id: id, user: getInventoryOwnerId(user) });
     if (!item) return res.status(404).json({ error: 'Item not found' });
 
     return res.json({
@@ -322,19 +350,22 @@ export const addInventoryItem = async (req: Request, res: Response) => {
     const user = await getAuthUser(req);
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
 
-    if (!hasInventoryWriteAccess(user)) {
-      return denySubscription(res, user);
+    const planUser = await getInventoryPlanUser(user);
+    if (!hasInventoryWriteAccess(planUser)) {
+      return denySubscription(res, planUser);
     }
+
+    const inventoryOwnerId = getInventoryOwnerId(user);
 
     if (!safeName) {
       return res.status(400).json({ error: 'Item name is required and must be a string' });
     }
 
-    let item = await Inventory.findOne({ user: user._id, name: safeName.toLowerCase() });
+    let item = await Inventory.findOne({ user: inventoryOwnerId, name: safeName.toLowerCase() });
 
     if (safeBarcode) {
       const barcodeOwner = await Inventory.findOne({
-        user: user._id,
+        user: inventoryOwnerId,
         barcode: safeBarcode,
         ...(item ? { _id: { $ne: item._id } } : {}),
         isDeleted: { $ne: true },
@@ -359,15 +390,15 @@ export const addInventoryItem = async (req: Request, res: Response) => {
       if (safeSizes !== undefined) item.sizes = safeSizes;
       // Allow dashboard SKU override if provided
       if (body.sku && typeof body.sku === 'string') item.sku = body.sku.toUpperCase().trim();
-      item.marketplaceSeo = buildMarketplaceProductSeo(item, user);
+      item.marketplaceSeo = buildMarketplaceProductSeo(item, planUser);
       await item.save();
     } else {
       const sku = (body.sku && typeof body.sku === 'string')
         ? body.sku.toUpperCase().trim()
-        : await generateUniqueSku(user._id);
+        : await generateUniqueSku(inventoryOwnerId);
 
       const newProduct = {
-        user: user._id,
+        user: inventoryOwnerId,
         name: safeName.toLowerCase(),
         sku,
         quantity: safeStock !== undefined ? safeStock : 0,
@@ -384,7 +415,7 @@ export const addInventoryItem = async (req: Request, res: Response) => {
 
       item = await Inventory.create({
         ...newProduct,
-        marketplaceSeo: buildMarketplaceProductSeo(newProduct, user),
+        marketplaceSeo: buildMarketplaceProductSeo(newProduct, planUser),
       });
     }
 
@@ -449,17 +480,20 @@ export const updateInventoryItem = async (req: Request, res: Response) => {
     const user = await getAuthUser(req);
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
 
-    if (!hasInventoryWriteAccess(user)) {
-      return denySubscription(res, user);
+    const planUser = await getInventoryPlanUser(user);
+    if (!hasInventoryWriteAccess(planUser)) {
+      return denySubscription(res, planUser);
     }
 
-    const item = await Inventory.findOne({ _id: id, user: user._id });
+    const inventoryOwnerId = getInventoryOwnerId(user);
+
+    const item = await Inventory.findOne({ _id: id, user: inventoryOwnerId });
     if (!item) return res.status(404).json({ error: 'Item not found' });
 
     if (safeBarcode) {
       const barcodeOwner = await Inventory.findOne({
         _id: { $ne: item._id },
-        user: user._id,
+        user: inventoryOwnerId,
         barcode: safeBarcode,
         isDeleted: { $ne: true },
       }).select('name');
@@ -487,7 +521,7 @@ export const updateInventoryItem = async (req: Request, res: Response) => {
     if (body.description !== undefined) item.description = sanitizeString(body.description);
     if (Array.isArray(body.colors)) item.colors = sanitizeStringArray(body.colors) || [];
     if (Array.isArray(body.sizes)) item.sizes = sanitizeStringArray(body.sizes) || [];
-    item.marketplaceSeo = buildMarketplaceProductSeo(item, user);
+    item.marketplaceSeo = buildMarketplaceProductSeo(item, planUser);
 
     await item.save();
     refreshMarketplaceProduct(item._id, 'inventory-update');
@@ -527,9 +561,12 @@ export const bulkUpdateInventory = async (req: Request, res: Response) => {
     const user = await getAuthUser(req);
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
 
-    if (!hasInventoryWriteAccess(user)) {
-      return denySubscription(res, user);
+    const planUser = await getInventoryPlanUser(user);
+    if (!hasInventoryWriteAccess(planUser)) {
+      return denySubscription(res, planUser);
     }
+
+    const inventoryOwnerId = getInventoryOwnerId(user);
 
     if (updates.length === 0) {
       return res.json({ success: true, count: 0 });
@@ -542,7 +579,7 @@ export const bulkUpdateInventory = async (req: Request, res: Response) => {
 
       return {
         updateOne: {
-          filter: { _id: u.id, user: user._id },
+          filter: { _id: u.id, user: inventoryOwnerId },
           update: { $set: update },
         },
       };
@@ -576,11 +613,12 @@ export const deleteInventoryItem = async (req: Request, res: Response) => {
     const user = await getAuthUser(req);
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
 
-    if (!hasInventoryWriteAccess(user)) {
-      return denySubscription(res, user);
+    const planUser = await getInventoryPlanUser(user);
+    if (!hasInventoryWriteAccess(planUser)) {
+      return denySubscription(res, planUser);
     }
 
-    const item = await Inventory.findOne({ _id: id, user: user._id });
+    const item = await Inventory.findOne({ _id: id, user: getInventoryOwnerId(user) });
     if (!item) return res.status(404).json({ error: 'Item not found' });
 
     // ✅ Delete image from R2 if exists
@@ -612,8 +650,9 @@ export const bulkParseInventory = async (req: Request, res: Response) => {
       return res.status(403).json({ error: 'Bulk AI Upload is a Tycoon-only feature.' });
     }
 
-    if (!hasInventoryWriteAccess(user)) {
-      return denySubscription(res, user);
+    const planUser = await getInventoryPlanUser(user);
+    if (!hasInventoryWriteAccess(planUser)) {
+      return denySubscription(res, planUser);
     }
 
     const { text } = req.body;
@@ -646,9 +685,12 @@ export const bulkSaveInventory = async (req: Request, res: Response) => {
       return res.status(403).json({ error: 'Bulk AI Upload is a Tycoon-only feature.' });
     }
 
-    if (!hasInventoryWriteAccess(user)) {
-      return denySubscription(res, user);
+    const planUser = await getInventoryPlanUser(user);
+    if (!hasInventoryWriteAccess(planUser)) {
+      return denySubscription(res, planUser);
     }
+
+    const inventoryOwnerId = getInventoryOwnerId(user);
 
     const { items } = req.body;
     if (!Array.isArray(items) || items.length === 0) {
@@ -669,7 +711,7 @@ export const bulkSaveInventory = async (req: Request, res: Response) => {
       if (!name) continue;
 
       const existingItem = await Inventory.findOne({
-        user: user._id,
+        user: inventoryOwnerId,
         name: { $regex: new RegExp(`^${escapeRegex(name)}$`, 'i') },
       });
 
@@ -677,14 +719,14 @@ export const bulkSaveInventory = async (req: Request, res: Response) => {
         existingItem.quantity = Number(existingItem.quantity || 0) + qty;
         if (costPrice > 0) existingItem.costPrice = costPrice;
         if (sellingPrice > 0) existingItem.lastUnitPrice = sellingPrice;
-        existingItem.marketplaceSeo = buildMarketplaceProductSeo(existingItem, user);
+        existingItem.marketplaceSeo = buildMarketplaceProductSeo(existingItem, planUser);
         await existingItem.save();
         changedProductIds.push(String(existingItem._id));
         updatedCount++;
       } else {
-        const sku = await generateUniqueSku(user._id);
+        const sku = await generateUniqueSku(inventoryOwnerId);
         const newProduct = {
-          user: user._id,
+          user: inventoryOwnerId,
           name,
           sku,
           quantity: qty,
@@ -693,7 +735,7 @@ export const bulkSaveInventory = async (req: Request, res: Response) => {
         };
         const createdItem = await Inventory.create({
           ...newProduct,
-          marketplaceSeo: buildMarketplaceProductSeo(newProduct, user),
+          marketplaceSeo: buildMarketplaceProductSeo(newProduct, planUser),
         });
         changedProductIds.push(String(createdItem._id));
         createdCount++;

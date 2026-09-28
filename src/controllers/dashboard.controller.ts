@@ -7,6 +7,7 @@ import { Order } from '../models/order.model';
 import { Expense } from '../models/expense.model';
 import { DailyStats } from '../models/dailyStats.model';
 import { getRelevantUserIds } from '../services/report.service';
+import { STAFF_PERMISSION_DEFAULTS } from '../middleware/staffPermission';
 const UNKNOWN_ITEM_NAMES = ['unknown_item', 'unknown', 'item', 'null', 'undefined'];
 
 const unknownSaleQuery = {
@@ -67,11 +68,59 @@ export const getDashboardData = async (req: Request, res: Response) => {
       return res.status(404).json({ error: "User account not found." });
     }
 
-    const defaultCurrency = getCurrencyConfig(user.countryCode);
-    const currencyCode = user.settings?.currencyCode || defaultCurrency.code;
+    const isStaff = user.role === 'STAFF';
+    const owner = isStaff && user.ownerId ? await User.findById(user.ownerId) : user;
+    if (!owner) return res.status(403).json({ error: 'Shop owner account not found' });
+    const configuredDashboardPermission = owner.settings?.staffPermissions?.canViewDashboard;
+    const canViewDashboard = !isStaff || (
+      typeof configuredDashboardPermission === 'boolean'
+        ? configuredDashboardPermission
+        : STAFF_PERMISSION_DEFAULTS.canViewDashboard
+    );
+    const effectiveSettings = isStaff ? owner.settings : user.settings;
+
+    const dashboardUser = {
+      id: user._id,
+      role: user.role,
+      ownerId: user.ownerId || null,
+      name: user.name || 'Shop Staff',
+      shopName: owner.businessName || 'My Store',
+      businessName: owner.businessName || 'My Store',
+      initials: user.name ? user.name.slice(0, 2).toUpperCase() : 'TP',
+      planType: owner.planType,
+      walletBalance: isStaff ? 0 : (owner.walletBalance || 0),
+      subscriptionStatus: owner.subscriptionStatus,
+      trialEndsAt: owner.trialEndsAt,
+      nextBillingDate: isStaff ? null : (owner.nextBillingDate || null),
+      settings: effectiveSettings,
+      shopSlug: owner.shopSlug || null,
+      shopDescription: owner.shopDescription || null,
+      heroImageUrl: owner.heroImageUrl || null,
+      themeColor: owner.themeColor || '#10b981',
+      marketplaceVerificationStatus: owner.marketplaceVerificationStatus || 'UNVERIFIED',
+      marketplaceVerifiedAt: owner.marketplaceVerifiedAt || null,
+      bankDetails: owner.bankDetails,
+      countryCode: owner.countryCode,
+    };
+
+    if (!canViewDashboard) {
+      const defaultCurrency = getCurrencyConfig(owner.countryCode);
+      return res.json({
+        user: { ...dashboardUser, currencyCode: owner.settings?.currencyCode || defaultCurrency.code, locale: defaultCurrency.locale },
+        stats: null,
+        inventory: [],
+        transactions: [],
+        expenses: [],
+        salesChart: [],
+        topItems: [],
+      });
+    }
+
+    const defaultCurrency = getCurrencyConfig(owner.countryCode);
+    const currencyCode = effectiveSettings?.currencyCode || defaultCurrency.code;
     const locale = defaultCurrency.locale;
 
-    const scope = user.role === 'OWNER' ? 'SHOP' : 'OWN';
+    const scope = user.role === 'OWNER' || user.role === 'STAFF' ? 'SHOP' : 'OWN';
     const relevantIds = await getRelevantUserIds(user, scope);
 
     // 7-day range
@@ -323,26 +372,8 @@ export const getDashboardData = async (req: Request, res: Response) => {
 
     return res.json({
       user: {
-        name: user.name || 'Shop Owner',
-        shopName: user.businessName || 'My Store',
-        initials: user.businessName ? user.businessName.slice(0, 2).toUpperCase() : 'IO',
-        planType: user.planType,
-        walletBalance: user.walletBalance || 0,
-        subscriptionStatus: user.subscriptionStatus,
-        trialEndsAt: user.trialEndsAt,
-        nextBillingDate: user.nextBillingDate || null,
-        settings: user.settings,
+        ...dashboardUser,
         
-        shopSlug: user.shopSlug || null,
-        shopDescription: user.shopDescription || null,
-        heroImageUrl: user.heroImageUrl || null,
-        themeColor: user.themeColor || '#10b981',
-        marketplaceVerificationStatus: user.marketplaceVerificationStatus || 'UNVERIFIED',
-        marketplaceVerifiedAt: user.marketplaceVerifiedAt || null,
-
-        bankDetails: user.bankDetails, // ✅ Added
-
-        countryCode: user.countryCode,
         currencyCode: currencyCode,
         locale: locale
       },
