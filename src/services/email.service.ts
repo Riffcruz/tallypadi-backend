@@ -124,6 +124,66 @@ export const sendBroadcastEmail = async (
     }
 };
 
+export const sendSubscriptionExpiryEmail = async ({
+    email,
+    name,
+    businessName,
+    expiryAt,
+    daysBeforeExpiry,
+    isTrial,
+}: {
+    email: string;
+    name?: string;
+    businessName?: string;
+    expiryAt: Date;
+    daysBeforeExpiry: 0 | 1 | 2 | 3;
+    isTrial: boolean;
+}) => {
+    const { transporter, smtpConfig } = await createSmtpTransport();
+    const safeName = escapeHtml(name || businessName || 'there');
+    const safeBusiness = escapeHtml(businessName || 'your shop');
+    const expiryDate = escapeHtml(expiryAt.toLocaleDateString('en-NG', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+        timeZone: 'Africa/Lagos',
+    }));
+    const accountLabel = isTrial ? 'free trial' : 'subscription';
+    const timing = daysBeforeExpiry === 0
+        ? `Your TallyPadi ${accountLabel} has expired.`
+        : `Your TallyPadi ${accountLabel} expires in ${daysBeforeExpiry} day${daysBeforeExpiry === 1 ? '' : 's'}.`;
+    const subject = daysBeforeExpiry === 0
+        ? `Your TallyPadi ${accountLabel} has expired`
+        : `${daysBeforeExpiry} day${daysBeforeExpiry === 1 ? '' : 's'} left on your TallyPadi ${accountLabel}`;
+    const billingUrl = `${String(process.env.APP_BASE_URL || 'https://tallypadi.com').replace(/\/$/, '')}/billing`;
+
+    await transporter.sendMail({
+        from: `TallyPadi <${smtpConfig.fromAddress || smtpConfig.user}>`,
+        to: email,
+        subject,
+        html: `
+            <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#172033;line-height:1.6">
+                <div style="background:#052e2b;color:#fff;padding:22px 24px;border-radius:14px 14px 0 0">
+                    <div style="font-size:22px;font-weight:800">TallyPadi</div>
+                </div>
+                <div style="border:1px solid #dbe5e3;border-top:0;padding:26px 24px;border-radius:0 0 14px 14px">
+                    <p>Hello ${safeName},</p>
+                    <h2 style="margin:8px 0;color:${daysBeforeExpiry === 0 ? '#b42318' : '#087f5b'}">${timing}</h2>
+                    <p><strong>${safeBusiness}</strong> is scheduled through <strong>${expiryDate}</strong>.</p>
+                    <p>${daysBeforeExpiry === 0 ? 'Renew now to restore access to your business tools.' : 'Renew early to keep your shop running without interruption.'}</p>
+                    <p style="margin:24px 0">
+                        <a href="${escapeHtml(billingUrl)}" style="background:#059669;color:#fff;text-decoration:none;padding:12px 20px;border-radius:9px;font-weight:700;display:inline-block">Renew subscription</a>
+                    </p>
+                    <p style="font-size:13px;color:#64748b;margin-top:24px">This is an account service notification from TallyPadi.</p>
+                </div>
+            </div>
+        `,
+    });
+
+    return true;
+};
+
 export const sendSellerVerificationAdminNotification = async ({
     verificationId,
     fullName,

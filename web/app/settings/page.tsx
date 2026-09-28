@@ -613,6 +613,12 @@ export default function SettingsPage() {
                       <option value="Hausa">Hausa</option>
                       <option value="Yoruba">Yoruba</option>
                       <option value="Igbo">Igbo</option>
+                      <option value="French">French</option>
+                      <option value="Swahili">Swahili</option>
+                      <option value="Twi">Twi</option>
+                      <option value="Portuguese">Portuguese</option>
+                      <option value="Arabic">Arabic</option>
+                      <option value="Zulu">Zulu</option>
                     </select>
                     <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
                       <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">

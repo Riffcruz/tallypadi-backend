@@ -8,6 +8,9 @@ import { queueMarketplaceFacetsRefresh, queueMarketplaceReconcile, queueOutbound
 import { cleanupPdfReports } from './pdf.service';
 import { orderService } from './order.service';
 import { runAdBoostMaintenance } from './adCampaign.service';
+import { sendSubscriptionExpiryEmail } from './email.service';
+import { SubscriptionEmailReminder } from '../models/subscriptionEmailReminder.model';
+import { shouldSendSubscriptionReminder } from './subscriptionReminder.logic';
 
 const BATCH_SIZE = 2000;
 const SPREAD_MINUTES = 10; // spread sending load (0..9 min) per user deterministically
@@ -108,6 +111,94 @@ export const getDateKeyForOffset = (d: Date, offsetMin: number) => {
   const m = String(shifted.getUTCMonth() + 1).padStart(2, '0');
   const day = String(shifted.getUTCDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
+};
+
+export const runSubscriptionEmailReminders = async (now = new Date()) => {
+  const rangeStart = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const rangeEnd = new Date(now.getTime() + 4 * 24 * 60 * 60 * 1000);
+  const users = await User.find({
+    role: 'OWNER',
+    email: { $exists: true, $nin: ['', null] },
+    emailSubscribed: { $ne: false },
+    emailDeliveryStatus: { $ne: 'HARD_BOUNCED' },
+    subscriptionStatus: { $in: ['trial', 'active', 'past_due'] },
+    $or: [
+      { trialEndsAt: { $gte: rangeStart, $lte: rangeEnd } },
+      { nextBillingDate: { $gte: rangeStart, $lte: rangeEnd } },
+    ],
+  })
+    .select('_id email name businessName subscriptionStatus trialEndsAt nextBillingDate settings.utcOffsetMinutes')
+    .lean();
+
+  let sent = 0;
+  let skipped = 0;
+  let failed = 0;
+
+  for (const user of users) {
+    const isTrial = user.subscriptionStatus === 'trial' || (!user.nextBillingDate && Boolean(user.trialEndsAt));
+    const expiryAt = new Date((isTrial ? user.trialEndsAt : user.nextBillingDate) as Date);
+    if (!Number.isFinite(expiryAt.getTime())) continue;
+    const offsetMinutes = Number(user.settings?.utcOffsetMinutes ?? 60);
+    const days = shouldSendSubscriptionReminder(now, expiryAt, offsetMinutes);
+    if (days === null) continue;
+
+    let reminder: any;
+    try {
+      reminder = await SubscriptionEmailReminder.create({
+        user: user._id,
+        expiryAt,
+        daysBeforeExpiry: days,
+        status: 'PENDING',
+        attempts: 1,
+        email: String(user.email).trim().toLowerCase(),
+      });
+    } catch (error: any) {
+      if (error?.code === 11000) {
+        reminder = await SubscriptionEmailReminder.findOneAndUpdate(
+          {
+            user: user._id,
+            expiryAt,
+            daysBeforeExpiry: days,
+            status: 'FAILED',
+            attempts: { $lt: 3 },
+          },
+          { $set: { status: 'PENDING', error: null }, $inc: { attempts: 1 } },
+          { new: true },
+        );
+        if (!reminder) {
+          skipped += 1;
+          continue;
+        }
+      } else {
+        throw error;
+      }
+    }
+
+    try {
+      await sendSubscriptionExpiryEmail({
+        email: String(user.email),
+        name: user.name,
+        businessName: user.businessName,
+        expiryAt,
+        daysBeforeExpiry: days,
+        isTrial,
+      });
+      await SubscriptionEmailReminder.updateOne(
+        { _id: reminder._id },
+        { $set: { status: 'SENT', sentAt: new Date(), error: null } },
+      );
+      sent += 1;
+    } catch (error: any) {
+      await SubscriptionEmailReminder.updateOne(
+        { _id: reminder._id },
+        { $set: { status: 'FAILED', error: String(error?.message || error).slice(0, 1000) } },
+      );
+      failed += 1;
+      console.error(`❌ Subscription reminder email failed for ${user.email}:`, error?.message || error);
+    }
+  }
+
+  return { eligible: users.length, sent, skipped, failed };
 };
 
 // compute next closing-time moment in UTC (with deterministic jitter)
@@ -284,6 +375,16 @@ export function startScheduler() {
       }
     } catch (err) {
       console.error('❌ Expiring plan scheduler error:', err);
+    }
+  });
+
+  // 2.5) Subscription email reminders (3, 2, 1 days and expiry day)
+  cron.schedule('15 * * * *', async () => {
+    try {
+      const result = await runSubscriptionEmailReminders();
+      if (result.eligible > 0) console.log('📧 Subscription email reminders:', result);
+    } catch (err) {
+      console.error('❌ Subscription email reminder scheduler error:', err);
     }
   });
 

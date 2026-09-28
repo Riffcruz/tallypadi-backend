@@ -36,6 +36,12 @@ const LANGUAGES = [
   { code: 'Yoruba', name: 'Yoruba' },
   { code: 'Igbo', name: 'Igbo' },
   { code: 'Hausa', name: 'Hausa' },
+  { code: 'French', name: 'French' },
+  { code: 'Swahili', name: 'Swahili' },
+  { code: 'Twi', name: 'Twi' },
+  { code: 'Portuguese', name: 'Portuguese' },
+  { code: 'Arabic', name: 'Arabic' },
+  { code: 'Zulu', name: 'Zulu' },
 ];
 
 function buildPhoneIdentifier(input: string, selectedCountryCode: string) {
@@ -81,6 +87,7 @@ export default function RegisterPage() {
   const [email, setEmail] = useState('');
   const [shopName, setShopName] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [closingHour, setClosingHour] = useState('20:00');
   const [language, setLanguage] = useState('English');
   const [showPassword, setShowPassword] = useState(false);
@@ -99,11 +106,12 @@ export default function RegisterPage() {
       return true;
     }
     if (!password.trim() || password.length < 6) return false;
+    if (!confirmPassword.trim() || password.trim() !== confirmPassword.trim()) return false;
     if (!shopName.trim()) return false;
     if (!phoneNumber.trim()) return false;
     if (!email.trim()) return false;
     return true;
-  }, [loading, password, shopName, phoneNumber, email, otpSent, otpCode]);
+  }, [loading, password, confirmPassword, shopName, phoneNumber, email, otpSent, otpCode]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -136,8 +144,14 @@ export default function RegisterPage() {
       } else {
         // Step 1: REQUEST RESGISTRATION
         const pass = password.trim();
+        const confirmedPass = confirmPassword.trim();
         if (pass.length < 6) {
           setError('Password must be at least 6 characters');
+          setLoading(false);
+          return;
+        }
+        if (pass !== confirmedPass) {
+          setError('Passwords do not match');
           setLoading(false);
           return;
         }
@@ -149,6 +163,7 @@ export default function RegisterPage() {
             email,
             businessName: shopName,
             password: pass,
+            confirmPassword: confirmedPass,
             closingTime: closingHour,
             language: language,
             countryCode: countryCode.replace('+', ''),
@@ -398,6 +413,7 @@ export default function RegisterPage() {
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                autoComplete="new-password"
               />
               <button
                 type="button"
@@ -407,6 +423,28 @@ export default function RegisterPage() {
                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
             </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">
+              Retype Password
+            </label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                <Lock className="h-5 w-5 text-slate-400" />
+              </div>
+              <input
+                type={showPassword ? 'text' : 'password'}
+                className={`w-full h-12 pl-11 pr-4 bg-slate-50 border rounded-xl focus:ring-2 transition-all outline-none text-slate-900 placeholder:text-slate-400 font-medium ${confirmPassword && password.trim() !== confirmPassword.trim() ? 'border-red-300 focus:ring-red-500/20 focus:border-red-500' : 'border-slate-200 focus:ring-emerald-500/20 focus:border-emerald-500'}`}
+                placeholder="Retype your password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                autoComplete="new-password"
+              />
+            </div>
+            {confirmPassword && password.trim() !== confirmPassword.trim() && (
+              <p className="text-xs font-semibold text-red-600 ml-1">Passwords do not match.</p>
+            )}
           </div>
 
           <button

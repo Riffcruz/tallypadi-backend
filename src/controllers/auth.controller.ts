@@ -286,10 +286,13 @@ export const loginUser = async (req: Request, res: Response) => {
 
 export const registerUser = async (req: Request, res: Response) => {
   try {
-    const { phoneNumber, businessName, password, closingTime, language, countryCode, email, referralCode } = req.body;
+    const { phoneNumber, businessName, password, confirmPassword, closingTime, language, countryCode, email, referralCode } = req.body;
 
     if (!phoneNumber || !businessName || !password || !email) {
       return res.status(400).json({ error: 'Please provide phone number, email, shop name, and password' });
+    }
+    if (confirmPassword !== undefined && password !== confirmPassword) {
+      return res.status(400).json({ error: 'Passwords do not match' });
     }
 
     // Normalize phone (digits only)
