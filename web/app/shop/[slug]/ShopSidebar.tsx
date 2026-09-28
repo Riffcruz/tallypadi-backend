@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Home, Phone, ShoppingBag, List, X, UserPlus, FileText, CreditCard, HelpCircle } from 'lucide-react';
+import { ChevronDown, Home, Phone, ShoppingBag, List, X, UserPlus, FileText, CreditCard, HelpCircle } from 'lucide-react';
 
 interface ShopSidebarProps {
   shopName: string;
@@ -74,29 +74,30 @@ export default function ShopSidebar({
           </button>
 
           {categories.length > 0 && (
-            <div className="pt-4">
-              <p className="px-4 text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+            <details open className="group pt-4">
+              <summary className="mb-2 flex cursor-pointer list-none items-center justify-between px-4 text-xs font-bold uppercase tracking-wider text-slate-400 marker:content-none">
                 Categories
-              </p>
+                <ChevronDown size={15} className="transition group-open:rotate-180" />
+              </summary>
               {categories.map((cat) => (
                 <button
                   key={cat}
                   onClick={() => {
-                    onCategorySelect(cat.toLowerCase());
+                    onCategorySelect(cat);
                     onClose();
                   }}
                   className={`w-full flex items-center gap-3 px-4 py-2.5 transition-all duration-200 font-medium text-sm text-left ${
-                    activeCategory === cat.toLowerCase()
+                    activeCategory === cat
                       ? 'bg-slate-50 font-bold'
                       : 'text-slate-600 hover:bg-slate-50'
                   }`}
-                  style={activeCategory === cat.toLowerCase() ? { color: themeColor } : {}}
+                  style={activeCategory === cat ? { color: themeColor } : {}}
                 >
                   <List size={16} className="opacity-50" />
                   <span className="capitalize">{cat}</span>
                 </button>
               ))}
-            </div>
+            </details>
           )}
 
           <div className="pt-4 mt-4 border-t border-slate-100">

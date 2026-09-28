@@ -52,6 +52,18 @@ type PublicSettingsResponse = {
   whatsappUrl?: unknown;
 };
 
+type MarketplacePreviewProduct = {
+  id: string;
+  name: string;
+  price: number;
+  image?: string | null;
+  isBoosted?: boolean;
+  shop?: {
+    name?: string;
+    currencyCode?: string;
+  };
+};
+
 const heroFeatures: Feature[] = [
   {
     title: "Chat to record sales",
@@ -383,6 +395,83 @@ function TrustStrip() {
             );
           })}
         </div>
+      </div>
+    </section>
+  );
+}
+
+function MarketplaceShowcase() {
+  const [products, setProducts] = useState<MarketplacePreviewProduct[]>([]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://tallypadi.com/api";
+
+    fetch(`${apiUrl}/marketplace?limit=4&sort=recommended`, { signal: controller.signal })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (Array.isArray(data?.products)) setProducts(data.products.slice(0, 4));
+      })
+      .catch(() => undefined);
+
+    return () => controller.abort();
+  }, []);
+
+  const formatPrice = (product: MarketplacePreviewProduct) => {
+    try {
+      return new Intl.NumberFormat("en-NG", {
+        style: "currency",
+        currency: product.shop?.currencyCode || "NGN",
+        maximumFractionDigits: 0,
+      }).format(product.price || 0);
+    } catch {
+      return `NGN ${(product.price || 0).toLocaleString()}`;
+    }
+  };
+
+  return (
+    <section className="bg-white py-14 sm:py-16">
+      <div className="mx-auto max-w-[1480px] px-5 sm:px-10 lg:px-20">
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <span className="inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1 text-xs font-black uppercase tracking-wider text-amber-900">
+              <Store size={14} /> TallyPadi Marketplace
+            </span>
+            <h2 className="mt-4 max-w-2xl text-4xl font-black leading-tight text-stone-950 sm:text-5xl" style={handStyle}>
+              Find products from local businesses.
+            </h2>
+            <p className="mt-4 max-w-xl text-sm font-semibold leading-6 text-stone-600">
+              Browse products, discover shops near you and chat directly with sellers.
+            </p>
+          </div>
+          <Link href="/marketplace" className="inline-flex w-fit items-center justify-center gap-2 rounded-lg bg-emerald-700 px-6 py-3.5 text-sm font-black text-white transition hover:bg-emerald-800">
+            Browse Marketplace <ArrowRight size={17} />
+          </Link>
+        </div>
+
+        {products.length > 0 && (
+          <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-5">
+            {products.map((product) => (
+              <Link key={product.id} href={`/marketplace/product/${product.id}`} className="group overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-lg">
+                <div className="relative aspect-square overflow-hidden bg-emerald-50 sm:aspect-[4/3]">
+                  {product.image ? (
+                    <img src={product.image} alt={product.name} loading="lazy" className="h-full w-full object-cover transition duration-300 group-hover:scale-105" />
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-4xl font-black uppercase text-emerald-700">{product.name.slice(0, 1)}</div>
+                  )}
+                  {product.isBoosted && (
+                    <span className="absolute left-2 top-2 rounded bg-amber-300 px-2 py-1 text-[10px] font-black uppercase text-stone-950">Sponsored</span>
+                  )}
+                </div>
+                <div className="p-3 sm:p-4">
+                  <p className="truncate text-sm font-black text-stone-950 sm:text-base">{product.name}</p>
+                  <p className="mt-1 text-sm font-black text-emerald-700">{formatPrice(product)}</p>
+                  {product.shop?.name && <p className="mt-2 truncate text-xs font-semibold text-stone-500">{product.shop.name}</p>}
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
     </section>
   );
@@ -877,6 +966,7 @@ export default function LandingPage() {
       <main className="pt-[72px]">
         <HeroSection whatsappLink={whatsappLink} />
         <TrustStrip />
+        <MarketplaceShowcase />
         <AboutSection />
         <PricingBand whatsappLink={whatsappLink} />
         <HowItWorksBand />

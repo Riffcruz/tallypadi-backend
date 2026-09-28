@@ -172,36 +172,38 @@ function FilterPanel({
         </button>
       </div>
 
-      <div className="space-y-2">
-        <button
-          type="button"
-          onClick={() => onCategoryChange('')}
-          className={`flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-left text-sm font-bold transition ${!selectedCategory
-            ? 'border-emerald-300 bg-emerald-50 text-emerald-900'
-            : 'border-stone-200 bg-white text-stone-700 hover:border-emerald-200 hover:bg-emerald-50/60'
-            }`}
-        >
-          <span>All categories</span>
-        </button>
-        {categories.map((category) => (
+      <details open className="group overflow-hidden rounded-lg border border-stone-200 bg-white">
+        <summary className="flex cursor-pointer list-none items-center justify-between px-3 py-3 text-sm font-black text-stone-900 marker:content-none">
+          Categories
+          <ChevronDown size={16} className="transition group-open:rotate-180" />
+        </summary>
+        <div className="space-y-1 border-t border-stone-100 p-2">
           <button
-            key={category.id}
             type="button"
-            onClick={() => onCategoryChange(category.id)}
-            className={`flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-left text-sm font-bold transition ${selectedCategory === category.id
-              ? 'border-emerald-300 bg-emerald-50 text-emerald-900'
-              : 'border-stone-200 bg-white text-stone-700 hover:border-emerald-200 hover:bg-emerald-50/60'
+            onClick={() => onCategoryChange('')}
+            className={`flex w-full items-center justify-between rounded-md px-3 py-2.5 text-left text-sm font-bold transition ${!selectedCategory
+              ? 'bg-emerald-700 text-white'
+              : 'text-stone-700 hover:bg-emerald-50 hover:text-emerald-900'
               }`}
           >
-            <span>{category.label}</span>
-            {category.count !== undefined && (
-              <span className="rounded-md bg-stone-100 px-2 py-0.5 text-[11px] text-stone-500">
-                {category.count}
-              </span>
-            )}
+            <span>All products</span>
           </button>
-        ))}
-      </div>
+          {categories.map((category) => (
+            <button
+              key={category.id}
+              type="button"
+              onClick={() => onCategoryChange(category.id)}
+              className={`flex w-full items-center justify-between rounded-md px-3 py-2.5 text-left text-sm font-bold transition ${selectedCategory === category.id
+                ? 'bg-emerald-700 text-white'
+                : 'text-stone-700 hover:bg-emerald-50 hover:text-emerald-900'
+                }`}
+            >
+              <span>{category.label}</span>
+              {category.count !== undefined && <span className="text-[11px] opacity-70">{category.count}</span>}
+            </button>
+          ))}
+        </div>
+      </details>
 
       <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
         <div className="mb-3 flex items-center gap-2 text-amber-900">

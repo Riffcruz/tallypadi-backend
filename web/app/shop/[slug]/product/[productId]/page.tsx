@@ -47,6 +47,7 @@ type ShopProduct = {
 };
 
 type ShopResponse = { shop?: ShopInfo };
+type ShopListingsResponse = { products?: ShopProduct[] };
 type Props = { params: Promise<{ slug: string; productId: string }> };
 
 const normalizeImageUrl = (image?: string | null) => {
@@ -94,6 +95,20 @@ const getProduct = async (slug: string, productId: string) => {
   });
   if (!res.ok) return null;
   return (await res.json()) as ShopProduct;
+};
+
+const getSimilarProducts = async (slug: string, product: ShopProduct) => {
+  const params = new URLSearchParams({ page: '1', sort: 'newest' });
+  if (product.category) params.set('category', product.category);
+  const res = await fetch(`${API_URL}/shop/${encodeURIComponent(slug)}/products?${params.toString()}`, {
+    next: { revalidate: 60 },
+  });
+  if (!res.ok) return [];
+  const data = (await res.json()) as ShopListingsResponse;
+  return (data.products || [])
+    .filter((candidate) => candidate.id !== product.id)
+    .sort((a, b) => Number(Boolean(b.isBoosted)) - Number(Boolean(a.isBoosted)))
+    .slice(0, 4);
 };
 
 const getLocationText = (shop: ShopInfo) => [
@@ -163,6 +178,7 @@ export default async function ShopProductPage({ params }: Props) {
   ]);
 
   if (!shop || !product) notFound();
+  const similarProducts = await getSimilarProducts(slug, product);
 
   const themeColor = shop.themeColor || '#10b981';
   const image = normalizeImageUrl(product.image);
@@ -354,6 +370,35 @@ export default async function ShopProductPage({ params }: Props) {
           </div>
         </aside>
       </section>
+
+      {similarProducts.length > 0 && (
+        <section className="mx-auto max-w-7xl px-4 pb-10 sm:px-6 lg:px-8">
+          <div className="mb-4 flex items-end justify-between gap-4">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.14em]" style={{ color: themeColor }}>More from this shop</p>
+              <h2 className="mt-1 text-2xl font-black text-slate-950">Similar adverts</h2>
+            </div>
+            <Link href={`/shop/${slug}`} className="text-sm font-black" style={{ color: themeColor }}>View all</Link>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-5">
+            {similarProducts.map((item) => {
+              const itemImage = normalizeImageUrl(item.image);
+              return (
+                <Link key={item.id} href={`/shop/${slug}/product/${item.id}`} className="group overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg">
+                  <div className="relative aspect-square overflow-hidden bg-slate-100 sm:aspect-[4/3]">
+                    {itemImage ? <img src={itemImage} alt={item.name} loading="lazy" className="h-full w-full object-cover transition duration-300 group-hover:scale-105" /> : <div className="flex h-full items-center justify-center text-4xl font-black uppercase" style={{ color: themeColor }}>{item.name.slice(0, 1)}</div>}
+                    {item.isBoosted && <span className="absolute left-2 top-2 rounded bg-amber-300 px-2 py-1 text-[10px] font-black uppercase text-slate-950">Sponsored</span>}
+                  </div>
+                  <div className="p-3 sm:p-4">
+                    <p className="line-clamp-2 text-sm font-black text-slate-950">{item.name}</p>
+                    <p className="mt-2 text-sm font-black" style={{ color: themeColor }}>{formatMoney(item.price, shop.currencyCode)}</p>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      )}
     </main>
   );
 }

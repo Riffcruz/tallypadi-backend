@@ -170,7 +170,7 @@ export const getShopProducts = async (req: Request, res: Response): Promise<any>
     }
 
     if (category) {
-      filter.category = String(category).toLowerCase();
+      filter.category = { $regex: `^${escapeRegExp(String(category).trim())}$`, $options: 'i' };
     }
 
     let sortOptions: Record<string, 1 | -1> = { createdAt: -1 }; // Default newest

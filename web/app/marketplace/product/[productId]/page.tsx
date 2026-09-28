@@ -18,6 +18,10 @@ type MarketplaceProduct = {
   colors?: string[];
   sizes?: string[];
   isBoosted?: boolean;
+  smartCategory?: {
+    id: string;
+    label: string;
+  };
   seo?: {
     title?: string;
     metaDescription?: string;
@@ -45,6 +49,7 @@ type MarketplaceProduct = {
 };
 
 type ProductResponse = { product?: MarketplaceProduct };
+type ListingsResponse = { products?: MarketplaceProduct[] };
 type Props = { params: Promise<{ productId: string }> };
 
 const formatMoney = (amount: number, currencyCode = 'NGN') => {
@@ -89,6 +94,20 @@ const getProduct = async (productId: string) => {
   if (!res.ok) return null;
   const data = (await res.json()) as ProductResponse;
   return data.product || null;
+};
+
+const getSimilarProducts = async (product: MarketplaceProduct) => {
+  const params = new URLSearchParams({ limit: '12', sort: 'recommended' });
+  const category = product.smartCategory?.id || product.category;
+  if (category) params.set('category', category);
+
+  const res = await fetch(`${API_URL}/marketplace?${params.toString()}`, { next: { revalidate: 60 } });
+  if (!res.ok) return [];
+  const data = (await res.json()) as ListingsResponse;
+  return (data.products || [])
+    .filter((candidate) => candidate.id !== product.id)
+    .sort((a, b) => Number(Boolean(b.isBoosted)) - Number(Boolean(a.isBoosted)))
+    .slice(0, 4);
 };
 
 const buildWhatsAppLink = (product: MarketplaceProduct) => {
@@ -137,6 +156,7 @@ export default async function MarketplaceProductPage({ params }: Props) {
   const { productId } = await params;
   const product = await getProduct(productId);
   if (!product) notFound();
+  const similarProducts = await getSimilarProducts(product);
 
   const whatsappLink = buildWhatsAppLink(product);
   const locationText = getLocationText(product);
@@ -308,6 +328,35 @@ export default async function MarketplaceProductPage({ params }: Props) {
         </aside>
         </div>
       </section>
+
+      {similarProducts.length > 0 && (
+        <section className="mx-auto max-w-7xl px-4 pb-10 sm:px-6 lg:px-8">
+          <div className="mb-4 flex items-end justify-between gap-4">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.14em] text-emerald-700">More in this category</p>
+              <h2 className="mt-1 text-2xl font-black text-stone-950">Similar adverts</h2>
+            </div>
+            <Link href={`/marketplace${product.smartCategory?.id ? `?category=${encodeURIComponent(product.smartCategory.id)}` : ''}`} className="text-sm font-black text-emerald-700 hover:text-emerald-900">
+              View all
+            </Link>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-5">
+            {similarProducts.map((item) => (
+              <Link key={item.id} href={`/marketplace/product/${item.id}`} className="group overflow-hidden rounded-lg border border-stone-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg">
+                <div className="relative aspect-square overflow-hidden bg-emerald-50 sm:aspect-[4/3]">
+                  {item.image ? <img src={item.image} alt={item.name} loading="lazy" className="h-full w-full object-cover transition duration-300 group-hover:scale-105" /> : <div className="flex h-full items-center justify-center text-4xl font-black uppercase text-emerald-700">{item.name.slice(0, 1)}</div>}
+                  {item.isBoosted && <span className="absolute left-2 top-2 rounded bg-amber-300 px-2 py-1 text-[10px] font-black uppercase text-stone-950">Sponsored</span>}
+                </div>
+                <div className="p-3 sm:p-4">
+                  <p className="line-clamp-2 text-sm font-black text-stone-950">{item.name}</p>
+                  <p className="mt-2 text-sm font-black text-emerald-700">{formatMoney(item.price, item.shop.currencyCode)}</p>
+                  <p className="mt-1 truncate text-xs font-semibold text-stone-500">{item.shop.name}</p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
     </main>
       <MarketplaceFooter />
     </div>

@@ -7,6 +7,7 @@ import {
   BadgeCheck,
   ShoppingBag, Loader2, PackageX, ExternalLink, AlertTriangle,
   Search, Menu, Plus, Minus, ShoppingCart, X, MessageCircle,
+  ChevronDown,
 } from 'lucide-react';
 import ShopSidebar from './ShopSidebar';
 
@@ -303,8 +304,8 @@ export default function ShopClient({ initialShop, slug }: ShopClientProps) {
         </div>
       </header>
 
-      {/* Mobile visible filters */}
-      <section className="border-b border-slate-200 bg-white px-4 py-4 shadow-sm md:hidden">
+      {/* Always-visible category filters */}
+      <section className="border-b border-slate-200 bg-white px-4 py-4 shadow-sm">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <p className="text-xs font-black uppercase tracking-wider text-slate-400">Filter products</p>
@@ -314,33 +315,34 @@ export default function ShopClient({ initialShop, slug }: ShopClientProps) {
           </div>
         </div>
 
-        <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
-          <button
-            onClick={() => setCategory('')}
-            className={`shrink-0 rounded-full border px-4 py-2 text-xs font-black transition ${
-              category === '' ? 'text-white shadow-sm' : 'border-slate-200 bg-slate-50 text-slate-600'
-            }`}
-            style={category === '' ? { backgroundColor: themeColor, borderColor: themeColor } : {}}
-          >
-            All
-          </button>
-          {initialShop.categories.map((cat) => {
-            const value = cat.toLowerCase();
-            const active = category === value;
-            return (
+        <details className="group mt-3 overflow-hidden rounded-xl border border-slate-200 bg-slate-50 md:hidden">
+          <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-black text-slate-800 marker:content-none">
+            Browse categories
+            <ChevronDown size={17} className="transition group-open:rotate-180" />
+          </summary>
+          <div className="space-y-1 border-t border-slate-200 bg-white p-2">
+            <button
+              onClick={() => setCategory('')}
+              className={`w-full rounded-lg px-4 py-2.5 text-left text-sm font-black transition ${category === '' ? 'text-white' : 'text-slate-700 hover:bg-slate-50'}`}
+              style={category === '' ? { backgroundColor: themeColor } : {}}
+            >
+              All products
+            </button>
+            {initialShop.categories.map((cat) => {
+              const active = category === cat;
+              return (
               <button
                 key={cat}
-                onClick={() => setCategory(value)}
-                className={`shrink-0 rounded-full border px-4 py-2 text-xs font-black capitalize transition ${
-                  active ? 'text-white shadow-sm' : 'border-slate-200 bg-slate-50 text-slate-600'
-                }`}
-                style={active ? { backgroundColor: themeColor, borderColor: themeColor } : {}}
+                onClick={() => setCategory(cat)}
+                className={`w-full rounded-lg px-4 py-2.5 text-left text-sm font-bold capitalize transition ${active ? 'text-white' : 'text-slate-700 hover:bg-slate-50'}`}
+                style={active ? { backgroundColor: themeColor } : {}}
               >
                 {cat}
               </button>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        </details>
 
         <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
           {[
