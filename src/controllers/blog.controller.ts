@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
+import { z } from 'zod';
 import { BlogPost, BlogBlockType, IBlogContentBlock, IBlogSeo } from '../models/blogPost.model';
+import { generateBlogDraft } from '../services/blogAi.service';
 
 const allowedBlockTypes = new Set<BlogBlockType>([
   'heading',
@@ -16,6 +18,18 @@ const allowedBlockTypes = new Set<BlogBlockType>([
 const allowedFontSizes = new Set(['sm', 'base', 'lg', 'xl', '2xl']);
 
 const cleanString = (value: unknown, max = 5000) => String(value || '').trim().slice(0, max);
+
+const cleanLink = (value: unknown, max = 1000): string => {
+  const link = cleanString(value, max);
+  if (!link) return '';
+  if (link.startsWith('/') && !link.startsWith('//')) return link;
+  try {
+    const url = new URL(link);
+    return url.protocol === 'https:' ? url.toString() : '';
+  } catch {
+    return '';
+  }
+};
 
 const getRouteParam = (value: unknown): string => {
   if (Array.isArray(value)) return String(value[0] || '');
@@ -86,7 +100,7 @@ const normalizeBlocks = (value: unknown): IBlogContentBlock[] => {
       imageUrl: cleanString(block.imageUrl, 1000),
       alt: cleanString(block.alt, 180),
       caption: cleanString(block.caption, 240),
-      href: cleanString(block.href, 1000),
+      href: cleanLink(block.href),
       label: cleanString(block.label, 120),
       textColor: cleanString(block.textColor, 32),
       backgroundColor: cleanString(block.backgroundColor, 32),
@@ -102,7 +116,7 @@ const normalizeSeo = (value: unknown): IBlogSeo => {
     metaTitle: cleanString(seo.metaTitle, 70),
     metaDescription: cleanString(seo.metaDescription, 170),
     keywords: normalizeStringArray(seo.keywords, 24, 80),
-    canonicalUrl: cleanString(seo.canonicalUrl, 300),
+    canonicalUrl: cleanLink(seo.canonicalUrl, 300),
     ogImage: cleanString(seo.ogImage, 1000),
     noIndex: Boolean(seo.noIndex),
   };
@@ -144,7 +158,31 @@ const buildPostPayload = async (body: Record<string, unknown>, existingId?: stri
 };
 
 const publicProjection = '-createdBy -updatedBy -__v';
-const blogCacheControl = 'no-store, no-cache, must-revalidate, proxy-revalidate';
+const blogCacheControl = 'public, max-age=60, s-maxage=300, stale-while-revalidate=600';
+
+const aiDraftSchema = z.object({
+  brief: z.string().trim().min(20).max(12000),
+  primaryKeyword: z.string().trim().max(160).optional(),
+  audience: z.string().trim().max(300).optional(),
+  tone: z.string().trim().max(160).optional(),
+  length: z.enum(['STANDARD', 'IN_DEPTH']).optional().default('STANDARD'),
+}).strict();
+
+export const generateAdminBlogDraft = async (req: Request, res: Response) => {
+  try {
+    const parsed = aiDraftSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+    const generated = await generateBlogDraft(parsed.data);
+    const payload = await buildPostPayload(generated);
+    payload.seo.canonicalUrl = `https://tallypadi.com/blog/${payload.slug}`;
+
+    return res.json({ draft: { ...payload, status: 'DRAFT' } });
+  } catch (error) {
+    console.error('generateAdminBlogDraft error:', error);
+    return res.status(502).json({ error: error instanceof Error ? error.message : 'Could not generate article' });
+  }
+};
 
 export const listPublishedBlogPosts = async (req: Request, res: Response) => {
   try {

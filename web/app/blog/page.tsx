@@ -5,7 +5,7 @@ import MarketingNavbar from '../../components/MarketingNavbar';
 import MarketingFooter from '../../components/MarketingFooter';
 import { fetchBlogPosts } from './blogApi';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 300;
 
 export const metadata: Metadata = {
   title: 'TallyPadi Blog - Business Management Tips for African SMEs',
@@ -67,6 +67,20 @@ const formatDate = (value?: string) => {
 
 export default async function BlogPage() {
   const posts = await fetchBlogPosts(36);
+  const blogJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'Blog',
+    name: 'TallyPadi Blog',
+    url: 'https://tallypadi.com/blog',
+    description: metadata.description,
+    blogPost: posts.slice(0, 20).map((post) => ({
+      '@type': 'BlogPosting',
+      headline: post.title,
+      url: `https://tallypadi.com/blog/${post.slug}`,
+      datePublished: post.publishedAt,
+      dateModified: post.updatedAt || post.publishedAt,
+    })),
+  };
 
   return (
     <div className="min-h-screen bg-[#f7f0df] text-stone-900">
@@ -159,6 +173,7 @@ export default async function BlogPage() {
         </section>
       </main>
       <MarketingFooter />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(blogJsonLd) }} />
     </div>
   );
 }

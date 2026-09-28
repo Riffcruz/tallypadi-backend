@@ -86,10 +86,14 @@ export default function BlogRenderer({ blocks }: { blocks: BlogContentBlock[] })
         }
 
         if (block.type === 'button') {
+          const href = block.href?.startsWith('/') || block.href?.startsWith('https://') ? block.href : '#';
+          const external = href.startsWith('https://');
           return (
             <a
               key={block.id}
-              href={block.href || '#'}
+              href={href}
+              target={external ? '_blank' : undefined}
+              rel={external ? 'noopener noreferrer' : undefined}
               className="inline-flex rounded-lg bg-emerald-600 px-5 py-3 text-sm font-black text-white transition hover:bg-emerald-700"
             >
               {block.label || 'Open link'}

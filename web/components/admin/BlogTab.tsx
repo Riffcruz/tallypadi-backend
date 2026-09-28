@@ -35,6 +35,7 @@ import {
   Send,
   SeparatorHorizontal,
   Settings2,
+  Sparkles,
   Trash2,
   Type,
   UploadCloud,
@@ -380,6 +381,13 @@ export default function BlogTab({ adminToken }: { adminToken: string }) {
   const [saving, setSaving] = useState(false);
   const [uploadingTarget, setUploadingTarget] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [aiPanelOpen, setAiPanelOpen] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [aiBrief, setAiBrief] = useState('');
+  const [aiKeyword, setAiKeyword] = useState('');
+  const [aiAudience, setAiAudience] = useState('Small and growing business owners in Nigeria and Africa');
+  const [aiTone, setAiTone] = useState('Clear, practical and conversational');
+  const [aiLength, setAiLength] = useState<'STANDARD' | 'IN_DEPTH'>('STANDARD');
 
   const headers = useMemo(() => ({
     Authorization: `Bearer ${adminToken}`,
@@ -692,6 +700,36 @@ export default function BlogTab({ adminToken }: { adminToken: string }) {
     setEditorOpen(false);
   };
 
+  const generateWithAi = async () => {
+    if (aiBrief.trim().length < 20) {
+      Swal.fire('Add more context', 'Tell the AI what the article should cover, its goal, and any facts it must include.', 'warning');
+      return;
+    }
+
+    setGenerating(true);
+    try {
+      const response = await axios.post(`${API_URL}/admin/blog/generate`, {
+        brief: aiBrief,
+        primaryKeyword: aiKeyword,
+        audience: aiAudience,
+        tone: aiTone,
+        length: aiLength,
+      }, { headers });
+      const draft = normalizePost(response.data?.draft || {});
+      setSelectedPost(draft);
+      setSelectedBlockId(draft.contentBlocks[0]?.id || null);
+      setInspectorTab('article');
+      setSavedSnapshot('__UNSAVED_AI_DRAFT__');
+      setEditorOpen(true);
+      setAiPanelOpen(false);
+    } catch (error: unknown) {
+      const data = axios.isAxiosError(error) ? error.response?.data as { error?: unknown } | undefined : undefined;
+      Swal.fire('Generation failed', typeof data?.error === 'string' ? data.error : 'The AI could not generate the article. Please try again.', 'error');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   if (!editorOpen) {
     return (
       <div className="space-y-5">
@@ -701,10 +739,39 @@ export default function BlogTab({ adminToken }: { adminToken: string }) {
             <h2 className="mt-2 text-2xl font-black text-white">Your articles</h2>
             <p className="mt-1 text-sm text-slate-400">Create a new post or continue editing a draft.</p>
           </div>
-          <button type="button" onClick={newArticle} className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-500 px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-emerald-400">
-            <FilePlus2 size={17} /> New article
-          </button>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <button type="button" onClick={() => setAiPanelOpen((open) => !open)} className="inline-flex items-center justify-center gap-2 rounded-lg bg-violet-500 px-5 py-3 text-sm font-black text-white transition hover:bg-violet-400">
+              <Sparkles size={17} /> Generate with AI
+            </button>
+            <button type="button" onClick={newArticle} className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-500 px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-emerald-400">
+              <FilePlus2 size={17} /> Write manually
+            </button>
+          </div>
         </div>
+
+        {aiPanelOpen && (
+          <section className="rounded-xl border border-violet-500/30 bg-violet-500/5 p-5">
+            <div className="flex items-start gap-3">
+              <div className="rounded-lg bg-violet-500 p-2 text-white"><Sparkles size={18} /></div>
+              <div><h3 className="font-black text-white">Generate an editable SEO draft</h3><p className="mt-1 text-sm text-slate-400">The AI fills the article, links, category, tags and search fields. It never publishes automatically.</p></div>
+            </div>
+            <label className="mt-5 block">
+              <span className="text-xs font-black uppercase tracking-wider text-slate-300">What should the article cover?</span>
+              <textarea value={aiBrief} onChange={(event) => setAiBrief(event.target.value)} rows={7} placeholder="Example: Write a practical guide for Nigerian mini-mart owners on tracking daily sales and stock with WhatsApp. Explain common mistakes, give a simple daily routine, and connect it naturally to TallyPadi. Do not invent statistics." className="mt-2 w-full resize-y rounded-lg border border-slate-700 bg-slate-950 p-4 text-sm leading-6 text-white outline-none placeholder:text-slate-600 focus:border-violet-400" />
+            </label>
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <label><span className="text-xs font-black uppercase tracking-wider text-slate-400">Main search phrase</span><input value={aiKeyword} onChange={(event) => setAiKeyword(event.target.value)} placeholder="e.g. daily sales tracking Nigeria" className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white outline-none focus:border-violet-400" /></label>
+              <label><span className="text-xs font-black uppercase tracking-wider text-slate-400">Audience</span><input value={aiAudience} onChange={(event) => setAiAudience(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white outline-none focus:border-violet-400" /></label>
+              <label><span className="text-xs font-black uppercase tracking-wider text-slate-400">Writing style</span><input value={aiTone} onChange={(event) => setAiTone(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white outline-none focus:border-violet-400" /></label>
+              <label><span className="text-xs font-black uppercase tracking-wider text-slate-400">Article depth</span><select value={aiLength} onChange={(event) => setAiLength(event.target.value as 'STANDARD' | 'IN_DEPTH')} className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white outline-none focus:border-violet-400"><option value="STANDARD">Standard — 800 to 1,200 words</option><option value="IN_DEPTH">In-depth — 1,400 to 2,000 words</option></select></label>
+            </div>
+            <div className="mt-5 flex justify-end">
+              <button type="button" onClick={() => void generateWithAi()} disabled={generating} className="inline-flex items-center gap-2 rounded-lg bg-violet-500 px-5 py-3 text-sm font-black text-white transition hover:bg-violet-400 disabled:cursor-wait disabled:opacity-60">
+                {generating ? <Loader2 size={17} className="animate-spin" /> : <Sparkles size={17} />} {generating ? 'Writing article…' : 'Generate draft'}
+              </button>
+            </div>
+          </section>
+        )}
 
         <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
           <div className="flex flex-col gap-3 md:flex-row">

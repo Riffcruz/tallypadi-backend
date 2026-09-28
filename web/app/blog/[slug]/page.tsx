@@ -5,9 +5,9 @@ import { ArrowLeft, CalendarDays, Clock3, Share2 } from 'lucide-react';
 import MarketingNavbar from '../../../components/MarketingNavbar';
 import MarketingFooter from '../../../components/MarketingFooter';
 import BlogRenderer from '../../../components/blog/BlogRenderer';
-import { fetchBlogPost } from '../blogApi';
+import { fetchBlogPost, fetchBlogPosts } from '../blogApi';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 300;
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://tallypadi.com';
 
@@ -64,9 +64,16 @@ export default async function BlogArticlePage({ params }: { params: Promise<{ sl
   if (!post) notFound();
 
   const canonical = post.seo?.canonicalUrl || `${siteUrl}/blog/${post.slug}`;
+  const relatedPosts = (await fetchBlogPosts(12))
+    .filter((candidate) => candidate.slug !== post.slug)
+    .sort((a, b) => Number(b.category === post.category) - Number(a.category === post.category))
+    .slice(0, 3);
+  const articleText = (post.contentBlocks || [])
+    .flatMap((block) => [block.text || '', ...(block.items || [])])
+    .join(' ');
   const jsonLd = {
     '@context': 'https://schema.org',
-    '@type': 'Article',
+    '@type': 'BlogPosting',
     headline: post.seo?.metaTitle || post.title,
     description: post.seo?.metaDescription || post.excerpt,
     image: post.seo?.ogImage || post.coverImage || undefined,
@@ -80,8 +87,21 @@ export default async function BlogArticlePage({ params }: { params: Promise<{ sl
       '@type': 'Organization',
       name: 'TallyPadi',
       url: siteUrl,
+      logo: { '@type': 'ImageObject', url: `${siteUrl}/tallypadi-logo.png` },
     },
     mainEntityOfPage: canonical,
+    articleSection: post.category || undefined,
+    keywords: [...(post.seo?.keywords || []), ...(post.tags || [])].join(', '),
+    wordCount: articleText.split(/\s+/).filter(Boolean).length,
+  };
+  const breadcrumbJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Home', item: siteUrl },
+      { '@type': 'ListItem', position: 2, name: 'Blog', item: `${siteUrl}/blog` },
+      { '@type': 'ListItem', position: 3, name: post.title, item: canonical },
+    ],
   };
 
   return (
@@ -139,11 +159,25 @@ export default async function BlogArticlePage({ params }: { params: Promise<{ sl
                 ))}
               </div>
             )}
+            {relatedPosts.length > 0 && (
+              <section className="mt-14 border-t border-stone-200 pt-10" aria-labelledby="related-articles">
+                <h2 id="related-articles" className="text-2xl font-black text-stone-950">Related articles</h2>
+                <div className="mt-5 grid gap-4 sm:grid-cols-3">
+                  {relatedPosts.map((related) => (
+                    <Link key={related.slug} href={`/blog/${related.slug}`} className="rounded-lg border border-stone-200 bg-white p-4 transition hover:border-emerald-400">
+                      <span className="text-xs font-black uppercase text-emerald-700">{related.category || 'Guide'}</span>
+                      <h3 className="mt-2 font-black leading-6 text-stone-950">{related.title}</h3>
+                    </Link>
+                  ))}
+                </div>
+              </section>
+            )}
           </div>
         </article>
       </main>
       <MarketingFooter />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }} />
     </div>
   );
 }

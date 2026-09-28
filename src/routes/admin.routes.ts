@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import { verifyAdmin } from '../middleware/admin.middleware';
 import fxRoutes from './fx.routes';
 import chatRoutes from './chat.routes';
@@ -56,6 +57,7 @@ import { getAdminReferralTransactions } from '../controllers/referral.controller
 import {
   createAdminBlogPost,
   deleteAdminBlogPost,
+  generateAdminBlogDraft,
   listAdminBlogPosts,
   publishAdminBlogPost,
   unpublishAdminBlogPost,
@@ -63,6 +65,14 @@ import {
 } from '../controllers/blog.controller';
 
 const router = Router();
+const blogAiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => `admin:${req.user?.id || 'authenticated'}`,
+  message: { error: 'Too many AI article requests. Please wait before generating another draft.' },
+});
 
 router.use(verifyAdmin);
 
@@ -98,6 +108,7 @@ router.delete('/marketplace-verifications/:id', deleteSellerVerificationForAdmin
 
 // Blog CMS
 router.get('/blog', listAdminBlogPosts);
+router.post('/blog/generate', blogAiLimiter, generateAdminBlogDraft);
 router.post('/blog', createAdminBlogPost);
 router.put('/blog/:id', updateAdminBlogPost);
 router.post('/blog/:id/publish', publishAdminBlogPost);

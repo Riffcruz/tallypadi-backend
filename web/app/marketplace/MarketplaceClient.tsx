@@ -13,7 +13,6 @@ import {
   MessageCircle,
   Search,
   SlidersHorizontal,
-  Sparkles,
   Store,
   TrendingUp,
   X,
@@ -261,7 +260,7 @@ function ProductCard({ product }: { product: MarketplaceProduct }) {
       className={`group flex h-full flex-col overflow-hidden rounded-lg border bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg ${product.isBoosted ? 'border-amber-300 shadow-amber-100' : 'border-stone-200'
         }`}
     >
-      <Link href={productUrl} className="relative block aspect-[4/3] overflow-hidden bg-emerald-50">
+      <Link href={productUrl} className="relative block aspect-square overflow-hidden bg-stone-100 sm:aspect-[4/3]">
         {product.image ? (
           <img
             src={product.image}
@@ -274,23 +273,23 @@ function ProductCard({ product }: { product: MarketplaceProduct }) {
             {product.name.slice(0, 1)}
           </div>
         )}
-        <div className="absolute left-3 top-3 flex flex-wrap gap-2">
+        <div className="absolute left-2 top-2 flex flex-wrap gap-1.5 sm:left-3 sm:top-3 sm:gap-2">
           {product.isBoosted && (
             <span className="inline-flex items-center gap-1 rounded-md bg-amber-400 px-2 py-1 text-[11px] font-black text-stone-950 shadow">
               <TrendingUp size={12} />
               Boosted
             </span>
           )}
-          <span className="rounded-md bg-white/90 px-2 py-1 text-[11px] font-black text-emerald-800 shadow">
+          <span className="hidden rounded-md bg-white/90 px-2 py-1 text-[11px] font-black text-emerald-800 shadow sm:inline-flex">
             {product.smartCategory.label}
           </span>
         </div>
       </Link>
 
-      <div className="flex flex-1 flex-col p-4">
+      <div className="flex flex-1 flex-col p-3 sm:p-4">
         <div className="mb-2 flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-lg font-black text-emerald-700">
+            <p className="text-base font-black text-emerald-700 sm:text-lg">
               {formatMoney(product.price, product.shop.currencyCode)}
             </p>
             <Link href={productUrl} className="mt-1 block text-sm font-black leading-snug text-stone-950 line-clamp-2 hover:text-emerald-700">
@@ -300,12 +299,12 @@ function ProductCard({ product }: { product: MarketplaceProduct }) {
         </div>
 
         {previewDescription && (
-          <p className="mb-3 text-xs leading-relaxed text-stone-500 line-clamp-2">
+          <p className="mb-3 hidden text-xs leading-relaxed text-stone-500 line-clamp-2 sm:block">
             {previewDescription}
           </p>
         )}
 
-        <div className="mt-auto space-y-3 border-t border-stone-100 pt-3">
+        <div className="mt-auto space-y-2 border-t border-stone-100 pt-2.5 sm:space-y-3 sm:pt-3">
           <div className="min-w-0">
             <div className="flex items-center gap-1 text-sm font-bold text-stone-800">
               <Store size={14} className="shrink-0 text-emerald-700" />
@@ -317,17 +316,17 @@ function ProductCard({ product }: { product: MarketplaceProduct }) {
               )}
             </div>
             {locationText && (
-              <div className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-stone-500">
+              <div className="mt-1 hidden items-center gap-1.5 text-xs font-semibold text-stone-500 sm:flex">
                 <MapPin size={13} className="text-amber-600" />
                 <span className="truncate">{locationText}</span>
               </div>
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <Link
               href={productUrl}
-              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-stone-200 px-3 py-2 text-xs font-black text-stone-700 transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-800"
+              className="hidden items-center justify-center gap-1.5 rounded-lg border border-stone-200 px-3 py-2 text-xs font-black text-stone-700 transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-800 sm:inline-flex"
             >
               Details
               <ExternalLink size={13} />
@@ -472,22 +471,22 @@ export default function MarketplaceClient() {
   return (
     <div className="min-h-screen bg-[#f7fbf8] text-stone-950">
       <MarketplaceHeader />
-      <section className="border-b border-emerald-100 bg-emerald-950 text-white">
-        <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
+      <section className="border-b border-emerald-900 bg-emerald-950 text-white">
+        <div className="mx-auto max-w-7xl px-3 py-5 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
           <div className="flex flex-col justify-center">
-            <div className="mb-4 inline-flex w-fit items-center gap-2 rounded-lg border border-emerald-300/30 bg-emerald-800/70 px-3 py-1.5 text-xs font-black uppercase tracking-[0.16em] text-emerald-100">
-              {/* <Sparkles size={14} /> */}
+            <div className="mb-4 hidden w-fit items-center gap-2 rounded-lg border border-emerald-300/30 bg-emerald-800/70 px-3 py-1.5 text-xs font-black uppercase tracking-[0.16em] text-emerald-100 sm:inline-flex">
               Smart sorted marketplace
             </div>
-            <h1 className="max-w-3xl text-3xl font-black leading-tight tracking-tight sm:text-4xl lg:text-5xl">
-              Find products from active TallyPadi shop fronts.
+            <h1 className="max-w-3xl text-2xl font-black leading-tight tracking-tight sm:text-4xl lg:text-5xl">
+              <span className="sm:hidden">Find products near you.</span>
+              <span className="hidden sm:inline">Find products from active TallyPadi shop fronts.</span>
             </h1>
-            <p className="mt-3 max-w-2xl text-sm font-medium leading-6 text-emerald-50 sm:text-base">
+            <p className="mt-3 hidden max-w-2xl text-sm font-medium leading-6 text-emerald-50 sm:block sm:text-base">
               Search by product, category, state, or city. Boosted listings rise first, then fresh and relevant stock from nearby sellers.
             </p>
 
             <form
-              className="mt-6 grid gap-3 rounded-lg bg-white p-3 text-stone-950 shadow-xl lg:grid-cols-[1.2fr_180px_180px_120px]"
+              className="mt-4 grid grid-cols-[1fr_auto] gap-2 rounded-xl bg-white p-2 text-stone-950 shadow-lg sm:mt-6 sm:gap-3 sm:p-3 lg:grid-cols-[1.2fr_180px_180px_120px]"
               onSubmit={(event) => event.preventDefault()}
             >
               <label className="relative block">
@@ -496,11 +495,11 @@ export default function MarketplaceClient() {
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                   placeholder="Search products, shops, or categories"
-                  className="h-12 w-full rounded-lg border border-stone-200 bg-stone-50 pl-10 pr-3 text-base font-semibold outline-none transition focus:border-emerald-400 focus:bg-white"
+                  className="h-11 w-full rounded-lg border-0 bg-stone-50 pl-10 pr-3 text-sm font-semibold outline-none transition focus:bg-white focus:ring-2 focus:ring-emerald-400 sm:h-12 sm:border sm:text-base"
                 />
               </label>
 
-              <label className="relative block">
+              <label className="relative hidden lg:block">
                 <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-amber-600" />
                 <select
                   value={selectedState}
@@ -520,7 +519,7 @@ export default function MarketplaceClient() {
                 <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
               </label>
 
-              <label className="relative block">
+              <label className="relative hidden lg:block">
                 <select
                   value={selectedCity}
                   onChange={(event) => setSelectedCity(event.target.value)}
@@ -540,10 +539,10 @@ export default function MarketplaceClient() {
               <button
                 type="button"
                 onClick={() => setFiltersOpen(true)}
-                className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-amber-400 px-4 text-sm font-black text-stone-950 transition hover:bg-amber-300 lg:hidden"
+                className="inline-flex h-11 w-11 items-center justify-center rounded-lg bg-amber-400 text-stone-950 transition hover:bg-amber-300 sm:h-12 sm:w-auto sm:gap-2 sm:px-4 lg:hidden"
               >
                 <Filter size={16} />
-                Filter
+                <span className="hidden sm:inline">Filter</span>
               </button>
               <a
                 href="#listings"
@@ -556,7 +555,7 @@ export default function MarketplaceClient() {
         </div>
       </section>
 
-      <main id="listings" className="mx-auto grid max-w-7xl gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[270px_1fr] lg:px-8">
+      <main id="listings" className="mx-auto grid max-w-7xl gap-5 px-3 py-4 sm:px-6 sm:py-6 lg:grid-cols-[270px_1fr] lg:px-8">
         <aside className="hidden lg:block">
           <div className="sticky top-24 rounded-lg border border-stone-200 bg-white p-5 shadow-sm">
             <FilterPanel
@@ -577,14 +576,14 @@ export default function MarketplaceClient() {
         </aside>
 
         <section className="min-w-0">
-          <div className="mb-4 flex flex-col gap-3 rounded-lg border border-stone-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+          <div className="mb-3 flex items-end justify-between gap-3 border-b border-stone-200 pb-3 sm:mb-4 sm:rounded-lg sm:border sm:bg-white sm:p-4 sm:shadow-sm">
             <div>
-              <div className="flex flex-wrap items-center gap-2 text-xs font-black uppercase tracking-[0.14em] text-emerald-700">
+              <div className="hidden flex-wrap items-center gap-2 text-xs font-black uppercase tracking-[0.14em] text-emerald-700 sm:flex">
                 <span>{activeCategoryLabel || 'All products'}</span>
                 <span className="text-stone-300">/</span>
                 <span>{activeLocationLabel}</span>
               </div>
-              <h2 className="mt-1 text-xl font-black text-stone-950">
+              <h2 className="text-lg font-black text-stone-950 sm:mt-1 sm:text-xl">
                 {loading ? 'Finding products' : `${totalItems.toLocaleString()} product${totalItems === 1 ? '' : 's'}`}
               </h2>
             </div>
@@ -593,7 +592,7 @@ export default function MarketplaceClient() {
               <button
                 type="button"
                 onClick={() => setFiltersOpen(true)}
-                className="inline-flex items-center gap-2 rounded-lg border border-stone-200 px-3 py-2 text-sm font-black text-stone-700 lg:hidden"
+                className="hidden items-center gap-2 rounded-lg border border-stone-200 px-3 py-2 text-sm font-black text-stone-700"
               >
                 <SlidersHorizontal size={16} />
                 Filters
@@ -621,7 +620,7 @@ export default function MarketplaceClient() {
           )}
 
           {loading ? (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 xl:grid-cols-4">
               {Array.from({ length: 8 }).map((_, index) => (
                 <div key={index} className="overflow-hidden rounded-lg border border-stone-200 bg-white">
                   <div className="aspect-[4/3] animate-pulse bg-stone-100" />
@@ -635,7 +634,7 @@ export default function MarketplaceClient() {
             </div>
           ) : products.length > 0 ? (
             <>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+              <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 xl:grid-cols-4">
                 {products.map((product) => (
                   <ProductCard key={product.id} product={product} />
                 ))}

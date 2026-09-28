@@ -10,13 +10,13 @@ type BlogDetailResponse = {
   post?: BlogPost;
 };
 
-const fetchWithTimeout = async (url: string, timeoutMs = 2500) => {
+const fetchWithTimeout = async (url: string, timeoutMs = 5000) => {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     return await fetch(url, {
-      cache: 'no-store',
+      next: { revalidate: 300 },
       signal: controller.signal,
     });
   } finally {
