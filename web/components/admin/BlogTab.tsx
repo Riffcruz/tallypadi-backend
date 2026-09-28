@@ -7,6 +7,7 @@ import {
   AlignCenter,
   AlignLeft,
   AlignRight,
+  ArrowLeft,
   BookOpen,
   ChevronDown,
   ChevronUp,
@@ -25,6 +26,7 @@ import {
   MousePointerClick,
   Palette,
   PanelRight,
+  Pencil,
   Pilcrow,
   Plus,
   RefreshCcw,
@@ -367,6 +369,8 @@ function PreviewBlock({ block }: { block: BlogContentBlock }) {
 
 export default function BlogTab({ adminToken }: { adminToken: string }) {
   const [posts, setPosts] = useState<BlogPost[]>([]);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [savedSnapshot, setSavedSnapshot] = useState('');
   const [selectedPost, setSelectedPost] = useState<BlogPost>(() => createEmptyPost());
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('article');
@@ -440,6 +444,8 @@ export default function BlogTab({ adminToken }: { adminToken: string }) {
     setSelectedPost(normalized);
     setSelectedBlockId(normalized.contentBlocks[0]?.id || null);
     setInspectorTab('article');
+    setEditorOpen(true);
+    setSavedSnapshot(JSON.stringify(buildPayload(normalized)));
   };
 
   const newArticle = () => {
@@ -447,6 +453,8 @@ export default function BlogTab({ adminToken }: { adminToken: string }) {
     setSelectedPost(draft);
     setSelectedBlockId(draft.contentBlocks[0]?.id || null);
     setInspectorTab('article');
+    setEditorOpen(true);
+    setSavedSnapshot(JSON.stringify(buildPayload(draft)));
   };
 
   const addBlock = (type: BlogBlockType, afterBlockId = selectedBlock?.id) => {
@@ -526,6 +534,7 @@ export default function BlogTab({ adminToken }: { adminToken: string }) {
         : await axios.post(`${API_URL}/admin/blog`, payload, { headers });
       const saved = normalizePost(res.data?.post);
       setSelectedPost(saved);
+      setSavedSnapshot(JSON.stringify(buildPayload(saved)));
       setSelectedBlockId(saved.contentBlocks[0]?.id || null);
       await fetchPosts(statusFilter);
       if (showToast) {
@@ -551,6 +560,7 @@ export default function BlogTab({ adminToken }: { adminToken: string }) {
       const res = await axios.post(`${API_URL}/admin/blog/${id}/publish`, {}, { headers });
       const published = normalizePost(res.data?.post);
       setSelectedPost(published);
+      setSavedSnapshot(JSON.stringify(buildPayload(published)));
       setSelectedBlockId(published.contentBlocks[0]?.id || null);
       await fetchPosts(statusFilter);
       Swal.fire('Published', 'This article is now live on the public blog.', 'success');
@@ -571,6 +581,7 @@ export default function BlogTab({ adminToken }: { adminToken: string }) {
       const res = await axios.post(`${API_URL}/admin/blog/${id}/unpublish`, {}, { headers });
       const draft = normalizePost(res.data?.post);
       setSelectedPost(draft);
+      setSavedSnapshot(JSON.stringify(buildPayload(draft)));
       setSelectedBlockId(draft.contentBlocks[0]?.id || null);
       await fetchPosts(statusFilter);
       Swal.fire('Unpublished', 'This article has been moved back to draft.', 'success');
@@ -602,7 +613,9 @@ export default function BlogTab({ adminToken }: { adminToken: string }) {
     setSaving(true);
     try {
       await axios.delete(`${API_URL}/admin/blog/${id}`, { headers });
-      newArticle();
+      setSelectedPost(createEmptyPost());
+      setSelectedBlockId(null);
+      setEditorOpen(false);
       await fetchPosts(statusFilter);
       Swal.fire('Deleted', 'Blog article deleted.', 'success');
     } catch (error: unknown) {
@@ -663,6 +676,80 @@ export default function BlogTab({ adminToken }: { adminToken: string }) {
   });
 
   const selectedBlockIndex = selectedBlock ? selectedPost.contentBlocks.findIndex((block) => block.id === selectedBlock.id) : -1;
+
+  const closeEditor = async () => {
+    if (savedSnapshot && savedSnapshot !== JSON.stringify(buildPayload(selectedPost))) {
+      const result = await Swal.fire({
+        title: 'Leave without saving?',
+        text: 'Your latest changes will be lost.',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Leave editor',
+        confirmButtonColor: '#ef4444',
+      });
+      if (!result.isConfirmed) return;
+    }
+    setEditorOpen(false);
+  };
+
+  if (!editorOpen) {
+    return (
+      <div className="space-y-5">
+        <div className="flex flex-col gap-4 rounded-xl border border-slate-800 bg-slate-900/70 p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.22em] text-emerald-300"><BookOpen size={16} /> Blog</p>
+            <h2 className="mt-2 text-2xl font-black text-white">Your articles</h2>
+            <p className="mt-1 text-sm text-slate-400">Create a new post or continue editing a draft.</p>
+          </div>
+          <button type="button" onClick={newArticle} className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-500 px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-emerald-400">
+            <FilePlus2 size={17} /> New article
+          </button>
+        </div>
+
+        <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+          <div className="flex flex-col gap-3 md:flex-row">
+            <div className="flex flex-1 gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5">
+              <Search size={17} className="mt-0.5 text-slate-500" />
+              <input value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void fetchPosts(statusFilter); }} placeholder="Search articles" className="w-full bg-transparent text-sm text-white outline-none placeholder:text-slate-500" />
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {(['ALL', 'DRAFT', 'PUBLISHED'] as StatusFilter[]).map((status) => (
+                <button type="button" key={status} onClick={() => setStatusFilter(status)} className={`rounded-lg px-4 py-2.5 text-xs font-black transition ${statusFilter === status ? 'bg-emerald-500 text-slate-950' : 'bg-slate-950 text-slate-400 hover:text-white'}`}>
+                  {status === 'ALL' ? 'All' : status === 'DRAFT' ? 'Drafts' : 'Published'}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center gap-2 rounded-xl border border-slate-800 bg-slate-900/70 p-16 text-slate-400"><Loader2 size={18} className="animate-spin" /> Loading articles</div>
+        ) : filteredPosts.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-slate-700 bg-slate-900/40 p-14 text-center">
+            <BookOpen size={34} className="mx-auto text-slate-600" />
+            <h3 className="mt-4 font-black text-white">No articles found</h3>
+            <button type="button" onClick={newArticle} className="mt-4 text-sm font-black text-emerald-300 hover:text-emerald-200">Create your first article</button>
+          </div>
+        ) : (
+          <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
+            {filteredPosts.map((post) => (
+              <article key={getPostId(post) || post.title} className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/70 transition hover:border-slate-600">
+                {post.coverImage ? <img src={post.coverImage} alt={post.coverImageAlt || ''} className="h-40 w-full object-cover" /> : <div className="flex h-32 items-center justify-center bg-slate-950 text-slate-700"><ImageIcon size={30} /></div>}
+                <div className="p-5">
+                  <div className="flex items-start justify-between gap-3"><h3 className="line-clamp-2 font-black text-white">{post.title || 'Untitled article'}</h3><span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-black ${statusClass[post.status]}`}>{post.status === 'DRAFT' ? 'Draft' : 'Live'}</span></div>
+                  <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-400">{post.excerpt || 'No summary added yet.'}</p>
+                  <div className="mt-5 flex items-center justify-between gap-3 border-t border-slate-800 pt-4">
+                    <span className="text-xs text-slate-500">{post.readingMinutes || 1} min read</span>
+                    <button type="button" onClick={() => selectPost(post)} className="inline-flex items-center gap-2 rounded-lg bg-slate-800 px-4 py-2 text-xs font-black text-white transition hover:bg-slate-700"><Pencil size={14} /> Edit</button>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   const renderEditorBlock = (block: BlogContentBlock, index: number) => {
     const selected = block.id === selectedBlock?.id;
@@ -779,7 +866,7 @@ export default function BlogTab({ adminToken }: { adminToken: string }) {
               <BookOpen size={16} /> Blog CMS
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-3">
-              <h2 className="text-2xl font-black text-white">Article Editor</h2>
+              <h2 className="text-2xl font-black text-white">{getPostId(selectedPost) ? 'Edit article' : 'New article'}</h2>
               <span className={`rounded-full border px-3 py-1 text-xs font-black ${statusClass[selectedPost.status]}`}>
                 {selectedPost.status}
               </span>
@@ -792,10 +879,10 @@ export default function BlogTab({ adminToken }: { adminToken: string }) {
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={newArticle}
+              onClick={() => void closeEditor()}
               className="inline-flex items-center gap-2 rounded-md bg-slate-800 px-4 py-2 text-sm font-bold text-white transition hover:bg-slate-700"
             >
-              <FilePlus2 size={16} /> New
+              <ArrowLeft size={16} /> Articles
             </button>
             <button
               type="button"
@@ -803,7 +890,7 @@ export default function BlogTab({ adminToken }: { adminToken: string }) {
               disabled={saving}
               className="inline-flex items-center gap-2 rounded-md bg-emerald-500 px-4 py-2 text-sm font-black text-slate-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} Save
+              {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} {selectedPost.status === 'DRAFT' ? 'Save draft' : 'Save changes'}
             </button>
             {selectedPost.status === 'PUBLISHED' ? (
               <button
@@ -836,8 +923,8 @@ export default function BlogTab({ adminToken }: { adminToken: string }) {
         </div>
       </div>
 
-      <div className="grid gap-5 2xl:grid-cols-[300px_minmax(0,1fr)_340px]">
-        <aside className="rounded-lg border border-slate-800 bg-slate-900/70 p-3 2xl:sticky 2xl:top-4 2xl:max-h-[calc(100vh-150px)] 2xl:overflow-hidden">
+      <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_340px]">
+        <aside className="hidden">
           <div className="flex items-center justify-between gap-3 px-1">
             <h3 className="text-sm font-black uppercase tracking-wider text-slate-300">Articles</h3>
             <button
@@ -923,7 +1010,7 @@ export default function BlogTab({ adminToken }: { adminToken: string }) {
                 }}
                 disabled={!selectedBlock}
                 aria-label="Block type"
-                className="h-9 rounded-md border border-slate-700 bg-slate-900 px-3 text-sm font-bold text-white outline-none focus:border-emerald-400 disabled:opacity-40"
+                className="hidden"
               >
                 {blockTypes.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
               </select>
@@ -942,14 +1029,14 @@ export default function BlogTab({ adminToken }: { adminToken: string }) {
                 {blockTypes.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
               </select>
 
-              <div className="h-7 w-px bg-slate-800" />
+              <div className="hidden h-7 w-px bg-slate-800" />
 
               {selectedBlock?.type === 'heading' && (
                 <select
                   value={selectedBlock.level || 2}
                   onChange={(event) => updateBlock(selectedBlock.id, { level: Number(event.target.value) })}
                   aria-label="Heading level"
-                  className="h-9 rounded-md border border-slate-700 bg-slate-900 px-3 text-sm font-bold text-white outline-none focus:border-emerald-400"
+                  className="hidden"
                 >
                   <option value={2}>H2</option>
                   <option value={3}>H3</option>
@@ -962,12 +1049,12 @@ export default function BlogTab({ adminToken }: { adminToken: string }) {
                 onChange={(event) => selectedBlock && updateBlock(selectedBlock.id, { fontSize: event.target.value })}
                 disabled={!selectedBlock}
                 aria-label="Text size"
-                className="h-9 rounded-md border border-slate-700 bg-slate-900 px-3 text-sm text-white outline-none focus:border-emerald-400 disabled:opacity-40"
+                className="hidden"
               >
                 {fontSizes.map((size) => <option key={size.value} value={size.value}>{size.label}</option>)}
               </select>
 
-              <div className="flex gap-1">
+              <div className="hidden gap-1">
                 <ToolButton label="Align left" active={selectedBlock?.align === 'left' || !selectedBlock?.align} disabled={!selectedBlock} onClick={() => selectedBlock && updateBlock(selectedBlock.id, { align: 'left' })}>
                   <AlignLeft size={16} />
                 </ToolButton>
@@ -979,7 +1066,7 @@ export default function BlogTab({ adminToken }: { adminToken: string }) {
                 </ToolButton>
               </div>
 
-              <label className="flex h-9 items-center gap-2 rounded-md border border-slate-700 bg-slate-900 px-2 text-xs font-bold text-slate-300" title="Text color">
+              <label className="hidden h-9 items-center gap-2 rounded-md border border-slate-700 bg-slate-900 px-2 text-xs font-bold text-slate-300" title="Text color">
                 <Type size={14} />
                 <input
                   type="color"
@@ -991,7 +1078,7 @@ export default function BlogTab({ adminToken }: { adminToken: string }) {
                 />
               </label>
 
-              <label className="flex h-9 items-center gap-2 rounded-md border border-slate-700 bg-slate-900 px-2 text-xs font-bold text-slate-300" title="Background color">
+              <label className="hidden h-9 items-center gap-2 rounded-md border border-slate-700 bg-slate-900 px-2 text-xs font-bold text-slate-300" title="Background color">
                 <Palette size={14} />
                 <input
                   type="color"
@@ -1005,7 +1092,7 @@ export default function BlogTab({ adminToken }: { adminToken: string }) {
 
               {selectedBlock?.type === 'image' && renderUploadButton(selectedBlock.id, selectedBlock.imageUrl ? 'Replace' : 'Upload')}
 
-              <div className="h-7 w-px bg-slate-800" />
+              <div className="hidden h-7 w-px bg-slate-800" />
 
               <ToolButton label="Move block up" disabled={!selectedBlock || selectedBlockIndex <= 0} onClick={() => selectedBlock && moveBlock(selectedBlock.id, -1)}>
                 <ChevronUp size={16} />
@@ -1026,6 +1113,7 @@ export default function BlogTab({ adminToken }: { adminToken: string }) {
           </div>
 
           <div className="mt-4 rounded-lg border border-slate-800 bg-slate-950 p-4 sm:p-6">
+            <p className="mx-auto mb-3 max-w-4xl text-xs font-black uppercase tracking-[0.18em] text-slate-500">Write your article</p>
             <article className="mx-auto max-w-4xl rounded-lg bg-slate-900 p-4 shadow-2xl sm:p-8">
               <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-950">
                 {selectedPost.coverImage ? (
@@ -1075,8 +1163,8 @@ export default function BlogTab({ adminToken }: { adminToken: string }) {
         <aside className="rounded-lg border border-slate-800 bg-slate-900/70 p-3 2xl:sticky 2xl:top-4 2xl:max-h-[calc(100vh-150px)] 2xl:overflow-y-auto">
           <div className="grid grid-cols-3 gap-2">
             {([
-              { value: 'article', label: 'Article', icon: Settings2 },
-              { value: 'seo', label: 'SEO', icon: Globe2 },
+              { value: 'article', label: 'Details', icon: Settings2 },
+              { value: 'seo', label: 'Search', icon: Globe2 },
               { value: 'preview', label: 'Preview', icon: PanelRight },
             ] as { value: InspectorTab; label: string; icon: LucideIcon }[]).map((tab) => {
               const Icon = tab.icon;

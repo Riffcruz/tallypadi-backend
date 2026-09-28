@@ -8,7 +8,8 @@ import { Inventory } from '../models/inventory.model';
 import { AdminSettings } from '../models/adminSettings.model';
 import { AdminAuditLog } from '../models/adminAuditLog.model';
 import { EmailTemplate } from '../models/emailTemplate.model';
-import { sendBroadcastEmail } from '../services/email.service';
+import { invalidateSmtpTransport } from '../services/email.service';
+import { encryptSmtpPassword } from '../services/emailSecurity.service';
 import { queueBroadcastMessage, broadcastQueue } from '../services/queue.service';
 import { DailyStats } from '../models/dailyStats.model';
 import { ProcessedMessage } from '../models/processedMessage.model';
@@ -78,9 +79,10 @@ const updateGlobalSettingsSchema = z
         host: z.string().trim().optional().default(''),
         port: z.coerce.number().optional().default(465),
         user: z.string().trim().optional().default(''),
-        pass: z.string().trim().optional().default(''),
+        pass: z.string().optional().default(''),
         fromAddress: z.string().trim().optional().default('notifications@tallypadi.com'),
-        secure: z.boolean().optional().default(true)
+        secure: z.boolean().optional().default(true),
+        dailyLimit: z.coerce.number().int().min(1).max(100000).optional().default(300)
     }).optional(),
     adsPlans: z.array(z.object({
       id: z.string(),
@@ -117,7 +119,8 @@ const broadcastSchema = z
     sendEmail: z.boolean().optional().default(false),
     emailTemplateId: z.string().trim().optional(),
     emailSubject: z.string().trim().optional(),
-    emailDelayMs: z.coerce.number().optional().default(150),
+    emailDelayMs: z.coerce.number().int().min(1000).max(60000).optional().default(1000),
+    includeUnsubscribed: z.boolean().optional().default(false),
     specificIdentifier: z.string().trim().optional(), // For specific user test
   })
   .strict();
@@ -663,7 +666,9 @@ export const getGlobalSettings = async (_req: Request, res: Response) => {
   try {
     let settings = await AdminSettings.findOne();
     if (!settings) settings = await AdminSettings.create({});
-    res.json(settings);
+    const safeSettings = settings.toObject();
+    if (safeSettings.smtp) (safeSettings.smtp as any).pass = '';
+    res.json(safeSettings);
   } catch (error) {
     console.error('Get Settings Error:', error);
     res.status(500).json({ error: 'Error' });
@@ -682,13 +687,24 @@ export const updateGlobalSettings = async (req: Request, res: Response) => {
     if (autoSuspendOnJailbreak !== undefined) updatePayload['security.autoSuspendOnJailbreak'] = autoSuspendOnJailbreak;
     if (maxMessageHistory !== undefined) updatePayload['limits.maxMessageHistory'] = maxMessageHistory;
     if (maxStaffAccounts !== undefined) updatePayload['limits.maxStaffAccounts'] = maxStaffAccounts;
-    if (smtp !== undefined) updatePayload.smtp = smtp;
+    if (smtp !== undefined) {
+      updatePayload['smtp.host'] = smtp.host;
+      updatePayload['smtp.port'] = smtp.port;
+      updatePayload['smtp.user'] = smtp.user;
+      updatePayload['smtp.fromAddress'] = smtp.fromAddress;
+      updatePayload['smtp.secure'] = smtp.secure;
+      updatePayload['smtp.dailyLimit'] = smtp.dailyLimit;
+      if (smtp.pass) updatePayload['smtp.pass'] = encryptSmtpPassword(smtp.pass);
+    }
     if (adsPlans !== undefined) updatePayload.adsPlans = adsPlans;
     if (referralProgram !== undefined) updatePayload.referralProgram = referralProgram;
     if (globalEmailTemplate !== undefined) updatePayload.globalEmailTemplate = globalEmailTemplate;
 
     const settings = await AdminSettings.findOneAndUpdate({}, { $set: updatePayload }, { new: true, upsert: true });
-    res.json({ success: true, settings });
+    if (smtp !== undefined) invalidateSmtpTransport();
+    const safeSettings = settings?.toObject();
+    if (safeSettings?.smtp) (safeSettings.smtp as any).pass = '';
+    res.json({ success: true, settings: safeSettings });
   } catch (error) {
     console.error('Update Settings Error:', error);
     res.status(500).json({ error: 'Error' });
@@ -704,10 +720,14 @@ export const broadcastMessage = async (req: Request, res: Response) => {
     const parsed = broadcastSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
-    const { target, message, mediaId, mediaType, sendPush, sendWhatsapp, sendEmail, emailTemplateId, emailDelayMs, specificIdentifier } = parsed.data;
+    const { target, message, mediaId, mediaType, sendPush, sendWhatsapp, sendEmail, emailTemplateId, emailDelayMs, specificIdentifier, includeUnsubscribed } = parsed.data;
 
     // Build the Query
     const query: any = { role: 'OWNER' };
+    if (sendEmail) {
+      query.emailDeliveryStatus = { $ne: 'HARD_BOUNCED' };
+      if (!includeUnsubscribed) query.emailSubscribed = { $ne: false };
+    }
     if (target === 'tycoon') query.planType = 'TYCOON';
     else if (target === 'oga_boss') query.planType = 'OGA_BOSS';
     else if (target === 'active_24h') query.updatedAt = { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) };
@@ -746,8 +766,10 @@ export const broadcastMessage = async (req: Request, res: Response) => {
     // Fetch Admin Settings for global layout wrapper
     const settings = await AdminSettings.findOne().lean();
     const globalEmailTemplate = settings?.globalEmailTemplate;
+    const emailDailyLimit = Math.max(1, Number(settings?.smtp?.dailyLimit || 300));
 
     // Replace Async Dispatch Loop with Broadcast Queue
+    let emailRecipientIndex = 0;
     for (const u of recipients) {
       const jobPayload = {
         sendEmail,
@@ -759,14 +781,24 @@ export const broadcastMessage = async (req: Request, res: Response) => {
         templateHtml: template?.htmlBody || '',
         globalEmailTemplate,
         emailDelayMs,
+        includeUnsubscribed,
         apiBaseUrl: process.env.API_BASE_URL || 'https://tallypadi.com/api'
       };
       
       // Dispatch individually to Queue
-      await queueBroadcastMessage(u, jobPayload);
+      const emailDayOffset = sendEmail && u.email
+        ? Math.floor(emailRecipientIndex++ / emailDailyLimit)
+        : 0;
+      await queueBroadcastMessage(u, jobPayload, undefined, emailDayOffset * 24 * 60 * 60 * 1000);
     }
 
-    res.json({ success: true, message: `Broadcast queued to ${recipients.length} recipients.` });
+    const scheduledDays = sendEmail && emailRecipientIndex
+      ? Math.ceil(emailRecipientIndex / emailDailyLimit)
+      : 1;
+    res.json({
+      success: true,
+      message: `Broadcast queued to ${recipients.length} recipients${scheduledDays > 1 ? ` across ${scheduledDays} days` : ''}.`,
+    });
   } catch (error) {
     console.error('Broadcast Error:', error);
     res.status(500).json({ error: 'Broadcast Error' });

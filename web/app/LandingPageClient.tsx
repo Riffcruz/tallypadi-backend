@@ -373,13 +373,20 @@ function HeroSection({ whatsappLink }: { whatsappLink: string }) {
               Start on WhatsApp
             </a>
             <Link
-              href="/login"
-              className="inline-flex items-center justify-center gap-2 rounded-lg border border-stone-500 bg-white/40 px-7 py-4 text-sm font-black text-stone-950 transition hover:border-emerald-700 hover:text-emerald-800"
+              href="/marketplace"
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-amber-300 px-7 py-4 text-sm font-black text-stone-950 shadow-lg shadow-amber-900/10 transition hover:bg-amber-200"
             >
-              Try the Dashboard
-              <Smartphone size={18} />
+              <Store size={18} />
+              Browse Marketplace
             </Link>
           </div>
+
+          <p className="mt-4 text-sm font-bold text-stone-700">
+            Already use TallyPadi?{" "}
+            <Link href="/login" className="text-emerald-800 underline decoration-2 underline-offset-4 hover:text-emerald-950">
+              Open your dashboard
+            </Link>
+          </p>
 
           <div className="mt-8 flex max-w-[430px] items-start gap-4">
             <div className="h-12 w-12 rounded-bl-[28px] border-b-2 border-l-2 border-emerald-700" />
@@ -1001,7 +1008,7 @@ export default function LandingPage() {
     const fetchSettings = async () => {
       try {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://tallypadi.com/api";
-        const response = await fetch(`${apiUrl}/admin/settings`);
+        const response = await fetch(`${apiUrl}/public/settings`);
         if (!response.ok) return;
 
         const data = (await response.json()) as PublicSettingsResponse;

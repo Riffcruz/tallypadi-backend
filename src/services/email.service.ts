@@ -1,5 +1,58 @@
 import nodemailer from 'nodemailer';
 import { AdminSettings } from '../models/adminSettings.model';
+import { decryptSmtpPassword, encryptSmtpPassword } from './emailSecurity.service';
+
+type SmtpConfig = {
+    host: string;
+    port: number;
+    secure: boolean;
+    user: string;
+    pass: string;
+    fromAddress?: string;
+};
+
+let cachedTransport: { key: string; transporter: nodemailer.Transporter; smtpConfig: SmtpConfig } | null = null;
+
+export const invalidateSmtpTransport = () => {
+    cachedTransport?.transporter.close();
+    cachedTransport = null;
+};
+
+const createSmtpTransport = async () => {
+    const settings = await AdminSettings.findOne().select('+smtp.pass').lean();
+    const stored = (settings as any)?.smtp;
+    if (!stored?.host || !stored?.user || !stored?.pass) {
+        throw new Error('SMTP Configuration is missing or disabled in Admin Settings');
+    }
+
+    if (!String(stored.pass).startsWith('enc:v1:')) {
+        await AdminSettings.updateOne({ _id: (settings as any)._id }, { $set: { 'smtp.pass': encryptSmtpPassword(String(stored.pass)) } });
+    }
+
+    const smtpConfig: SmtpConfig = {
+        host: String(stored.host).trim(),
+        port: Number(stored.port) || 587,
+        secure: Boolean(stored.secure),
+        user: String(stored.user).trim(),
+        pass: decryptSmtpPassword(String(stored.pass)),
+        fromAddress: String(stored.fromAddress || stored.user).trim(),
+    };
+    const key = JSON.stringify(smtpConfig);
+    if (cachedTransport?.key === key) return cachedTransport;
+
+    invalidateSmtpTransport();
+    const transporter = nodemailer.createTransport({
+        pool: true,
+        maxConnections: 2,
+        maxMessages: 100,
+        host: smtpConfig.host,
+        port: smtpConfig.port,
+        secure: smtpConfig.secure,
+        auth: { user: smtpConfig.user, pass: smtpConfig.pass },
+    });
+    cachedTransport = { key, transporter, smtpConfig };
+    return cachedTransport;
+};
 
 const escapeHtml = (value: unknown) =>
     String(value ?? '')
@@ -11,22 +64,7 @@ const escapeHtml = (value: unknown) =>
 
 export const sendRegistrationOTP = async (email: string, otp: string) => {
     // Dynamically retrieve SMTP settings from the DB
-    const settings = await AdminSettings.findOne().lean();
-    const smtpConfig = (settings as any)?.smtp;
-
-    if (!smtpConfig || !smtpConfig.host || !smtpConfig.user) {
-        throw new Error('SMTP Configuration is missing or disabled in Admin Settings');
-    }
-
-    const transporter = nodemailer.createTransport({
-        host: smtpConfig.host,
-        port: smtpConfig.port,
-        secure: smtpConfig.secure,
-        auth: {
-            user: smtpConfig.user,
-            pass: smtpConfig.pass,
-        },
-    });
+    const { transporter, smtpConfig } = await createSmtpTransport();
 
     const mailOptions = {
         from: `TallyPadi <${smtpConfig.fromAddress || smtpConfig.user}>`,
@@ -58,29 +96,23 @@ export const sendRegistrationOTP = async (email: string, otp: string) => {
     }
 };
 
-export const sendBroadcastEmail = async (email: string, subject: string, htmlBody: string) => {
-    const settings = await AdminSettings.findOne().lean();
-    const smtpConfig = (settings as any)?.smtp;
-
-    if (!smtpConfig || !smtpConfig.host || !smtpConfig.user) {
-        throw new Error('SMTP Configuration is missing or disabled in Admin Settings');
-    }
-
-    const transporter = nodemailer.createTransport({
-        host: smtpConfig.host,
-        port: smtpConfig.port,
-        secure: smtpConfig.secure,
-        auth: {
-            user: smtpConfig.user,
-            pass: smtpConfig.pass,
-        },
-    });
+export const sendBroadcastEmail = async (
+    email: string,
+    subject: string,
+    htmlBody: string,
+    unsubscribeUrl: string
+) => {
+    const { transporter, smtpConfig } = await createSmtpTransport();
 
     const mailOptions = {
         from: `TallyPadi <${smtpConfig.fromAddress || smtpConfig.user}>`,
         to: email,
         subject: subject,
-        html: htmlBody
+        html: htmlBody,
+        headers: {
+            'List-Unsubscribe': `<${unsubscribeUrl}>`,
+            'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+        },
     };
 
     try {
@@ -109,25 +141,10 @@ export const sendSellerVerificationAdminNotification = async ({
     countryCode: string;
     idType: string;
 }) => {
-    const settings = await AdminSettings.findOne().lean();
-    const smtpConfig = (settings as any)?.smtp;
-
-    if (!smtpConfig || !smtpConfig.host || !smtpConfig.user) {
-        throw new Error('SMTP Configuration is missing or disabled in Admin Settings');
-    }
+    const { transporter, smtpConfig } = await createSmtpTransport();
 
     const adminEmail = String(process.env.SELLER_VERIFICATION_ADMIN_EMAIL || smtpConfig.fromAddress || smtpConfig.user || '').trim();
     if (!adminEmail) throw new Error('Seller verification admin email is not configured');
-
-    const transporter = nodemailer.createTransport({
-        host: smtpConfig.host,
-        port: smtpConfig.port,
-        secure: smtpConfig.secure,
-        auth: {
-            user: smtpConfig.user,
-            pass: smtpConfig.pass,
-        },
-    });
 
     const safe = {
         verificationId: escapeHtml(verificationId),
@@ -162,27 +179,6 @@ export const sendSellerVerificationAdminNotification = async ({
     });
 
     return true;
-};
-
-const createSmtpTransport = async () => {
-    const settings = await AdminSettings.findOne().lean();
-    const smtpConfig = (settings as any)?.smtp;
-
-    if (!smtpConfig || !smtpConfig.host || !smtpConfig.user) {
-        throw new Error('SMTP Configuration is missing or disabled in Admin Settings');
-    }
-
-    const transporter = nodemailer.createTransport({
-        host: smtpConfig.host,
-        port: smtpConfig.port,
-        secure: smtpConfig.secure,
-        auth: {
-            user: smtpConfig.user,
-            pass: smtpConfig.pass,
-        },
-    });
-
-    return { transporter, smtpConfig };
 };
 
 export const sendSellerVerificationApprovedEmail = async (email: string, fullName: string) => {

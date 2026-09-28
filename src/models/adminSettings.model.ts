@@ -40,6 +40,7 @@ export interface IAdminSettings extends Document {
     pass: string;
     fromAddress: string;
     secure: boolean;
+    dailyLimit?: number;
   };
   
   globalEmailTemplate?: string;
@@ -84,9 +85,10 @@ const adminSettingsSchema = new Schema<IAdminSettings>(
       host: { type: String, default: '' },
       port: { type: Number, default: 465 },
       user: { type: String, default: '' },
-      pass: { type: String, default: '' },
+      pass: { type: String, default: '', select: false },
       fromAddress: { type: String, default: 'notifications@tallypadi.com' },
-      secure: { type: Boolean, default: true }
+      secure: { type: Boolean, default: true },
+      dailyLimit: { type: Number, default: 300, min: 1, max: 100000 }
     },
     
     globalEmailTemplate: { 

@@ -4,6 +4,9 @@ export interface IUser extends Document {
   phoneNumber: string;
   email?: string;
   emailSubscribed?: boolean;
+  emailDeliveryStatus?: 'ACTIVE' | 'HARD_BOUNCED';
+  emailLastFailureAt?: Date | null;
+  emailLastFailureReason?: string;
   password?: string;
 
   registrationStage?: 'EMAIL' | 'PASSWORD' | 'SHOP_NAME_SELECTION' | 'SHOP_NAME_INPUT' | 'COMPLETED' | 'OTP_PENDING';
@@ -128,6 +131,9 @@ const userSchema = new Schema<IUser>(
 
     email: { type: String, unique: true, sparse: true },
     emailSubscribed: { type: Boolean, default: true },
+    emailDeliveryStatus: { type: String, enum: ['ACTIVE', 'HARD_BOUNCED'], default: 'ACTIVE' },
+    emailLastFailureAt: { type: Date, default: null },
+    emailLastFailureReason: { type: String, maxlength: 500 },
     password: { type: String, select: false },
 
     registrationStage: {

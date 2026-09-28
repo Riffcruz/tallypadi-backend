@@ -200,10 +200,11 @@ export const queueOutboundBulk = async (phoneNumber: string, message: string, jo
 export const queueBroadcastMessage = async (
   recipient: any,
   jobPayload: any,
-  jobId?: string
+  jobId?: string,
+  delay = 0
 ) => {
   const finalJobId = safeJobId(jobId || `bcast_${recipient._id}_${Date.now()}`);
-  await broadcastQueue.add('send-broadcast', { recipient, jobPayload }, { jobId: finalJobId });
+  await broadcastQueue.add('send-broadcast', { recipient, jobPayload }, { jobId: finalJobId, delay });
 };
 
 // ============================================================

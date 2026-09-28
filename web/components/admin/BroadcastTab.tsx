@@ -23,6 +23,7 @@ export default function BroadcastTab({ headers }: { headers: Record<string, stri
 
     // Email States
     const [sendEmail, setSendEmail] = useState(false);
+    const [includeUnsubscribed, setIncludeUnsubscribed] = useState(false);
     const [emailDelayMs, setEmailDelayMs] = useState(1000);
     const [specificIdentifier, setSpecificIdentifier] = useState('');
     const [emailSubject, setEmailSubject] = useState('');
@@ -128,6 +129,17 @@ export default function BroadcastTab({ headers }: { headers: Record<string, stri
         });
 
         if (res.isConfirmed) {
+            if (sendEmail && includeUnsubscribed) {
+                const emergencyConfirmation = await Swal.fire({
+                    title: 'Emergency delivery override',
+                    text: 'This will include users who opted out of broadcast email. Use only for essential service or security notices. Hard-bounced addresses remain blocked.',
+                    icon: 'error',
+                    showCancelButton: true,
+                    confirmButtonText: 'Send emergency email',
+                    confirmButtonColor: '#dc2626',
+                });
+                if (!emergencyConfirmation.isConfirmed) return;
+            }
             try {
                 const payload: Record<string, unknown> = {
                     target, 
@@ -136,6 +148,7 @@ export default function BroadcastTab({ headers }: { headers: Record<string, stri
                     sendPush,
                     sendEmail,
                     emailDelayMs,
+                    includeUnsubscribed,
                     specificIdentifier
                 };
 
@@ -282,6 +295,17 @@ export default function BroadcastTab({ headers }: { headers: Record<string, stri
                                 className="w-full bg-slate-900 border border-slate-600 rounded-xl px-4 py-3 text-white focus:border-green-500 outline-none transition-colors"
                             />
                          </div>
+                    )}
+
+                    {sendEmail && (
+                        <button
+                            type="button"
+                            onClick={() => setIncludeUnsubscribed((current) => !current)}
+                            className={`w-full rounded-xl border px-4 py-3 text-left transition ${includeUnsubscribed ? 'border-red-500 bg-red-500/10 text-red-300' : 'border-slate-700 bg-slate-900/50 text-slate-400 hover:border-slate-500'}`}
+                        >
+                            <span className="block text-sm font-bold">{includeUnsubscribed ? 'Emergency override enabled' : 'Include unsubscribed users (emergency only)'}</span>
+                            <span className="mt-1 block text-xs">Hard-bounced addresses are always excluded.</span>
+                        </button>
                     )}
 
                     {/* EMAIL TEMPLATE SECTION */}

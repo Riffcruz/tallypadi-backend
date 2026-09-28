@@ -22,6 +22,14 @@ import {
   refreshMarketplaceOwnerListings,
 } from './marketplaceIndex.service';
 import { sendBroadcastEmail } from './email.service';
+import { createUnsubscribeToken } from './emailSecurity.service';
+
+const escapeEmailHtml = (value: unknown) => String(value ?? '')
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#39;');
 
 export const replyWorker = new Worker(
   'outbound-replies', // ✅ Fixed: Matches queue.service.ts
@@ -510,13 +518,13 @@ export const broadcastWorker = new Worker(
   async (job: import('bullmq').Job) => {
     if (job.name === 'send-broadcast') {
       const { recipient: u, jobPayload } = job.data;
-      const { sendEmail, sendWhatsapp, mediaId, mediaType, message, emailSubject, emailDelayMs, templateHtml, globalEmailTemplate, apiBaseUrl } = jobPayload;
+      const { sendEmail, sendWhatsapp, mediaId, mediaType, message, emailSubject, emailDelayMs, templateHtml, globalEmailTemplate, apiBaseUrl, includeUnsubscribed } = jobPayload;
 
       // Unsubscribe check
       if (sendEmail && u.email) {
         // Double check from DB directly in case they unsubscribed recently
         const freshUser = await User.findById(u._id).lean();
-        if (freshUser && freshUser.emailSubscribed === false) {
+        if (freshUser?.emailDeliveryStatus === 'HARD_BOUNCED' || (freshUser?.emailSubscribed === false && !includeUnsubscribed)) {
           // Skip email for this user
         } else {
           let personalizedSubject = '';
@@ -529,9 +537,9 @@ export const broadcastWorker = new Worker(
                  .replace(/##name##/g, u.name || 'Partner');
 
              personalizedHtml = templateHtml
-                 .replace(/##usershopname##/g, u.businessName || 'Your Shop')
-                 .replace(/##phonenumber##/g, u.phoneNumber || '')
-                 .replace(/##name##/g, u.name || 'Partner');
+                 .replace(/##usershopname##/g, escapeEmailHtml(u.businessName || 'Your Shop'))
+                 .replace(/##phonenumber##/g, escapeEmailHtml(u.phoneNumber || ''))
+                 .replace(/##name##/g, escapeEmailHtml(u.name || 'Partner'));
           } else if (emailSubject && message) {
              personalizedSubject = emailSubject
                  .replace(/##usershopname##/g, u.businessName || 'Your Shop')
@@ -543,12 +551,13 @@ export const broadcastWorker = new Worker(
                  .replace(/##phonenumber##/g, u.phoneNumber || '')
                  .replace(/##name##/g, u.name || 'Partner');
              
-             personalizedHtml = `<div style="font-family: sans-serif; white-space: pre-wrap;">${pMsg}</div>`;
+             personalizedHtml = `<div style="font-family: sans-serif; white-space: pre-wrap;">${escapeEmailHtml(pMsg)}</div>`;
           }
 
           if (personalizedSubject && personalizedHtml) {
              // Inject Unsubscribe Link
-             const unsubLink = `${apiBaseUrl || 'https://tallypadi.com/api'}/public/unsubscribe?email=${encodeURIComponent(u.email)}`;
+             const unsubscribeToken = createUnsubscribeToken(u.email);
+             const unsubLink = `${apiBaseUrl || 'https://tallypadi.com/api'}/public/unsubscribe?token=${encodeURIComponent(unsubscribeToken)}`;
              personalizedHtml = personalizedHtml.replace(/{{unsubscribe_link}}/g, unsubLink);
 
              // Wrap with Global Email Template
@@ -556,7 +565,23 @@ export const broadcastWorker = new Worker(
                  personalizedHtml = globalEmailTemplate.replace('{{message}}', personalizedHtml);
              }
 
-             await sendBroadcastEmail(u.email, personalizedSubject, personalizedHtml);
+             personalizedHtml = personalizedHtml.replace(/{{unsubscribe_link}}/g, unsubLink);
+             personalizedHtml += `<div style="margin-top:24px;padding-top:16px;border-top:1px solid #e5e7eb;text-align:center;font:12px sans-serif;color:#6b7280;">Do not want broadcast emails? <a href="${unsubLink}" style="color:#047857;">Unsubscribe</a></div>`;
+
+             try {
+               await sendBroadcastEmail(u.email, personalizedSubject, personalizedHtml, unsubLink);
+             } catch (error: any) {
+               const responseCode = Number(error?.responseCode || 0);
+               if (responseCode >= 500 && responseCode < 600) {
+                 await User.findByIdAndUpdate(u._id, {
+                   emailDeliveryStatus: 'HARD_BOUNCED',
+                   emailLastFailureAt: new Date(),
+                   emailLastFailureReason: String(error?.response || error?.message || 'Permanent SMTP rejection').slice(0, 500),
+                 });
+               } else {
+                 throw error;
+               }
+             }
              
              // Throttle internally per email strictly
              if (emailDelayMs > 0) {

@@ -12,6 +12,7 @@ import {
   loginStaffWithOTP
 } from './controllers/auth.controller';
 import { User } from './models/user.model';
+import { verifyUnsubscribeToken } from './services/emailSecurity.service';
 
 const app = express();
 
@@ -23,12 +24,11 @@ app.get('/', (_req: Request, res: Response) => {
 });
 
 // Public Unsubscribe
-app.get('/public/unsubscribe', async (req: Request, res: Response) => {
+const unsubscribeEmail = async (req: Request, res: Response) => {
   try {
-    const email = req.query.email as string;
-    if (!email) {
-      return res.status(400).send('Email is required');
-    }
+    const token = String(req.query.token || req.body?.token || '');
+    if (!token) return res.status(400).send('Invalid unsubscribe link');
+    const email = verifyUnsubscribeToken(token);
     
     await User.findOneAndUpdate(
       { email: email.toLowerCase() },
@@ -53,18 +53,22 @@ app.get('/public/unsubscribe', async (req: Request, res: Response) => {
         <div class="container">
           <div class="icon">✅</div>
           <h1>Unsubscribed</h1>
-          <p>You have successfully unsubscribed from <strong>${email}</strong>.</p>
-          <p>You will no longer receive these emails.</p>
+          <p>You will no longer receive TallyPadi broadcast emails.</p>
         </div>
       </body>
       </html>
     `;
     
     res.send(html);
-  } catch (err) {
-    res.status(500).send('Internal Server Error');
+  } catch {
+    res.status(400).send('This unsubscribe link is invalid or has expired.');
   }
-});
+};
+
+app.get('/public/unsubscribe', unsubscribeEmail);
+app.post('/public/unsubscribe', unsubscribeEmail);
+app.get('/api/public/unsubscribe', unsubscribeEmail);
+app.post('/api/public/unsubscribe', unsubscribeEmail);
 
 // Auth Routes
 app.post('/api/login', loginUser);

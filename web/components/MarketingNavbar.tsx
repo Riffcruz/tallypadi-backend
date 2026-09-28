@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Menu, MessageCircle, X } from "lucide-react";
+import { Menu, MessageCircle, Store, X } from "lucide-react";
 
 interface MarketingNavbarProps {
   whatsappLink?: string;
@@ -19,9 +19,9 @@ const navLinks = [
 ];
 
 const mobileExtraLinks = [
+  { href: "/marketplace", label: "Marketplace" },
   { href: "/help", label: "Help Center" },
   { href: "/blog", label: "Blog" },
-  { href: "/partners", label: "Partnership" },
 ];
 
 export default function MarketingNavbar({
@@ -45,6 +45,13 @@ export default function MarketingNavbar({
         </div>
 
         <div className="hidden items-center gap-5 lg:flex xl:gap-7">
+          <Link
+            href="/marketplace"
+            className="inline-flex items-center gap-2 rounded-lg border border-amber-300/40 bg-amber-300 px-4 py-2.5 text-xs font-black text-stone-950 shadow-sm transition hover:bg-amber-200 xl:text-sm"
+          >
+            <Store size={17} />
+            Marketplace
+          </Link>
           <Link href="/login" className="text-xs font-black text-white transition hover:text-emerald-200 xl:text-sm">
             Login
           </Link>

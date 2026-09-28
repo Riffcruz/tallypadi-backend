@@ -52,7 +52,7 @@ export default function SettingsTab({
         whatsappUrl: '',
         security: { autoSuspendOnJailbreak: false },
         limits: { maxMessageHistory: 5, maxStaffAccounts: 2 },
-        smtp: { host: '', port: 465, user: '', pass: '', fromAddress: '', secure: true },
+        smtp: { host: '', port: 465, user: '', pass: '', fromAddress: '', secure: true, dailyLimit: 300 },
         adsPlans: [] as AdsPlan[],
         referralProgram: { enabled: true, minimumFundingAmount: 10000, rewardPercentage: 10 },
         globalEmailTemplate: '<div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; padding: 20px; border-radius: 8px;">\n  <div style="text-align: center; margin-bottom: 20px;">\n    <h1 style="color: #1e293b; margin: 0;">TallyPadi</h1>\n  </div>\n  <div style="color: #334155; line-height: 1.6;">\n    {{message}}\n  </div>\n  <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e2e8f0; text-align: center; color: #94a3b8; font-size: 12px;">\n    &copy; TallyPadi. All rights reserved.\n  </div>\n</div>',
@@ -257,7 +257,7 @@ export default function SettingsTab({
                             </div>
                             <div>
                                 <label className="text-xs text-slate-400 font-bold mb-1 block">SMTP Password</label>
-                                <input type="password" value={localSettings.smtp?.pass || ''} onChange={(e) => handleSmtpChange('pass', e.target.value)} className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-green-500" placeholder="••••••••" />
+                                <input type="password" value={localSettings.smtp?.pass || ''} onChange={(e) => handleSmtpChange('pass', e.target.value)} className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-green-500" placeholder="Leave blank to keep current key" autoComplete="new-password" />
                             </div>
                         </div>
                         <div className="grid grid-cols-2 gap-4 items-end">
@@ -271,6 +271,11 @@ export default function SettingsTab({
                                     <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${localSettings.smtp?.secure ? 'translate-x-4' : 'translate-x-[2px]'}`} />
                                 </button>
                             </div>
+                        </div>
+                        <div>
+                            <label className="text-xs text-slate-400 font-bold mb-1 block">Daily broadcast limit</label>
+                            <input type="number" min="1" max="100000" value={localSettings.smtp?.dailyLimit || 300} onChange={(e) => handleSmtpChange('dailyLimit', parseInt(e.target.value) || 1)} className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-green-500" />
+                            <p className="mt-1 text-[11px] text-slate-500">Overflow is automatically scheduled in daily batches.</p>
                         </div>
                     </div>
                 </div>

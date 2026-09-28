@@ -61,6 +61,9 @@ import { connectDb } from './config/db';
 import { RedisRateLimitStore } from './services/rateLimitRedisStore';
 import { getJwtSecret } from './config/jwt';
 import { requireOwnerAccount, requireStaffPermission } from './middleware/staffPermission';
+import { verifyUnsubscribeToken } from './services/emailSecurity.service';
+import { User } from './models/user.model';
+import { AdminSettings } from './models/adminSettings.model';
 
 // --- CONTROLLERS ---
 import { getDashboardData } from './controllers/dashboard.controller';
@@ -75,7 +78,6 @@ import {
   bulkSaveInventory
 } from './controllers/inventory.controller';
 import { updateSettings } from './controllers/settings.controller';
-import { getGlobalSettings } from './controllers/admin.controller';
 import { getStaff, addStaff, removeStaff, updateStaff } from './controllers/staff.controller';
 import { presignUpload } from './controllers/upload.controller';
 
@@ -320,6 +322,36 @@ app.use('/api', (req: Request, res: Response, next: NextFunction) => {
   return apiLimiter(req, res, next);
 });
 
+const unsubscribeEmail = async (req: Request, res: Response) => {
+  try {
+    const token = String(req.query.token || req.body?.token || '');
+    if (!token) return res.status(400).send('Invalid unsubscribe link');
+    const email = verifyUnsubscribeToken(token);
+    await User.findOneAndUpdate(
+      { email },
+      { $set: { emailSubscribed: false } }
+    );
+
+    if (req.method === 'POST') return res.sendStatus(200);
+    return res.type('html').send(`<!doctype html>
+      <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Unsubscribed</title></head>
+      <body style="margin:0;background:#f4f4f5;font-family:Arial,sans-serif;color:#0f172a;display:grid;min-height:100vh;place-items:center">
+        <main style="max-width:420px;margin:24px;background:#fff;padding:36px;border-radius:16px;text-align:center;box-shadow:0 10px 30px rgba(15,23,42,.08)">
+          <div style="font-size:42px">✓</div><h1>You are unsubscribed</h1><p style="color:#64748b;line-height:1.6">You will no longer receive TallyPadi broadcast emails.</p>
+        </main>
+      </body></html>`);
+  } catch {
+    return res.status(400).send('This unsubscribe link is invalid or has expired.');
+  }
+};
+
+app.get('/api/public/unsubscribe', unsubscribeEmail);
+app.post('/api/public/unsubscribe', unsubscribeEmail);
+app.get('/api/public/settings', async (_req: Request, res: Response) => {
+  const settings = await AdminSettings.findOne().select('whatsappUrl').lean();
+  return res.json({ whatsappUrl: settings?.whatsappUrl || '' });
+});
+
 // ==========================================
 // ✅ WEBHOOK ROUTES (No Auth Required)
 // ==========================================
@@ -435,7 +467,6 @@ app.get('/api/sales/:saleId/receipt', authRequired, generateSaleReceiptPdf);
 
 // --- SETTINGS & STAFF ---
 app.put('/api/settings', authRequired, requireOwnerAccount, updateSettings);
-app.get('/api/admin/settings', getGlobalSettings); // Public config (OK if intentional)
 app.get('/api/staff', authRequired, requireOwnerAccount, getStaff);
 app.post('/api/staff', authRequired, requireOwnerAccount, addStaff);
 app.put('/api/staff/:id', authRequired, requireOwnerAccount, updateStaff);
