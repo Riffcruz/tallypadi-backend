@@ -4,7 +4,9 @@ import {
   getOrders,
   getOrder,
   updateOrder,
-  deleteOrder
+  deleteOrder,
+  acceptStorefrontOrder,
+  declineStorefrontOrder,
 } from '../controllers/order.controller';
 
 const router = Router();
@@ -14,6 +16,9 @@ router.post('/', createOrder);
 
 // GET /api/orders
 router.get('/', getOrders);
+
+router.post('/:id/accept', acceptStorefrontOrder);
+router.post('/:id/decline', declineStorefrontOrder);
 
 // GET /api/orders/:id
 router.get('/:id', getOrder);

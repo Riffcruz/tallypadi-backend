@@ -17,7 +17,6 @@ export const metadata: Metadata = {
     'SME business tools Africa',
     'send ads to facebook',
     'send ads to instagram',
-    'send ads to tiktok',
     'send ads to google',
     'send receipts via whatsapp',
     'manage inventory and stock',
@@ -48,7 +47,7 @@ const products = [
   { icon: ReceiptText, title: 'Sales and receipts', text: 'Record sales, generate professional receipts, track cash flow, and keep a searchable sales history.' },
   { icon: Warehouse, title: 'Inventory control', text: 'Manage stock, prices, low-stock alerts, barcode-friendly checkout, and product records.' },
   { icon: Store, title: 'Storefront and marketplace', text: 'Publish products to a public shop link and TallyPadi Marketplace when store setup is complete.' },
-  { icon: Megaphone, title: 'Managed product promotion', text: 'Merchants can request product boosts across TallyPadi Marketplace and external ad platforms such as TikTok, Meta, and Google.' },
+  { icon: Megaphone, title: 'Managed product promotion', text: 'Merchants can request product boosts across TallyPadi Marketplace, Meta, and Google.' },
 ];
 
 export default function AboutPage() {
@@ -135,7 +134,7 @@ export default function AboutPage() {
               </div>
               <h2 className="mt-5 text-2xl font-black text-stone-950">How TallyPadi Uses Ads Platforms</h2>
               <p className="mt-4 leading-7 text-stone-700">
-                TallyPadi is building managed advertising workflows for merchants who request product boosts inside TallyPadi. For TikTok, Meta, and Google, TallyPadi may use approved business API access to create, submit, pause, update, and report on campaigns for products that merchants have selected and funded in TallyPadi.
+                TallyPadi manages approved Meta and Google campaigns for products merchants select and fund inside TallyPadi.
               </p>
               <p className="mt-4 leading-7 text-stone-700">
                 Merchants do not connect their own ad manager accounts in the current version. TallyPadi reviews product details, creative copy, budgets, and policy risks before any provider submission.

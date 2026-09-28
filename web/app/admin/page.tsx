@@ -56,6 +56,7 @@ export default function AdminDashboard() {
 
   const logout = () => {
     sessionStorage.removeItem(TOKEN_KEY);
+    axios.delete(`${API_URL}/admin/queues/session`, { withCredentials: true }).catch(() => {});
     setToken('');
     setIsAuthenticated(false);
     setStats(null);
@@ -71,6 +72,10 @@ export default function AdminDashboard() {
       setIsAuthenticated(true);
       setToken(tkn);
       sessionStorage.setItem(TOKEN_KEY, tkn);
+      await axios.post(`${API_URL}/admin/queues/session`, {}, {
+        headers: getHeaders(tkn),
+        withCredentials: true,
+      });
       await loadData(tkn);
     } catch (err: unknown) {
       const status = axios.isAxiosError(err) ? err.response?.status : undefined;

@@ -12,8 +12,12 @@ import {
 } from '../services/marketplaceTrust.service';
 import { getMarketplaceProductSeo } from '../services/marketplaceSeo.service';
 import { queueMarketplaceOwnerRefresh } from '../services/queue.service';
+import { orderService } from '../services/order.service';
+import { activityService } from '../services/activity.service';
+import { randomBytes } from 'crypto';
 
 const PUBLIC_SHOP_CACHE = 'public, max-age=30, s-maxage=120, stale-while-revalidate=300';
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 // Schema for updating shop settings
 const updateShopSchema = z.object({
@@ -162,7 +166,7 @@ export const getShopProducts = async (req: Request, res: Response): Promise<any>
     };
 
     if (q) {
-      filter.name = { $regex: String(q), $options: 'i' };
+      filter.name = { $regex: escapeRegExp(String(q).slice(0, 80)), $options: 'i' };
     }
 
     if (category) {
@@ -196,6 +200,7 @@ export const getShopProducts = async (req: Request, res: Response): Promise<any>
           colors: p.colors,
           sizes: p.sizes,
           inStock: p.quantity > 0,
+          availableQuantity: p.quantity,
           isBoosted: Boolean(activeBoost),
           seo,
         };
@@ -210,6 +215,71 @@ export const getShopProducts = async (req: Request, res: Response): Promise<any>
   } catch (error) {
     console.error('Error fetching products:', error);
     return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const createStorefrontOrder = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const slug = String(req.params.slug || '').trim();
+    const customerName = String(req.body?.customerName || '').trim().slice(0, 120);
+    const customerPhone = String(req.body?.customerPhone || '').trim().slice(0, 32);
+    const requestedItems = Array.isArray(req.body?.items) ? req.body.items.slice(0, 25) : [];
+
+    if (customerName.length < 2 || !/^[+]?[\d\s\-()]{7,32}$/.test(customerPhone) || requestedItems.length === 0) {
+      return res.status(400).json({ error: 'Name, phone number and cart items are required.' });
+    }
+
+    const owner = await User.findOne({ shopSlug: slug }).select('_id businessName planType subscriptionStatus trialEndsAt');
+    if (!owner || !isTycoon(owner) || !isSubActive(owner)) return res.status(404).json({ error: 'Shop unavailable' });
+
+    const ids = requestedItems.map((item: any) => String(item?.productId || '')).filter((id: string) => /^[a-f\d]{24}$/i.test(id));
+    const products = await Inventory.find({ _id: { $in: ids }, user: owner._id, quantity: { $gt: 0 }, isPublished: { $ne: false } })
+      .select('name quantity lastUnitPrice')
+      .lean();
+    const productMap = new Map(products.map((product) => [String(product._id), product]));
+
+    const lines: string[] = [];
+    const items: Array<{ product: any; name: string; quantity: number; unitPrice: number; lineTotal: number }> = [];
+    let total = 0;
+    for (const requested of requestedItems) {
+      const product = productMap.get(String(requested?.productId || ''));
+      if (!product) return res.status(400).json({ error: 'One or more products are unavailable.' });
+      const quantity = Math.max(1, Math.min(Math.trunc(Number(requested?.quantity) || 1), Number(product.quantity)));
+      const lineTotal = Number(product.lastUnitPrice || 0) * quantity;
+      total += lineTotal;
+      lines.push(`${quantity} × ${product.name}`);
+      items.push({ product: product._id, name: product.name, quantity, unitPrice: Number(product.lastUnitPrice || 0), lineTotal });
+    }
+
+    const publicReference = `TP-${Date.now().toString(36).toUpperCase()}-${randomBytes(2).toString('hex').toUpperCase()}`;
+
+    const order = await orderService.createOrder(owner._id, {
+      description: lines.join(', ').slice(0, 500),
+      customerName,
+      customerPhone,
+      price: total,
+      amountPaid: 0,
+      deliveryDate: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      status: 'PENDING',
+      source: 'STOREFRONT',
+      publicReference,
+      storefrontSlug: slug,
+      items,
+    });
+
+    await activityService.recordActivitySafely({
+      user: owner._id,
+      type: 'ORDER',
+      title: 'New storefront order',
+      message: `${customerName} placed order ${publicReference}`,
+      amount: total,
+      metadata: { orderId: order._id, publicReference, source: 'STOREFRONT' },
+    });
+
+    return res.status(201).json({ orderId: order._id, reference: publicReference, total });
+  } catch (error) {
+    console.error('Create Storefront Order Error:', error);
+    return res.status(500).json({ error: 'Could not create order.' });
   }
 };
 

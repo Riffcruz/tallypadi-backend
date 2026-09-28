@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { User } from '../models/user.model';
+import { getJwtSecret } from '../config/jwt';
 
 type JwtPayload = {
   id?: string;
@@ -29,9 +30,8 @@ export const authRequired = async (req: Request, res: Response, next: NextFuncti
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  const secret = process.env.JWT_SECRET || 'supersecret_fallback_key_123';
-
   try {
+    const secret = getJwtSecret();
     const decoded = jwt.verify(token, secret) as JwtPayload;
     const userId = decoded.id || decoded._id || decoded.userId || '';
 

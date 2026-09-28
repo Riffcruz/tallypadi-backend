@@ -50,3 +50,26 @@ test('authRequired hydrates ownerId for existing staff tokens', async () => {
     }
   }
 });
+
+test('authRequired fails closed when JWT_SECRET is missing', async () => {
+  const previousSecret = process.env.JWT_SECRET;
+  delete process.env.JWT_SECRET;
+
+  const req = { headers: { authorization: 'Bearer forged-token' } };
+  const res = {
+    statusCode: 200,
+    body: null,
+    status(code) { this.statusCode = code; return this; },
+    json(payload) { this.body = payload; return this; },
+  };
+
+  try {
+    let nextCalled = false;
+    await authRequired(req, res, () => { nextCalled = true; });
+    assert.equal(nextCalled, false);
+    assert.equal(res.statusCode, 401);
+  } finally {
+    if (previousSecret === undefined) delete process.env.JWT_SECRET;
+    else process.env.JWT_SECRET = previousSecret;
+  }
+});

@@ -257,7 +257,7 @@ export const createCampaign = async (req: Request, res: Response) => {
       globalLandingPageUrl: req.body?.globalLandingPageUrl,
       providerLandingPageUrls: req.body?.providerLandingPageUrls,
       consent: {
-        accepted: Boolean(req.body?.adTermsAccepted ?? req.body?.consent?.accepted ?? true),
+        accepted: Boolean(req.body?.adTermsAccepted ?? req.body?.consent?.accepted ?? false),
         version: req.body?.consent?.version,
         ipAddress: req.ip,
         userAgent: req.headers['user-agent'],
@@ -306,6 +306,11 @@ export const boostProduct = async (req: Request, res: Response) => {
         brief: String(adDetails?.brief || req.body?.creativeNotes || '').trim(),
         audience: String(adDetails?.audience || req.body?.targetAudience || '').trim(),
         keywords: Array.isArray(adDetails?.keywords) ? adDetails.keywords : [],
+      },
+      consent: {
+        accepted: Boolean(req.body?.consent?.accepted ?? false),
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
       },
     });
 

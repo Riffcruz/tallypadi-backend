@@ -14,7 +14,6 @@ import { env } from '../../config/env';
 import { getProviderAutomationReadiness } from './providerCredentials.service';
 import { googleAdsProvider } from './providers/googleAds.provider';
 import { metaAdsProvider } from './providers/metaAds.provider';
-import { tiktokAdsProvider } from './providers/tiktokAds.provider';
 import { AdsProviderAdapter, ProviderSubmissionContext } from './providers/types';
 import { providerErrorMessage, truncateForProvider } from './providers/providerUtils';
 import { walletService } from '../wallet.service';
@@ -22,7 +21,6 @@ import { walletService } from '../wallet.service';
 const providerAdapters: Partial<Record<AdProvider, AdsProviderAdapter>> = {
   META_ADS: metaAdsProvider,
   GOOGLE_ADS: googleAdsProvider,
-  TIKTOK_ADS: tiktokAdsProvider,
 };
 
 const providerIsTerminal = (status: string) => ['COMPLETED', 'FAILED', 'CANCELLED', 'REJECTED_BY_PROVIDER'].includes(status);
@@ -240,7 +238,7 @@ export const submitProviderCampaignToProvider = async (providerCampaignId: strin
   const locked = await ProviderCampaign.findOneAndUpdate(
     {
       _id: existing._id,
-      provider: { $in: ['META_ADS', 'GOOGLE_ADS', 'TIKTOK_ADS'] },
+      provider: { $in: ['META_ADS', 'GOOGLE_ADS'] },
       status: 'READY_TO_SUBMIT',
     },
     {

@@ -412,7 +412,7 @@ export default function OnlineStorePage() {
             </button>
             <div>
               <h1 className="text-2xl md:text-3xl font-bold text-gray-900 tracking-tight">Online Store</h1>
-              <p className="text-gray-500 text-sm mt-1">Manage your public storefront link and appearance</p>
+              <p className="text-gray-500 text-sm mt-1">Your shop</p>
             </div>
           </div>
           <div className={`px-4 py-2 rounded-full text-xs font-bold flex items-center gap-2 border shadow-sm ${isTycoon ? 'bg-purple-50 text-purple-700 border-purple-100' : 'bg-green-50 text-green-700 border-green-100'}`}>
@@ -435,8 +435,7 @@ export default function OnlineStorePage() {
                     <div className="flex items-center gap-3">
                       <div className="p-2 bg-pink-50 rounded-xl text-pink-600"><Smartphone size={20} /></div>
                       <div>
-                        <h2 className="text-lg font-bold text-gray-900">Online Storefront Settings</h2>
-                        <p className="text-xs text-gray-400">Shop link, cover image, description, products, and theme color.</p>
+                        <h2 className="text-lg font-bold text-gray-900">Storefront</h2>
                       </div>
                     </div>
                     <ChevronDown size={18} className={`text-slate-400 transition-transform ${openSettingsCard === 'storefront' ? 'rotate-180' : ''}`} />
@@ -512,8 +511,7 @@ export default function OnlineStorePage() {
                 <div className="flex items-center gap-3 mb-6">
                   <div className="p-2 bg-purple-50 rounded-xl text-purple-600"><Palette size={20} /></div>
                   <div>
-                    <h2 className="text-lg font-bold text-gray-900">Store Theme Color</h2>
-                    <p className="text-xs text-gray-400">Pick an accent color for your public shop page (buttons, cart, highlights)</p>
+                    <h2 className="text-lg font-bold text-gray-900">Brand color</h2>
                   </div>
                 </div>
 
@@ -562,7 +560,7 @@ export default function OnlineStorePage() {
                       <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
                     </div>
                     <div>
-                      <h2 className="text-lg font-bold text-gray-900">Shop Location Settings</h2>
+                      <h2 className="text-lg font-bold text-gray-900">Location</h2>
                       <p className="text-xs text-gray-400">Country, state, city, and street address used for marketplace visibility.</p>
                     </div>
                   </div>
@@ -647,8 +645,7 @@ export default function OnlineStorePage() {
                     {storeSetup?.isComplete ? <FileCheck size={20} /> : <AlertCircle size={20} />}
                   </div>
                   <div className="flex-1">
-                    <h2 className="text-lg font-bold text-gray-900">Marketplace Readiness</h2>
-                    <p className="text-xs text-gray-400">Your direct shop link stays public, but marketplace discovery needs these details completed.</p>
+                    <h2 className="text-lg font-bold text-gray-900">Store status</h2>
                     <div className="mt-4 flex flex-wrap gap-2">
                       {Object.entries(STORE_SETUP_LABELS).map(([key, label]) => {
                         const missing = Boolean(storeSetup?.missing?.includes(key));

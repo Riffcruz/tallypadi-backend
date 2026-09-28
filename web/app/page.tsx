@@ -25,7 +25,6 @@ export const metadata: Metadata = {
     'African retail software',
     'send ads to facebook',
     'send ads to instagram',
-    'send ads to tiktok',
     'send ads to google',
     'send receipts via whatsapp',
     'manage inventory and stock',

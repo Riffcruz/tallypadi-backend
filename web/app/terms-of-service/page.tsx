@@ -88,7 +88,7 @@ export default function TermsOfServicePage() {
             </div>
             <h2 className="mt-5 text-xl font-black text-stone-950">Advertising platform use</h2>
             <p className="mt-3 leading-7 text-stone-700">
-              When a merchant requests an ad boost, TallyPadi may review product details, generate or edit ad suggestions, reserve campaign funds, create provider campaign records, submit approved campaign materials to platforms such as TikTok, Meta, or Google where API access is enabled, pause or stop campaigns, and retrieve reporting data for display in TallyPadi.
+              When a merchant requests an ad boost, TallyPadi may review product details, reserve campaign funds, submit approved campaign materials to Meta or Google, manage campaigns, and retrieve reporting data.
             </p>
             <p className="mt-3 leading-7 text-stone-700">
               TallyPadi may reject or pause a campaign that violates our rules, advertiser policies, marketplace policy, applicable law, or third-party platform policy. External platforms may also reject, limit, review, or suspend ads based on their own policies.

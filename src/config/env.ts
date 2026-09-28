@@ -45,20 +45,5 @@ export const env = {
       loginCustomerId: process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID || '',
       customerId: process.env.GOOGLE_ADS_CUSTOMER_ID || '',
     },
-    tiktok: {
-      apiBaseUrl: process.env.TIKTOK_BUSINESS_API_BASE_URL || 'https://business-api.tiktok.com',
-      apiVersion: process.env.TIKTOK_BUSINESS_API_VERSION || 'v1.3',
-      accessToken: process.env.TIKTOK_BUSINESS_ACCESS_TOKEN || '',
-      advertiserId: process.env.TIKTOK_ADVERTISER_ID || '',
-      appId: process.env.TIKTOK_APP_ID || '',
-      appSecret: process.env.TIKTOK_APP_SECRET || '',
-      pixelId: process.env.TIKTOK_PIXEL_ID || '',
-      identityId: process.env.TIKTOK_IDENTITY_ID || '',
-      identityType: process.env.TIKTOK_IDENTITY_TYPE || '',
-      defaultLocationIds: (process.env.TIKTOK_DEFAULT_LOCATION_IDS || '')
-        .split(',')
-        .map((value) => value.trim())
-        .filter(Boolean),
-    },
   },
 };

@@ -223,7 +223,6 @@ const generateCampaignAiSuggestionSafely = async (campaignId: string, campaignRu
           generatedPlatformNotes: {
             providers: campaign.selectedProviders || campaign.platforms || [],
             meta: 'Review copy, creative, and landing page before creating Meta ads manually.',
-            tiktok: 'Confirm creative format and hook before TikTok placement.',
             google: 'Confirm campaign type, keywords, landing page quality, and policy-sensitive claims.',
           },
           generatedPolicyWarnings: [],
@@ -364,10 +363,12 @@ export const serializeAdCampaign = (campaign: IAdCampaign | any, options?: {
   walletTransactions?: any[];
 }) => {
   const run = options?.run || campaign.activeRun || campaign.latestRun || null;
-  const providers = options?.providerCampaigns || campaign.providerCampaigns || [];
-  const selectedProviders = campaign.selectedProviders?.length
+  const providers = (options?.providerCampaigns || campaign.providerCampaigns || [])
+    .filter((provider: any) => AD_PROVIDERS.includes(provider.provider));
+  const selectedProviders = (campaign.selectedProviders?.length
     ? campaign.selectedProviders
-    : (campaign.platforms || []).map((platform: string) => LEGACY_PROVIDER_MAP[String(platform).toUpperCase()] || platform);
+    : (campaign.platforms || []).map((platform: string) => LEGACY_PROVIDER_MAP[String(platform).toUpperCase()] || platform))
+    .filter((provider: AdProvider) => AD_PROVIDERS.includes(provider));
   const status = calculateAggregateStatus(campaign.status, providers);
   const grossBudgetMinor = run?.grossBudgetMinor ?? convertLegacyBudgetToMinor(campaign.budget || 0);
 
@@ -481,6 +482,9 @@ const resolvePlan = async (input: CreateManagedCampaignInput) => {
 };
 
 export const createManagedCampaign = async (input: CreateManagedCampaignInput) => {
+  if (input.consent?.accepted !== true) {
+    throw new AdCampaignError('Campaign approval is required', 400);
+  }
   const userObjectId = toObjectId(input.userId);
   const selectedProviders = expandAdPlatforms(input.providers || input.platform);
   const { plan, durationDays } = await resolvePlan(input);
@@ -548,7 +552,7 @@ export const createManagedCampaign = async (input: CreateManagedCampaignInput) =
       campaignGoal: cleanText(input.campaignGoal || 'Drive product enquiries', 120),
       keywords: cleanKeywords(input.keywords || input.adDetails?.keywords),
       creativeNotes: cleanText(input.creativeNotes || input.adDetails?.brief, 1000),
-      merchantConsentAccepted: Boolean(input.consent?.accepted ?? true),
+      merchantConsentAccepted: Boolean(input.consent?.accepted ?? false),
       merchantConsentVersion: input.consent?.version || AD_TERMS_VERSION,
       planId: plan.id,
       planLabel: plan.label,
@@ -809,6 +813,7 @@ export const createPendingAdCampaign = async (input: {
   };
   globalLandingPageUrl?: string;
   providerLandingPageUrls?: Record<string, string>;
+  consent?: CreateManagedCampaignInput['consent'];
 }) => createManagedCampaign({
   userId: input.userId,
   productId: input.productId,
@@ -821,6 +826,7 @@ export const createPendingAdCampaign = async (input: {
   keywords: input.adDetails?.keywords,
   globalLandingPageUrl: input.globalLandingPageUrl,
   providerLandingPageUrls: input.providerLandingPageUrls,
+  consent: input.consent,
 });
 
 export const repairOrphanCampaignReservations = async (userId?: string | Types.ObjectId) => {

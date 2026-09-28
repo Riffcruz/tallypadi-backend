@@ -27,6 +27,8 @@ interface Order {
   deliveryDate: string;
   status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'DELIVERED' | 'CANCELLED';
   createdAt: string;
+  source?: 'MANUAL' | 'STOREFRONT' | 'WHATSAPP';
+  publicReference?: string;
 }
 
 interface UserProfile {
@@ -40,6 +42,7 @@ export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [sourceFilter, setSourceFilter] = useState<'ALL' | 'STOREFRONT'>('ALL');
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -115,9 +118,10 @@ export default function OrdersPage() {
     return orders.filter(o => {
       const nameMatch = (o.customerName || '').toLowerCase().includes(search.toLowerCase());
       const descMatch = (o.description || '').toLowerCase().includes(search.toLowerCase());
-      return nameMatch || descMatch;
+      const sourceMatch = sourceFilter === 'ALL' || o.source === sourceFilter;
+      return sourceMatch && (nameMatch || descMatch);
     });
-  }, [orders, search]);
+  }, [orders, search, sourceFilter]);
 
   const closeForm = () => setIsFormOpen(false);
 
@@ -182,6 +186,26 @@ export default function OrdersPage() {
       } catch (err) {
         Swal.fire('Error', 'Failed to delete.', 'error');
       }
+    }
+  };
+
+  const handleStorefrontDecision = async (order: Order, action: 'accept' | 'decline') => {
+    const confirmation = await Swal.fire({
+      title: action === 'accept' ? 'Accept this order?' : 'Decline this order?',
+      text: action === 'accept' ? 'Stock will be reserved for this customer.' : 'The order will be marked as cancelled.',
+      icon: action === 'accept' ? 'question' : 'warning',
+      showCancelButton: true,
+      confirmButtonColor: action === 'accept' ? '#059669' : '#dc2626',
+    });
+    if (!confirmation.isConfirmed) return;
+
+    try {
+      const token = getCookie('tallyToken');
+      await axios.post(`${API_URL}/orders/${order._id}/${action}`, {}, { headers: { Authorization: `Bearer ${token}` } });
+      await fetchOrders(token || '');
+      Swal.fire({ toast: true, icon: 'success', title: `Order ${action === 'accept' ? 'accepted' : 'declined'}`, position: 'top-end', showConfirmButton: false, timer: 2000 });
+    } catch (err: any) {
+      Swal.fire('Could not update order', err.response?.data?.error || 'Please try again.', 'error');
     }
   };
 
@@ -266,6 +290,14 @@ export default function OrdersPage() {
             />
           </div>
 
+          <div className="flex gap-2">
+            {(['ALL', 'STOREFRONT'] as const).map((source) => (
+              <button key={source} onClick={() => setSourceFilter(source)} className={`rounded-full px-4 py-2 text-sm font-bold transition ${sourceFilter === source ? 'bg-gray-900 text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>
+                {source === 'ALL' ? 'All orders' : 'Storefront'}
+              </button>
+            ))}
+          </div>
+
           {loading && orders.length === 0 ? (
             <div className="flex flex-col items-center py-20 gap-3">
               <Loader2 className="w-10 h-10 animate-spin text-emerald-600" />
@@ -294,13 +326,15 @@ export default function OrdersPage() {
                             </div>
                             <div>
                               <h3 className="font-black text-gray-900 text-lg capitalize tracking-tight line-clamp-1">{order.customerName}</h3>
+                              {order.source === 'STOREFRONT' && <p className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">Storefront {order.publicReference ? `· ${order.publicReference}` : ''}</p>}
                               <p className="text-xs text-gray-400 font-bold uppercase tracking-widest line-clamp-1">{order.description}</p>
                             </div>
                           </div>
                           <div className="flex gap-2 shrink-0">
-                            <button onClick={() => openEdit(order)} 
-                              className="p-2.5 bg-gray-50 text-gray-400 hover:text-emerald-600 rounded-xl transition-colors"><Edit2 className="w-4 h-4" /></button>
-                            <button onClick={() => handleDelete(order)} className="p-2.5 bg-gray-50 text-gray-400 hover:text-red-600 rounded-xl transition-colors"><Trash2 className="w-4 h-4" /></button>
+                            {order.source !== 'STOREFRONT' && <>
+                              <button onClick={() => openEdit(order)} className="p-2.5 bg-gray-50 text-gray-400 hover:text-emerald-600 rounded-xl transition-colors"><Edit2 className="w-4 h-4" /></button>
+                              <button onClick={() => handleDelete(order)} className="p-2.5 bg-gray-50 text-gray-400 hover:text-red-600 rounded-xl transition-colors"><Trash2 className="w-4 h-4" /></button>
+                            </>}
                           </div>
                         </div>
 
@@ -329,6 +363,13 @@ export default function OrdersPage() {
                                {order.status}
                            </div>
                         </div>
+
+                        {order.source === 'STOREFRONT' && order.status === 'PENDING' && (
+                          <div className="grid grid-cols-2 gap-3 mt-5">
+                            <button onClick={() => handleStorefrontDecision(order, 'decline')} className="rounded-xl border border-red-200 px-4 py-3 text-sm font-black text-red-700 hover:bg-red-50">Decline</button>
+                            <button onClick={() => handleStorefrontDecision(order, 'accept')} className="rounded-xl bg-emerald-600 px-4 py-3 text-sm font-black text-white hover:bg-emerald-700">Accept order</button>
+                          </div>
+                        )}
 
                       </div>
                     </div>

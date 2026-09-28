@@ -49,17 +49,6 @@ export const getProviderAutomationReadiness = (provider: AdProvider): ProviderAu
     externalAccountId = env.ads.google.customerId || null;
   }
 
-  if (provider === 'TIKTOK_ADS') {
-    missing = compact([
-      !env.ads.tiktok.accessToken && 'TIKTOK_BUSINESS_ACCESS_TOKEN',
-      !env.ads.tiktok.advertiserId && 'TIKTOK_ADVERTISER_ID',
-      !env.ads.tiktok.identityId && 'TIKTOK_IDENTITY_ID',
-      !env.ads.tiktok.identityType && 'TIKTOK_IDENTITY_TYPE',
-      env.ads.tiktok.defaultLocationIds.length === 0 && 'TIKTOK_DEFAULT_LOCATION_IDS',
-    ]);
-    externalAccountId = env.ads.tiktok.advertiserId || null;
-  }
-
   if (globallyDisabled) {
     return {
       provider,

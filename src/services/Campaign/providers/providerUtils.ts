@@ -23,9 +23,6 @@ export const toDateYYYYMMDDDashed = (date: Date) => {
   return `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}`;
 };
 
-export const toTikTokDateTime = (date: Date) =>
-  date.toISOString().replace('T', ' ').slice(0, 19);
-
 export const providerLaunchStatus = () => env.ads.providerInitialStatus === 'ACTIVE' ? 'RUNNING' : 'PROVIDER_REVIEW';
 
 export const axiosTimeout = () => env.ads.requestTimeoutMs;

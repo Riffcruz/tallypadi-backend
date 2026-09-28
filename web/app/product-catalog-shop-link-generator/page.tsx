@@ -66,7 +66,7 @@ export default function CatalogPage() {
             </span>
           </h1>
           <p className="text-xl text-slate-300 mb-10 max-w-2xl mx-auto font-light">
-            Turn your inventory list into a beautiful online catalog in one click. Share your link on WhatsApp, Instagram, or TikTok and let customers browse your products.
+            Turn your inventory list into an online catalog in one click. Share your link and let customers browse your products.
           </p>
           <div className="flex flex-col sm:flex-row justify-center gap-4">
             <a

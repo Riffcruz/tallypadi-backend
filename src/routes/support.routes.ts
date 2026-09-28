@@ -1,21 +1,24 @@
 import { Router, RequestHandler } from 'express';
 import { supportController } from '../controllers/support.controller';
-import { supportAgentAuth, adminAuth } from '../middleware/support.middleware';
+import { supportAgentAuth } from '../middleware/support.middleware';
+import { authRequired } from '../middleware/authRequired';
+import { verifyAdmin } from '../middleware/admin.middleware';
 
 
 const router = Router();
 
 // Admin
-router.post('/admin/agents', adminAuth, supportController.createAgent as unknown as RequestHandler);
-router.get('/admin/agents', adminAuth, supportController.listAgents as unknown as RequestHandler);
-router.put('/admin/agents/:id', adminAuth, supportController.updateAgent as unknown as RequestHandler);
-router.delete('/admin/agents/:id', adminAuth, supportController.deleteAgent as unknown as RequestHandler);
+router.use('/admin', authRequired, verifyAdmin);
+router.post('/admin/agents', supportController.createAgent as unknown as RequestHandler);
+router.get('/admin/agents', supportController.listAgents as unknown as RequestHandler);
+router.put('/admin/agents/:id', supportController.updateAgent as unknown as RequestHandler);
+router.delete('/admin/agents/:id', supportController.deleteAgent as unknown as RequestHandler);
 
-router.get('/admin/tickets', adminAuth, supportController.adminListTickets as unknown as RequestHandler);
-router.get('/admin/tickets/:ticketId/messages', adminAuth, supportController.adminGetTicketMessages as unknown as RequestHandler);
-router.delete('/admin/tickets/:ticketId', adminAuth, supportController.adminDeleteTicket as unknown as RequestHandler);
-router.post('/admin/tickets/:ticketId/assign', adminAuth, supportController.adminAssignTicket as unknown as RequestHandler);
-router.post('/admin/tickets/:ticketId/send', adminAuth, supportController.adminSendMessage as unknown as RequestHandler);
+router.get('/admin/tickets', supportController.adminListTickets as unknown as RequestHandler);
+router.get('/admin/tickets/:ticketId/messages', supportController.adminGetTicketMessages as unknown as RequestHandler);
+router.delete('/admin/tickets/:ticketId', supportController.adminDeleteTicket as unknown as RequestHandler);
+router.post('/admin/tickets/:ticketId/assign', supportController.adminAssignTicket as unknown as RequestHandler);
+router.post('/admin/tickets/:ticketId/send', supportController.adminSendMessage as unknown as RequestHandler);
 
 // Agent Auth
 router.post('/auth/login', supportController.login as unknown as RequestHandler);

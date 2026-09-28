@@ -21,7 +21,6 @@ export const metadata: Metadata = {
     'inventory management guide Nigeria',
     'send ads to facebook',
     'send ads to instagram',
-    'send ads to tiktok',
     'send ads to google',
   ],
   alternates: {
@@ -55,7 +54,7 @@ const starterGuides = [
   },
   {
     title: 'Boost products to your storefront',
-    text: 'Publish products to your shop link and route ads from Meta, TikTok, Google, or Marketplace to product pages.',
+    text: 'Publish products to your shop link and route ads from Meta, Google, or Marketplace to product pages.',
     href: '/product-catalog-shop-link-generator',
     icon: Megaphone,
   },

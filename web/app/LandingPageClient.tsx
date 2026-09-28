@@ -896,7 +896,7 @@ function HowItWorksBand() {
             Get your shop running in <span className="text-emerald-400">5 minutes.</span>
           </h2>
           <p className="mx-auto mt-6 max-w-2xl text-base font-semibold leading-relaxed text-stone-300">
-            Start with WhatsApp, publish a storefront, add products, then boost them. TallyPadi can send buyers from Marketplace, Meta, TikTok and Google ads straight to your shop front or product page.
+            Start with WhatsApp, publish a storefront, add products, then boost them through Marketplace, Meta, and Google.
           </p>
         </div>
 

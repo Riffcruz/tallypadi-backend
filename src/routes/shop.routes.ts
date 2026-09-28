@@ -5,7 +5,8 @@ import {
   getShopMe, 
   updateShopSettings,
   getShopProductById,
-  recordShopVisit
+  recordShopVisit,
+  createStorefrontOrder,
 } from '../controllers/shop.controller';
 import { authRequired } from '../middleware/authRequired';
 import { subscribeUserPush } from '../controllers/auth.controller';
@@ -27,6 +28,7 @@ router.post('/verification', authRequired, submitSellerVerification);
 
 // 🌍 Public Routes
 router.post('/:slug/visit', recordShopVisit);
+router.post('/:slug/orders', createStorefrontOrder);
 router.get('/:slug', getShopBySlug);
 router.get('/:slug/products', getShopProducts);
 router.get('/:slug/products/:productId', getShopProductById);

@@ -12,6 +12,7 @@ import { buildMarketplaceProductSeo } from './marketplaceSeo.service';
 import { applyPaymentToDebts } from './debt.service';
 import { resolveDebtor, normName } from './debtor.service';
 import { Debtor } from '../models/debtor.model';
+import crypto from 'crypto';
 
 // ==========================================
 // 🔧 HELPERS
@@ -740,16 +741,18 @@ export const processTransaction = async (
 
     // ── Create Magic Draft Link for ambiguous items ──────────────────────────
     if (ambiguousDraftItems.length > 0) {
+      const draftAccessToken = crypto.randomBytes(32).toString('base64url');
       const draft = await DraftRestock.create({
         user: userId,
         messageId,
         status: 'PENDING',
         items: ambiguousDraftItems,
         successCount: finalItems.length,
+        accessTokenHash: crypto.createHash('sha256').update(draftAccessToken).digest('hex'),
       });
 
       const appUrl = process.env.APP_URL || 'https://tallypadi.com';
-      const draftUrl = `${appUrl}/draft/${draft._id}`;
+      const draftUrl = `${appUrl}/draft/${draft._id}?token=${encodeURIComponent(draftAccessToken)}`;
 
       const successMsg = finalItems.length > 0
         ? `✅ *${finalItems.length} item(s)* saved successfully!\n\n`

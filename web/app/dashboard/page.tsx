@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import Sidebar from '../../components/Sidebar';
 import PushNotificationPrompt from '../../components/PushNotificationPrompt';
 import Preloader from '../../components/Preloader';
+import DashboardOnboarding from '../../components/DashboardOnboarding';
 import {
   Wallet,
   Coins,
@@ -72,6 +73,8 @@ interface ChartDataPoint {
 
 interface DashboardResponse {
   user?: {
+    id?: string;
+    _id?: string;
     name?: string;
     shopName?: string;
     shopSlug?: string;
@@ -111,7 +114,7 @@ interface FxRatesResponse {
   updatedAt?: string;
 }
 
-type ActivityType = 'WALLET_FUNDING' | 'AD_BOOST' | 'SUBSCRIPTION' | 'REFERRAL_REWARD' | 'LOW_STOCK' | 'EXPENSE' | 'OTHER';
+type ActivityType = 'WALLET_FUNDING' | 'AD_BOOST' | 'SUBSCRIPTION' | 'REFERRAL_REWARD' | 'LOW_STOCK' | 'ORDER' | 'EXPENSE' | 'OTHER';
 
 interface ActivityItem {
   id: string;
@@ -150,6 +153,7 @@ const getActivityIcon = (type: ActivityType) => {
   if (type === 'SUBSCRIPTION') return CreditCard;
   if (type === 'REFERRAL_REWARD') return Coins;
   if (type === 'LOW_STOCK') return AlertCircle;
+  if (type === 'ORDER') return Clipboard;
   if (type === 'EXPENSE') return TrendingDown;
   return Bell;
 };
@@ -160,6 +164,7 @@ const getActivityAccent = (type: ActivityType) => {
   if (type === 'SUBSCRIPTION') return 'bg-purple-50 text-purple-700 border-purple-100';
   if (type === 'REFERRAL_REWARD') return 'bg-amber-50 text-amber-700 border-amber-100';
   if (type === 'LOW_STOCK') return 'bg-red-50 text-red-700 border-red-100';
+  if (type === 'ORDER') return 'bg-blue-50 text-blue-700 border-blue-100';
   if (type === 'EXPENSE') return 'bg-orange-50 text-orange-700 border-orange-100';
   return 'bg-slate-50 text-slate-700 border-slate-100';
 };
@@ -481,6 +486,7 @@ const topTransactions = filteredTransactions.slice(0, 6);
 
   return (
     <div className="flex min-h-screen bg-slate-50 text-slate-900 relative overflow-x-hidden">
+      <DashboardOnboarding userKey={data?.user?.id || data?.user?._id || data?.user?.shopSlug || data?.user?.shopName || 'account'} />
       {/* Sidebar Overlay */}
       {isMobileMenuOpen && (
         <div

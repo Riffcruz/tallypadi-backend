@@ -12,7 +12,6 @@ export interface IBoostSettings extends Document {
   lowBudgetAlertThresholdBasisPoints: number;
   paidProviderWeights: {
     META_ADS: number;
-    TIKTOK_ADS: number;
     GOOGLE_ADS: number;
   };
   internalBoostConsumesExternalBudget: boolean;
@@ -33,7 +32,6 @@ const boostSettingsSchema = new Schema<IBoostSettings>(
     lowBudgetAlertThresholdBasisPoints: { type: Number, default: 1000, min: 0, max: 10000 },
     paidProviderWeights: {
       META_ADS: { type: Number, default: 40, min: 0 },
-      TIKTOK_ADS: { type: Number, default: 30, min: 0 },
       GOOGLE_ADS: { type: Number, default: 20, min: 0 },
     },
     internalBoostConsumesExternalBudget: { type: Boolean, default: false },

@@ -39,7 +39,7 @@ const sections = [
     title: 'Data sharing',
     body: [
       'We do not sell personal data. We share data only when needed to operate TallyPadi, comply with the law, process payments, host data securely, deliver messages, provide support, or run merchant-requested advertising workflows.',
-      'For advertising workflows, TallyPadi may share campaign-related product data, creative content, target location, campaign budget, landing page URLs, and campaign control instructions with advertising providers such as TikTok, Meta, and Google when the merchant has requested the boost and TallyPadi has approved it.',
+      'For advertising workflows, TallyPadi may share campaign-related product data, creative content, target location, campaign budget, landing page URLs, and campaign control instructions with Meta and Google when the merchant has requested the boost and TallyPadi has approved it.',
       'Provider reporting data may be imported back into TallyPadi so merchants and admins can see impressions, clicks, cost, status, and other campaign results.',
     ],
   },

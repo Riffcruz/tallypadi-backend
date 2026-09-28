@@ -133,7 +133,7 @@ function AgentDashboardContent() {
 
             // 2. Initialize Socket
             const baseUrl = API_URL.endsWith('/api') ? API_URL.slice(0, -4) : API_URL;
-            const socketConn = io(baseUrl);
+            const socketConn = io(baseUrl, { auth: { token } });
 
             setSocket(socketConn);
 

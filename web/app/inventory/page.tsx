@@ -24,6 +24,7 @@ import {
   Trash2,
   ScanBarcode, // Import ScanBarcode
   CheckCircle2,
+  AlertTriangle,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { getCookie } from '../../utils/cookies';
@@ -91,6 +92,7 @@ export default function InventoryPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showScanner, setShowScanner] = useState(false); // ✅ Scanner visibility
   const [scannerTarget, setScannerTarget] = useState<'search' | 'add' | 'edit'>('search'); // ✅ Scanner target
+  const [scanNotice, setScanNotice] = useState<{ type: 'found' | 'new'; code: string; item?: InventoryItem } | null>(null);
   
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isUploadingImage, setIsLoadingImage] = useState(false); // New state for upload status
@@ -250,16 +252,38 @@ export default function InventoryPage() {
     );
   }, [inventory, searchTerm, selectedCategory]);
 
-  const handleScan = (code: string) => {
+  const handleScan = (rawCode: string) => {
+    const code = rawCode.trim();
+    if (!code) return;
     setShowScanner(false);
-    
-    // Intelligent Routing based on active modal
-    if (addOpen) {
-      setNewItemBarcode(code);
-    } else if (editOpen) {
-      setEditBarcode(code);
-    } else {
+
+    const matchedItem = inventory.find((item) => String(item.barcode || '').trim().toLowerCase() === code.toLowerCase());
+    const target = editOpen ? 'edit' : addOpen ? 'add' : scannerTarget;
+
+    if (matchedItem && !(target === 'edit' && matchedItem.id === editingId)) {
+      setSelectedCategory('');
       setSearchTerm(code);
+      setScanNotice({ type: 'found', code, item: matchedItem });
+      if (target === 'add') setAddOpen(false);
+      if (target === 'edit') setEditOpen(false);
+      return;
+    }
+
+    if (target === 'add') {
+      setNewItemBarcode(code);
+      setScanNotice(null);
+    } else if (target === 'edit') {
+      setEditBarcode(code);
+      setScanNotice(null);
+    } else {
+      if (!hasFeatureAccess) {
+        setSearchTerm(code);
+        setScanNotice({ type: 'new', code });
+        return;
+      }
+      setNewItemBarcode(code);
+      setScanNotice({ type: 'new', code });
+      setAddOpen(true);
     }
   };
 
@@ -400,8 +424,8 @@ export default function InventoryPage() {
     } catch (err) {
       console.error('Failed to add item:', err);
       Swal.fire({
-        title: 'Error',
-        text: 'Could not add item.',
+        title: 'Could not add product',
+        text: axios.isAxiosError(err) ? String(err.response?.data?.error || 'Could not add item.') : 'Could not add item.',
         icon: 'error',
         confirmButtonColor: '#d33',
       });
@@ -555,7 +579,7 @@ export default function InventoryPage() {
       });
     } catch (err: any) {
       console.error('Update failed', err);
-      Swal.fire('Error', 'Failed to update item.', 'error');
+      Swal.fire('Could not update product', axios.isAxiosError(err) ? String(err.response?.data?.error || 'Failed to update item.') : 'Failed to update item.', 'error');
     }
   };
 
@@ -850,7 +874,7 @@ export default function InventoryPage() {
                   </span>
                 </div>
                 <p className="text-slate-500 text-sm font-semibold mt-1">
-                  Fast edit with popup • Currency: <span className="text-slate-700">{currencyCode}</span>
+                  Scan, add and manage products • <span className="text-slate-700">{inventory.length} items</span>
                 </p>
               </div>
             </div>
@@ -936,7 +960,7 @@ export default function InventoryPage() {
                       type="text"
                       placeholder="Search items…"
                       value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
+                      onChange={(e) => { setSearchTerm(e.target.value); setScanNotice(null); }}
                       className="w-full pl-9 pr-3 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-semibold outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500"
                     />
                  </div>
@@ -947,6 +971,8 @@ export default function InventoryPage() {
                         setShowScanner(true);
                     }}
                     className="p-3 bg-slate-100 rounded-2xl border border-slate-200 text-slate-600 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+                    aria-label="Scan barcode to find a product"
+                    title="Scan barcode"
                  >
                     <ScanBarcode className="w-5 h-5" />
                  </button>
@@ -983,6 +1009,23 @@ export default function InventoryPage() {
             </div>
           </div>
         </header>
+
+        {scanNotice?.type === 'found' && scanNotice.item && (
+          <div className="mb-6 flex flex-col gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" />
+              <div><p className="font-black text-emerald-950">{scanNotice.item.name} found</p><p className="text-xs font-semibold text-emerald-700">Stock: {scanNotice.item.stock} · Barcode {scanNotice.code}</p></div>
+            </div>
+            <button onClick={() => startEditing(scanNotice.item!)} disabled={showLockUI} className="rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-black text-white disabled:opacity-50">Edit product</button>
+          </div>
+        )}
+
+        {scanNotice?.type === 'new' && !addOpen && (
+          <div className="mb-6 flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+            <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600" />
+            <div><p className="font-black text-amber-950">Barcode not found</p><p className="text-xs font-semibold text-amber-700">Add a product for barcode {scanNotice.code}.</p></div>
+          </div>
+        )}
 
         {/* Desktop: Add form + stats */}
         <div className="hidden lg:grid grid-cols-3 gap-6 mb-8">
@@ -1160,7 +1203,9 @@ export default function InventoryPage() {
                               setScannerTarget('add');
                               setShowScanner(true);
                           }}
-                          className="p-4 bg-slate-100 rounded-2xl border border-slate-200 text-slate-600 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+                        className="p-4 bg-slate-100 rounded-2xl border border-slate-200 text-slate-600 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+                        aria-label="Scan product barcode"
+                        title="Scan barcode"
                         >
                           <ScanBarcode className="w-5 h-5" />
                         </button>
@@ -1620,9 +1665,13 @@ export default function InventoryPage() {
                   key={item.id}
                   className="bg-white rounded-3xl border border-slate-200 shadow-sm p-4 flex items-start gap-3"
                 >
-                  <div className="w-12 h-12 rounded-3xl bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-700 font-black text-xs uppercase shrink-0">
-                    {String(item.name || 'I').slice(0, 2)}
-                  </div>
+                  {item.image ? (
+                    <img src={getImageUrl(item.image)} alt="" className="h-12 w-12 shrink-0 rounded-2xl border border-slate-200 object-cover" />
+                  ) : (
+                    <div className="w-12 h-12 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-700 font-black text-xs uppercase shrink-0">
+                      {String(item.name || 'I').slice(0, 2)}
+                    </div>
+                  )}
 
                   <div className="flex-1 min-w-0">
                     <p className="font-black text-slate-900 capitalize truncate">{item.name}</p>
@@ -1720,7 +1769,7 @@ export default function InventoryPage() {
 
             <div className="overflow-y-auto p-5 space-y-6">
                {/* Image Upload */}
-               <div className="w-full aspect-[4/3] relative group rounded-3xl overflow-hidden border-2 border-dashed border-slate-300 bg-slate-50">
+               <div className="w-full h-28 relative group rounded-2xl overflow-hidden border-2 border-dashed border-slate-300 bg-slate-50">
                   <input
                       type="file"
                       accept="image/*"
@@ -1740,8 +1789,8 @@ export default function InventoryPage() {
                       </>
                     ) : (
                       <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400">
-                         <div className="w-14 h-14 bg-white rounded-full shadow-sm flex items-center justify-center mb-3 text-emerald-500">
-                            <Upload className="w-6 h-6" />
+                         <div className="w-10 h-10 bg-white rounded-full shadow-sm flex items-center justify-center mb-2 text-emerald-500">
+                            <Upload className="w-5 h-5" />
                          </div>
                          <p className="text-sm font-black text-slate-600">Tap to upload image</p>
                          <p className="text-xs font-semibold opacity-60">Supports JPG, PNG</p>
@@ -1985,6 +2034,8 @@ export default function InventoryPage() {
                           setShowScanner(true);
                       }}
                       className="p-3 bg-slate-100 rounded-2xl border border-slate-200 text-slate-600 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+                      aria-label="Scan replacement barcode"
+                      title="Scan barcode"
                     >
                       <ScanBarcode className="w-4 h-4" />
                     </button>

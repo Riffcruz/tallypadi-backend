@@ -12,9 +12,7 @@ import { Transaction } from '../models/transaction.model';
 import { Inventory } from '../models/inventory.model';
 import { supportService } from '../services/support.service';
 import { sendWhatsAppText } from '../services/whatsapp.service';
-import { env } from '../config/env';
-
-const JWT_SECRET = process.env.JWT_SECRET || (env as { jwtSecret?: string }).jwtSecret || 'fallback_secret';
+import { getJwtSecret } from '../config/jwt';
 
 const isValidObjectId = (id: string) => mongoose.Types.ObjectId.isValid(id);
 
@@ -267,7 +265,7 @@ export const supportController = {
 
     const token = jwt.sign(
       { agentId: agent._id, username: agent.username, role: 'AGENT' },
-      JWT_SECRET,
+      getJwtSecret(),
       { expiresIn: '7d' }
     );
 

@@ -8,13 +8,12 @@ const {
 } = require('../dist/services/Campaign/adBudget.service');
 
 test('normalizes legacy ad provider names and removes duplicates', () => {
-  assert.deepEqual(normalizeProviders(['META', 'META_ADS', 'TIKTOK']), ['META_ADS', 'TIKTOK_ADS']);
+  assert.deepEqual(normalizeProviders(['META', 'META_ADS', 'GOOGLE']), ['META_ADS', 'GOOGLE_ADS']);
 });
 
 test('expands ALL to every supported ad provider', () => {
   assert.deepEqual(normalizeProviders('ALL'), [
     'META_ADS',
-    'TIKTOK_ADS',
     'GOOGLE_ADS',
     'TALLYPADI_MARKETPLACE_BOOST',
   ]);

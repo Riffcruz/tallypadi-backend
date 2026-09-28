@@ -1,8 +1,9 @@
 'use client';
 import Link from 'next/link';
-import { LayoutDashboard, Users, Settings as SettingsIcon, Send, ShieldAlert, Briefcase, Headphones, MessageSquare, Megaphone, BadgeCheck, Newspaper, Gift, type LucideIcon } from 'lucide-react';
+import { LayoutDashboard, Users, Settings as SettingsIcon, Send, ShieldAlert, Briefcase, Headphones, MessageSquare, Megaphone, BadgeCheck, Newspaper, Gift, Activity, type LucideIcon } from 'lucide-react';
 
 type AdminMenuItem = { id: string; icon: LucideIcon; label: string; href?: string };
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 
 export default function Sidebar({ tab, setTab }: { tab: string, setTab: (t: string) => void }) {
     // 🔴 Removed: isOpen state and setIsOpen setter
@@ -17,6 +18,7 @@ export default function Sidebar({ tab, setTab }: { tab: string, setTab: (t: stri
         { id: 'investors', icon: Briefcase, label: 'Investors' },
         { id: 'support', icon: Headphones, label: 'Customer Care' },
         { id: 'live_support', icon: MessageSquare, label: 'Live Support', href: '/admin/support' },
+        { id: 'queues', icon: Activity, label: 'Queue Monitor', href: `${API_URL}/admin/queues` },
         { id: 'settings', icon: SettingsIcon, label: 'Global Settings' },
         { id: 'broadcast', icon: Send, label: 'Broadcast' },
     ];

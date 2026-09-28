@@ -57,18 +57,17 @@ type CampaignStatus =
   | 'RUNNING'
   | 'REJECTED';
 type StatusFilter = 'ALL' | 'PENDING' | 'RUNNING' | 'COMPLETED' | 'REJECTED';
-type PlatformOption = 'TALLYPADI_MARKETPLACE_BOOST' | 'META_ADS' | 'TIKTOK_ADS' | 'GOOGLE_ADS';
+type PlatformOption = 'TALLYPADI_MARKETPLACE_BOOST' | 'META_ADS' | 'GOOGLE_ADS';
 
 const PROMOTION_PLATFORM_OPTIONS: { value: PlatformOption; label: string }[] = [
   { value: 'TALLYPADI_MARKETPLACE_BOOST', label: 'TallyPadi Marketplace Boost' },
   { value: 'META_ADS', label: 'Meta Ads' },
-  { value: 'TIKTOK_ADS', label: 'TikTok Ads' },
   { value: 'GOOGLE_ADS', label: 'Google Ads' },
 ];
-const ALL_PROMOTION_PLATFORMS = PROMOTION_PLATFORM_OPTIONS.map((option) => option.value);
 
 interface AdsUser {
   businessName?: string;
+  shopSlug?: string;
   planType?: string;
   walletBalance?: number;
   currencyCode?: string;
@@ -139,6 +138,7 @@ interface BoostForm {
   useGlobalLandingPage: boolean;
   globalLandingPageUrl: string;
   providerLandingPageUrls: Record<string, string>;
+  termsAccepted: boolean;
 }
 
 interface NewProductForm {
@@ -151,13 +151,13 @@ interface NewProductForm {
 
 const defaultBoostForm: BoostForm = {
   planId: '',
-  platforms: [...ALL_PROMOTION_PLATFORMS],
+  platforms: ['TALLYPADI_MARKETPLACE_BOOST'],
   budget: '',
   brief: '',
   keywords: '',
   targetLocationCountry: 'NG',
-  targetLocationState: 'Lagos',
-  targetLocationCity: 'Lekki',
+  targetLocationState: '',
+  targetLocationCity: '',
   startDate: new Date().toISOString().split('T')[0],
   endDate: '',
   adDescription: '',
@@ -165,6 +165,7 @@ const defaultBoostForm: BoostForm = {
   useGlobalLandingPage: true,
   globalLandingPageUrl: '',
   providerLandingPageUrls: {},
+  termsAccepted: false,
 };
 
 const defaultNewProductForm: NewProductForm = {
@@ -213,7 +214,6 @@ const parseKeywords = (value: string) =>
 const platformLabel = (platform: string) => {
   if (platform === 'TALLYPADI_MARKETPLACE_BOOST' || platform === 'TALLYPADI_SEO') return 'TallyPadi Marketplace Boost';
   if (platform === 'META_ADS' || platform === 'META') return 'Meta Ads';
-  if (platform === 'TIKTOK_ADS' || platform === 'TIKTOK') return 'TikTok Ads';
   if (platform === 'GOOGLE_ADS' || platform === 'GOOGLE') return 'Google Ads';
   return platform;
 };
@@ -274,8 +274,8 @@ function AdsManagerContent() {
   const [campaignMetrics, setCampaignMetrics] = useState<any[]>([]);
 
   const storeSlug = useMemo(() => {
-    return String(user?.businessName || 'my-shop').toLowerCase().replace(/[^a-z0-9]+/g, '-');
-  }, [user?.businessName]);
+    return user?.shopSlug || String(user?.businessName || 'my-shop').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  }, [user?.shopSlug, user?.businessName]);
 
   const selectedProduct = useMemo(
     () => products.find((p) => p.id === selectedProductId),
@@ -389,6 +389,13 @@ function AdsManagerContent() {
     [adsPlans, newBoost.planId]
   );
 
+  useEffect(() => {
+    const firstPlan = adsPlans[0];
+    if (!firstPlan) return;
+    setExistingBoost((current) => current.planId ? current : { ...current, planId: firstPlan.id, budget: String(firstPlan.price) });
+    setNewBoost((current) => current.planId ? current : { ...current, planId: firstPlan.id, budget: String(firstPlan.price) });
+  }, [adsPlans]);
+
   const filteredProducts = useMemo(() => {
     const q = productSearch.trim().toLowerCase();
     if (!q) return products;
@@ -429,6 +436,10 @@ function AdsManagerContent() {
     }
     if (!form.platforms.length) {
       Swal.fire('Select a platform', 'Choose at least one promotion platform.', 'warning');
+      return null;
+    }
+    if (!form.termsAccepted) {
+      Swal.fire('Confirm campaign', 'Please approve the campaign budget and selected channels.', 'warning');
       return null;
     }
 
@@ -512,7 +523,7 @@ function AdsManagerContent() {
           adDescription: form.adDescription.trim(),
         },
         consent: {
-          accepted: true
+          accepted: form.termsAccepted
         },
         globalLandingPageUrl: form.useGlobalLandingPage ? form.globalLandingPageUrl.trim() : '',
         providerLandingPageUrls: !form.useGlobalLandingPage ? Object.fromEntries(
@@ -676,6 +687,13 @@ function AdsManagerContent() {
                         className="w-full border border-slate-200 bg-slate-50 rounded-lg pl-16 pr-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all font-medium"
                       />
                     </div>
+                    <div className="mt-2 grid grid-cols-3 gap-2">
+                      {[5000, 10000, 20000].map((amount) => (
+                        <button key={amount} type="button" onClick={() => setFundingAmount(String(amount))} className="rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs font-bold text-slate-600 hover:border-emerald-300 hover:text-emerald-700">
+                          {formatCurrency(amount, userCurrencyCode)}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                   <button
                     onClick={handleFundWallet}
@@ -689,7 +707,7 @@ function AdsManagerContent() {
               </div>
 
               <div className="bg-white border border-slate-200 rounded-lg p-6 shadow-sm">
-                <h2 className="text-base font-bold text-slate-900 mb-4">Admin Minimums</h2>
+                <h2 className="text-base font-bold text-slate-900 mb-4">Campaign plans</h2>
                 <div className="space-y-3">
                   {adsPlans.map((plan) => (
                     <div key={plan.id} className="flex items-center justify-between gap-3 border border-slate-100 rounded-lg p-3 bg-slate-50">
@@ -717,8 +735,8 @@ function AdsManagerContent() {
                       <PackagePlus size={20} />
                     </div>
                     <div className="min-w-0">
-                      <h2 className="text-base font-black text-slate-900">Create New Campaign</h2>
-                      <p className="text-xs font-medium text-slate-500">Add a new product and submit it for ads review.</p>
+                      <h2 className="text-base font-black text-slate-900">Add a product to promote</h2>
+                      <p className="text-xs font-medium text-slate-500">Use this only when the product is not in inventory yet.</p>
                     </div>
                   </div>
                 </button>
@@ -734,8 +752,8 @@ function AdsManagerContent() {
                       <Search size={20} />
                     </div>
                     <div className="min-w-0">
-                      <h2 className="text-base font-black text-slate-900">Use Existing Product</h2>
-                      <p className="text-xs font-medium text-slate-500">Pick a product already in inventory and boost it.</p>
+                      <h2 className="text-base font-black text-slate-900">Promote a product</h2>
+                      <p className="text-xs font-medium text-slate-500">Choose a product, set a budget and submit.</p>
                     </div>
                   </div>
                 </button>
@@ -1068,7 +1086,7 @@ function LiveAdPreview({
   productId: string;
   currencyCode: string;
 }) {
-  const [activeTab, setActiveTab] = useState<'TIKTOK' | 'META'>('TIKTOK');
+  const [activeTab, setActiveTab] = useState<'META' | 'GOOGLE'>('META');
 
   return (
     <div className="flex flex-col items-center w-full space-y-4">
@@ -1076,10 +1094,10 @@ function LiveAdPreview({
       <div className="flex gap-2 p-1 bg-slate-100 rounded-lg text-xs font-bold w-full max-w-[320px]">
         <button
           type="button"
-          onClick={() => setActiveTab('TIKTOK')}
-          className={`flex-1 py-1.5 rounded transition-all text-center ${activeTab === 'TIKTOK' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-950'}`}
+          onClick={() => setActiveTab('GOOGLE')}
+          className={`flex-1 py-1.5 rounded transition-all text-center ${activeTab === 'GOOGLE' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-950'}`}
         >
-          TikTok Ads
+          Google Ads
         </button>
         <button
           type="button"
@@ -1090,8 +1108,8 @@ function LiveAdPreview({
         </button>
       </div>
 
-      {activeTab === 'TIKTOK' ? (
-        /* TikTok Preview mock */
+      {activeTab === 'GOOGLE' ? (
+        /* Search ad preview */
         <div className="relative w-full max-w-[320px] aspect-[9/16] rounded-3xl bg-zinc-950 text-white border-4 border-zinc-800 shadow-2xl overflow-hidden flex flex-col justify-between p-4 select-none">
           {/* Top Camera Punch/Notch */}
           <div className="absolute top-2.5 left-1/2 -translate-x-1/2 w-20 h-4 bg-black rounded-full z-20 flex items-center justify-center">
@@ -1615,8 +1633,14 @@ function BoostControls({
   onPlanChange: (planId: string) => void;
   onChange: React.Dispatch<React.SetStateAction<BoostForm>>;
 }) {
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
   return (
     <div className="space-y-4">
+      <div className="grid grid-cols-3 gap-2 rounded-lg bg-slate-50 p-3 text-center text-[10px] font-black uppercase tracking-wider text-slate-500">
+        <span>1. Duration</span><span>2. Budget</span><span>3. Confirm</span>
+      </div>
+      {showAdvanced && <>
       <div>
         <span className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">Platforms</span>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
@@ -1728,8 +1752,9 @@ function BoostControls({
           </label>
         </div>
       </div>
+      </>}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div className={`grid grid-cols-1 ${showAdvanced ? 'sm:grid-cols-2' : ''} gap-3`}>
         <label className="block">
           <span className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">Duration</span>
           <select
@@ -1744,7 +1769,7 @@ function BoostControls({
           </select>
         </label>
 
-        <label className="block">
+        {showAdvanced && <label className="block">
           <span className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">Budget Type</span>
           <select
             value={form.budgetType}
@@ -1754,7 +1779,7 @@ function BoostControls({
             <option value="TOTAL">Total Budget</option>
             <option value="DAILY">Daily Budget</option>
           </select>
-        </label>
+        </label>}
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1773,7 +1798,7 @@ function BoostControls({
           </div>
         </label>
 
-        <div className="grid grid-cols-2 gap-2">
+        {showAdvanced && <div className="grid grid-cols-2 gap-2">
           <label className="block">
             <span className="block text-[11px] font-semibold text-slate-500 mb-1 uppercase">Start Date</span>
             <input
@@ -1792,10 +1817,10 @@ function BoostControls({
               className="w-full border border-slate-200 bg-slate-50 rounded-lg px-2 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-semibold"
             />
           </label>
-        </div>
+        </div>}
       </div>
 
-      <label className="block">
+      {showAdvanced && <label className="block">
         <div className="flex justify-between items-center mb-1">
           <span className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">Ad Copy Creative Text (Description)</span>
           <span className="text-[10px] text-slate-400 font-bold">{form.adDescription.length}/1000</span>
@@ -1804,13 +1829,13 @@ function BoostControls({
           value={form.adDescription}
           maxLength={1000}
           onChange={(e) => onChange((prev) => ({ ...prev, adDescription: e.target.value }))}
-          placeholder="Enter description copy that users see on social feeds (e.g. TikTok, Meta)..."
+          placeholder="Short ad description"
           rows={2}
           className="w-full border border-slate-200 bg-slate-50 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
         />
-      </label>
+      </label>}
 
-      <label className="block">
+      {showAdvanced && <label className="block">
         <span className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">Ad Search Notes</span>
         <textarea
           value={form.brief}
@@ -1819,9 +1844,13 @@ function BoostControls({
           rows={2}
           className="w-full border border-slate-200 bg-slate-50 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
         />
-      </label>
+      </label>}
 
-      <label className="block">
+      <button type="button" onClick={() => setShowAdvanced((value) => !value)} className="w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-50">
+        {showAdvanced ? 'Hide extra options' : 'More options'}
+      </button>
+
+      {showAdvanced && <label className="block">
         <span className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">Search Keywords</span>
         <input
           value={form.keywords}
@@ -1829,6 +1858,10 @@ function BoostControls({
           placeholder="e.g. smart tv, used fridge, lekki phone shop"
           className="w-full border border-slate-200 bg-slate-50 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
         />
+      </label>}
+      <label className="flex items-start gap-3 rounded-lg border border-slate-200 p-3 text-sm font-semibold text-slate-700">
+        <input type="checkbox" checked={form.termsAccepted} onChange={(e) => onChange((prev) => ({ ...prev, termsAccepted: e.target.checked }))} className="mt-0.5 h-4 w-4" />
+        <span>I approve this budget and campaign.</span>
       </label>
     </div>
   );

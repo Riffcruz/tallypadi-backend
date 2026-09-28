@@ -5,6 +5,16 @@ import { Inventory } from '../models/inventory.model';
 import { Transaction } from '../models/transaction.model';
 import { User } from '../models/user.model';
 import { buildMarketplaceProductSeo } from '../services/marketplaceSeo.service';
+import crypto from 'crypto';
+
+const hasValidDraftAccess = (draft: { accessTokenHash?: string }, token: unknown) => {
+  // Drafts created before this deployment remain valid until their existing 24-hour TTL expires.
+  if (!draft.accessTokenHash) return true;
+  if (typeof token !== 'string' || !token) return false;
+  const actual = crypto.createHash('sha256').update(token).digest();
+  const expected = Buffer.from(draft.accessTokenHash, 'hex');
+  return actual.length === expected.length && crypto.timingSafeEqual(actual, expected);
+};
 
 // --- SKU Generator (duplicated here to keep controller self-contained) ---
 function generateSku(): string {
@@ -37,8 +47,9 @@ export const getDraft = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Draft not found' });
     }
 
-    const draft = await DraftRestock.findById(id).lean();
+    const draft = await DraftRestock.findById(id).select('+accessTokenHash').lean();
     if (!draft) return res.status(404).json({ error: 'Draft not found or has expired' });
+    if (!hasValidDraftAccess(draft, req.query.token)) return res.status(404).json({ error: 'Draft not found or has expired' });
 
     if (draft.status !== 'PENDING') {
       return res.status(410).json({ error: 'This draft has already been resolved' });
@@ -76,8 +87,9 @@ export const resolveDraft = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Draft not found' });
     }
 
-    const draft = await DraftRestock.findById(id);
+    const draft = await DraftRestock.findById(id).select('+accessTokenHash');
     if (!draft) return res.status(404).json({ error: 'Draft not found or has expired' });
+    if (!hasValidDraftAccess(draft, req.query.token)) return res.status(404).json({ error: 'Draft not found or has expired' });
 
     if (draft.status !== 'PENDING') {
       return res.status(410).json({ error: 'This draft has already been resolved' });
@@ -155,8 +167,9 @@ export const getDraftInventoryOptions = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Draft not found' });
     }
 
-    const draft = await DraftRestock.findById(id).lean();
+    const draft = await DraftRestock.findById(id).select('+accessTokenHash').lean();
     if (!draft) return res.status(404).json({ error: 'Draft not found or has expired' });
+    if (!hasValidDraftAccess(draft, req.query.token)) return res.status(404).json({ error: 'Draft not found or has expired' });
 
     // Return only the names from the options arrays (already curated fuzzy matches)
     // Plus also look up the actual inventory items by name to get their IDs

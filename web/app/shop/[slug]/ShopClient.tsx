@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import axios from 'axios';
 import {
@@ -11,7 +11,6 @@ import {
 import ShopSidebar from './ShopSidebar';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
-const DESCRIPTION_SLIDE_MAX_CHARS = 92;
 
 type Product = {
   id: string;
@@ -23,6 +22,7 @@ type Product = {
   colors?: string[];
   sizes?: string[];
   inStock: boolean;
+  availableQuantity: number;
 };
 
 type CartItem = {
@@ -50,58 +50,6 @@ interface ShopClientProps {
   slug: string;
 }
 
-const splitLongSentence = (sentence: string) => {
-  const chunks: string[] = [];
-  let current = '';
-
-  sentence.split(/\s+/).forEach((word) => {
-    const next = current ? `${current} ${word}` : word;
-    if (next.length > DESCRIPTION_SLIDE_MAX_CHARS && current) {
-      chunks.push(current);
-      current = word;
-    } else {
-      current = next;
-    }
-  });
-
-  if (current) chunks.push(current);
-  return chunks;
-};
-
-const buildDescriptionSlides = (description?: string) => {
-  const clean = String(description || '').replace(/\s+/g, ' ').trim();
-  if (!clean) return [];
-
-  const slides: string[] = [];
-  const sentences = clean.match(/[^.!?]+[.!?]*/g) || [clean];
-  let current = '';
-
-  sentences.forEach((rawSentence) => {
-    const sentence = rawSentence.trim();
-    if (!sentence) return;
-
-    if (sentence.length > DESCRIPTION_SLIDE_MAX_CHARS) {
-      if (current) {
-        slides.push(current);
-        current = '';
-      }
-      slides.push(...splitLongSentence(sentence));
-      return;
-    }
-
-    const next = current ? `${current} ${sentence}` : sentence;
-    if (next.length > DESCRIPTION_SLIDE_MAX_CHARS && current) {
-      slides.push(current);
-      current = sentence;
-    } else {
-      current = next;
-    }
-  });
-
-  if (current) slides.push(current);
-  return slides;
-};
-
 export default function ShopClient({ initialShop, slug }: ShopClientProps) {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
@@ -112,20 +60,30 @@ export default function ShopClient({ initialShop, slug }: ShopClientProps) {
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   // Cart State
-  const [cart, setCart] = useState<CartItem[]>([]);
+  const [cart, setCart] = useState<CartItem[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try { return JSON.parse(localStorage.getItem(`tallypadi-cart:${slug}`) || '[]'); } catch { return []; }
+  });
+  const [customerName, setCustomerName] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [checkoutError, setCheckoutError] = useState('');
+  const [productsError, setProductsError] = useState(false);
 
   // Filters
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('');
   const [sort, setSort] = useState('newest');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [descriptionSlideIndex, setDescriptionSlideIndex] = useState(0);
 
   // Theme color from shop settings
   const themeColor = initialShop?.themeColor || '#10b981';
   // Dynamic currency from shop settings
   const currencyCode = initialShop?.currencyCode || 'NGN';
-  const descriptionSlides = useMemo(() => buildDescriptionSlides(initialShop?.description), [initialShop?.description]);
+
+  useEffect(() => {
+    localStorage.setItem(`tallypadi-cart:${slug}`, JSON.stringify(cart));
+  }, [cart, slug]);
 
   // Record Visit on Mount
   useEffect(() => {
@@ -138,20 +96,10 @@ export default function ShopClient({ initialShop, slug }: ShopClientProps) {
     return () => clearTimeout(timer);
   }, [search]);
 
-  useEffect(() => {
-    setDescriptionSlideIndex(0);
-  }, [initialShop?.description]);
-
-  useEffect(() => {
-    if (descriptionSlides.length <= 1) return;
-    const timer = setInterval(() => {
-      setDescriptionSlideIndex((index) => (index + 1) % descriptionSlides.length);
-    }, 3600);
-    return () => clearInterval(timer);
-  }, [descriptionSlides.length]);
 
   const fetchProducts = useCallback(async (reset = false) => {
     setLoading(true);
+    setProductsError(false);
     try {
       const p = reset ? 1 : page;
       const res = await axios.get(`${API_URL}/shop/${slug}/products`, {
@@ -166,6 +114,7 @@ export default function ShopClient({ initialShop, slug }: ShopClientProps) {
       setTotalPages(pagination.totalPages);
     } catch (err) {
       console.error(err);
+      setProductsError(true);
     } finally {
       setLoading(false);
     }
@@ -199,7 +148,7 @@ export default function ShopClient({ initialShop, slug }: ShopClientProps) {
     // For now, we just add the product directly.
     setCart(prev => {
       const existing = prev.find(c => c.product.id === product.id);
-      if (existing) return prev.map(c => c.product.id === product.id ? { ...c, qty: c.qty + 1 } : c);
+      if (existing) return prev.map(c => c.product.id === product.id ? { ...c, qty: Math.min(c.qty + 1, product.availableQuantity) } : c);
       return [...prev, { product, qty: 1 }];
     });
   };
@@ -229,19 +178,34 @@ export default function ShopClient({ initialShop, slug }: ShopClientProps) {
     }).format(amount);
   };
 
-  const buildWhatsAppMessage = () => {
+  const buildWhatsAppMessage = (orderId?: string) => {
     const lines = cart.map((item, i) =>
       `${i + 1}. ${item.product.name} x${item.qty} — ${formatMoney(item.product.price * item.qty)}`
     ).join('\n');
 
-    return `Hi ${initialShop?.name}, I'd like to order:\n\n${lines}\n\nTotal: ${formatMoney(cartTotal)}\n\nPlease confirm availability.`;
+    return `Hi ${initialShop?.name}, I'd like to order:\n\n${lines}\n\nTotal: ${formatMoney(cartTotal)}${orderId ? `\nOrder: #${orderId.slice(-8).toUpperCase()}` : ''}\n\nName: ${customerName}\nPhone: ${customerPhone}`;
   };
 
-  const handleWhatsAppCheckout = () => {
+  const handleWhatsAppCheckout = async () => {
     if (!initialShop?.phone || cart.length === 0) return;
-    const msg = buildWhatsAppMessage();
-    const link = `https://wa.me/${initialShop.phone}?text=${encodeURIComponent(msg)}`;
-    window.open(link, '_blank');
+    if (customerName.trim().length < 2 || customerPhone.trim().length < 6) return;
+    setCheckoutLoading(true);
+    setCheckoutError('');
+    try {
+      const res = await axios.post(`${API_URL}/shop/${slug}/orders`, {
+        customerName: customerName.trim(),
+        customerPhone: customerPhone.trim(),
+        items: cart.map((item) => ({ productId: item.product.id, quantity: item.qty })),
+      });
+      const msg = buildWhatsAppMessage(String(res.data.reference || res.data.orderId || ''));
+      localStorage.removeItem(`tallypadi-cart:${slug}`);
+      setCart([]);
+      window.open(`https://wa.me/${initialShop.phone}?text=${encodeURIComponent(msg)}`, '_self');
+    } catch (error) {
+      setCheckoutError(axios.isAxiosError(error) ? String(error.response?.data?.error || 'Could not place order.') : 'Could not place order.');
+    } finally {
+      setCheckoutLoading(false);
+    }
   };
 
   if (!initialShop) {
@@ -295,35 +259,7 @@ export default function ShopClient({ initialShop, slug }: ShopClientProps) {
                           </span>
                         )}
                       </div>
-                      {descriptionSlides.length > 0 && (
-                        <div className="mt-1 max-w-2xl overflow-hidden" aria-live="polite">
-                          <div
-                            className="flex transition-transform duration-700 ease-out"
-                            style={{ transform: `translateX(-${descriptionSlideIndex * 100}%)` }}
-                          >
-                            {descriptionSlides.map((slide, index) => (
-                              <p
-                                key={`${index}-${slide.slice(0, 18)}`}
-                                className="w-full shrink-0 text-sm font-semibold leading-6 text-white/90 drop-shadow-sm md:text-base"
-                              >
-                                {slide}
-                              </p>
-                            ))}
-                          </div>
-                          {descriptionSlides.length > 1 && (
-                            <div className="mt-2 flex gap-1">
-                              {descriptionSlides.map((slide, index) => (
-                                <span
-                                  key={`${slide.slice(0, 8)}-${index}`}
-                                  className={`h-1.5 rounded-full transition-all ${
-                                    index === descriptionSlideIndex ? 'w-5 bg-white' : 'w-1.5 bg-white/45'
-                                  }`}
-                                />
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )}
+                      {initialShop.description && <p className="mt-1 max-w-2xl text-sm font-medium leading-6 text-white/90 md:text-base">{initialShop.description}</p>}
                     </div>
                  </div>
               </div>
@@ -447,7 +383,7 @@ export default function ShopClient({ initialShop, slug }: ShopClientProps) {
         <main className="flex-1 min-w-0 flex flex-col">
           {/* Sorting Header */}
           <div className="mb-6 hidden items-center justify-between md:flex">
-             <h3 className="font-bold text-slate-800 text-lg md:text-xl">Trending ads</h3>
+             <h3 className="font-bold text-slate-800 text-lg md:text-xl">Products</h3>
              <select
                value={sort}
                onChange={(e) => setSort(e.target.value)}
@@ -461,7 +397,12 @@ export default function ShopClient({ initialShop, slug }: ShopClientProps) {
 
         {/* PRODUCT GRID */}
         <div className="pb-32 w-full">
-          {products.length === 0 && !loading ? (
+          {productsError ? (
+            <div className="text-center py-20">
+              <h3 className="font-bold text-slate-900">Could not load products</h3>
+              <button onClick={() => fetchProducts(true)} className="mt-3 text-sm font-bold" style={{ color: themeColor }}>Try again</button>
+            </div>
+          ) : products.length === 0 && !loading ? (
             <div className="text-center py-24">
               <div className="bg-slate-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Search className="text-slate-400 w-8 h-8" />
@@ -609,7 +550,7 @@ export default function ShopClient({ initialShop, slug }: ShopClientProps) {
 
               {/* Checkout Button */}
               <button
-                onClick={handleWhatsAppCheckout}
+                onClick={() => setIsCartOpen(true)}
                 className="flex items-center gap-2 px-5 py-3 rounded-xl text-white font-bold text-sm shadow-lg transition-all hover:opacity-90 active:scale-95 flex-shrink-0"
                 style={{ backgroundColor: themeColor }}
               >
@@ -682,21 +623,24 @@ export default function ShopClient({ initialShop, slug }: ShopClientProps) {
 
             {/* Drawer Footer */}
             <div className="p-5 border-t border-slate-100 space-y-3 bg-white">
+              <div className="grid grid-cols-1 gap-2">
+                <input value={customerName} onChange={(event) => setCustomerName(event.target.value)} placeholder="Your name" maxLength={120} className="rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-slate-400" />
+                <input value={customerPhone} onChange={(event) => setCustomerPhone(event.target.value)} placeholder="Phone number" maxLength={32} inputMode="tel" className="rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-slate-400" />
+              </div>
+              {checkoutError && <p className="text-sm font-semibold text-red-600">{checkoutError}</p>}
               <div className="flex justify-between items-center">
                 <span className="text-sm font-bold text-slate-600">Order Total</span>
                 <span className="text-xl font-black text-slate-900">{formatMoney(cartTotal)}</span>
               </div>
               <button
-                onClick={() => { setIsCartOpen(false); handleWhatsAppCheckout(); }}
+                onClick={handleWhatsAppCheckout}
+                disabled={checkoutLoading || customerName.trim().length < 2 || customerPhone.trim().length < 6}
                 className="w-full py-4 rounded-2xl text-white font-black text-base flex items-center justify-center gap-3 shadow-lg transition-all hover:opacity-90 active:scale-[0.98]"
                 style={{ backgroundColor: themeColor }}
               >
-                <MessageCircle size={20} />
-                Send Order on WhatsApp
+                {checkoutLoading ? <Loader2 size={20} className="animate-spin" /> : <MessageCircle size={20} />}
+                Place order
               </button>
-              <p className="text-center text-[10px] text-slate-400 font-medium">
-                Your order details will be sent directly to {initialShop.name}
-              </p>
             </div>
           </div>
         </div>

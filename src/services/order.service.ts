@@ -1,6 +1,7 @@
 // src/services/order.service.ts
 import { Types } from 'mongoose';
-import { Order, IOrder, ORDER_STATUSES, OrderStatus } from '../models/order.model';
+import { Order, IOrder, IOrderItem, ORDER_SOURCES, ORDER_STATUSES, OrderSource, OrderStatus } from '../models/order.model';
+import { Inventory } from '../models/inventory.model';
 import { startOfDay, endOfDay, addDays } from 'date-fns';
 
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
@@ -15,6 +16,10 @@ type CreateOrderDto = {
   amountPaid?: number;
   deliveryDate: Date;
   status?: OrderStatus;
+  source?: OrderSource;
+  publicReference?: string;
+  storefrontSlug?: string;
+  items?: IOrderItem[];
 };
 
 type OrderFilters = {
@@ -24,6 +29,7 @@ type OrderFilters = {
   search?: string;
   page?: number;
   limit?: number;
+  source?: OrderSource;
 };
 
 type UpdateOrderDto = {
@@ -45,6 +51,7 @@ export class OrderService {
     if (data.status && !(ORDER_STATUSES as readonly string[]).includes(data.status)) {
       throw new Error('Invalid status');
     }
+    if (data.source && !(ORDER_SOURCES as readonly string[]).includes(data.source)) throw new Error('Invalid source');
 
     const price = Number(data.price);
     const paid = Number(data.amountPaid ?? 0);
@@ -62,6 +69,10 @@ export class OrderService {
       amountPaid: paid,
       deliveryDate: data.deliveryDate,
       status: data.status,
+      source: data.source,
+      publicReference: data.publicReference,
+      storefrontSlug: data.storefrontSlug,
+      items: data.items ?? [],
       // balance is computed in model middleware too; keep it consistent:
       balance: Math.max(0, price - paid),
     });
@@ -76,6 +87,7 @@ export class OrderService {
     const query: Record<string, unknown> = { user: userId };
 
     if (filters.status) query.status = filters.status;
+    if (filters.source) query.source = filters.source;
 
     if (filters.startDate || filters.endDate) {
       query.deliveryDate = {};
@@ -176,6 +188,57 @@ export class OrderService {
       _id: new Types.ObjectId(orderId),
       user: userId,
     });
+  }
+
+  async acceptStorefrontOrder(userId: string | Types.ObjectId, orderId: string) {
+    if (!Types.ObjectId.isValid(orderId)) return { kind: 'NOT_FOUND' as const };
+
+    const order = await Order.findOneAndUpdate(
+      { _id: orderId, user: userId, source: 'STOREFRONT', status: 'PENDING', stockReserved: false },
+      { $set: { status: 'IN_PROGRESS' } },
+      { new: true }
+    );
+    if (!order) {
+      const existing = await Order.findOne({ _id: orderId, user: userId }).select('status source stockReserved');
+      return existing ? { kind: 'INVALID_STATE' as const, order: existing } : { kind: 'NOT_FOUND' as const };
+    }
+
+    const reserved: Array<{ product: Types.ObjectId; quantity: number }> = [];
+    try {
+      for (const item of order.items) {
+        const updated = await Inventory.findOneAndUpdate(
+          { _id: item.product, user: userId, isDeleted: { $ne: true }, quantity: { $gte: item.quantity } },
+          { $inc: { quantity: -item.quantity } },
+          { new: true }
+        );
+        if (!updated) throw new Error(`Not enough stock for ${item.name}`);
+        reserved.push({ product: item.product, quantity: item.quantity });
+      }
+
+      order.stockReserved = true;
+      order.acceptedAt = new Date();
+      await order.save();
+      return { kind: 'ACCEPTED' as const, order };
+    } catch (error) {
+      await Promise.all(reserved.map((item) => Inventory.updateOne({ _id: item.product, user: userId }, { $inc: { quantity: item.quantity } })));
+      await Order.updateOne(
+        { _id: order._id, user: userId, status: 'IN_PROGRESS', stockReserved: false },
+        { $set: { status: 'PENDING' } }
+      );
+      return { kind: 'OUT_OF_STOCK' as const, message: error instanceof Error ? error.message : 'Not enough stock' };
+    }
+  }
+
+  async declineStorefrontOrder(userId: string | Types.ObjectId, orderId: string) {
+    if (!Types.ObjectId.isValid(orderId)) return { kind: 'NOT_FOUND' as const };
+    const order = await Order.findOneAndUpdate(
+      { _id: orderId, user: userId, source: 'STOREFRONT', status: 'PENDING', stockReserved: false },
+      { $set: { status: 'CANCELLED', declinedAt: new Date() } },
+      { new: true }
+    );
+    if (order) return { kind: 'DECLINED' as const, order };
+    const existing = await Order.findOne({ _id: orderId, user: userId }).select('status source stockReserved');
+    return existing ? { kind: 'INVALID_STATE' as const, order: existing } : { kind: 'NOT_FOUND' as const };
   }
 
   /**

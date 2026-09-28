@@ -12,6 +12,17 @@ export const ORDER_STATUSES = [
 
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
 
+export const ORDER_SOURCES = ['MANUAL', 'STOREFRONT', 'WHATSAPP'] as const;
+export type OrderSource = (typeof ORDER_SOURCES)[number];
+
+export interface IOrderItem {
+  product: Types.ObjectId;
+  name: string;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
+}
+
 export interface IOrder extends Document {
   user: Types.ObjectId | IUser;
 
@@ -26,6 +37,13 @@ export interface IOrder extends Document {
   deliveryDate: Date;
 
   status: OrderStatus;
+  source: OrderSource;
+  publicReference?: string | null;
+  storefrontSlug?: string | null;
+  items: IOrderItem[];
+  stockReserved: boolean;
+  acceptedAt?: Date | null;
+  declinedAt?: Date | null;
 
   reminderSent: boolean;
 
@@ -118,6 +136,36 @@ const orderSchema = new Schema<IOrder>(
       index: true,
     },
 
+    source: {
+      type: String,
+      enum: ORDER_SOURCES,
+      default: 'MANUAL',
+      index: true,
+    },
+
+    publicReference: {
+      type: String,
+      unique: true,
+      sparse: true,
+      trim: true,
+      uppercase: true,
+      maxlength: 32,
+    },
+
+    storefrontSlug: { type: String, default: null, trim: true, maxlength: 30 },
+
+    items: [{
+      product: { type: Schema.Types.ObjectId, ref: 'Inventory', required: true },
+      name: { type: String, required: true, trim: true, maxlength: 160 },
+      quantity: { type: Number, required: true, min: 1, max: 10_000 },
+      unitPrice: { type: Number, required: true, min: 0, max: 1_000_000_000 },
+      lineTotal: { type: Number, required: true, min: 0, max: 1_000_000_000 },
+    }],
+
+    stockReserved: { type: Boolean, default: false, index: true },
+    acceptedAt: { type: Date, default: null },
+    declinedAt: { type: Date, default: null },
+
     reminderSent: {
       type: Boolean,
       default: false,
@@ -158,5 +206,6 @@ orderSchema.pre('validate', function () {
 // useful indexes for your queries
 orderSchema.index({ user: 1, deliveryDate: 1 });
 orderSchema.index({ user: 1, status: 1, deliveryDate: 1 });
+orderSchema.index({ user: 1, source: 1, createdAt: -1 });
 
 export const Order = model<IOrder>('Order', orderSchema);

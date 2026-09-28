@@ -1,5 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { messageQueue, replyQueue, bulkQueue } from '../services/queue.service';
+import { authRequired } from '../middleware/authRequired';
+import { verifyAdmin } from '../middleware/admin.middleware';
 
 const router = Router();
 
@@ -51,7 +53,7 @@ router.get('/queue', async (req: Request, res: Response) => {
 });
 
 // POST /api/health/retry
-router.post('/retry', async (req: Request, res: Response) => {
+router.post('/retry', authRequired, verifyAdmin, async (req: Request, res: Response) => {
   try {
     await Promise.all([
       messageQueue.retryJobs({ count: 200 }),

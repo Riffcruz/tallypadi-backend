@@ -223,7 +223,6 @@ const formatDate = (value?: string | null) => {
 const platformLabel = (platform: string) => {
   if (platform === 'TALLYPADI_MARKETPLACE_BOOST' || platform === 'TALLYPADI_SEO') return 'TallyPadi Marketplace Boost';
   if (platform === 'META_ADS' || platform === 'META') return 'Meta Ads';
-  if (platform === 'TIKTOK_ADS' || platform === 'TIKTOK') return 'TikTok Ads';
   if (platform === 'GOOGLE_ADS' || platform === 'GOOGLE') return 'Google Ads';
   return platform;
 };

@@ -16,6 +16,7 @@ export interface IDraftRestock extends Document {
   status: 'PENDING' | 'RESOLVED' | 'EXPIRED';
   items: IDraftRestockItem[];
   successCount: number;     // How many items were already saved before draft
+  accessTokenHash?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -40,6 +41,7 @@ const draftRestockSchema = new Schema<IDraftRestock>(
     status: { type: String, enum: ['PENDING', 'RESOLVED', 'EXPIRED'], default: 'PENDING' },
     items: [draftRestockItemSchema],
     successCount: { type: Number, default: 0 },
+    accessTokenHash: { type: String, select: false },
   },
   { timestamps: true }
 );

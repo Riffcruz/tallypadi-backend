@@ -332,6 +332,18 @@ export const addInventoryItem = async (req: Request, res: Response) => {
 
     let item = await Inventory.findOne({ user: user._id, name: safeName.toLowerCase() });
 
+    if (safeBarcode) {
+      const barcodeOwner = await Inventory.findOne({
+        user: user._id,
+        barcode: safeBarcode,
+        ...(item ? { _id: { $ne: item._id } } : {}),
+        isDeleted: { $ne: true },
+      }).select('name');
+      if (barcodeOwner) {
+        return res.status(409).json({ error: `This barcode is already assigned to ${barcodeOwner.name}.` });
+      }
+    }
+
     if (item) {
       const stockToAdd = safeStock !== undefined ? safeStock : 0;
       item.quantity += stockToAdd;
@@ -443,6 +455,18 @@ export const updateInventoryItem = async (req: Request, res: Response) => {
 
     const item = await Inventory.findOne({ _id: id, user: user._id });
     if (!item) return res.status(404).json({ error: 'Item not found' });
+
+    if (safeBarcode) {
+      const barcodeOwner = await Inventory.findOne({
+        _id: { $ne: item._id },
+        user: user._id,
+        barcode: safeBarcode,
+        isDeleted: { $ne: true },
+      }).select('name');
+      if (barcodeOwner) {
+        return res.status(409).json({ error: `This barcode is already assigned to ${barcodeOwner.name}.` });
+      }
+    }
 
     if (safeStock !== undefined) item.quantity = safeStock;
     if (safePrice !== undefined) item.lastUnitPrice = safePrice;

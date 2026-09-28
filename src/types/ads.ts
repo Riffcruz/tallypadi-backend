@@ -1,13 +1,12 @@
 export const AD_PROVIDERS = [
   'META_ADS',
-  'TIKTOK_ADS',
   'GOOGLE_ADS',
   'TALLYPADI_MARKETPLACE_BOOST',
 ] as const;
 
 export type AdProvider = typeof AD_PROVIDERS[number];
 
-export const PAID_AD_PROVIDERS: AdProvider[] = ['META_ADS', 'TIKTOK_ADS', 'GOOGLE_ADS'];
+export const PAID_AD_PROVIDERS: AdProvider[] = ['META_ADS', 'GOOGLE_ADS'];
 
 export type FulfillmentMode = 'MANUAL' | 'AUTO';
 
@@ -73,14 +72,12 @@ export type MetricSource = 'INTERNAL' | 'MANUAL_ADMIN' | 'PROVIDER_API';
 
 export const PROVIDER_LABELS: Record<AdProvider, string> = {
   META_ADS: 'Meta Ads',
-  TIKTOK_ADS: 'TikTok Ads',
   GOOGLE_ADS: 'Google Ads',
   TALLYPADI_MARKETPLACE_BOOST: 'TallyPadi Marketplace Boost',
 };
 
 export const LEGACY_PROVIDER_MAP: Record<string, AdProvider> = {
   META: 'META_ADS',
-  TIKTOK: 'TIKTOK_ADS',
   GOOGLE: 'GOOGLE_ADS',
   GOOGLE_ADS: 'GOOGLE_ADS',
   TALLYPADI_SEO: 'TALLYPADI_MARKETPLACE_BOOST',

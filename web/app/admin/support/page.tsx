@@ -9,6 +9,8 @@ import {
 import Swal from 'sweetalert2';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
+const getAdminToken = () => typeof window === 'undefined' ? '' : (sessionStorage.getItem('adminToken') || '');
+const adminHeaders = () => ({ Authorization: `Bearer ${getAdminToken()}` });
 
 interface Ticket {
   _id: string;
@@ -88,7 +90,7 @@ function AdminSupportContent() {
     try {
         const res = await fetch(`${API_URL}/support/admin/tickets/${selectedTicket._id}/send`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...adminHeaders() },
             body: JSON.stringify({ text: tempMsg.text })
         });
         
@@ -112,7 +114,7 @@ function AdminSupportContent() {
         try {
             // 1. Socket
             const baseUrl = API_URL.endsWith('/api') ? API_URL.slice(0, -4) : API_URL;
-            const socketConn = io(baseUrl);
+            const socketConn = io(baseUrl, { auth: { token: getAdminToken() } });
             setSocket(socketConn);
 
             socketConn.on('connect', () => {
@@ -195,7 +197,7 @@ function AdminSupportContent() {
     try {
       // Fetch all
       const res = await fetch(`${API_URL}/support/admin/tickets`, {
-         // Add admin auth headers if needed
+         headers: adminHeaders()
       });
       if (res.ok) {
           const data = await res.json();
@@ -206,7 +208,7 @@ function AdminSupportContent() {
 
   const fetchMessages = async (ticketId: string, silent = false) => {
     try {
-      const res = await fetch(`${API_URL}/support/admin/tickets/${ticketId}/messages`);
+      const res = await fetch(`${API_URL}/support/admin/tickets/${ticketId}/messages`, { headers: adminHeaders() });
       if (res.ok) {
           const data = await res.json();
           setMessages(data);
@@ -233,7 +235,7 @@ function AdminSupportContent() {
 
     if (result.isConfirmed) {
         try {
-            await fetch(`${API_URL}/support/admin/tickets/${selectedTicket._id}`, { method: 'DELETE' });
+            await fetch(`${API_URL}/support/admin/tickets/${selectedTicket._id}`, { method: 'DELETE', headers: adminHeaders() });
             setTickets(prev => prev.filter(t => t._id !== selectedTicket._id));
             setSelectedTicket(null);
             setMessages([]);

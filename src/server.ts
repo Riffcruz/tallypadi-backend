@@ -12,6 +12,7 @@ import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { generateSaleReceiptPdf } from './controllers/receipt.controller';
 import { initSocket } from './socket';
 import { authRequired } from './middleware/authRequired';
+import { verifyAdmin } from './middleware/admin.middleware';
 
 // --- BULL BOARD ADAPTERS ---
 import { createBullBoard } from '@bull-board/api';
@@ -58,6 +59,7 @@ import { startScheduler } from './services/scheduler';
 import { env } from './config/env';
 import { connectDb } from './config/db';
 import { RedisRateLimitStore } from './services/rateLimitRedisStore';
+import { getJwtSecret } from './config/jwt';
 
 // --- CONTROLLERS ---
 import { getDashboardData } from './controllers/dashboard.controller';
@@ -469,8 +471,45 @@ createBullBoard({
   serverAdapter: serverAdapter,
 });
 
-// Mounted publicly or add authRequired if preferred, currently open local to server instance testing
-app.use('/api/admin/queues', serverAdapter.getRouter());
+const bullBoardCookieAuth = (req: Request, _res: Response, next: NextFunction) => {
+  if (!req.headers.authorization) {
+    const cookies = String(req.headers.cookie || '').split(';');
+    const cookie = cookies.find((value) => value.trim().startsWith('tallyAdminQueueToken='));
+    if (cookie) {
+      const encodedToken = cookie.trim().slice('tallyAdminQueueToken='.length);
+      try {
+        req.headers.authorization = `Bearer ${decodeURIComponent(encodedToken)}`;
+      } catch {
+        // authRequired will reject malformed cookie values.
+      }
+    }
+  }
+  next();
+};
+
+app.post('/api/admin/queues/session', authRequired, verifyAdmin, (req: Request, res: Response) => {
+  const auth = String(req.headers.authorization || '');
+  const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
+  res.cookie('tallyAdminQueueToken', token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    path: '/api/admin/queues',
+  });
+  res.sendStatus(204);
+});
+
+app.delete('/api/admin/queues/session', (_req: Request, res: Response) => {
+  res.clearCookie('tallyAdminQueueToken', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    path: '/api/admin/queues',
+  });
+  res.sendStatus(204);
+});
+
+app.use('/api/admin/queues', bullBoardCookieAuth, authRequired, verifyAdmin, serverAdapter.getRouter());
 
 
 // --- ADMIN (SITE OWNER) ---
@@ -505,6 +544,7 @@ app.get('/', (_req: Request, res: Response) => {
 // 🔌 START SERVER
 // ==========================================
 if (require.main === module) {
+  getJwtSecret();
   const server = createServer(app);
   initSocket(server);
 

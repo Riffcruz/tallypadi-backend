@@ -2,7 +2,7 @@ import { Schema, model, Document, Types } from 'mongoose';
 import { AD_PROVIDERS, AdCampaignStatus, AdProvider } from '../types/ads';
 
 export type { AdCampaignStatus } from '../types/ads';
-export type AdPlatform = AdProvider | 'TALLYPADI_SEO' | 'META' | 'TIKTOK';
+export type AdPlatform = AdProvider | 'TALLYPADI_SEO' | 'META';
 
 export interface IAdCampaign extends Document {
   user: Types.ObjectId;
@@ -80,7 +80,7 @@ export interface IAdCampaign extends Document {
   updatedAt: Date;
 }
 
-const legacyPlatformValues = ['TALLYPADI_SEO', 'META', 'TIKTOK'];
+const legacyPlatformValues = ['TALLYPADI_SEO', 'META'];
 const statusValues: AdCampaignStatus[] = [
   'DRAFT',
   'PENDING_ADMIN_REVIEW',

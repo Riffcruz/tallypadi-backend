@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { PackageOpen, Sparkles, Loader2, CheckCircle2, AlertTriangle, Plus, Link as LinkIcon } from 'lucide-react';
 import Swal from 'sweetalert2';
 
@@ -33,6 +33,9 @@ interface InventoryOption {
 export default function DraftResolutionPage() {
   const { id } = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const accessToken = searchParams.get('token');
+  const draftRequestConfig = accessToken ? { params: { token: accessToken } } : undefined;
 
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState<DraftData | null>(null);
@@ -48,8 +51,8 @@ export default function DraftResolutionPage() {
     const fetchDraft = async () => {
       try {
         const [draftRes, invRes] = await Promise.all([
-          axios.get(`${API_URL}/draft/${id}`),
-          axios.get(`${API_URL}/draft/${id}/inventory`)
+          axios.get(`${API_URL}/draft/${id}`, draftRequestConfig),
+          axios.get(`${API_URL}/draft/${id}/inventory`, draftRequestConfig)
         ]);
 
         setDraft(draftRes.data);
@@ -93,7 +96,7 @@ export default function DraftResolutionPage() {
     };
 
     fetchDraft();
-  }, [id]);
+  }, [id, accessToken]);
 
   const handleResolve = (rawName: string, value: string) => {
     setResolutions(prev => ({ ...prev, [rawName]: value }));
@@ -113,7 +116,7 @@ export default function DraftResolutionPage() {
          };
       }).filter(Boolean);
 
-      await axios.post(`${API_URL}/draft/${id}/resolve`, { resolutions: payload });
+      await axios.post(`${API_URL}/draft/${id}/resolve`, { resolutions: payload }, draftRequestConfig);
 
       Swal.fire({
         title: 'Items Saved!',

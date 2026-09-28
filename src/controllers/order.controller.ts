@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import { Types } from 'mongoose';
 import { orderService } from '../services/order.service';
 import { User } from '../models/user.model';
+import { ORDER_SOURCES, OrderSource } from '../models/order.model';
+import { activityService } from '../services/activity.service';
 
 // If you already exported these from your model, prefer importing them instead:
 // import { ORDER_STATUSES, OrderStatus } from '../models/order.model';
@@ -21,6 +23,12 @@ const normalizeStatus = (s: any): OrderStatus | undefined => {
   if (!s) return undefined;
   const up = String(s).toUpperCase().trim();
   return (ORDER_STATUSES as readonly string[]).includes(up) ? (up as OrderStatus) : undefined;
+};
+
+const normalizeSource = (source: any): OrderSource | undefined => {
+  if (!source) return undefined;
+  const value = String(source).toUpperCase().trim();
+  return (ORDER_SOURCES as readonly string[]).includes(value) ? value as OrderSource : undefined;
 };
 
 const normalizeText = (v: any, max = 500): string | undefined => {
@@ -141,12 +149,14 @@ export const getOrders = async (req: AuthedReq, res: Response) => {
     if (!ownerId) return res.status(401).json({ error: 'User not found' });
 
     const status = normalizeStatus((req.query as any)?.status);
+    const source = normalizeSource((req.query as any)?.source);
     const startDate = parseDate((req.query as any)?.startDate);
     const endDate = parseDate((req.query as any)?.endDate);
 
     if ((req.query as any)?.status && !status) {
       return res.status(400).json({ error: 'Invalid status' });
     }
+    if ((req.query as any)?.source && !source) return res.status(400).json({ error: 'Invalid source' });
     if ((req.query as any)?.startDate && !startDate) {
       return res.status(400).json({ error: 'Invalid startDate' });
     }
@@ -165,6 +175,7 @@ export const getOrders = async (req: AuthedReq, res: Response) => {
 
     const result = await orderService.getOrders(ownerId, {
       status,
+      source,
       startDate,
       endDate,
       search,
@@ -175,6 +186,61 @@ export const getOrders = async (req: AuthedReq, res: Response) => {
     return res.json(result);
   } catch (error: any) {
     console.error('Get Orders Error:', error);
+    return res.status(500).json({ error: 'Server Error' });
+  }
+};
+
+export const acceptStorefrontOrder = async (req: AuthedReq, res: Response) => {
+  try {
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+    const ownerId = await resolveOwnerId(userId);
+    if (!ownerId) return res.status(401).json({ error: 'User not found' });
+
+    const result = await orderService.acceptStorefrontOrder(ownerId, String(req.params.id || ''));
+    if (result.kind === 'NOT_FOUND') return res.status(404).json({ error: 'Order not found' });
+    if (result.kind === 'INVALID_STATE') return res.status(409).json({ error: 'Only pending storefront orders can be accepted' });
+    if (result.kind === 'OUT_OF_STOCK') return res.status(409).json({ error: result.message });
+
+    await activityService.recordActivitySafely({
+      user: ownerId,
+      actor: userId,
+      type: 'ORDER',
+      title: 'Storefront order accepted',
+      message: `Order ${result.order.publicReference || result.order._id} was accepted`,
+      amount: result.order.price,
+      metadata: { orderId: result.order._id, action: 'ACCEPTED' },
+    });
+    return res.json({ success: true, order: result.order });
+  } catch (error) {
+    console.error('Accept Storefront Order Error:', error);
+    return res.status(500).json({ error: 'Server Error' });
+  }
+};
+
+export const declineStorefrontOrder = async (req: AuthedReq, res: Response) => {
+  try {
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+    const ownerId = await resolveOwnerId(userId);
+    if (!ownerId) return res.status(401).json({ error: 'User not found' });
+
+    const result = await orderService.declineStorefrontOrder(ownerId, String(req.params.id || ''));
+    if (result.kind === 'NOT_FOUND') return res.status(404).json({ error: 'Order not found' });
+    if (result.kind === 'INVALID_STATE') return res.status(409).json({ error: 'Only pending storefront orders can be declined' });
+
+    await activityService.recordActivitySafely({
+      user: ownerId,
+      actor: userId,
+      type: 'ORDER',
+      title: 'Storefront order declined',
+      message: `Order ${result.order.publicReference || result.order._id} was declined`,
+      amount: result.order.price,
+      metadata: { orderId: result.order._id, action: 'DECLINED' },
+    });
+    return res.json({ success: true, order: result.order });
+  } catch (error) {
+    console.error('Decline Storefront Order Error:', error);
     return res.status(500).json({ error: 'Server Error' });
   }
 };

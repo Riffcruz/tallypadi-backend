@@ -35,15 +35,13 @@ interface StoreCampaign {
   product: string;
 }
 
-type PlatformOption = 'TALLYPADI_MARKETPLACE_BOOST' | 'META_ADS' | 'TIKTOK_ADS' | 'GOOGLE_ADS';
+type PlatformOption = 'TALLYPADI_MARKETPLACE_BOOST' | 'META_ADS' | 'GOOGLE_ADS';
 
 const PROMOTION_PLATFORM_OPTIONS: { value: PlatformOption; label: string }[] = [
   { value: 'TALLYPADI_MARKETPLACE_BOOST', label: 'TallyPadi Marketplace Boost' },
   { value: 'META_ADS', label: 'Meta Ads' },
-  { value: 'TIKTOK_ADS', label: 'TikTok Ads' },
   { value: 'GOOGLE_ADS', label: 'Google Ads' },
 ];
-const ALL_PROMOTION_PLATFORMS = PROMOTION_PLATFORM_OPTIONS.map((option) => option.value);
 
 const formatCurrency = (amount?: number | null, currencyCode = 'NGN') => {
   try {
@@ -60,7 +58,6 @@ const formatCurrency = (amount?: number | null, currencyCode = 'NGN') => {
 const platformLabel = (platform: string) => {
   if (platform === 'TALLYPADI_MARKETPLACE_BOOST' || platform === 'TALLYPADI_SEO') return 'TallyPadi Marketplace Boost';
   if (platform === 'META_ADS' || platform === 'META') return 'Meta Ads';
-  if (platform === 'TIKTOK_ADS' || platform === 'TIKTOK') return 'TikTok Ads';
   if (platform === 'GOOGLE_ADS' || platform === 'GOOGLE') return 'Google Ads';
   return platform;
 };
@@ -85,7 +82,7 @@ export default function StoreProductsModal({ token, onClose }: StoreProductsModa
   const [currencyCode, setCurrencyCode] = useState('NGN');
   const [campaigns, setCampaigns] = useState<StoreCampaign[]>([]);
   const [boostingProductId, setBoostingProductId] = useState<string | null>(null);
-  const [boostForm, setBoostForm] = useState({ planId: '', platforms: [...ALL_PROMOTION_PLATFORMS], budget: '', brief: '', keywords: '' });
+  const [boostForm, setBoostForm] = useState({ planId: '', platforms: ['TALLYPADI_MARKETPLACE_BOOST'] as PlatformOption[], budget: '', brief: '', keywords: '', termsAccepted: false });
   const [boosting, setBoosting] = useState(false);
   const selectedBoostPlan = adsPlans.find(plan => plan.id === boostForm.planId);
 
@@ -160,6 +157,7 @@ export default function StoreProductsModal({ token, onClose }: StoreProductsModa
   const handleBoostSubmit = async (productId: string) => {
     if (!boostForm.planId) return Swal.fire('Error', 'Please select a duration', 'error');
     if (!boostForm.platforms.length) return Swal.fire('Error', 'Please select at least one platform', 'error');
+    if (!boostForm.termsAccepted) return Swal.fire('Confirm campaign', 'Please approve this campaign.', 'warning');
     
     const selectedPlan = adsPlans.find(p => p.id === boostForm.planId);
     if (!selectedPlan) return;
@@ -192,6 +190,7 @@ export default function StoreProductsModal({ token, onClose }: StoreProductsModa
           brief: boostForm.brief.trim(),
           keywords,
         },
+        consent: { accepted: boostForm.termsAccepted },
       }, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -201,7 +200,7 @@ export default function StoreProductsModal({ token, onClose }: StoreProductsModa
         setCampaigns(prev => [res.data.campaign, ...prev.filter(c => c.id !== res.data.campaign.id)]);
       }
       setBoostingProductId(null);
-      setBoostForm({ planId: '', platforms: [...ALL_PROMOTION_PLATFORMS], budget: '', brief: '', keywords: '' });
+      setBoostForm({ planId: '', platforms: ['TALLYPADI_MARKETPLACE_BOOST'], budget: '', brief: '', keywords: '', termsAccepted: false });
       Swal.fire('Submitted', 'Boost request is pending admin review.', 'success');
     } catch (err: unknown) {
       console.error(err);
@@ -394,10 +393,15 @@ export default function StoreProductsModal({ token, onClose }: StoreProductsModa
                           />
                         </div>
 
+                        <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                          <input type="checkbox" checked={boostForm.termsAccepted} onChange={e => setBoostForm({ ...boostForm, termsAccepted: e.target.checked })} />
+                          I approve this campaign.
+                        </label>
+
                         <div className="flex justify-end pt-2">
                           <button
                             onClick={() => handleBoostSubmit(product.id)}
-                            disabled={boosting || !boostForm.planId}
+                            disabled={boosting || !boostForm.planId || !boostForm.termsAccepted}
                             className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold shadow-md hover:bg-blue-700 active:scale-95 transition-all disabled:opacity-50"
                           >
                             {boosting ? <Loader2 size={16} className="animate-spin" /> : <TrendingUp size={16} />}

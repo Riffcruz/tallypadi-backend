@@ -58,7 +58,6 @@ export const metadata: Metadata = {
     "wholesale inventory software",
     "send ads to facebook",
     "send ads to instagram",
-    "send ads to tiktok",
     "send ads to google",
     "send receipts via whatsapp",
     "manage inventory and stock",
