@@ -2,7 +2,7 @@
 import React, { useMemo, useState } from 'react';
 import axios from 'axios';
 import Swal from 'sweetalert2';
-import { Search, Filter, Eye, Lock, Unlock, UserPlus, Wallet } from 'lucide-react';
+import { Search, Filter, Eye, Lock, Unlock, UserPlus, Wallet, Trash2 } from 'lucide-react';
 import UserDeepDiveModal from './UserDeepDiveModal';
 import CreateInvestorModal from './CreateInvestorModal';
 
@@ -18,6 +18,10 @@ export interface User {
   walletBalance?: number;
   currencyCode?: string;
   joinedAt?: string;
+  role?: 'OWNER' | 'STAFF';
+  ownerId?: string;
+  orphaned?: boolean;
+  name?: string;
 }
 
 interface UsersTabProps {
@@ -40,6 +44,8 @@ export default function UsersTab({
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [showCreateInvestor, setShowCreateInvestor] = useState(false);
 
+  const phoneDigits = (value: unknown) => String(value || '').replace(/\D/g, '');
+
   const getUserCurrency = (user?: User | null) => String(user?.currencyCode || 'NGN').toUpperCase();
   const formatCurrency = (amount?: number | null, currencyCode = 'NGN') => {
     try {
@@ -57,16 +63,42 @@ export default function UsersTab({
     const q = search.trim().toLowerCase();
 
     return (users || []).filter((u: User) => {
-      const name = (u.businessName || '').toLowerCase();
-      const phone = String(u.phone || '');
-      const matchesSearch = !q || name.includes(q) || phone.includes(q);
+      const name = `${u.businessName || ''} ${u.name || ''} ${u.email || ''}`.toLowerCase();
+      const phone = phoneDigits(u.phone);
+      const queryDigits = phoneDigits(q);
+      const phoneMatch = queryDigits.length >= 7
+        ? phone.endsWith(queryDigits.slice(-10)) || queryDigits.endsWith(phone.slice(-10))
+        : Boolean(queryDigits) && phone.includes(queryDigits);
+      const matchesSearch = !q || name.includes(q) || phoneMatch;
 
       const status = u.status;
-      const matchesStatus = filterActive ? status === 'active' || status === 'trial' : true;
+      const matchesStatus = q ? true : filterActive ? status === 'active' || status === 'trial' : true;
 
       return matchesSearch && matchesStatus;
     });
   }, [users, search, filterActive]);
+
+  const deleteLinkedAccount = async (user: User) => {
+    const result = await Swal.fire({
+      title: user.orphaned ? 'Delete orphaned staff?' : 'Delete staff account?',
+      text: `${user.name || user.phone || 'This staff account'} will be permanently removed.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Delete staff',
+      confirmButtonColor: '#dc2626',
+    });
+    if (!result.isConfirmed) return;
+    try {
+      await axios.delete(`${API_URL}/admin/staff/${user.id}`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      await Swal.fire('Deleted', 'The staff account has been removed.', 'success');
+      await onRefresh?.();
+    } catch (error: unknown) {
+      const data = axios.isAxiosError(error) ? error.response?.data as { error?: string } | undefined : undefined;
+      Swal.fire('Delete failed', data?.error || 'Could not delete this staff account.', 'error');
+    }
+  };
 
   const StatusPill = ({ status }: { status: string }) => {
     const cls =
@@ -219,9 +251,12 @@ export default function UsersTab({
             <div key={u.id} className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-white font-extrabold truncate">{u.businessName || '—'}</p>
+                  <p className="text-white font-extrabold truncate">{u.businessName || u.name || 'Unnamed account'}</p>
                   <p className="text-xs text-slate-400 font-mono break-words">{u.phone || '—'}</p>
                   {u.email && <p className="text-xs text-slate-500 font-mono break-words">{u.email}</p>}
+                  <p className={`mt-1 text-[11px] font-bold ${u.orphaned ? 'text-red-300' : 'text-slate-500'}`}>
+                    {u.orphaned ? 'Orphaned staff' : u.role === 'STAFF' ? 'Staff' : 'Owner'}
+                  </p>
                 </div>
 
                 <div className="flex flex-col items-end gap-2 shrink-0">
@@ -242,14 +277,22 @@ export default function UsersTab({
               </div>
 
               <div className="mt-4 grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => setSelectedUser(u)}
-                  className="w-full px-3 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-sm font-extrabold flex items-center justify-center gap-2 transition"
-                >
-                  <Eye size={16} /> View
-                </button>
+                {u.role === 'STAFF' ? (
+                  <button
+                    onClick={() => deleteLinkedAccount(u)}
+                    className="col-span-2 w-full px-3 py-2.5 bg-red-500/15 hover:bg-red-500/20 text-red-200 border border-red-500/25 rounded-xl text-sm font-extrabold flex items-center justify-center gap-2 transition"
+                  >
+                    <Trash2 size={16} /> Delete staff
+                  </button>
+                ) : <>
+                  <button
+                    onClick={() => setSelectedUser(u)}
+                    className="w-full px-3 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-sm font-extrabold flex items-center justify-center gap-2 transition"
+                  >
+                    <Eye size={16} /> View
+                  </button>
 
-                {u.status === 'suspended' ? (
+                  {u.status === 'suspended' ? (
                   <button
                     onClick={() => onAction(u.id, 'unsuspend')}
                     className="w-full px-3 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-sm font-extrabold flex items-center justify-center gap-2 transition"
@@ -263,8 +306,9 @@ export default function UsersTab({
                   >
                     <Lock size={16} /> Suspend
                   </button>
-                )}
-                {role !== 'agent' && (
+                  )}
+                </>}
+                {role !== 'agent' && u.role !== 'STAFF' && (
                   <button
                     onClick={() => handleWalletTopUp(u)}
                     className="col-span-2 w-full px-3 py-2.5 bg-emerald-500/15 hover:bg-emerald-500/20 text-emerald-200 border border-emerald-500/25 rounded-xl text-sm font-extrabold flex items-center justify-center gap-2 transition"
@@ -304,9 +348,12 @@ export default function UsersTab({
                 filtered.map((u: User) => (
                   <tr key={u.id} className="hover:bg-gray-700/30 transition-colors">
                     <td className="px-6 py-4">
-                      <div className="font-extrabold text-white">{u.businessName}</div>
+                      <div className="font-extrabold text-white">{u.businessName || u.name || 'Unnamed account'}</div>
                       <div className="text-xs text-slate-500 font-mono">{u.phone}</div>
                       {u.email && <div className="text-xs text-slate-500 font-mono">{u.email}</div>}
+                      <div className={`mt-1 text-[11px] font-bold ${u.orphaned ? 'text-red-300' : 'text-slate-500'}`}>
+                        {u.orphaned ? 'Orphaned staff' : u.role === 'STAFF' ? 'Staff' : 'Owner'}
+                      </div>
                     </td>
 
                     <td className="px-6 py-4">
@@ -327,12 +374,20 @@ export default function UsersTab({
 
                     <td className="px-6 py-4 text-right">
                       <div className="flex justify-end gap-2">
-                        <button
-                          onClick={() => setSelectedUser(u)}
-                          className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-xs font-extrabold flex items-center gap-1 transition-colors"
-                        >
-                          <Eye size={14} /> View
-                        </button>
+                        {u.role === 'STAFF' ? (
+                          <button
+                            onClick={() => deleteLinkedAccount(u)}
+                            className="bg-red-500/15 hover:bg-red-500/20 text-red-200 border border-red-500/25 px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors flex items-center gap-1"
+                          >
+                            <Trash2 size={14} /> Delete
+                          </button>
+                        ) : <>
+                          <button
+                            onClick={() => setSelectedUser(u)}
+                            className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-xs font-extrabold flex items-center gap-1 transition-colors"
+                          >
+                            <Eye size={14} /> View
+                          </button>
 
                         {role !== 'agent' && (
                           <button
@@ -361,6 +416,7 @@ export default function UsersTab({
                             <Lock size={14} />
                           </button>
                         )}
+                        </>}
                       </div>
                     </td>
                   </tr>

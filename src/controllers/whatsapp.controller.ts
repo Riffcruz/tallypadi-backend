@@ -1170,6 +1170,14 @@ export const handleMessageLogic = async (
       return;
     }
 
+    // Staff records can outlive an owner created by older versions. Check the
+    // relationship before subscription status so an orphan is never reported
+    // as an expired shop subscription.
+    if (actor.role === 'STAFF' && (!owner || !ownerId)) {
+      await queueOutboundMessage(from, `❌ This staff account is no longer linked to an active shop. Ask an admin to remove it or an owner to re-add you.`);
+      return;
+    }
+
     // ✅ suspension check
     const shopUser = owner || actor;
     if (shopUser.subscriptionStatus === 'suspended') {
@@ -1189,10 +1197,6 @@ export const handleMessageLogic = async (
 
     // ✅ staff safety
     if (actor.role === 'STAFF') {
-      if (!owner || !ownerId) {
-        await queueOutboundMessage(from, `❌ This staff account has no owner linked. Ask owner to re-add you.`);
-        return;
-      }
       actor.registrationStage = 'COMPLETED';
     }
 

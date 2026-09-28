@@ -67,6 +67,7 @@ const analyticsQuerySchema = z.object({
 
 const getAllUsersQuerySchema = z.object({
   search: z.string().trim().max(60).optional(),
+  includeLinked: z.enum(['true', 'false']).optional(),
 });
 
 const updateGlobalSettingsSchema = z
@@ -334,12 +335,18 @@ export const getAllUsers = async (req: Request, res: Response) => {
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
     const { search } = parsed.data;
+    const includeLinked = parsed.data.includeLinked === 'true';
 
-    const match: any = { role: 'OWNER' };
+    const match: any = includeLinked ? {} : { role: 'OWNER' };
     if (search) {
+      const digits = search.replace(/\D/g, '');
+      const phoneTail = digits.length >= 7 ? digits.slice(-10) : digits;
       match.$or = [
         { phoneNumber: { $regex: search, $options: 'i' } },
+        ...(phoneTail ? [{ phoneNumber: { $regex: phoneTail, $options: 'i' } }] : []),
         { businessName: { $regex: search, $options: 'i' } },
+        { name: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } },
       ];
     }
 
@@ -347,6 +354,14 @@ export const getAllUsers = async (req: Request, res: Response) => {
     const rows = await User.aggregate([
       { $match: match },
       { $sort: { createdAt: -1 } },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'ownerId',
+          foreignField: '_id',
+          as: 'linkedOwner',
+        },
+      },
       {
         $lookup: {
           from: 'transactions',
@@ -372,7 +387,17 @@ export const getAllUsers = async (req: Request, res: Response) => {
       {
         $project: {
           id: '$_id',
+          role: 1,
+          ownerId: 1,
+          orphaned: {
+            $and: [
+              { $eq: ['$role', 'STAFF'] },
+              { $ne: ['$ownerId', null] },
+              { $eq: [{ $size: '$linkedOwner' }, 0] },
+            ],
+          },
           businessName: 1,
+          name: 1,
           email: 1,
           phone: '$phoneNumber',
           plan: '$planType',

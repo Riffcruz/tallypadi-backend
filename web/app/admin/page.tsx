@@ -103,7 +103,7 @@ export default function AdminDashboard() {
     try {
       const [statsRes, usersRes, settingsRes] = await Promise.all([
         axios.get(`${API_URL}/admin/analytics?range=week`, { headers }),
-        axios.get(`${API_URL}/admin/users?limit=200`, { headers }),
+        axios.get(`${API_URL}/admin/users?includeLinked=true`, { headers }),
         axios.get(`${API_URL}/admin/settings`, { headers }),
       ]);
 
