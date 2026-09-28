@@ -31,6 +31,8 @@ import {
   Globe,
   MapPin,
   Calendar,
+  ChevronDown,
+  ChevronUp,
   type LucideIcon
 } from 'lucide-react';
 import Swal from 'sweetalert2';
@@ -247,6 +249,14 @@ const statusGroups: Record<StatusFilter, CampaignStatus[]> = {
   REJECTED: ['REJECTED', 'REJECTED_BY_TALLYPADI', 'PARTIALLY_REJECTED', 'FAILED', 'CANCELLED'],
 };
 
+const activeFilterClass: Record<StatusFilter, string> = {
+  ALL: 'border-slate-950 bg-slate-950 text-white',
+  PENDING: 'border-amber-500 bg-amber-500 text-amber-950',
+  RUNNING: 'border-emerald-600 bg-emerald-600 text-white',
+  COMPLETED: 'border-blue-700 bg-blue-700 text-white',
+  REJECTED: 'border-red-600 bg-red-600 text-white',
+};
+
 function AdsManagerContent() {
   const [user, setUser] = useState<AdsUser | null>(null);
   const [loading, setLoading] = useState(true);
@@ -265,6 +275,10 @@ function AdsManagerContent() {
   const [submittingExisting, setSubmittingExisting] = useState(false);
   const [submittingNew, setSubmittingNew] = useState(false);
   const [activeBoostModal, setActiveBoostModal] = useState<'new' | 'existing' | null>(null);
+  const [walletOpen, setWalletOpen] = useState(false);
+  const [plansOpen, setPlansOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(true);
+  const [expandedCampaignDetails, setExpandedCampaignDetails] = useState<string | null>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -657,26 +671,33 @@ function AdsManagerContent() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 2xl:grid-cols-[360px_minmax(0,1fr)] gap-6">
+          <div className="space-y-6">
             <section className="min-w-0 space-y-6">
-              <div className="bg-white border border-slate-200 rounded-lg p-6 shadow-sm">
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+              <div className="overflow-hidden rounded-2xl border-2 border-emerald-200 bg-white shadow-sm">
+                <button
+                  type="button"
+                  onClick={() => setWalletOpen((open) => !open)}
+                  className="flex w-full items-center justify-between gap-4 bg-emerald-950 px-5 py-5 text-left text-white sm:px-6"
+                  aria-expanded={walletOpen}
+                >
+                  <div className="flex min-w-0 items-center gap-3">
+                  <div className="w-11 h-11 rounded-xl bg-emerald-400 text-emerald-950 flex items-center justify-center shrink-0">
                     <Wallet size={20} />
                   </div>
-                  <div>
-                    <h2 className="text-base font-bold text-slate-900">Ads Wallet</h2>
-                    <p className="text-xs text-slate-500">Available balance</p>
+                  <div className="min-w-0">
+                    <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-300">Ads Wallet</p>
+                    <h2 className="truncate text-xl font-black sm:text-2xl">{formatCurrency(user?.walletBalance || 0, userCurrencyCode)}</h2>
                   </div>
                 </div>
+                  <span className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-xs font-black">
+                    {walletOpen ? 'Close funding' : 'Fund wallet'}
+                    {walletOpen ? <ChevronUp size={17} /> : <ChevronDown size={17} />}
+                  </span>
+                </button>
 
-                <h3 className="text-4xl font-black text-slate-900 mb-6">
-                  {formatCurrency(user?.walletBalance || 0, userCurrencyCode)}
-                </h3>
-
-                <div className="space-y-4">
+                {walletOpen && <div className="grid gap-4 p-5 sm:grid-cols-[minmax(0,1fr)_220px] sm:p-6">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">Amount to Fund</label>
+                    <label className="block text-xs font-black text-slate-500 mb-1.5 uppercase tracking-wider">Amount to fund</label>
                     <div className="relative">
                       <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-black">{userCurrencyCode}</span>
                       <input
@@ -698,19 +719,22 @@ function AdsManagerContent() {
                   <button
                     onClick={handleFundWallet}
                     disabled={funding || !isTycoon}
-                    className="w-full flex justify-center items-center gap-2 bg-emerald-600 text-white rounded-lg py-3.5 text-sm font-bold shadow-sm hover:bg-emerald-700 active:scale-[0.99] transition-all disabled:opacity-50"
+                    className="w-full self-end flex justify-center items-center gap-2 bg-emerald-600 text-white rounded-xl py-3.5 text-sm font-black shadow-sm hover:bg-emerald-700 active:scale-[0.99] transition-all disabled:opacity-50"
                   >
                     {funding ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}
                     Fund Wallet
                   </button>
-                </div>
+                </div>}
               </div>
 
-              <div className="bg-white border border-slate-200 rounded-lg p-6 shadow-sm">
-                <h2 className="text-base font-bold text-slate-900 mb-4">Campaign plans</h2>
-                <div className="space-y-3">
+              <div className="overflow-hidden rounded-2xl border border-indigo-200 bg-white shadow-sm">
+                <button type="button" onClick={() => setPlansOpen((open) => !open)} className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left sm:px-6" aria-expanded={plansOpen}>
+                  <div><p className="text-xs font-black uppercase tracking-[0.16em] text-indigo-600">Pricing</p><h2 className="text-base font-black text-slate-950">Campaign plans</h2></div>
+                  {plansOpen ? <ChevronUp className="text-indigo-600" size={20} /> : <ChevronDown className="text-indigo-600" size={20} />}
+                </button>
+                {plansOpen && <div className="grid gap-3 border-t border-indigo-100 p-5 sm:grid-cols-2 lg:grid-cols-3 sm:p-6">
                   {adsPlans.map((plan) => (
-                    <div key={plan.id} className="flex items-center justify-between gap-3 border border-slate-100 rounded-lg p-3 bg-slate-50">
+                    <div key={plan.id} className="flex items-center justify-between gap-3 border border-indigo-100 rounded-xl p-3 bg-indigo-50/60">
                       <div>
                         <p className="text-sm font-bold text-slate-900">{plan.label}</p>
                         <p className="text-xs text-slate-500">{plan.durationDays} day{plan.durationDays > 1 ? 's' : ''}</p>
@@ -718,7 +742,7 @@ function AdsManagerContent() {
                       <p className="font-black text-slate-900">{formatCurrency(plan.price, userCurrencyCode)}</p>
                     </div>
                   ))}
-                </div>
+                </div>}
               </div>
             </section>
 
@@ -728,15 +752,15 @@ function AdsManagerContent() {
                   type="button"
                   onClick={() => setActiveBoostModal('new')}
                   disabled={!isTycoon}
-                  className="group min-w-0 rounded-lg border border-blue-100 bg-white p-5 text-left shadow-sm transition-all hover:border-blue-200 hover:shadow-md disabled:opacity-50"
+                  className="group min-w-0 rounded-2xl border-2 border-blue-700 bg-blue-700 p-5 text-left text-white shadow-lg shadow-blue-900/10 transition-all hover:bg-blue-800 disabled:opacity-50"
                 >
                   <div className="flex min-w-0 items-center gap-3">
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white text-blue-700">
                       <PackagePlus size={20} />
                     </div>
                     <div className="min-w-0">
-                      <h2 className="text-base font-black text-slate-900">Add a product to promote</h2>
-                      <p className="text-xs font-medium text-slate-500">Use this only when the product is not in inventory yet.</p>
+                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-blue-200">New product</p>
+                      <h2 className="text-lg font-black text-white">Add product & promote</h2>
                     </div>
                   </div>
                 </button>
@@ -745,15 +769,15 @@ function AdsManagerContent() {
                   type="button"
                   onClick={() => setActiveBoostModal('existing')}
                   disabled={!isTycoon}
-                  className="group min-w-0 rounded-lg border border-emerald-100 bg-white p-5 text-left shadow-sm transition-all hover:border-emerald-200 hover:shadow-md disabled:opacity-50"
+                  className="group min-w-0 rounded-2xl border-2 border-emerald-700 bg-emerald-700 p-5 text-left text-white shadow-lg shadow-emerald-900/10 transition-all hover:bg-emerald-800 disabled:opacity-50"
                 >
                   <div className="flex min-w-0 items-center gap-3">
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white text-emerald-700">
                       <Search size={20} />
                     </div>
                     <div className="min-w-0">
-                      <h2 className="text-base font-black text-slate-900">Promote a product</h2>
-                      <p className="text-xs font-medium text-slate-500">Choose a product, set a budget and submit.</p>
+                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-200">Inventory product</p>
+                      <h2 className="text-lg font-black text-white">Promote existing product</h2>
                     </div>
                   </div>
                 </button>
@@ -949,13 +973,13 @@ function AdsManagerContent() {
                 </div>
               )}
 
-              <div className="min-w-0 overflow-hidden bg-white border border-slate-200 rounded-lg shadow-sm">
-                <div className="flex flex-col justify-between gap-4 p-4 sm:p-6 border-b border-slate-100">
-                  <div>
-                    <h2 className="text-base font-bold text-slate-900">Boost Requests & History</h2>
-                    <p className="text-xs text-slate-500 mt-1">Pending, active, completed, and rejected ads boosts</p>
-                  </div>
-                  <div className="grid w-full grid-cols-2 lg:grid-cols-5 gap-2">
+              <div className="min-w-0 overflow-hidden bg-white border border-slate-200 rounded-2xl shadow-sm">
+                <div className="border-b border-slate-100">
+                  <button type="button" onClick={() => setHistoryOpen((open) => !open)} className="flex w-full items-center justify-between gap-4 bg-slate-950 p-5 text-left text-white sm:px-6" aria-expanded={historyOpen}>
+                    <div><p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Campaign activity</p><h2 className="text-lg font-black">Boost Requests & History</h2></div>
+                    {historyOpen ? <ChevronUp size={21} /> : <ChevronDown size={21} />}
+                  </button>
+                  {historyOpen && <div className="flex w-full gap-2 overflow-x-auto p-4 sm:p-5">
                     {(['ALL', 'PENDING', 'RUNNING', 'COMPLETED', 'REJECTED'] as StatusFilter[]).map((status) => {
                       const config = statusCopy[status];
                       const Icon = config.icon;
@@ -963,7 +987,7 @@ function AdsManagerContent() {
                         <button
                           key={status}
                           onClick={() => setStatusFilter(status)}
-                          className={`flex min-w-0 items-center justify-center gap-2 rounded-lg border px-2 py-2 text-xs font-bold transition-colors ${statusFilter === status ? config.className : 'border-slate-200 text-slate-500 hover:bg-slate-50'}`}
+                          className={`flex min-w-[125px] items-center justify-center gap-2 rounded-xl border-2 px-3 py-2.5 text-xs font-black transition-colors ${statusFilter === status ? activeFilterClass[status] : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'}`}
                         >
                           <Icon size={14} className="shrink-0" />
                           <span className="min-w-0 truncate">{status === 'RUNNING' ? 'Active' : config.label.replace(' Review', '')}</span>
@@ -971,10 +995,10 @@ function AdsManagerContent() {
                         </button>
                       );
                     })}
-                  </div>
+                  </div>}
                 </div>
 
-                <div className="p-4 sm:p-6 space-y-3">
+                {historyOpen && <div className="p-4 sm:p-6 space-y-3">
                   {visibleCampaigns.length === 0 ? (
                     <div className="rounded-lg border border-dashed border-slate-200 p-8 text-center">
                       <AlertCircle className="mx-auto mb-3 text-slate-300" size={28} />
@@ -983,30 +1007,29 @@ function AdsManagerContent() {
                   ) : visibleCampaigns.map((campaign) => {
                     const config = statusCopy[campaign.status] || statusCopy.RUNNING;
                     const Icon = config.icon;
+                    const campaignKey = String(campaign.id || campaign._id || campaign.requestedAt);
+                    const detailsOpen = expandedCampaignDetails === campaignKey;
                     return (
-                      <article key={campaign.id} className="min-w-0 rounded-lg border border-slate-200 p-4">
+                      <article key={campaignKey} className={`min-w-0 overflow-hidden rounded-2xl border-2 bg-white transition-colors ${detailsOpen ? 'border-slate-300' : 'border-slate-100'}`}>
+                        <button type="button" onClick={() => setExpandedCampaignDetails(detailsOpen ? null : campaignKey)} className="flex w-full items-center justify-between gap-4 p-4 text-left sm:p-5" aria-expanded={detailsOpen}>
+                          <div className="min-w-0"><div className="mb-2 flex flex-wrap items-center gap-2"><span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-black ${config.className}`}><Icon size={13} />{config.label}</span></div><h3 className="truncate text-base font-black text-slate-950">{campaign.productSnapshot?.name || 'Product boost'}</h3><p className="mt-1 text-xs font-bold text-slate-400">{formatDate(campaign.requestedAt)}</p></div>
+                          <div className="flex shrink-0 items-center gap-3"><div className="text-right"><p className="text-lg font-black text-slate-950 sm:text-xl">{formatCurrency(campaign.budget, userCurrencyCode)}</p><p className="text-xs text-slate-500">{campaign.planLabel}</p></div>{detailsOpen ? <ChevronUp className="text-slate-500" size={20} /> : <ChevronDown className="text-slate-500" size={20} />}</div>
+                        </button>
+
+                        {detailsOpen && <div className="border-t border-slate-100 p-4 sm:p-5">
                         <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4">
                           <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2 mb-2">
-                              <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold ${config.className}`}>
-                                <Icon size={13} />
-                                {config.label}
-                              </span>
                               {(campaign.selectedProviders || campaign.platforms || []).map((platform) => (
                                 <span key={platform} className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">
                                   {platformLabel(platform)}
                                 </span>
                               ))}
                             </div>
-                            <h3 className="font-black text-slate-900 truncate">{campaign.productSnapshot?.name || 'Product boost'}</h3>
                             <p className="text-sm text-slate-500 mt-1 line-clamp-2">{campaign.productSnapshot?.description || campaign.planLabel}</p>
                             {campaign.rejectionReason && (
                               <p className="text-sm text-red-600 mt-2">Reason: {campaign.rejectionReason}</p>
                             )}
-                          </div>
-                          <div className="xl:text-right shrink-0">
-                            <p className="text-2xl font-black text-slate-900">{formatCurrency(campaign.budget, userCurrencyCode)}</p>
-                            <p className="text-xs text-slate-500">{campaign.planLabel}</p>
                           </div>
                         </div>
 
@@ -1052,10 +1075,11 @@ function AdsManagerContent() {
                           </div>
 
                         </div>
+                        </div>}
                       </article>
                     );
                   })}
-                </div>
+                </div>}
               </div>
             </section>
           </div>
