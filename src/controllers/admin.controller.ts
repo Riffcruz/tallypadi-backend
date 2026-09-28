@@ -389,10 +389,20 @@ export const getAllUsers = async (req: Request, res: Response) => {
           id: '$_id',
           role: 1,
           ownerId: 1,
+          linkedAccount: {
+            $or: [
+              { $eq: [{ $toUpper: { $ifNull: ['$role', ''] } }, 'STAFF'] },
+              { $ne: [{ $ifNull: ['$ownerId', null] }, null] },
+            ],
+          },
           orphaned: {
             $and: [
-              { $eq: ['$role', 'STAFF'] },
-              { $ne: ['$ownerId', null] },
+              {
+                $or: [
+                  { $eq: [{ $toUpper: { $ifNull: ['$role', ''] } }, 'STAFF'] },
+                  { $ne: [{ $ifNull: ['$ownerId', null] }, null] },
+                ],
+              },
               { $eq: [{ $size: '$linkedOwner' }, 0] },
             ],
           },
@@ -504,6 +514,18 @@ export const getUserDeepDive = async (req: Request, res: Response) => {
     if (!user) return res.status(404).json({ error: 'User not found' });
 
     const ownerId = user.role === 'OWNER' ? user._id : user.ownerId;
+    const linkedOwner = user.ownerId ? await User.findById(user.ownerId).select('_id').lean() : null;
+    if (String(user.role || '').toUpperCase() === 'STAFF' && (!ownerId || !linkedOwner)) {
+      return res.json({
+        profile: user,
+        staff: [],
+        inventory: [],
+        recentSales: [],
+        lastMessages: user.messageHistory || [],
+        orphaned: true,
+        linkedAccount: true,
+      });
+    }
     if (!ownerId) return res.status(400).json({ error: 'OwnerId not found' });
 
     // Find all users linked to this owner, EXCLUDING the owner themselves

@@ -18,9 +18,10 @@ export interface User {
   walletBalance?: number;
   currencyCode?: string;
   joinedAt?: string;
-  role?: 'OWNER' | 'STAFF';
+  role?: string;
   ownerId?: string;
   orphaned?: boolean;
+  linkedAccount?: boolean;
   name?: string;
 }
 
@@ -45,6 +46,9 @@ export default function UsersTab({
   const [showCreateInvestor, setShowCreateInvestor] = useState(false);
 
   const phoneDigits = (value: unknown) => String(value || '').replace(/\D/g, '');
+  const isLinkedAccount = (user: User) => Boolean(
+    user.linkedAccount || user.ownerId || String(user.role || '').toUpperCase() === 'STAFF'
+  );
 
   const getUserCurrency = (user?: User | null) => String(user?.currencyCode || 'NGN').toUpperCase();
   const formatCurrency = (amount?: number | null, currencyCode = 'NGN') => {
@@ -255,7 +259,7 @@ export default function UsersTab({
                   <p className="text-xs text-slate-400 font-mono break-words">{u.phone || '—'}</p>
                   {u.email && <p className="text-xs text-slate-500 font-mono break-words">{u.email}</p>}
                   <p className={`mt-1 text-[11px] font-bold ${u.orphaned ? 'text-red-300' : 'text-slate-500'}`}>
-                    {u.orphaned ? 'Orphaned staff' : u.role === 'STAFF' ? 'Staff' : 'Owner'}
+                    {u.orphaned ? 'Orphaned staff' : isLinkedAccount(u) ? 'Staff' : 'Owner'}
                   </p>
                 </div>
 
@@ -277,7 +281,7 @@ export default function UsersTab({
               </div>
 
               <div className="mt-4 grid grid-cols-2 gap-2">
-                {u.role === 'STAFF' ? (
+                {isLinkedAccount(u) ? (
                   <button
                     onClick={() => deleteLinkedAccount(u)}
                     className="col-span-2 w-full px-3 py-2.5 bg-red-500/15 hover:bg-red-500/20 text-red-200 border border-red-500/25 rounded-xl text-sm font-extrabold flex items-center justify-center gap-2 transition"
@@ -308,7 +312,7 @@ export default function UsersTab({
                   </button>
                   )}
                 </>}
-                {role !== 'agent' && u.role !== 'STAFF' && (
+                {role !== 'agent' && !isLinkedAccount(u) && (
                   <button
                     onClick={() => handleWalletTopUp(u)}
                     className="col-span-2 w-full px-3 py-2.5 bg-emerald-500/15 hover:bg-emerald-500/20 text-emerald-200 border border-emerald-500/25 rounded-xl text-sm font-extrabold flex items-center justify-center gap-2 transition"
@@ -352,7 +356,7 @@ export default function UsersTab({
                       <div className="text-xs text-slate-500 font-mono">{u.phone}</div>
                       {u.email && <div className="text-xs text-slate-500 font-mono">{u.email}</div>}
                       <div className={`mt-1 text-[11px] font-bold ${u.orphaned ? 'text-red-300' : 'text-slate-500'}`}>
-                        {u.orphaned ? 'Orphaned staff' : u.role === 'STAFF' ? 'Staff' : 'Owner'}
+                        {u.orphaned ? 'Orphaned staff' : isLinkedAccount(u) ? 'Staff' : 'Owner'}
                       </div>
                     </td>
 
@@ -374,7 +378,7 @@ export default function UsersTab({
 
                     <td className="px-6 py-4 text-right">
                       <div className="flex justify-end gap-2">
-                        {u.role === 'STAFF' ? (
+                        {isLinkedAccount(u) ? (
                           <button
                             onClick={() => deleteLinkedAccount(u)}
                             className="bg-red-500/15 hover:bg-red-500/20 text-red-200 border border-red-500/25 px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors flex items-center gap-1"
