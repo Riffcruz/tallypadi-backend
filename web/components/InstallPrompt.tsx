@@ -24,12 +24,18 @@ export default function InstallPrompt() {
   const [isStandalone, setIsStandalone] = useState(false);
   const [showInstructions, setShowInstructions] = useState(false);
   const [showInstallButton, setShowInstallButton] = useState(false);
+  const [displayReady, setDisplayReady] = useState(false);
 
   // Collapsible UI
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(true);
 
   // ✅ session-only dismiss
   const [dismissed, setDismissed] = useState(false);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDisplayReady(true), 15000);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     // 1. Check if installed
@@ -111,10 +117,10 @@ export default function InstallPrompt() {
   };
 
   // ✅ hide on standalone, dismissed, homepage, or not eligible
-  if (isStandalone || dismissed || !showInstallButton || pathname === "/") return null;
+  if (isStandalone || dismissed || !showInstallButton || !displayReady || pathname === "/") return null;
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-2 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="fixed bottom-4 right-4 z-50 flex flex-col items-end gap-2 animate-in fade-in slide-in-from-bottom-4 duration-500 sm:bottom-6 sm:right-6">
       {/* iOS Instructions Bubble */}
       {showInstructions && !isCollapsed && (
         <div className="mb-2 w-72 bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden animate-in slide-in-from-bottom-2 duration-200 origin-bottom-right">

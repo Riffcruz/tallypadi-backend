@@ -253,7 +253,7 @@ function ProductCard({ product }: { product: MarketplaceProduct }) {
     .filter(Boolean)
     .join(', ');
   const whatsappLink = buildWhatsAppLink(product);
-  const previewDescription = product.seo?.adDescription || product.description;
+  const previewDescription = product.description;
 
   return (
     <article
@@ -357,6 +357,44 @@ function ProductCard({ product }: { product: MarketplaceProduct }) {
   );
 }
 
+function SponsoredProductCard({ product }: { product: MarketplaceProduct }) {
+  const productUrl = `/marketplace/product/${product.id}`;
+
+  return (
+    <Link
+      href={productUrl}
+      className="group grid min-w-[260px] grid-cols-[88px_1fr] overflow-hidden rounded-lg border border-amber-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-amber-300 hover:shadow-md sm:min-w-0"
+    >
+      <div className="aspect-square overflow-hidden bg-emerald-50">
+        {product.image ? (
+          <img
+            src={product.image}
+            alt={product.name}
+            loading="lazy"
+            className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-3xl font-black uppercase text-emerald-700">
+            {product.name.slice(0, 1)}
+          </div>
+        )}
+      </div>
+      <div className="min-w-0 p-3">
+        <span className="inline-flex rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wide text-amber-900">
+          Sponsored
+        </span>
+        <h3 className="mt-1.5 line-clamp-1 text-sm font-black text-stone-950 group-hover:text-emerald-700">
+          {titleCase(product.name)}
+        </h3>
+        <p className="mt-1 text-sm font-black text-emerald-700">
+          {formatMoney(product.price, product.shop.currencyCode)}
+        </p>
+        <p className="mt-1 truncate text-xs font-semibold text-stone-500">{product.shop.name}</p>
+      </div>
+    </Link>
+  );
+}
+
 export default function MarketplaceClient() {
   const [products, setProducts] = useState<MarketplaceProduct[]>([]);
   const [categories, setCategories] = useState<SmartCategory[]>(FALLBACK_CATEGORIES);
@@ -384,6 +422,10 @@ export default function MarketplaceClient() {
   const selectedStateCities = useMemo(
     () => locations.find((location) => location.state === selectedState)?.cities || [],
     [locations, selectedState]
+  );
+  const sponsoredProducts = useMemo(
+    () => products.filter((product) => product.isBoosted).slice(0, 4),
+    [products]
   );
 
   const displayCategories = categories.length > 0 ? categories : FALLBACK_CATEGORIES;
@@ -475,14 +517,14 @@ export default function MarketplaceClient() {
         <div className="mx-auto max-w-7xl px-3 py-5 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
           <div className="flex flex-col justify-center">
             <div className="mb-4 hidden w-fit items-center gap-2 rounded-lg border border-emerald-300/30 bg-emerald-800/70 px-3 py-1.5 text-xs font-black uppercase tracking-[0.16em] text-emerald-100 sm:inline-flex">
-              Smart sorted marketplace
+              Shop local businesses
             </div>
             <h1 className="max-w-3xl text-2xl font-black leading-tight tracking-tight sm:text-4xl lg:text-5xl">
               <span className="sm:hidden">Find products near you.</span>
-              <span className="hidden sm:inline">Find products from active TallyPadi shop fronts.</span>
+              <span className="hidden sm:inline">Shop products from trusted local businesses.</span>
             </h1>
             <p className="mt-3 hidden max-w-2xl text-sm font-medium leading-6 text-emerald-50 sm:block sm:text-base">
-              Search by product, category, state, or city. Boosted listings rise first, then fresh and relevant stock from nearby sellers.
+              Find products near you and chat directly with verified independent sellers.
             </p>
 
             <form
@@ -576,6 +618,22 @@ export default function MarketplaceClient() {
         </aside>
 
         <section className="min-w-0">
+          {!loading && sponsoredProducts.length > 0 && (
+            <section aria-labelledby="sponsored-products" className="mb-4 rounded-lg bg-amber-50 p-3 sm:p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h2 id="sponsored-products" className="text-sm font-black text-stone-950 sm:text-base">
+                  Sponsored products
+                </h2>
+                <span className="text-[11px] font-bold text-stone-500">Promoted listings</span>
+              </div>
+              <div className="flex gap-3 overflow-x-auto pb-1 sm:grid sm:grid-cols-2 sm:overflow-visible xl:grid-cols-4">
+                {sponsoredProducts.map((product) => (
+                  <SponsoredProductCard key={`sponsored-${product.id}`} product={product} />
+                ))}
+              </div>
+            </section>
+          )}
+
           <div className="mb-3 flex items-end justify-between gap-3 border-b border-stone-200 pb-3 sm:mb-4 sm:rounded-lg sm:border sm:bg-white sm:p-4 sm:shadow-sm">
             <div>
               <div className="hidden flex-wrap items-center gap-2 text-xs font-black uppercase tracking-[0.14em] text-emerald-700 sm:flex">

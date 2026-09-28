@@ -140,7 +140,7 @@ export default async function MarketplaceProductPage({ params }: Props) {
 
   const whatsappLink = buildWhatsAppLink(product);
   const locationText = getLocationText(product);
-  const visibleDescription = product.seo?.adDescription || product.description || getDescription(product);
+  const visibleDescription = product.description || `${product.name} from ${product.shop.name}. Contact the seller for availability and product details.`;
   const productUrl = `${SITE_URL}/marketplace/product/${product.id}`;
   const shopUrl = product.shop.slug ? `/shop/${product.shop.slug}` : '/marketplace';
   const jsonLd = {

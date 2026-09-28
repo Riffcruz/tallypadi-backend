@@ -8,8 +8,6 @@ import {
   BadgeCheck,
   Building2,
   Check,
-  ChevronLeft,
-  ChevronRight,
   CircleDollarSign,
   MapPin,
   Megaphone,
@@ -18,7 +16,6 @@ import {
   ReceiptText,
   Smartphone,
   Store,
-  TrendingUp,
   type LucideIcon,
 } from "lucide-react";
 import MarketingFooter from "../components/MarketingFooter";
@@ -34,13 +31,6 @@ type Feature = {
   title: string;
   text: string;
   icon: LucideIcon;
-};
-
-type Story = {
-  name: string;
-  business: string;
-  image: string;
-  quote: string;
 };
 
 type Plan = {
@@ -86,31 +76,10 @@ const heroFeatures: Feature[] = [
 ];
 
 const trustItems = [
-  { title: "Minimart", place: "Ibadan", icon: Building2 },
-  { title: "POS Corner", place: "Lagos", icon: ReceiptText },
-  { title: "Grace Stores", place: "Onitsha", icon: PackageCheck },
-  { title: "Al-Mustapha", place: "Kano", icon: TrendingUp },
-];
-
-const stories: Story[] = [
-  {
-    name: "Mrs Chioma Okeke",
-    business: "Chioma Ventures, Onitsha",
-    image: "/merchant-story-chioma.svg",
-    quote: "TallyPadi don change my life. I no dey write body for book again. Everything dey my WhatsApp!",
-  },
-  {
-    name: "Mr Tunde",
-    business: "Tunde Stores, Surulere",
-    image: "/merchant-story-tunde.svg",
-    quote: "The receipt feature worry me o! My customers love it. Looks very professional.",
-  },
-  {
-    name: "Alhaji Musa",
-    business: "Musa Global Store, Kano",
-    image: "/merchant-story-musa.svg",
-    quote: "Inventory tracking na the best. I always know wetin dey my shop.",
-  },
+  { title: "WhatsApp-first", place: "Record sales from chat", icon: MessageCircle },
+  { title: "Web dashboard", place: "More control when needed", icon: Building2 },
+  { title: "POS compatible", place: "Phones, tablets and terminals", icon: Smartphone },
+  { title: "Public storefront", place: "Sell through your shop link", icon: Store },
 ];
 
 const plans: Plan[] = [
@@ -347,6 +316,15 @@ function HeroSection({ whatsappLink }: { whatsappLink: string }) {
             Record sales, send receipts, track stock and manage your business. All on WhatsApp. No stress.
           </p>
 
+          <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+            <a href={whatsappLink} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-700 px-7 py-4 text-sm font-black text-white shadow-lg shadow-emerald-900/20 transition hover:bg-emerald-800">
+              <MessageCircle size={18} /> Start on WhatsApp
+            </a>
+            <Link href="/marketplace" className="inline-flex items-center justify-center gap-2 rounded-lg bg-amber-300 px-7 py-4 text-sm font-black text-stone-950 shadow-lg shadow-amber-900/10 transition hover:bg-amber-200">
+              <Store size={18} /> Shop Marketplace
+            </Link>
+          </div>
+
           <div className="mt-7 grid max-w-[680px] gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {heroFeatures.map((feature) => {
               const Icon = feature.icon;
@@ -360,25 +338,6 @@ function HeroSection({ whatsappLink }: { whatsappLink: string }) {
                 </div>
               );
             })}
-          </div>
-
-          <div className="mt-9 flex flex-col gap-4 sm:flex-row">
-            <a
-              href={whatsappLink}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-700 px-7 py-4 text-sm font-black text-white shadow-lg shadow-emerald-900/20 transition hover:bg-emerald-800"
-            >
-              <MessageCircle size={18} />
-              Start on WhatsApp
-            </a>
-            <Link
-              href="/marketplace"
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-amber-300 px-7 py-4 text-sm font-black text-stone-950 shadow-lg shadow-amber-900/10 transition hover:bg-amber-200"
-            >
-              <Store size={18} />
-              Browse Marketplace
-            </Link>
           </div>
 
           <p className="mt-4 text-sm font-bold text-stone-700">
@@ -408,24 +367,7 @@ function TrustStrip() {
   return (
     <section className="bg-[#101914] text-white">
       <div className="mx-auto flex max-w-[1480px] flex-col gap-6 px-5 py-7 sm:px-10 lg:flex-row lg:items-center lg:justify-between lg:px-20">
-        <div className="flex flex-wrap items-center gap-4">
-          <p className="text-sm font-bold">Trusted by 1,000+ shop owners globally</p>
-          <div className="flex -space-x-2">
-            {stories.map((story) => (
-              <Image
-                key={story.name}
-                src={story.image}
-                alt=""
-                width={36}
-                height={36}
-                className="h-9 w-9 rounded-full border-2 border-[#101914] bg-white object-cover"
-              />
-            ))}
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border-2 border-[#101914] bg-amber-300 text-xs font-black text-stone-950">
-              +9
-            </span>
-          </div>
-        </div>
+        <p className="text-sm font-black text-emerald-200">One business system, wherever you work.</p>
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 lg:gap-8">
           {trustItems.map((item) => {
@@ -497,11 +439,11 @@ function TeamPlaceholder() {
   };
 
   const mixedItems = [
-    { type: 'story', data: stories[0] },
     { type: 'feature', label: "WhatsApp POS", color: "bg-emerald-500/10 text-emerald-300 border-emerald-500/30 backdrop-blur-sm" },
-    { type: 'story', data: stories[1] },
+    { type: 'feature', label: "Sales Tracking", color: "bg-sky-500/10 text-sky-300 border-sky-500/30 backdrop-blur-sm" },
     { type: 'feature', label: "Inventory Sync", color: "bg-amber-500/10 text-amber-300 border-amber-500/30 backdrop-blur-sm" },
-    { type: 'story', data: stories[2] },
+    { type: 'feature', label: "Storefront", color: "bg-orange-500/10 text-orange-300 border-orange-500/30 backdrop-blur-sm" },
+    { type: 'feature', label: "Business Reports", color: "bg-violet-500/10 text-violet-300 border-violet-500/30 backdrop-blur-sm" },
     { type: 'feature', label: "PDF Receipts", color: "bg-sky-500/10 text-sky-300 border-sky-500/30 backdrop-blur-sm" },
   ];
 
@@ -536,31 +478,9 @@ function TeamPlaceholder() {
               style={{ transform: `translate(${x}px, ${y}px)` }}
             >
               <div className="orbit-item h-full w-full flex items-center justify-center">
-                {item.type === 'story' && item.data ? (
-                  <div className="relative flex flex-col items-center">
-                    <Image
-                      src={item.data.image}
-                      alt=""
-                      width={64}
-                      height={64}
-                      className="h-[64px] w-[64px] rounded-full border-4 border-[#1b241e] bg-emerald-100 object-cover shadow-2xl relative z-10"
-                      draggable={false}
-                    />
-                    <div className="absolute top-[72px] w-[150px] rounded-2xl bg-white/95 backdrop-blur-xl p-3 shadow-2xl border border-white/50 pointer-events-none">
-                      <div className="absolute -top-2 left-1/2 -translate-x-1/2 border-x-8 border-x-transparent border-b-8 border-b-white/95" />
-                      <p className="text-[10px] font-bold leading-relaxed text-stone-800 line-clamp-3 text-center">
-                        "{item.data.quote}"
-                      </p>
-                      <p className="mt-2 text-[8px] font-black text-emerald-700 uppercase tracking-widest text-center">
-                        {item.data.name}
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className={`flex whitespace-nowrap px-4 py-2.5 items-center justify-center rounded-2xl border shadow-xl ${item.color}`}>
-                    <span className="text-[11px] font-black uppercase tracking-wider">{item.label}</span>
-                  </div>
-                )}
+                <div className={`flex whitespace-nowrap px-4 py-2.5 items-center justify-center rounded-2xl border shadow-xl ${item.color}`}>
+                  <span className="text-[11px] font-black uppercase tracking-wider">{item.label}</span>
+                </div>
               </div>
             </div>
           );
@@ -628,77 +548,6 @@ function AboutSection() {
               <p className="font-black">WhatsApp</p>
               <p>+234 903 566 4420</p>
             </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function TestimonialsStrip() {
-  const [current, setCurrent] = useState(0);
-  const active = stories[current];
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      setCurrent((value) => (value + 1) % stories.length);
-    }, 5000);
-    return () => window.clearInterval(timer);
-  }, []);
-
-  return (
-    <section id="testimonials" className="bg-[#1f1f1c] py-10 text-white">
-      <div className="mx-auto grid max-w-[1480px] gap-8 px-5 sm:px-10 lg:grid-cols-[220px_1fr] lg:px-20">
-        <div>
-          <h2 className="text-3xl font-black leading-tight" style={handStyle}>
-            From real
-            <br />
-            shop owners.
-          </h2>
-          <div className="mt-4 h-1.5 w-28 rounded-full bg-amber-400" />
-          <p className="mt-4 text-xs font-semibold text-stone-400">Sample merchant stories until approved customer testimonials are added.</p>
-        </div>
-
-        <div className="hidden grid-cols-3 divide-x divide-white/15 lg:grid">
-          {stories.map((story) => (
-            <article key={story.name} className="grid grid-cols-[72px_1fr] gap-5 px-8">
-              <Image src={story.image} alt="" width={72} height={72} className="h-[72px] w-[72px] rounded-full bg-white object-cover" />
-              <div>
-                <p className="text-4xl leading-4 text-white/40">“</p>
-                <p className="text-sm font-semibold leading-6 text-stone-100">{story.quote}</p>
-                <p className="mt-4 text-xs font-black">{story.name}</p>
-                <p className="text-xs text-stone-400">{story.business}</p>
-              </div>
-            </article>
-          ))}
-        </div>
-
-        <div className="rounded-md border border-white/10 bg-white/[0.04] p-5 lg:hidden">
-          <div className="flex items-start gap-4">
-            <Image src={active.image} alt="" width={70} height={70} className="h-[70px] w-[70px] rounded-full bg-white object-cover" />
-            <div>
-              <p className="text-sm font-semibold leading-6">{active.quote}</p>
-              <p className="mt-4 text-xs font-black">{active.name}</p>
-              <p className="text-xs text-stone-400">{active.business}</p>
-            </div>
-          </div>
-          <div className="mt-5 flex justify-end gap-2">
-            <button
-              type="button"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/10"
-              onClick={() => setCurrent((current - 1 + stories.length) % stories.length)}
-              aria-label="Previous story"
-            >
-              <ChevronLeft size={18} />
-            </button>
-            <button
-              type="button"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/10"
-              onClick={() => setCurrent((current + 1) % stories.length)}
-              aria-label="Next story"
-            >
-              <ChevronRight size={18} />
-            </button>
           </div>
         </div>
       </div>
@@ -1029,7 +878,6 @@ export default function LandingPage() {
         <HeroSection whatsappLink={whatsappLink} />
         <TrustStrip />
         <AboutSection />
-        <TestimonialsStrip />
         <PricingBand whatsappLink={whatsappLink} />
         <HowItWorksBand />
         <BusinessManagementSeoBand />
