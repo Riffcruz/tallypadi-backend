@@ -39,6 +39,7 @@ import {
 } from '../services/queue.service';
 import { executeGlobalPushNotification, executePushNotification } from '../services/push.service';
 import { sendWhatsAppDocumentBuffer, sendTypingIndicator, markWhatsAppMessageRead, sendWhatsAppText } from '../services/whatsapp.service';
+import { WhatsAppInboundEvent } from '../models/whatsappInboundEvent.model';
 
 
 import { undoLastSale } from '../services/undo.service';
@@ -721,24 +722,55 @@ export const handleWebhook = async (req: Request, res: Response) => {
 
     const body = req.body;
 
-    if (!body.object || !body.entry?.[0]?.changes?.[0]?.value?.messages?.[0]) {
+    if (!body.object) {
       return;
     }
 
-    const value = body.entry[0].changes[0].value;
-    const msg = value.messages[0];
-    const messageId: string = msg.id;
-    const from = msg.from;
+    const incomingMessages = (body.entry || []).flatMap((entry: any) =>
+      (entry.changes || []).flatMap((change: any) => {
+        const value = change?.value;
+        return (value?.messages || []).map((msg: any) => ({
+          messageId: String(msg.id || ''),
+          from: String(msg.from || ''),
+          rawBody: {
+            object: body.object,
+            entry: [{ ...entry, changes: [{ ...change, value: { ...value, messages: [msg] } }] }],
+          },
+        }));
+      }),
+    ).filter((event: any) => event.messageId && event.from);
 
-    // ✅ Queue inbound processing
-    await messageQueue
-      .add(
-        'process-message',
-        { rawBody: body },
-        { jobId: messageId, removeOnComplete: true }
-      );
-      
-    console.log(`📥 Queued message from ${from}`);
+    await Promise.all(incomingMessages.map(async (event: any) => {
+      try {
+        const stored = await WhatsAppInboundEvent.findOneAndUpdate(
+          { messageId: event.messageId },
+          {
+            $setOnInsert: {
+              messageId: event.messageId,
+              from: event.from,
+              rawBody: event.rawBody,
+              status: 'RECEIVED',
+            },
+          },
+          { upsert: true, new: true },
+        );
+
+        if (stored.status === 'PROCESSED' || stored.status === 'PROCESSING') return;
+
+        await messageQueue.add(
+          'process-message',
+          { rawBody: event.rawBody, inboundEventId: String(stored._id) },
+          { jobId: event.messageId, removeOnComplete: true },
+        );
+        await WhatsAppInboundEvent.updateOne(
+          { _id: stored._id, status: 'RECEIVED' },
+          { $set: { status: 'QUEUED', lastError: null } },
+        );
+        console.log(`📥 Queued message from ${event.from}`);
+      } catch (error: any) {
+        console.error(`❌ Could not persist/queue WhatsApp message ${event.messageId}:`, error?.message || error);
+      }
+    }));
   } catch (err) {
     console.error('❌ Error in webhook receiver:', err);
     // Response already sent

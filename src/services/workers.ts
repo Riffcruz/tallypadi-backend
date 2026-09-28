@@ -1,13 +1,14 @@
 // src/services/queue.worker.ts
 import { Worker } from 'bullmq'; // ✅ Switched to BullMQ
 import axios from 'axios';
-import { createRedisConnection } from './queue.service'; // ✅ Factory for dedicated connections
+import { createRedisConnection, messageQueue } from './queue.service'; // ✅ Factory for dedicated connections
 import { sendWhatsAppText, sendWhatsAppButtons, sendWhatsAppList, sendWhatsAppDocumentBuffer, sendWhatsAppFlow, sendTypingIndicator, sendWhatsAppCtaUrl, sendWhatsAppMediaById } from './whatsapp.service';
 import { generateSaleReceiptPdfBuffer } from '../controllers/receipt.controller';
 import { Invoice } from '../models/invoice.model';
 import { generateInvoicePdf } from './invoice.pdf.service';
 import { User } from '../models/user.model';
 import { SupportMessage } from '../models/supportMessage.model';
+import { WhatsAppInboundEvent } from '../models/whatsappInboundEvent.model';
 import { processRawWebhook, handleMessageLogic } from '../controllers/whatsapp.controller';
 import { executePushNotification, executeGlobalPushNotification } from './push.service';
 import {
@@ -382,14 +383,39 @@ bulkWorker.on('failed', (job: import('bullmq').Job | undefined, err: Error) =>
 export const messageWorker = new Worker(
   'incoming-messages',
   async (job: import('bullmq').Job) => {
-    if (job.data.rawBody) {
-      // ✅ New Path: Raw Webhook
-      await processRawWebhook(job.data.rawBody);
-    } else {
-      // ⚠️ Legacy Path (Drain old jobs)
-      const { from, text, messageId, mediaId, isVoiceMessage, profileName } = job.data;
-      console.log(`⚡ Worker processing ${from} (${messageId})...`);
-      await handleMessageLogic(from, text, messageId, mediaId, isVoiceMessage, profileName);
+    const inboundEventId = job.data.inboundEventId;
+    try {
+      if (inboundEventId) {
+        const claimed = await WhatsAppInboundEvent.findOneAndUpdate(
+          { _id: inboundEventId, status: { $ne: 'PROCESSED' } },
+          { $set: { status: 'PROCESSING', lastError: null } },
+          { new: true },
+        );
+        if (!claimed) return;
+      }
+
+      if (job.data.rawBody) {
+        await processRawWebhook(job.data.rawBody);
+      } else {
+        const { from, text, messageId, mediaId, isVoiceMessage, profileName } = job.data;
+        console.log(`⚡ Worker processing ${from} (${messageId})...`);
+        await handleMessageLogic(from, text, messageId, mediaId, isVoiceMessage, profileName);
+      }
+
+      if (inboundEventId) {
+        await WhatsAppInboundEvent.updateOne(
+          { _id: inboundEventId },
+          { $set: { status: 'PROCESSED', processedAt: new Date(), lastError: null } },
+        );
+      }
+    } catch (error: any) {
+      if (inboundEventId) {
+        await WhatsAppInboundEvent.updateOne(
+          { _id: inboundEventId },
+          { $set: { status: 'FAILED', lastError: String(error?.message || error).slice(0, 1000) } },
+        ).catch(() => {});
+      }
+      throw error;
     }
   },
   {
@@ -402,6 +428,37 @@ messageWorker.on('completed', (job: import('bullmq').Job) => console.log(`✔️
 messageWorker.on('failed', (job: import('bullmq').Job | undefined, err: Error) =>
   console.error(`❌ Message failed: ${err.message}`)
 );
+
+// Redis can be temporarily unavailable after the webhook has already been
+// acknowledged. Requeue durable inbox records without involving Meta or users.
+const inboundRecoveryTimer = setInterval(async () => {
+  try {
+    const pending = await WhatsAppInboundEvent.find({ status: 'RECEIVED' })
+      .sort({ createdAt: 1 })
+      .limit(100)
+      .lean();
+
+    for (const event of pending) {
+      try {
+        await messageQueue.add(
+          'process-message',
+          { rawBody: event.rawBody, inboundEventId: String(event._id) },
+          { jobId: event.messageId, removeOnComplete: true },
+        );
+        await WhatsAppInboundEvent.updateOne(
+          { _id: event._id, status: 'RECEIVED' },
+          { $set: { status: 'QUEUED', lastError: null } },
+        );
+      } catch (error: any) {
+        console.warn(`⚠️ WhatsApp inbox recovery delayed for ${event.messageId}:`, error?.message || error);
+        break;
+      }
+    }
+  } catch (error: any) {
+    console.error('❌ WhatsApp inbox recovery failed:', error?.message || error);
+  }
+}, 15000);
+inboundRecoveryTimer.unref();
 
 // ============================================================
 // WORKER: NOTIFICATIONS (Push)

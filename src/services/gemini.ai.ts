@@ -26,10 +26,50 @@ import type { ParsedResult, InventorySnapshotItem } from './gemini.types';
 // ─── Model init ─────────────────────────────────────────────
 const ai = new GoogleGenAI({ apiKey: env.geminiApiKey });
 
+const AI_TIMEOUT_MS = Math.max(3000, Number(process.env.GEMINI_TIMEOUT_MS || 12000));
+const AI_MEDIA_TIMEOUT_MS = Math.max(AI_TIMEOUT_MS, Number(process.env.GEMINI_MEDIA_TIMEOUT_MS || 45000));
+const AI_MAX_RETRIES = Math.max(0, Math.min(2, Number(process.env.GEMINI_MAX_RETRIES || 1)));
+const AI_MAX_CONCURRENT = Math.max(1, Number(process.env.GEMINI_MAX_CONCURRENT || 12));
+const AI_CIRCUIT_OPEN_MS = Math.max(10000, Number(process.env.GEMINI_CIRCUIT_OPEN_MS || 60000));
+
+let geminiInFlight = 0;
+let geminiCircuitOpenUntil = 0;
+
+class GeminiUnavailableError extends Error {
+  constructor(public readonly reason: 'CIRCUIT_OPEN' | 'BUSY' | 'QUOTA' | 'AUTH' | 'TIMEOUT') {
+    super(`GEMINI_${reason}`);
+    this.name = 'GeminiUnavailableError';
+  }
+}
+
+function errorStatus(error: any): number | undefined {
+  return Number(error?.status || error?.code || error?.response?.status || error?.error?.code) || undefined;
+}
+
+function errorText(error: any): string {
+  return String(error?.message || error?.response?.data?.error?.message || '').toLowerCase();
+}
+
+function classifyGeminiError(error: any): 'QUOTA' | 'AUTH' | 'TIMEOUT' | 'RETRYABLE' | 'PERMANENT' {
+  if (error instanceof GeminiUnavailableError) return error.reason === 'TIMEOUT' ? 'TIMEOUT' : 'PERMANENT';
+  const status = errorStatus(error);
+  const text = errorText(error);
+  if (status === 429 || text.includes('quota') || text.includes('resource_exhausted') || text.includes('credit')) return 'QUOTA';
+  if (status === 401 || status === 403 || text.includes('api key')) return 'AUTH';
+  if (text.includes('timeout') || text.includes('timed out')) return 'TIMEOUT';
+  if (!status || status === 408 || status >= 500) return 'RETRYABLE';
+  return 'PERMANENT';
+}
+
+function openGeminiCircuit(reason: string) {
+  geminiCircuitOpenUntil = Date.now() + AI_CIRCUIT_OPEN_MS;
+  console.warn(`[Gemini] Circuit opened for ${AI_CIRCUIT_OPEN_MS}ms (${reason}).`);
+}
+
 // ─── Timeout wrapper ─────────────────────────────────────────
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('TIMEOUT')), ms);
+    const timer = setTimeout(() => reject(new GeminiUnavailableError('TIMEOUT')), ms);
     promise
       .then((value) => { clearTimeout(timer); resolve(value); })
       .catch((err) => { clearTimeout(timer); reject(err); });
@@ -39,19 +79,28 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 // ─── Retry with exponential backoff ─────────────────────────
 async function interactionsWithRetry(
   params: Parameters<typeof ai.interactions.create>[0] & { stream?: false },
-  retries = 3,
-  timeoutMs = 90000
+  retries = AI_MAX_RETRIES,
+  timeoutMs = AI_TIMEOUT_MS
 ) {
+  if (Date.now() < geminiCircuitOpenUntil) throw new GeminiUnavailableError('CIRCUIT_OPEN');
+  if (geminiInFlight >= AI_MAX_CONCURRENT) throw new GeminiUnavailableError('BUSY');
+
   for (let i = 0; i <= retries; i++) {
     try {
       // Explicitly non-streaming so TypeScript resolves to GoogleGenAIInteraction
-      const result = await withTimeout(
-        ai.interactions.create({ ...params, stream: false }),
-        timeoutMs
-      );
+      geminiInFlight += 1;
+      const request = ai.interactions
+        .create({ ...params, stream: false })
+        .finally(() => { geminiInFlight = Math.max(0, geminiInFlight - 1); });
+      const result = await withTimeout(request, timeoutMs);
       return result;
     } catch (err: unknown) {
-      if (i === retries) throw err;
+      const kind = classifyGeminiError(err);
+      if (kind === 'QUOTA' || kind === 'AUTH') {
+        openGeminiCircuit(kind);
+        throw new GeminiUnavailableError(kind);
+      }
+      if (kind !== 'RETRYABLE' || i === retries) throw err;
       const baseDelay = 1000 * Math.pow(2, i);
       const jitter = Math.floor(Math.random() * 500);
       const waitTime = baseDelay + jitter;
@@ -313,8 +362,10 @@ export const parseMessageWithGemini = async (
   inventoryContext?: InventorySnapshotItem[], // ← capped at 50 in buildInventoryContext
   options?: { maxRetries?: number; timeoutMs?: number },
 ): Promise<ParsedResult> => {
-  const maxRetries = options?.maxRetries ?? 3;
-  const timeoutMs = options?.timeoutMs ?? 90000;
+  const maxRetries = options?.maxRetries ?? AI_MAX_RETRIES;
+  // Images and voice notes need more model time. PDF/invoice rendering happens
+  // in its own queue and is deliberately not governed by this AI timeout.
+  const timeoutMs = options?.timeoutMs ?? (imageBuffer ? AI_MEDIA_TIMEOUT_MS : AI_TIMEOUT_MS);
 
   const stripped = stripWhatsAppExportLine(message);
   const safeMessage = sanitizeInput(stripped);
