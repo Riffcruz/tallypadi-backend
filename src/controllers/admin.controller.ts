@@ -513,9 +513,11 @@ export const getUserDeepDive = async (req: Request, res: Response) => {
     const user = await User.findById(id);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    const ownerId = user.role === 'OWNER' ? user._id : user.ownerId;
+    const normalizedRole = String(user.role || '').toUpperCase();
     const linkedOwner = user.ownerId ? await User.findById(user.ownerId).select('_id').lean() : null;
-    if (String(user.role || '').toUpperCase() === 'STAFF' && (!ownerId || !linkedOwner)) {
+    const hasBrokenStaffLink = normalizedRole === 'STAFF' && (!user.ownerId || !linkedOwner);
+    const hasDanglingOwnerLink = Boolean(user.ownerId && !linkedOwner);
+    if (hasBrokenStaffLink || hasDanglingOwnerLink) {
       return res.json({
         profile: user,
         staff: [],
@@ -526,7 +528,10 @@ export const getUserDeepDive = async (req: Request, res: Response) => {
         linkedAccount: true,
       });
     }
-    if (!ownerId) return res.status(400).json({ error: 'OwnerId not found' });
+    // Very old records may have neither a modern role nor ownerId. Admin tools
+    // treat those standalone records as their own account so they remain
+    // inspectable and deletable instead of returning a permanent 400.
+    const ownerId = normalizedRole === 'OWNER' || !user.ownerId ? user._id : user.ownerId;
 
     // Find all users linked to this owner, EXCLUDING the owner themselves
     const staff = await User.find({ ownerId, _id: { $ne: ownerId } });
@@ -610,8 +615,9 @@ export const manageUser = async (req: Request, res: Response) => {
     const user = await User.findById(id);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    const ownerId = user.role === 'OWNER' ? user._id : user.ownerId;
-    if (!ownerId) return res.status(400).json({ error: 'OwnerId not found' });
+    const ownerId = String(user.role || '').toUpperCase() === 'OWNER' || !user.ownerId
+      ? user._id
+      : user.ownerId;
 
     const staffIds = await User.find({ ownerId, role: 'STAFF' }).distinct('_id');
     const allUserIds = [ownerId, ...staffIds];
