@@ -8,6 +8,7 @@ const {
 const {
   getReceiptPaymentSummary,
   buildReceiptContactLines,
+  getReceiptPageWidth,
 } = require('../dist/controllers/receipt.controller');
 const { applyPaymentToDebts } = require('../dist/services/debt.service');
 const { Debtor } = require('../dist/models/debtor.model');
@@ -198,4 +199,10 @@ test('receipt contact lines include phone and configured address only when set',
   );
 
   assert.deepEqual(buildReceiptContactLines({ settings: { location: {} } }), []);
+});
+
+test('thermal receipt widths match common 58mm and 80mm POS paper', () => {
+  assert.equal(getReceiptPageWidth('thermal58'), 164.4);
+  assert.equal(getReceiptPageWidth('thermal'), 226.8);
+  assert.equal(getReceiptPageWidth('A4'), 595.28);
 });

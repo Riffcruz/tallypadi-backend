@@ -2,9 +2,10 @@ import { Request, Response } from 'express';
 import { User } from '../models/user.model';
 import { Inventory } from '../models/inventory.model';
 import { Transaction } from '../models/transaction.model';
-import { Types } from 'mongoose';
+import mongoose, { Types } from 'mongoose';
 import bcrypt from 'bcryptjs';
 import { buildMarketplaceProductSeo } from '../services/marketplaceSeo.service';
+import { StockTransfer } from '../models/stockTransfer.model';
 
 // --- Helpers ---
 const getAuthUser = async (req: Request) => {
@@ -159,6 +160,7 @@ export const getHqDashboard = async (req: Request, res: Response) => {
 // POST /hq/transfer
 // Move stock from Branch A to Branch B
 export const transferStock = async (req: Request, res: Response) => {
+    const session = await mongoose.startSession();
     try {
         const { fromBranchId, toBranchId, itemName, quantity } = req.body;
         const user = await getAuthUser(req);
@@ -174,14 +176,15 @@ export const transferStock = async (req: Request, res: Response) => {
 
         const hqId = (user.role === 'STAFF') ? user.ownerId : user._id;
 
-        if (!fromBranchId || !toBranchId || !itemName || !quantity || quantity <= 0) {
+        const transferQuantity = Number(quantity);
+        if (!fromBranchId || !toBranchId || !itemName || !Number.isSafeInteger(transferQuantity) || transferQuantity <= 0 || fromBranchId === toBranchId) {
             return res.status(400).json({ error: 'Invalid transfer details' });
         }
 
         // Verify ownership of branches
         const [fromBranch, toBranch] = await Promise.all([
-            User.findOne({ _id: fromBranchId, hqId: hqId }),
-            User.findOne({ _id: toBranchId, hqId: hqId })
+            User.findOne({ _id: fromBranchId, $or: [{ _id: hqId }, { hqId }] }),
+            User.findOne({ _id: toBranchId, $or: [{ _id: hqId }, { hqId }] })
         ]);
 
         if (!fromBranch || !toBranch) {
@@ -189,59 +192,57 @@ export const transferStock = async (req: Request, res: Response) => {
         }
 
         // Find Item in Source
-        const sourceItem = await Inventory.findOne({ user: fromBranch._id, name: itemName.toLowerCase() });
-        if (!sourceItem || sourceItem.quantity < quantity) {
+        const normalizedItemName = cleanBranchText(itemName, 200).toLowerCase();
+        const sourceItem = await Inventory.findOne({ user: fromBranch._id, name: normalizedItemName, isDeleted: { $ne: true } });
+        if (!sourceItem || sourceItem.quantity < transferQuantity) {
             return res.status(400).json({ error: `Insufficient stock of "${itemName}" in ${fromBranch.businessName}. Available: ${sourceItem?.quantity || 0}` });
         }
+        await session.withTransaction(async () => {
+            const updatedSource = await Inventory.findOneAndUpdate(
+                { _id: sourceItem._id, quantity: { $gte: transferQuantity }, isDeleted: { $ne: true } },
+                { $inc: { quantity: -transferQuantity } },
+                { new: true, session }
+            );
+            if (!updatedSource) throw Object.assign(new Error('Stock changed before this transfer completed. Please try again.'), { status: 409 });
 
-        // Decrement Source
-        sourceItem.quantity -= quantity;
-        await sourceItem.save();
+            const destItem = await Inventory.findOne({ user: toBranch._id, name: normalizedItemName, isDeleted: { $ne: true } }).session(session);
+            if (destItem) {
+                destItem.quantity += transferQuantity;
+                destItem.marketplaceSeo = buildMarketplaceProductSeo(destItem, toBranch);
+                await destItem.save({ session });
+            } else {
+                const newProduct = { user: toBranch._id, name: normalizedItemName, quantity: transferQuantity, lastUnitPrice: sourceItem.lastUnitPrice, costPrice: sourceItem.costPrice, category: sourceItem.category, image: sourceItem.image };
+                await Inventory.create([{ ...newProduct, marketplaceSeo: buildMarketplaceProductSeo(newProduct, toBranch) }], { session });
+            }
 
-        // Increment/Create Dest
-        let destItem = await Inventory.findOne({ user: toBranch._id, name: itemName.toLowerCase() });
-        if (destItem) {
-            destItem.quantity += quantity;
-            // Optionally average cost price? Keeping it simple for now.
-            destItem.marketplaceSeo = buildMarketplaceProductSeo(destItem, toBranch);
-            await destItem.save();
-        } else {
-            // Create new item in dest branch
-            // Copy properties from source
-            const newProduct = {
-                user: toBranch._id,
-                name: itemName.toLowerCase(),
-                quantity: quantity,
-                lastUnitPrice: sourceItem.lastUnitPrice,
-                costPrice: sourceItem.costPrice,
-                category: sourceItem.category,
-                image: sourceItem.image
-            };
-            await Inventory.create({
-                ...newProduct,
-                marketplaceSeo: buildMarketplaceProductSeo(newProduct, toBranch),
-            });
-        }
-
-        // Log Transfer Transaction? (Ideally yes, but keeping it simple for MVP)
-        // Creating a 'TRANSFER' transaction record would be good for audit trails.
-        
-        await Transaction.create({
-            user: hqId, // Logged under HQ
-            // Let's create a special transaction for audit
-            type: 'TRANSFER',
-            totalMoney: 0,
-            items: [{ name: itemName, qty: quantity, unitPrice: sourceItem.lastUnitPrice }],
-            timestamp: new Date(),
-            date: new Date().toISOString().split('T')[0],
-            notes: `Transfer from ${fromBranch.businessName} to ${toBranch.businessName} by ${user.name}`
+            const now = new Date();
+            await Transaction.create([{
+                user: hqId, type: 'TRANSFER', totalMoney: 0,
+                items: [{ name: normalizedItemName, itemId: sourceItem._id, qty: transferQuantity, unit: '', unitPrice: sourceItem.lastUnitPrice, costPrice: sourceItem.costPrice, total: 0 }],
+                timestamp: now, date: now.toISOString().split('T')[0],
+                notes: `Transfer from ${fromBranch.businessName} to ${toBranch.businessName} by ${user.name}`
+            }], { session });
+            const reference = `TRF-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`.toUpperCase();
+            await StockTransfer.create([{
+                hq: hqId, reference, fromLocation: fromBranch._id, toLocation: toBranch._id,
+                item: sourceItem._id, itemName: normalizedItemName, quantity: transferQuantity,
+                status: 'RECEIVED', requestedBy: user._id, approvedBy: user._id,
+                dispatchedBy: user._id, receivedBy: user._id, approvedAt: now,
+                dispatchedAt: now, receivedAt: now,
+                events: ['REQUESTED', 'APPROVED', 'DISPATCHED', 'RECEIVED'].map((action) => ({ action, actor: user._id, at: now })),
+            }], { session });
         });
 
-        return res.json({ success: true, message: `Transferred ${quantity} ${itemName} from ${fromBranch.businessName} to ${toBranch.businessName}` });
+        return res.json({ success: true, message: `Transferred ${transferQuantity} ${itemName} from ${fromBranch.businessName} to ${toBranch.businessName}` });
 
-    } catch (error) {
+    } catch (error: any) {
         console.error('HQ Transfer Error:', error);
-        return res.status(500).json({ error: 'Server Error' });
+        if (/Transaction numbers are only allowed|replica set|mongos/i.test(String(error?.message || ''))) {
+            return res.status(503).json({ error: 'Safe stock transfers require MongoDB replica-set transactions. No stock was changed.' });
+        }
+        return res.status(error?.status || 500).json({ error: error?.status ? error.message : 'Server Error' });
+    } finally {
+        await session.endSession();
     }
 };
 

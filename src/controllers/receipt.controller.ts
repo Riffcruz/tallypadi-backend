@@ -41,6 +41,10 @@ const THEME = {
 };
 
 type PdfDoc = InstanceType<typeof PDFDocument>;
+type ReceiptFormat = 'A4' | 'thermal' | 'thermal58';
+
+export const getReceiptPageWidth = (format: ReceiptFormat) =>
+  format === 'thermal58' ? 164.4 : format === 'thermal' ? 226.8 : 595.28;
 
 // ✅ REQUIRED FORMAT: 22/12/2025 14:05
 function fmtDDMMYYYY_HHMM(d: Date, offsetMinutes: number) {
@@ -216,7 +220,7 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
   regFont: string;
   boldFont: string;
   tx: any;
-  format: 'A4' | 'thermal';
+  format: ReceiptFormat;
   exactHeight?: number;
   contactLines?: string[];
   logoBuffer?: Buffer;
@@ -254,21 +258,22 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
       maximumFractionDigits: 0,
     }).format(Number(n || 0));
 
-  // --- Theme ---
+  const isThermal = format !== 'A4';
+  const is58mm = format === 'thermal58';
+
+  // Thermal printers produce the sharpest output with pure black lines and text.
   const THEME_INVOICE = {
     primary: '#0F766E', // Teal
     accent: '#14B8A6',
-    dark: '#1E293B',
-    text: '#334155',
-    muted: '#64748B',
-    border: '#E2E8F0',
+    dark: isThermal ? '#000000' : '#1E293B',
+    text: isThermal ? '#000000' : '#334155',
+    muted: isThermal ? '#000000' : '#64748B',
+    border: isThermal ? '#000000' : '#E2E8F0',
     bgLight: '#F8FAFC',
     bgHeader: '#F1F5F9',
     white: '#FFFFFF',
     alert: '#EF4444',
   };
-
-  const isThermal = format === 'thermal';
 
   // --- Page Setup ---
   let pageW = 595.28; // A4
@@ -278,10 +283,10 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
   let sideMargin = 40;
 
   if (isThermal) {
-      pageW = 226; // ~80mm
-      topMargin = 10;
+      pageW = getReceiptPageWidth(format); // exact 58mm / 80mm in PDF points
+      topMargin = 8;
       bottomMargin = 0; // Set to 0 to completely disable auto-pagination near bottom
-      sideMargin = 10;
+      sideMargin = is58mm ? 7 : 9;
       if (payload.exactHeight) {
           pageH = payload.exactHeight;
       } else {
@@ -307,7 +312,7 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
   const margin = sideMargin;
 
   // --- HEADER ---
-  let y = isThermal ? 10 : 40;
+  let y = isThermal ? 8 : 40;
   
   if (!isThermal) {
       // Soft header background strip for A4
@@ -317,7 +322,7 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
   }
 
   // Business name + title
-  const headerFontSize = isThermal ? 14 : 22;
+  const headerFontSize = isThermal ? (is58mm ? 12 : 14) : 22;
   doc.fillColor(THEME_INVOICE.dark).font(boldFont).fontSize(headerFontSize).text(businessName.toUpperCase(), margin, y, {
       align: isThermal ? 'center' : 'left',
       width: isThermal ? contentW : undefined
@@ -326,21 +331,21 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
   y += doc.heightOfString(businessName.toUpperCase(), { width: isThermal ? contentW : undefined }) + 5;
 
   if (isThermal) {
-      doc.fillColor(THEME_INVOICE.text).font(regFont).fontSize(10).text('RECEIPT', margin, y, { align: 'center', width: contentW });
-      y += 15;
+      doc.fillColor(THEME_INVOICE.text).font(boldFont).fontSize(is58mm ? 8 : 9).text('SALES RECEIPT', margin, y, { align: 'center', width: contentW });
+      y += 13;
       
       // Meta
-      doc.fontSize(9).font(regFont);
+      doc.fontSize(is58mm ? 7 : 8).font(regFont);
       doc.text(receiptDate, margin, y, { align: 'center', width: contentW });
-      y += 12;
+      y += 11;
       doc.text(receiptNo, margin, y, { align: 'center', width: contentW });
-      y += 12;
+      y += 11;
       doc.text(`Customer: ${tx.customerName || 'Guest'}`, margin, y, { align: 'center', width: contentW });
-      y += 20;
+      y += 16;
 
       // Divider
-      doc.moveTo(margin, y).lineTo(pageW - margin, y).strokeColor(THEME_INVOICE.border).stroke();
-      y += 10;
+      doc.lineWidth(0.8).moveTo(margin, y).lineTo(pageW - margin, y).strokeColor(THEME_INVOICE.border).stroke();
+      y += 7;
 
   } else {
       // A4 Header continues
@@ -418,10 +423,10 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
   }
 
   // --- TABLE ---
-  const tableHeaderHeight = isThermal ? 20 : 32;
-  const cellPadX = isThermal ? 4 : 8;
+  const tableHeaderHeight = isThermal ? 18 : 32;
+  const cellPadX = isThermal ? 2 : 8;
   const cellPadY = isThermal ? 4 : 7;
-  const fontSizeBody = isThermal ? 9 : 10;
+  const fontSizeBody = isThermal ? (is58mm ? 7 : 8) : 10;
 
   // Columns
   let colW: any;
@@ -429,10 +434,10 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
 
   if (isThermal) {
       colW = {
-        desc: contentW * 0.5,
-        qty: contentW * 0.15,
+        desc: contentW * (is58mm ? 0.45 : 0.48),
+        qty: contentW * (is58mm ? 0.13 : 0.12),
         unit: 0, // skip unit price column if tight, or keep small
-        total: contentW * 0.35,
+        total: contentW * (is58mm ? 0.42 : 0.4),
       };
       colX = {
         desc: margin,
@@ -466,13 +471,13 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
       y += tableHeaderHeight + 2;
   } else {
       // Thermal Header
-      doc.font(boldFont).fontSize(9).fillColor(THEME_INVOICE.dark);
-      doc.text('Item', colX.desc, y, { width: colW.desc });
+      doc.font(boldFont).fontSize(is58mm ? 7 : 8).fillColor(THEME_INVOICE.dark);
+      doc.text('ITEM', colX.desc + cellPadX, y, { width: colW.desc - cellPadX });
       doc.text('Qty', colX.qty, y, { width: colW.qty, align: 'center' });
-      doc.text('Total', colX.total, y, { width: colW.total, align: 'right' });
-      y += 12;
-      doc.moveTo(margin, y).lineTo(pageW - margin, y).strokeColor(THEME_INVOICE.border).stroke();
-      y += 8;
+      doc.text('AMOUNT', colX.total, y, { width: colW.total - cellPadX, align: 'right' });
+      y += 11;
+      doc.lineWidth(0.8).moveTo(margin, y).lineTo(pageW - margin, y).strokeColor(THEME_INVOICE.border).stroke();
+      y += 5;
   }
 
   // Items
@@ -489,7 +494,7 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
     
     // Auto height
     const descH = doc.heightOfString(desc, { width: colW.desc - cellPadX * 2 });
-    const rowH = Math.max(isThermal ? 16 : 28, Math.ceil(descH + cellPadY * 2));
+    const rowH = Math.max(isThermal ? 18 : 28, Math.ceil(descH + cellPadY * 2));
 
     // Pagination check
     // Ensure thermal and A4 NEVER paginate by removing the pageH check for it entirely
@@ -506,9 +511,12 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
     doc.fillColor(THEME_INVOICE.dark).font(regFont).fontSize(fontSizeBody);
     
     if (isThermal) {
-        doc.text(desc, colX.desc, y, { width: colW.desc });
-        doc.text(String(qty), colX.qty, y, { width: colW.qty, align: 'center' });
-        doc.text(formatMoney(lineTotal), colX.total, y, { width: colW.total, align: 'right' });
+        doc.font(boldFont).fontSize(fontSizeBody).text(desc, colX.desc + cellPadX, y + 2, { width: colW.desc - cellPadX * 2 });
+        doc.font(regFont).fontSize(fontSizeBody).text(String(qty), colX.qty, y + 2, { width: colW.qty, align: 'center' });
+        const lineAmount = formatMoney(lineTotal);
+        const amountSize = fitTextWidth(doc, lineAmount, colW.total - cellPadX * 2, fontSizeBody, 6);
+        doc.font(regFont).fontSize(amountSize).text(lineAmount, colX.total + cellPadX, y + 2, { width: colW.total - cellPadX * 2, align: 'right', lineBreak: false });
+        doc.lineWidth(0.35).moveTo(margin, y + rowH).lineTo(pageW - margin, y + rowH).strokeColor('#777777').stroke();
     } else {
         doc.text(desc, colX.desc + cellPadX, y + cellPadY, { width: colW.desc - cellPadX * 2 });
         doc.text(String(qty), colX.qty + cellPadX, y + cellPadY, { width: colW.qty - cellPadX * 2, align: 'center' });
@@ -520,7 +528,7 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
   });
 
   // --- TOTALS ---
-  y += 16;
+  y += isThermal ? 8 : 16;
 
   const paymentSummary = getReceiptPaymentSummary(tx, computedTotal);
   const totalMoney = paymentSummary.total;
@@ -531,11 +539,12 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
   const pointsEarned = Number(tx.pointsEarned ?? 0);
 
   if (isThermal) {
-      doc.moveTo(margin, y).lineTo(pageW - margin, y).strokeColor(THEME_INVOICE.border).stroke();
-      y += 10;
+      doc.lineWidth(1).moveTo(margin, y).lineTo(pageW - margin, y).strokeColor(THEME_INVOICE.border).stroke();
+      doc.moveTo(margin, y + 3).lineTo(pageW - margin, y + 3).stroke();
+      y += 9;
       
       if (discount > 0) {
-        doc.font(regFont).fontSize(10).fillColor(THEME_INVOICE.dark);
+        doc.font(regFont).fontSize(is58mm ? 8 : 9).fillColor(THEME_INVOICE.dark);
         doc.text(`Subtotal: ${formatMoney(totalMoney)}`, margin, y, { align: 'right', width: contentW });
         y += 14;
         doc.text(`Discount: -${formatMoney(discount)}`, margin, y, { align: 'right', width: contentW });
@@ -543,17 +552,19 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
       }
       
       if (hasOutstanding) {
-        doc.font(regFont).fontSize(10).fillColor(THEME_INVOICE.dark);
+        doc.font(regFont).fontSize(is58mm ? 8 : 9).fillColor(THEME_INVOICE.dark);
         doc.text(`Total: ${formatMoney(totalMoney)}`, margin, y, { align: 'right', width: contentW });
         y += 14;
         doc.text(`Total paid: ${formatMoney(netTotal)}`, margin, y, { align: 'right', width: contentW });
         y += 14;
-        doc.font(boldFont).fontSize(11).fillColor(THEME_INVOICE.alert);
+        doc.font(boldFont).fontSize(is58mm ? 9 : 10).fillColor(THEME_INVOICE.dark);
         doc.text(`Outstanding: ${formatMoney(outstanding)}`, margin, y, { align: 'right', width: contentW });
         y += 20;
       } else {
-        doc.font(boldFont).fontSize(12).fillColor(THEME_INVOICE.dark);
-        doc.text(`TOTAL: ${formatMoney(netTotal)}`, margin, y, { align: 'right', width: contentW });
+        const totalText = `TOTAL  ${formatMoney(netTotal)}`;
+        const totalSize = fitTextWidth(doc, totalText, contentW, is58mm ? 10 : 12, 8);
+        doc.font(boldFont).fontSize(totalSize).fillColor(THEME_INVOICE.dark);
+        doc.text(totalText, margin, y, { align: 'right', width: contentW, lineBreak: false });
         y += 20;
       }
       
@@ -614,11 +625,11 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
   
   if (isThermal) {
       y += 10;
-      doc.font(regFont).fontSize(8).fillColor(THEME_INVOICE.muted);
+      doc.font(regFont).fontSize(is58mm ? 7 : 8).fillColor(THEME_INVOICE.muted);
       doc.text(`Served by: ${cashierName}`, margin, y, { align: 'center', width: contentW });
       y += 12;
       contactLines.forEach((line) => {
-        doc.font(regFont).fontSize(7).fillColor(THEME_INVOICE.muted);
+        doc.font(regFont).fontSize(is58mm ? 6 : 7).fillColor(THEME_INVOICE.muted);
         const lineH = doc.heightOfString(line, { width: contentW, align: 'center' });
         doc.text(line, margin, y, { align: 'center', width: contentW });
         y += lineH + 4;
@@ -644,7 +655,7 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
   return y;
 }
 
-export const generateSaleReceiptPdfBuffer = async (userId: string, saleId: string, format: 'A4' | 'thermal' = 'A4') => {
+export const generateSaleReceiptPdfBuffer = async (userId: string, saleId: string, format: ReceiptFormat = 'A4') => {
   const requester: any = await User.findById(userId).lean();
   if (!requester) throw new Error('User not found');
 
@@ -758,7 +769,8 @@ export const generateSaleReceiptPdf = async (req: Request | any, res: Response) 
 
     const saleId = String(req.params.saleId || '').trim();
     if (!saleId) return res.status(400).json({ error: 'Missing saleId' });
-    const format = String(req.query.format).toLowerCase() === 'thermal' ? 'thermal' : 'A4';
+    const requestedFormat = String(req.query.format || '').toLowerCase();
+    const format: ReceiptFormat = requestedFormat === 'thermal58' ? 'thermal58' : requestedFormat === 'thermal' ? 'thermal' : 'A4';
 
     const user: any = await User.findById(userId).lean();
     if (!user) return res.status(404).json({ error: 'User not found' });
@@ -802,7 +814,7 @@ export const generateSaleReceiptPdf = async (req: Request | any, res: Response) 
     const receiptNo = makeReceiptNo(saleId, when, offsetMinutes);
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename=Receipt_${saleId}${format === 'thermal' ? '_thermal' : ''}.pdf`);
+    res.setHeader('Content-Disposition', `attachment; filename=Receipt_${saleId}${format !== 'A4' ? `_${format}` : ''}.pdf`);
 
     // Fetch brand logo
     let logoBuffer: Buffer | undefined;

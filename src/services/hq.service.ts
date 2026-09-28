@@ -1,8 +1,9 @@
 import { User } from '../models/user.model';
 import { Inventory } from '../models/inventory.model';
 import { Transaction } from '../models/transaction.model';
-import { Types } from 'mongoose';
+import mongoose, { Types } from 'mongoose';
 import { buildMarketplaceProductSeo } from './marketplaceSeo.service';
+import { StockTransfer } from '../models/stockTransfer.model';
 
 export const hqService = {
   // Get all branches for an HQ user
@@ -100,6 +101,7 @@ export const hqService = {
 
   // Transfer stock logic
   transferStock: async (hqUserId: string, fromBranchName: string, toBranchName: string, itemName: string, quantity: number) => {
+    if (!Number.isSafeInteger(quantity) || quantity < 1) throw new Error('Transfer quantity must be a positive whole number.');
     // Fuzzy match branch names
     const branches = await User.find({ hqId: hqUserId, role: 'OWNER' });
     
@@ -120,41 +122,40 @@ export const hqService = {
         throw new Error(`Insufficient stock of "${itemName}" in ${fromBranch.businessName}. Available: ${sourceItem?.quantity || 0}`);
     }
 
-    // Perform transfer
-    sourceItem.quantity -= quantity;
-    await sourceItem.save();
+    const session = await mongoose.startSession();
+    try {
+      await session.withTransaction(async () => {
+        const updatedSource = await Inventory.findOneAndUpdate(
+          { _id: sourceItem._id, quantity: { $gte: quantity }, isDeleted: { $ne: true } },
+          { $inc: { quantity: -quantity } },
+          { new: true, session }
+        );
+        if (!updatedSource) throw new Error('Stock changed before this transfer completed. Please try again.');
 
-    let destItem = await Inventory.findOne({ user: toBranch._id, name: itemName.toLowerCase() });
-    if (destItem) {
-        destItem.quantity += quantity;
-        destItem.marketplaceSeo = buildMarketplaceProductSeo(destItem, toBranch);
-        await destItem.save();
-    } else {
-        const newProduct = {
-            user: toBranch._id,
-            name: itemName.toLowerCase(),
-            quantity: quantity,
-            lastUnitPrice: sourceItem.lastUnitPrice,
-            costPrice: sourceItem.costPrice,
-            category: sourceItem.category,
-            image: sourceItem.image
-        };
-        await Inventory.create({
-            ...newProduct,
-            marketplaceSeo: buildMarketplaceProductSeo(newProduct, toBranch),
-        });
+        const destItem = await Inventory.findOne({ user: toBranch._id, name: itemName.toLowerCase(), isDeleted: { $ne: true } }).session(session);
+        if (destItem) {
+          destItem.quantity += quantity;
+          destItem.marketplaceSeo = buildMarketplaceProductSeo(destItem, toBranch);
+          await destItem.save({ session });
+        } else {
+          const newProduct = { user: toBranch._id, name: itemName.toLowerCase(), quantity, lastUnitPrice: sourceItem.lastUnitPrice, costPrice: sourceItem.costPrice, category: sourceItem.category, image: sourceItem.image };
+          await Inventory.create([{ ...newProduct, marketplaceSeo: buildMarketplaceProductSeo(newProduct, toBranch) }], { session });
+        }
+
+        const now = new Date();
+        await Transaction.create([{ user: hqUserId, type: 'TRANSFER', totalMoney: 0, items: [{ name: itemName, itemId: sourceItem._id, qty: quantity, unit: '', unitPrice: sourceItem.lastUnitPrice, costPrice: sourceItem.costPrice, total: 0 }], timestamp: now, date: now.toISOString().split('T')[0], notes: `Transfer from ${fromBranch.businessName} to ${toBranch.businessName}` }], { session });
+        await StockTransfer.create([{
+          hq: hqUserId, reference: `TRF-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`.toUpperCase(),
+          fromLocation: fromBranch._id, toLocation: toBranch._id, item: sourceItem._id,
+          itemName: itemName.toLowerCase(), quantity, status: 'RECEIVED', requestedBy: hqUserId,
+          approvedBy: hqUserId, dispatchedBy: hqUserId, receivedBy: hqUserId,
+          approvedAt: now, dispatchedAt: now, receivedAt: now,
+          events: ['REQUESTED', 'APPROVED', 'DISPATCHED', 'RECEIVED'].map(action => ({ action, actor: hqUserId, at: now })),
+        }], { session });
+      });
+    } finally {
+      await session.endSession();
     }
-
-    // Log transaction
-    await Transaction.create({
-        user: hqUserId, 
-        type: 'TRANSFER',
-        totalMoney: 0,
-        items: [{ name: itemName, qty: quantity, unitPrice: sourceItem.lastUnitPrice }],
-        timestamp: new Date(),
-        date: new Date().toISOString().split('T')[0],
-        notes: `Transfer from ${fromBranch.businessName} to ${toBranch.businessName}` // Store notes if schema allows or rely on type
-    });
 
     return { success: true, fromBranch: fromBranch.businessName, toBranch: toBranch.businessName };
   }

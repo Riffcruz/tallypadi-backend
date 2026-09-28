@@ -258,7 +258,8 @@ export default function SalesHistory({ user }: { user: UserProfile | null }) {
       input: 'radio',
       inputOptions: {
         standard: 'Standard (A4)',
-        thermal: 'Thermal (80mm)'
+        thermal: 'Thermal (80mm)',
+        thermal58: 'Thermal (58mm)'
       },
       inputValue: 'thermal',
       confirmButtonText: 'Download',

@@ -172,7 +172,7 @@ export default function Sidebar() {
             {/* Warehouse / HQ */}
             <Link href="/hq/dashboard" className={linkClass('/hq/dashboard')}>
               <Store size={18} className={iconClass('/hq/dashboard')} />
-              <span>Warehouse</span>
+              <span>Stock Hub</span>
             </Link>
 
             {/* Online Store */}

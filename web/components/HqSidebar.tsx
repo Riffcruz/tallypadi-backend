@@ -17,9 +17,9 @@ export default function HqSidebar() {
   };
 
   const menuItems = [
-    { href: '/hq/dashboard', icon: LayoutDashboard, label: 'HQ Dashboard' },
-    { href: '/hq/branches', icon: Store, label: 'Branches' },
-    { href: '/hq/inventory', icon: ArrowRightLeft, label: 'Transfers' },
+    { href: '/hq/dashboard', icon: LayoutDashboard, label: 'Overview' },
+    { href: '/hq/inventory', icon: ArrowRightLeft, label: 'Stock Hub' },
+    { href: '/hq/branches', icon: Store, label: 'Locations' },
     { href: '/dashboard', icon: Store, label: 'Switch to Shop' },
     { href: '/settings', icon: Settings, label: 'Settings' },
   ];
@@ -30,7 +30,7 @@ export default function HqSidebar() {
       {/* Brand Header */}
       <div className="p-6 border-b border-slate-800 flex items-center gap-2 shrink-0">
         <div className="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center text-white font-bold text-xl">H</div>
-        <span className="font-bold text-xl text-white">TallyPadi HQ</span>
+        <span className="font-bold text-xl text-white">Stock Hub</span>
       </div>
       
       {/* Navigation Links */}

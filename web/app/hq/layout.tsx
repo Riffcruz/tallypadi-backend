@@ -36,7 +36,7 @@ export default function HqLayout({ children }: { children: React.ReactNode }) {
             >
               <Menu className="w-6 h-6" />
             </button>
-            <span className="font-bold text-lg">HQ Dashboard</span>
+            <span className="font-bold text-lg">Stock Hub</span>
         </div>
         
         {children}

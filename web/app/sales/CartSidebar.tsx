@@ -142,7 +142,7 @@ async function presentPdfActions(url: string, fileName: string) {
  * ✅ IMPORTANT:
  * Fetch receipt ONLY for this saleId (NOT /sales/report).
  */
-async function fetchReceiptPdfForSale(token: string, saleId?: string, directReceiptUrl?: string, isThermal?: boolean) {
+async function fetchReceiptPdfForSale(token: string, saleId?: string, directReceiptUrl?: string, receiptFormat: 'standard' | 'thermal' | 'thermal58' = 'thermal') {
   if (!saleId && !directReceiptUrl) {
     throw new Error('Missing saleId from checkout response. Backend must return saleId.');
   }
@@ -150,7 +150,9 @@ async function fetchReceiptPdfForSale(token: string, saleId?: string, directRece
   // 1) If backend returned a direct receipt URL
   if (directReceiptUrl) {
     // if relative, make absolute
-    const url = directReceiptUrl.startsWith('/') ? `${window.location.origin}${directReceiptUrl}` : directReceiptUrl;
+    const baseUrl = directReceiptUrl.startsWith('/') ? `${window.location.origin}${directReceiptUrl}` : directReceiptUrl;
+    const formatParam = receiptFormat === 'standard' ? '' : `${baseUrl.includes('?') ? '&' : '?'}format=${receiptFormat}`;
+    const url = `${baseUrl}${formatParam}`;
 
     // try with auth
     try {
@@ -167,13 +169,13 @@ async function fetchReceiptPdfForSale(token: string, saleId?: string, directRece
     }
   }
 
-  const query = isThermal ? '?format=thermal' : '';
+  const query = receiptFormat === 'standard' ? '' : `?format=${receiptFormat}`;
 
   // 2) Otherwise call your receipt endpoint
   const endpoints = [
     `${API_URL}/sales/${saleId}/receipt${query}`, // ✅ your real route
     `${API_URL}/sales/${saleId}/pdf${query}`, // optional fallback if you add it later
-    `${API_URL}/sales/receipt?saleId=${encodeURIComponent(String(saleId))}${isThermal ? '&format=thermal' : ''}`, // optional fallback
+    `${API_URL}/sales/receipt?saleId=${encodeURIComponent(String(saleId))}${receiptFormat === 'standard' ? '' : `&format=${receiptFormat}`}`, // optional fallback
   ];
 
   let lastErr: any = null;
@@ -219,7 +221,7 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess, on
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [printReceipt, setPrintReceipt] = useState(true);
-  const [receiptType, setReceiptType] = useState<'standard' | 'thermal'>('thermal');
+  const [receiptType, setReceiptType] = useState<'standard' | 'thermal' | 'thermal58'>('thermal');
   const [paymentMethod, setPaymentMethod] = useState<string>('CASH');
   
   const [customerSearch, setCustomerSearch] = useState('');
@@ -403,7 +405,7 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess, on
         didOpen: () => Swal.showLoading(),
       });
 
-      const pdfBlob = await fetchReceiptPdfForSale(token, saleId, directReceiptUrl, receiptType === 'thermal');
+      const pdfBlob = await fetchReceiptPdfForSale(token, saleId, directReceiptUrl, receiptType);
 
       Swal.close();
 
@@ -817,7 +819,7 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess, on
                 </label>
                 
                 {printReceipt && (
-                  <div className="mt-3 pl-7 flex items-center gap-4 animate-in slide-in-from-top-1">
+                  <div className="mt-3 pl-7 grid gap-3 sm:grid-cols-3 animate-in slide-in-from-top-1">
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input
                         type="radio"
@@ -837,6 +839,16 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess, on
                         className="h-4 w-4 accent-emerald-600"
                       />
                       <span className="text-sm font-bold text-slate-700">Thermal (80mm)</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="receiptType"
+                        checked={receiptType === 'thermal58'}
+                        onChange={() => setReceiptType('thermal58')}
+                        className="h-4 w-4 accent-emerald-600"
+                      />
+                      <span className="text-sm font-bold text-slate-700">Thermal (58mm)</span>
                     </label>
                   </div>
                 )}
