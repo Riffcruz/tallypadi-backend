@@ -129,6 +129,7 @@ export default function InventoryPage() {
 
   // ✅ File Input Ref
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const lastHandledScanRef = React.useRef<{ code: string; at: number }>({ code: '', at: 0 });
 
   // optional: mobile add modal (keeps the page clean)
   const [addOpen, setAddOpen] = useState(false);
@@ -255,6 +256,9 @@ export default function InventoryPage() {
   const handleScan = (rawCode: string) => {
     const code = rawCode.trim();
     if (!code) return;
+    const now = Date.now();
+    if (lastHandledScanRef.current.code === code && now - lastHandledScanRef.current.at < 1500) return;
+    lastHandledScanRef.current = { code, at: now };
     setShowScanner(false);
 
     const matchedItem = inventory.find((item) => String(item.barcode || '').trim().toLowerCase() === code.toLowerCase());
