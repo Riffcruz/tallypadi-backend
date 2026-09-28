@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { LayoutDashboard, Store, ArrowRightLeft, Settings, LogOut } from 'lucide-react';
+import { LayoutDashboard, Store, ArrowRightLeft, Settings, LogOut, ShoppingCart } from 'lucide-react';
 import { removeCookie } from '../utils/cookies';
 
 export default function HqSidebar() {
@@ -19,6 +19,7 @@ export default function HqSidebar() {
   const menuItems = [
     { href: '/hq/dashboard', icon: LayoutDashboard, label: 'Overview' },
     { href: '/hq/inventory', icon: ArrowRightLeft, label: 'Stock Hub' },
+    { href: '/hq/purchasing', icon: ShoppingCart, label: 'Purchasing' },
     { href: '/hq/branches', icon: Store, label: 'Locations' },
     { href: '/dashboard', icon: Store, label: 'Switch to Shop' },
     { href: '/settings', icon: Settings, label: 'Settings' },

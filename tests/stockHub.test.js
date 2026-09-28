@@ -2,6 +2,7 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 const { Types } = require('mongoose');
 const { StockTransfer } = require('../dist/models/stockTransfer.model');
+const { PurchaseOrder } = require('../dist/models/purchaseOrder.model');
 const hqRouter = require('../dist/routes/hq.routes').default;
 
 const validTransfer = () => ({
@@ -43,4 +44,19 @@ test('stock hub exposes stock, request, workflow, and receiving routes', () => {
   assert.ok(routes.includes('POST /transfers'));
   assert.ok(routes.includes('PATCH /transfers/:id'));
   assert.ok(routes.includes('POST /stock/receive'));
+  assert.ok(routes.includes('GET /purchasing'));
+  assert.ok(routes.includes('POST /suppliers'));
+  assert.ok(routes.includes('POST /purchase-orders'));
+  assert.ok(routes.includes('POST /purchase-orders/:id/receive'));
+});
+
+test('purchase orders reject invalid status and non-whole quantities', () => {
+  const base = {
+    owner: new Types.ObjectId(), reference: 'PO-TEST-001', supplier: new Types.ObjectId(),
+    destination: new Types.ObjectId(), createdBy: new Types.ObjectId(), subtotal: 100,
+    items: [{ product: new Types.ObjectId(), name: 'Rice', orderedQty: 2, receivedQty: 0, unitCost: 50 }],
+    events: [{ action: 'ORDERED', actor: new Types.ObjectId(), at: new Date() }],
+  };
+  assert.ok(new PurchaseOrder({ ...base, status: 'UNKNOWN' }).validateSync().errors.status);
+  assert.match(new PurchaseOrder({ ...base, status: 'ORDERED', items: [{ ...base.items[0], orderedQty: 1.5 }] }).validateSync().errors['items.0.orderedQty'].message, /whole number/);
 });
