@@ -90,6 +90,19 @@ const FALLBACK_CATEGORIES: SmartCategory[] = [
   { id: 'services', label: 'Jobs & Services' },
 ];
 
+const CATEGORY_ICONS: Record<string, string> = {
+  'phones-tablets': '📱',
+  electronics: '💻',
+  'home-appliances': '🛋️',
+  fashion: '👗',
+  'beauty-care': '🧴',
+  'food-farming': '🌾',
+  'tools-equipment': '🛠️',
+  'babies-kids': '🧸',
+  services: '🧰',
+  other: '📦',
+};
+
 const formatMoney = (amount: number, currencyCode = 'NGN') => {
   const localeMap: Record<string, string> = {
     NGN: 'en-NG',
@@ -620,6 +633,29 @@ export default function MarketplaceClient() {
         </aside>
 
         <section className="min-w-0">
+          <section className="mb-4 rounded-lg border border-stone-200 bg-white p-4 shadow-sm lg:hidden">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-lg font-black text-stone-950">Browse categories</h2>
+              {selectedCategory && (
+                <button type="button" onClick={() => setSelectedCategory('')} className="text-xs font-black text-emerald-700">Clear</button>
+              )}
+            </div>
+            <div className="grid grid-cols-4 gap-x-2 gap-y-5">
+              <button type="button" onClick={() => setSelectedCategory('')} className="flex min-w-0 flex-col items-center gap-2 text-center">
+                <span className={`flex h-14 w-14 items-center justify-center rounded-xl text-2xl ${!selectedCategory ? 'bg-emerald-600 text-white ring-2 ring-emerald-200' : 'bg-stone-100'}`}>🛍️</span>
+                <span className="text-[11px] font-bold leading-4 text-stone-700">All products</span>
+              </button>
+              {displayCategories.map((item) => (
+                <button key={`mobile-${item.id}`} type="button" onClick={() => setSelectedCategory(item.id)} className="flex min-w-0 flex-col items-center gap-2 text-center">
+                  <span className={`flex h-14 w-14 items-center justify-center rounded-xl text-2xl ${selectedCategory === item.id ? 'bg-emerald-600 ring-2 ring-emerald-200' : 'bg-slate-100'}`}>
+                    {CATEGORY_ICONS[item.id] || '📦'}
+                  </span>
+                  <span className="line-clamp-2 text-[11px] font-bold leading-4 text-stone-700">{item.label}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+
           {!loading && sponsoredProducts.length > 0 && (
             <section aria-labelledby="sponsored-products" className="mb-4 rounded-lg bg-amber-50 p-3 sm:p-4">
               <div className="mb-3 flex items-center justify-between gap-3">

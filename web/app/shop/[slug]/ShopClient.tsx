@@ -7,11 +7,23 @@ import {
   BadgeCheck,
   ShoppingBag, Loader2, PackageX, ExternalLink, AlertTriangle,
   Search, Menu, Plus, Minus, ShoppingCart, X, MessageCircle,
-  ChevronDown,
 } from 'lucide-react';
 import ShopSidebar from './ShopSidebar';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
+
+const categoryEmoji = (value: string) => {
+  const text = value.toLowerCase();
+  if (/phone|tablet|mobile/.test(text)) return '📱';
+  if (/electronic|computer|laptop/.test(text)) return '💻';
+  if (/home|furniture|appliance/.test(text)) return '🛋️';
+  if (/fashion|cloth|shoe|wear/.test(text)) return '👗';
+  if (/beauty|hair|cosmetic|care/.test(text)) return '🧴';
+  if (/food|farm|agric/.test(text)) return '🌾';
+  if (/baby|kid|toy/.test(text)) return '🧸';
+  if (/service|repair/.test(text)) return '🧰';
+  return '📦';
+};
 
 type Product = {
   id: string;
@@ -315,34 +327,23 @@ export default function ShopClient({ initialShop, slug }: ShopClientProps) {
           </div>
         </div>
 
-        <details className="group mt-3 overflow-hidden rounded-xl border border-slate-200 bg-slate-50 md:hidden">
-          <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-black text-slate-800 marker:content-none">
-            Browse categories
-            <ChevronDown size={17} className="transition group-open:rotate-180" />
-          </summary>
-          <div className="space-y-1 border-t border-slate-200 bg-white p-2">
-            <button
-              onClick={() => setCategory('')}
-              className={`w-full rounded-lg px-4 py-2.5 text-left text-sm font-black transition ${category === '' ? 'text-white' : 'text-slate-700 hover:bg-slate-50'}`}
-              style={category === '' ? { backgroundColor: themeColor } : {}}
-            >
-              All products
+        <div className="mt-4 md:hidden">
+          <div className="grid grid-cols-4 gap-x-2 gap-y-5">
+            <button onClick={() => setCategory('')} className="flex min-w-0 flex-col items-center gap-2 text-center">
+              <span className={`flex h-14 w-14 items-center justify-center rounded-xl text-2xl ${category === '' ? 'text-white ring-2 ring-slate-200' : 'bg-slate-100'}`} style={category === '' ? { backgroundColor: themeColor } : {}}>🛍️</span>
+              <span className="text-[11px] font-bold leading-4 text-slate-700">All products</span>
             </button>
             {initialShop.categories.map((cat) => {
               const active = category === cat;
               return (
-              <button
-                key={cat}
-                onClick={() => setCategory(cat)}
-                className={`w-full rounded-lg px-4 py-2.5 text-left text-sm font-bold capitalize transition ${active ? 'text-white' : 'text-slate-700 hover:bg-slate-50'}`}
-                style={active ? { backgroundColor: themeColor } : {}}
-              >
-                {cat}
-              </button>
+                <button key={cat} onClick={() => setCategory(cat)} className="flex min-w-0 flex-col items-center gap-2 text-center">
+                  <span className={`flex h-14 w-14 items-center justify-center rounded-xl text-2xl ${active ? 'ring-2 ring-slate-200' : 'bg-slate-100'}`} style={active ? { backgroundColor: themeColor } : {}}>{categoryEmoji(cat)}</span>
+                  <span className="line-clamp-2 text-[11px] font-bold capitalize leading-4 text-slate-700">{cat}</span>
+                </button>
               );
             })}
           </div>
-        </details>
+        </div>
 
         <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
           {[
