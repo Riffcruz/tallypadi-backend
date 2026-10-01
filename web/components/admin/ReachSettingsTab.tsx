@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import Swal from 'sweetalert2';
-import { CheckCircle2, KeyRound, Loader2, Mail, PlugZap, Save, Tags, Workflow } from 'lucide-react';
+import { CheckCircle2, ChevronDown, KeyRound, Loader2, Mail, PlugZap, RefreshCw, Save, Tags, UserX, Workflow } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 
@@ -34,6 +34,16 @@ type ReachOptions = {
     automations: Array<{ uuid: string; name: string; status: string }>;
 };
 
+type UnsubscribedContact = {
+    uuid: string;
+    email: string;
+    businessName?: string;
+    accountName?: string;
+    phoneNumber?: string;
+    planType?: string;
+    unsubscribedAt?: string | null;
+};
+
 export default function ReachSettingsTab({
     settings,
     onUpdate,
@@ -47,6 +57,9 @@ export default function ReachSettingsTab({
     const [options, setOptions] = useState<ReachOptions>({ tags: [], automations: [] });
     const [saving, setSaving] = useState(false);
     const [testing, setTesting] = useState(false);
+    const [showUnsubscribed, setShowUnsubscribed] = useState(false);
+    const [loadingUnsubscribed, setLoadingUnsubscribed] = useState(false);
+    const [unsubscribedContacts, setUnsubscribedContacts] = useState<UnsubscribedContact[] | null>(null);
 
     useEffect(() => {
         setForm({ ...DEFAULT_SETTINGS, ...settings, apiToken: '' });
@@ -89,6 +102,33 @@ export default function ReachSettingsTab({
         } finally {
             setTesting(false);
         }
+    };
+
+    const loadUnsubscribedContacts = async () => {
+        setLoadingUnsubscribed(true);
+        try {
+            const response = await axios.get(`${API_URL}/admin/settings/hostinger-reach/unsubscribed`, { headers });
+            setUnsubscribedContacts(Array.isArray(response.data?.contacts) ? response.data.contacts : []);
+        } catch (error: unknown) {
+            const message = axios.isAxiosError(error) ? error.response?.data?.error : undefined;
+            Swal.fire('Could not load contacts', message || 'Check the saved Reach connection and try again.', 'error');
+        } finally {
+            setLoadingUnsubscribed(false);
+        }
+    };
+
+    const toggleUnsubscribed = () => {
+        const next = !showUnsubscribed;
+        setShowUnsubscribed(next);
+        if (next && unsubscribedContacts === null && !loadingUnsubscribed) void loadUnsubscribedContacts();
+    };
+
+    const formatDate = (value?: string | null) => {
+        if (!value) return 'Date unavailable';
+        const date = new Date(value);
+        return Number.isNaN(date.getTime())
+            ? 'Date unavailable'
+            : new Intl.DateTimeFormat('en-NG', { dateStyle: 'medium', timeStyle: 'short' }).format(date);
     };
 
     return (
@@ -205,6 +245,72 @@ export default function ReachSettingsTab({
                         Save Reach Settings
                     </button>
                 </div>
+            </div>
+
+            <div className="overflow-hidden rounded-2xl border border-slate-700 bg-slate-800 shadow-lg">
+                <button
+                    type="button"
+                    onClick={toggleUnsubscribed}
+                    className="flex w-full items-center justify-between gap-4 p-5 text-left sm:px-8"
+                    aria-expanded={showUnsubscribed}
+                >
+                    <span className="flex min-w-0 items-center gap-3">
+                        <span className="rounded-xl bg-rose-500/15 p-3 text-rose-300"><UserX className="h-6 w-6" /></span>
+                        <span className="min-w-0">
+                            <span className="block font-bold text-white">Unsubscribed contacts</span>
+                            <span className="block text-sm text-slate-400">
+                                {unsubscribedContacts === null ? 'View opt-outs from Hostinger Reach' : `${unsubscribedContacts.length} contact${unsubscribedContacts.length === 1 ? '' : 's'}`}
+                            </span>
+                        </span>
+                    </span>
+                    {loadingUnsubscribed
+                        ? <Loader2 className="h-5 w-5 shrink-0 animate-spin text-slate-400" />
+                        : <ChevronDown className={`h-5 w-5 shrink-0 text-slate-400 transition-transform ${showUnsubscribed ? 'rotate-180' : ''}`} />}
+                </button>
+
+                {showUnsubscribed && (
+                    <div className="border-t border-slate-700 px-5 pb-5 pt-4 sm:px-8 sm:pb-8">
+                        <div className="mb-4 flex justify-end">
+                            <button
+                                type="button"
+                                onClick={loadUnsubscribedContacts}
+                                disabled={loadingUnsubscribed}
+                                className="inline-flex items-center gap-2 rounded-lg border border-slate-600 px-3 py-2 text-xs font-bold text-slate-200 transition hover:bg-slate-700 disabled:opacity-60"
+                            >
+                                <RefreshCw className={`h-4 w-4 ${loadingUnsubscribed ? 'animate-spin' : ''}`} />
+                                Refresh
+                            </button>
+                        </div>
+
+                        {!loadingUnsubscribed && unsubscribedContacts?.length === 0 && (
+                            <div className="rounded-xl border border-dashed border-slate-600 px-4 py-8 text-center text-sm text-slate-400">
+                                No unsubscribed contacts found.
+                            </div>
+                        )}
+
+                        <div className="space-y-3">
+                            {unsubscribedContacts?.map((contact) => (
+                                <div key={contact.uuid} className="rounded-xl border border-slate-700 bg-slate-900/50 p-4">
+                                    <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+                                        <div className="min-w-0">
+                                            <p className="truncate font-bold text-white">{contact.businessName || contact.accountName || 'Reach contact'}</p>
+                                            <p className="mt-1 break-all text-sm text-slate-300">{contact.email}</p>
+                                            {(contact.accountName || contact.phoneNumber) && (
+                                                <p className="mt-1 text-xs text-slate-500">
+                                                    {[contact.accountName, contact.phoneNumber].filter(Boolean).join(' · ')}
+                                                </p>
+                                            )}
+                                        </div>
+                                        <div className="shrink-0 sm:text-right">
+                                            <span className="inline-flex rounded-full bg-rose-500/15 px-2.5 py-1 text-xs font-bold text-rose-300">Unsubscribed</span>
+                                            <p className="mt-2 text-xs text-slate-500">{formatDate(contact.unsubscribedAt)}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );

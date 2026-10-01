@@ -31,6 +31,15 @@ type ExistingReachContact = {
   email: string;
 };
 
+export type ReachUnsubscribedContact = ExistingReachContact & {
+  name?: string | null;
+  surname?: string | null;
+  phone?: string | null;
+  subscriptionStatus: 'unsubscribed';
+  unsubscribedAt?: string | null;
+  source?: string | null;
+};
+
 type ReachSettings = {
   enabled: boolean;
   apiToken: string;
@@ -123,6 +132,52 @@ export const testHostingerReachConnection = async () => {
       tags,
       automations,
     };
+  } catch (error) {
+    throw new Error(describeReachError(error));
+  }
+};
+
+export const listHostingerReachUnsubscribedContacts = async () => {
+  const config = await readReachSettings();
+  if (!config.profileUuid) throw new Error('Hostinger Reach Profile UUID is missing in Admin Settings.');
+
+  const client = reachClient(config.apiToken);
+  const profilePath = `/profiles/${encodeURIComponent(config.profileUuid)}`;
+  const perPage = 100;
+
+  try {
+    const first = await client.get(`${profilePath}/contacts`, {
+      params: { subscription_status: 'unsubscribed', page: 1, per_page: perPage },
+    });
+    const contacts: any[] = Array.isArray(first.data?.data) ? [...first.data.data] : [];
+    const total = Math.max(contacts.length, Number(first.data?.meta?.total || 0));
+    const totalPages = Math.ceil(total / perPage);
+
+    // Keep these requests sequential so opening the admin page cannot burst the Reach API.
+    for (let page = 2; page <= totalPages; page += 1) {
+      const response = await client.get(`${profilePath}/contacts`, {
+        params: { subscription_status: 'unsubscribed', page, per_page: perPage },
+      });
+      if (Array.isArray(response.data?.data)) contacts.push(...response.data.data);
+    }
+
+    return contacts
+      .filter((contact) => contact?.uuid && normalizeValidEmail(contact?.email))
+      .map((contact): ReachUnsubscribedContact => ({
+        uuid: String(contact.uuid),
+        email: normalizeValidEmail(contact.email),
+        name: contact.name ? String(contact.name) : null,
+        surname: contact.surname ? String(contact.surname) : null,
+        phone: contact.phone ? String(contact.phone) : null,
+        subscriptionStatus: 'unsubscribed',
+        unsubscribedAt: contact.unsubscribed_at ? String(contact.unsubscribed_at) : null,
+        source: contact.source ? String(contact.source) : null,
+      }))
+      .sort((a, b) => {
+        const left = a.unsubscribedAt ? Date.parse(a.unsubscribedAt) : 0;
+        const right = b.unsubscribedAt ? Date.parse(b.unsubscribedAt) : 0;
+        return right - left;
+      });
   } catch (error) {
     throw new Error(describeReachError(error));
   }

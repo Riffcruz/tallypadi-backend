@@ -17,6 +17,7 @@ import {
   getGlobalSettings,
   updateGlobalSettings,
   testHostingerReach,
+  getHostingerReachUnsubscribedContacts,
   adminTopUpUserAdsWallet,
   adminAddStaff,
   deleteStaffMember,
@@ -120,6 +121,7 @@ router.delete('/blog/:id', deleteAdminBlogPost);
 router.get('/settings', getGlobalSettings);
 router.put('/settings', updateGlobalSettings);
 router.post('/settings/hostinger-reach/test', testHostingerReach);
+router.get('/settings/hostinger-reach/unsubscribed', getHostingerReachUnsubscribedContacts);
 
 // User Management
 router.get('/users', getAllUsers);

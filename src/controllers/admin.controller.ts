@@ -11,7 +11,7 @@ import { EmailTemplate } from '../models/emailTemplate.model';
 import { invalidateSmtpTransport } from '../services/email.service';
 import { encryptEmailCredential, encryptSmtpPassword } from '../services/emailSecurity.service';
 import { queueBroadcastMessage, broadcastQueue } from '../services/queue.service';
-import { prepareHostingerReachCampaign, testHostingerReachConnection, triggerHostingerReachAutomation } from '../services/hostingerReach.service';
+import { listHostingerReachUnsubscribedContacts, prepareHostingerReachCampaign, testHostingerReachConnection, triggerHostingerReachAutomation } from '../services/hostingerReach.service';
 import { DailyStats } from '../models/dailyStats.model';
 import { ProcessedMessage } from '../models/processedMessage.model';
 import { Debtor } from '../models/debtor.model';
@@ -808,6 +808,40 @@ export const testHostingerReach = async (_req: Request, res: Response) => {
     res.json({ success: true, ...result });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Hostinger Reach connection failed.';
+    res.status(400).json({ error: message });
+  }
+};
+
+export const getHostingerReachUnsubscribedContacts = async (_req: Request, res: Response) => {
+  try {
+    const contacts = await listHostingerReachUnsubscribedContacts();
+    const emails = contacts.map((contact) => contact.email);
+    const users = emails.length
+      ? await User.find({ email: { $in: emails } })
+        .select('email businessName name phoneNumber planType')
+        .lean()
+      : [];
+    const usersByEmail = new Map(
+      users.map((user) => [String(user.email || '').trim().toLowerCase(), user])
+    );
+
+    res.json({
+      success: true,
+      total: contacts.length,
+      contacts: contacts.map((contact) => {
+        const user = usersByEmail.get(contact.email);
+        return {
+          ...contact,
+          businessName: user?.businessName || contact.name || '',
+          accountName: user?.name || contact.surname || '',
+          phoneNumber: user?.phoneNumber || contact.phone || '',
+          planType: user?.planType || '',
+          tallyPadiUserId: user?._id ? String(user._id) : '',
+        };
+      }),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Could not load unsubscribed Reach contacts.';
     res.status(400).json({ error: message });
   }
 };
