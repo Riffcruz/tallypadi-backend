@@ -177,7 +177,7 @@ export default function ReachSettingsTab({
                         </div>
                         <div className="mt-3 flex items-start gap-2 rounded-lg bg-slate-800 px-3 py-2.5 text-xs text-slate-400">
                             <Tags className="mt-0.5 h-4 w-4 shrink-0 text-violet-300" />
-                            Choose the permanent tag monitored by the active Reach automation.
+                            Choose the permanent tag monitored by the automation. TallyPadi sends each shop name to Reach&apos;s Name field for personalization.
                         </div>
                     </section>
 

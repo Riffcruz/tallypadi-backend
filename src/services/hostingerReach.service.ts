@@ -160,12 +160,14 @@ const mapRecipientsToContacts = (
   const mappedContacts: ReachContact[] = recipients.flatMap((recipient) => {
       const email = normalizeValidEmail(recipient.email);
       if (!email) return [];
-      const parsedName = splitName(recipient.name || recipient.businessName);
+      const shopName = String(recipient.businessName || '').trim();
+      const ownerName = String(recipient.name || '').trim();
+      const parsedOwnerName = splitName(ownerName);
       const phone = normalizePhone(recipient.phoneNumber);
       return [{
         email,
-        ...(parsedName.name ? { name: parsedName.name } : {}),
-        ...(parsedName.surname ? { surname: parsedName.surname } : {}),
+        ...((shopName || parsedOwnerName.name) ? { name: shopName || parsedOwnerName.name } : {}),
+        ...(shopName && ownerName ? { surname: ownerName } : parsedOwnerName.surname ? { surname: parsedOwnerName.surname } : {}),
         ...(phone ? { phone } : {}),
       }];
     });

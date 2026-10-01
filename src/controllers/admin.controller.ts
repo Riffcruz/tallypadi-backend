@@ -871,8 +871,8 @@ export const broadcastMessage = async (req: Request, res: Response) => {
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')}</div>`;
       let reachHtml = template?.htmlBody || basicHtml;
-      if (globalEmailTemplate?.includes('{{message}}')) {
-        reachHtml = globalEmailTemplate.replace('{{message}}', reachHtml);
+      if (/\{\{\s*message\s*\}\}/i.test(globalEmailTemplate || '')) {
+        reachHtml = String(globalEmailTemplate).replace(/\{\{\s*message\s*\}\}/i, reachHtml);
       }
       reachCampaign = await prepareHostingerReachCampaign({
         recipients,

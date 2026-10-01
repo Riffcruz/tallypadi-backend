@@ -618,8 +618,8 @@ export const broadcastWorker = new Worker(
              personalizedHtml = personalizedHtml.replace(/{{unsubscribe_link}}/g, unsubLink);
 
              // Wrap with Global Email Template
-             if (globalEmailTemplate && globalEmailTemplate.includes('{{message}}')) {
-                 personalizedHtml = globalEmailTemplate.replace('{{message}}', personalizedHtml);
+             if (/\{\{\s*message\s*\}\}/i.test(globalEmailTemplate || '')) {
+                 personalizedHtml = String(globalEmailTemplate).replace(/\{\{\s*message\s*\}\}/i, personalizedHtml);
              }
 
              personalizedHtml = personalizedHtml.replace(/{{unsubscribe_link}}/g, unsubLink);

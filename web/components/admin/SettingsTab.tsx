@@ -1,6 +1,6 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { Shield, AlertTriangle, MessageSquare, Users, Save, Loader2, Phone, Globe, Gift, LayoutTemplate } from 'lucide-react';
+import { Shield, AlertTriangle, MessageSquare, Users, Save, Loader2, Phone, Globe, Gift, LayoutTemplate, Copy } from 'lucide-react';
 import axios from 'axios';
 import Swal from 'sweetalert2';
 import dynamic from 'next/dynamic';
@@ -106,6 +106,10 @@ export default function SettingsTab({
     };
 
     const handleSave = async () => {
+        if (activeSection === 'template' && !/\{\{\s*message\s*\}\}/i.test(localSettings.globalEmailTemplate || '')) {
+            Swal.fire('Template placeholder required', 'Add {{message}} where the email content should appear.', 'warning');
+            return;
+        }
         const invalidPlan = (localSettings.adsPlans || []).find((plan) => (
             !String(plan.label || '').trim() ||
             Number(plan.durationDays) < MIN_AD_PLAN_DAYS ||
@@ -141,6 +145,15 @@ export default function SettingsTab({
             Swal.fire('Error', data?.message || 'Failed to save settings. Check server logs.', 'error');
         } finally {
             setSaving(false);
+        }
+    };
+
+    const copyTemplateForReach = async () => {
+        try {
+            await navigator.clipboard.writeText(localSettings.globalEmailTemplate || '');
+            Swal.fire({ title: 'Copied', text: 'Global template HTML copied for Hostinger Reach.', icon: 'success', timer: 1400, showConfirmButton: false });
+        } catch {
+            Swal.fire('Copy failed', 'Your browser blocked clipboard access.', 'error');
         }
     };
 
@@ -448,14 +461,19 @@ export default function SettingsTab({
                 <div className="space-y-4 mb-8">
                     <h3 className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-3">Global Email Layout Wrapper</h3>
                     <div className="p-5 bg-slate-900/50 rounded-xl border border-slate-700 space-y-4">
-                        <div className="flex items-center gap-3 mb-2">
-                            <div className="p-2 bg-indigo-500/20 rounded-lg">
-                                <LayoutTemplate className="w-5 h-5 text-indigo-400" />
+                        <div className="flex flex-col gap-3 mb-2 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-indigo-500/20 rounded-lg">
+                                    <LayoutTemplate className="w-5 h-5 text-indigo-400" />
+                                </div>
+                                <div>
+                                    <h4 className="font-bold text-white">General Template (Header & Footer)</h4>
+                                    <p className="text-xs text-slate-400 mt-1">Use <code className="bg-slate-800 px-1 py-0.5 rounded text-indigo-300">{"{{message}}"}</code> where the email content belongs.</p>
+                                </div>
                             </div>
-                            <div>
-                                <h4 className="font-bold text-white">General Template (Header & Footer)</h4>
-                                <p className="text-xs text-slate-400 mt-1">This HTML template wraps around all your broadcast emails. <br/>Use <code className="bg-slate-800 px-1 py-0.5 rounded text-indigo-300">{"{{message}}"}</code> placeholder to dictate where the email body goes.</p>
-                            </div>
+                            <button type="button" onClick={copyTemplateForReach} className="flex shrink-0 items-center justify-center gap-2 rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-3 py-2 text-xs font-bold text-indigo-300 hover:bg-indigo-500/20">
+                                <Copy className="h-4 w-4" /> Copy HTML for Reach
+                            </button>
                         </div>
 
                         <div className="text-black prose-sm max-w-none rounded-lg overflow-hidden border border-slate-600 focus-within:border-indigo-500 transition-colors">

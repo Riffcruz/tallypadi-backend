@@ -339,14 +339,14 @@ export default function BroadcastTab({ headers }: { headers: Record<string, stri
                                 className={`rounded-lg border px-4 py-3 text-left transition ${reachMode === 'draft' ? 'border-violet-400 bg-violet-500/15 text-violet-200' : 'border-slate-700 text-slate-400 hover:border-slate-500'}`}
                             >
                                 <span className="block text-sm font-bold">Create campaign draft</span>
-                                <span className="mt-1 block text-xs">Use the TallyPadi email editor and finish in Reach.</span>
+                                <span className="mt-1 block text-xs">Import the global header and footer, then finish in Reach.</span>
                             </button>
                         </div>
                     )}
 
                     {sendEmail && emailProvider === 'hostinger_reach' && reachMode === 'automation' && (
                         <p className="rounded-lg border border-violet-500/20 bg-violet-500/5 px-4 py-3 text-xs text-violet-200">
-                            Reach controls the email content and timing. TallyPadi sends the selected users into the configured automation audience.
+                            Reach controls the email content and timing. TallyPadi sends the audience and each shop name to the configured automation.
                         </p>
                     )}
 
