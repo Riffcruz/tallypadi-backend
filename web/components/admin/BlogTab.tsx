@@ -753,7 +753,7 @@ export default function BlogTab({ adminToken }: { adminToken: string }) {
           <section className="rounded-xl border border-violet-500/30 bg-violet-500/5 p-5">
             <div className="flex items-start gap-3">
               <div className="rounded-lg bg-violet-500 p-2 text-white"><Sparkles size={18} /></div>
-              <div><h3 className="font-black text-white">Generate an editable SEO draft</h3><p className="mt-1 text-sm text-slate-400">The AI fills the article, links, category, tags and search fields. It never publishes automatically.</p></div>
+              <div><h3 className="font-black text-white">Generate an editable SEO draft</h3><p className="mt-1 text-sm text-slate-400">The AI already knows TallyPadi’s verified features, audience, plans, brand voice and claim limits. Your context controls the article topic, and nothing publishes automatically.</p></div>
             </div>
             <label className="mt-5 block">
               <span className="text-xs font-black uppercase tracking-wider text-slate-300">What should the article cover?</span>

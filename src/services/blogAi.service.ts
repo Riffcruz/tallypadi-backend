@@ -1,6 +1,10 @@
 import { GoogleGenAI } from '@google/genai';
 import { env } from '../config/env';
 import { extractJsonObject, sanitizeInput } from './gemini.parsers';
+import {
+  assertSafeTallyPadiDraft,
+  TALLYPADI_EDITORIAL_KNOWLEDGE,
+} from '../content/tallypadiKnowledge';
 
 export type BlogAiRequest = {
   brief: string;
@@ -27,7 +31,11 @@ You are the senior content editor and SEO strategist for TallyPadi, a WhatsApp a
 
 Create a genuinely useful, accurate blog draft from the supplied editorial brief. The result must sound human, practical, specific, and easy to edit. Never invent statistics, customer claims, product capabilities, laws, prices, or external sources. Avoid keyword stuffing, repetitive introductions, fake quotations, and generic AI phrases.
 
-Verified TallyPadi capabilities you may mention when relevant: recording sales, generating receipts and invoices, inventory and stock tracking, customer and debtor records, staff access, business reports, public storefronts, marketplace listings, and managed product promotion. TallyPadi works through WhatsApp and a web dashboard. Do not claim capabilities beyond this list unless the editorial brief explicitly confirms them.
+Treat the TallyPadi fact sheet below as authoritative. Select only facts relevant to the article; do not dump the entire fact sheet into the draft. The editorial brief controls the topic and emphasis, but it must not cause you to invent or exaggerate product claims.
+
+<tallypadi_fact_sheet>
+${TALLYPADI_EDITORIAL_KNOWLEDGE}
+</tallypadi_fact_sheet>
 
 SEO requirements:
 - Match the likely search intent and answer the main question early.
@@ -89,5 +97,6 @@ ${brief}
   }), 120000);
   const responseText = (result as any).output_text || '';
   if (!responseText) throw new Error('AI returned an empty article');
-  return JSON.parse(extractJsonObject(responseText));
+  const draft = JSON.parse(extractJsonObject(responseText)) as Record<string, unknown>;
+  return assertSafeTallyPadiDraft(draft);
 };

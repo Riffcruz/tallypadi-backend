@@ -42,6 +42,16 @@ export interface IAdminSettings extends Document {
     secure: boolean;
     dailyLimit?: number;
   };
+
+  hostingerReach?: {
+    enabled: boolean;
+    apiToken: string;
+    profileUuid: string;
+    senderName: string;
+    senderEmail: string;
+    automationTagUuid: string;
+    automationUuid: string;
+  };
   
   globalEmailTemplate?: string;
 
@@ -89,6 +99,16 @@ const adminSettingsSchema = new Schema<IAdminSettings>(
       fromAddress: { type: String, default: 'notifications@tallypadi.com' },
       secure: { type: Boolean, default: true },
       dailyLimit: { type: Number, default: 300, min: 1, max: 100000 }
+    },
+
+    hostingerReach: {
+      enabled: { type: Boolean, default: false },
+      apiToken: { type: String, default: '', select: false },
+      profileUuid: { type: String, default: '' },
+      senderName: { type: String, default: 'TallyPadi' },
+      senderEmail: { type: String, default: '' },
+      automationTagUuid: { type: String, default: '' },
+      automationUuid: { type: String, default: '' }
     },
     
     globalEmailTemplate: { 

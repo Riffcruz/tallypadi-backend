@@ -4,6 +4,9 @@ export default function robots(): MetadataRoute.Robots {
   const site = process.env.NEXT_PUBLIC_SITE_URL || "https://tallypadi.com";
   return {
     rules: [
+      { userAgent: "OAI-SearchBot", allow: "/" },
+      { userAgent: "ChatGPT-User", allow: "/" },
+      { userAgent: "GPTBot", allow: "/" },
       {
         userAgent: "*",
         allow: [

@@ -10,6 +10,7 @@ import Sidebar from '../../components/admin/Sidebar';
 import OverviewTab from '../../components/admin/OverviewTab';
 import UsersTab, { User as AdminUser } from '../../components/admin/UsersTab';
 import SettingsTab, { SettingsProfile } from '../../components/admin/SettingsTab';
+import ReachSettingsTab, { HostingerReachSettings } from '../../components/admin/ReachSettingsTab';
 import BroadcastTab from '../../components/admin/BroadcastTab';
 import InvestorsTab from '../../components/admin/InvestorsTab';
 import SupportTab from '../../components/admin/SupportTab';
@@ -20,8 +21,9 @@ import ReferralsTab from '../../components/admin/ReferralsTab';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 const TOKEN_KEY = 'adminToken';
-type AdminTab = 'overview' | 'users' | 'settings' | 'broadcast' | 'investors' | 'support' | 'ads' | 'verifications' | 'blog' | 'referrals';
+type AdminTab = 'overview' | 'users' | 'settings' | 'reach' | 'broadcast' | 'investors' | 'support' | 'ads' | 'verifications' | 'blog' | 'referrals';
 type OverviewStats = React.ComponentProps<typeof OverviewTab>['stats'];
+type AdminSettingsData = Partial<SettingsProfile> & { hostingerReach?: Partial<HostingerReachSettings> };
 
 export default function AdminDashboard() {
   const [token, setToken] = useState('');
@@ -30,7 +32,7 @@ export default function AdminDashboard() {
 
   const [stats, setStats] = useState<OverviewStats>(null);
   const [users, setUsers] = useState<AdminUser[]>([]);
-  const [globalSettings, setGlobalSettings] = useState<Partial<SettingsProfile> | undefined>(undefined);
+  const [globalSettings, setGlobalSettings] = useState<AdminSettingsData | undefined>(undefined);
 
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState<AdminTab>('overview');
@@ -109,7 +111,7 @@ export default function AdminDashboard() {
 
       setStats(statsRes.data as OverviewStats);
       setUsers(usersRes.data as AdminUser[]);
-      setGlobalSettings(settingsRes.data as Partial<SettingsProfile>);
+      setGlobalSettings(settingsRes.data as AdminSettingsData);
     } catch (e: unknown) {
       const status = axios.isAxiosError(e) ? e.response?.status : undefined;
       console.error('Data load error:', axios.isAxiosError(e) ? e.response?.data || e.message : e);
@@ -280,6 +282,14 @@ export default function AdminDashboard() {
   {tab === 'settings' && (
     <SettingsTab
       settings={globalSettings}
+      onUpdate={() => loadData(token)}
+      headers={getHeaders()}
+    />
+  )}
+
+  {tab === 'reach' && (
+    <ReachSettingsTab
+      settings={globalSettings?.hostingerReach}
       onUpdate={() => loadData(token)}
       headers={getHeaders()}
     />

@@ -9,19 +9,19 @@ const encryptionKey = () => crypto
   .update(process.env.SMTP_ENCRYPTION_KEY || getJwtSecret())
   .digest();
 
-export const encryptSmtpPassword = (password: string) => {
-  if (!password || password.startsWith(ENCRYPTED_PREFIX)) return password;
+export const encryptEmailCredential = (credential: string) => {
+  if (!credential || credential.startsWith(ENCRYPTED_PREFIX)) return credential;
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv('aes-256-gcm', encryptionKey(), iv);
-  const encrypted = Buffer.concat([cipher.update(password, 'utf8'), cipher.final()]);
+  const encrypted = Buffer.concat([cipher.update(credential, 'utf8'), cipher.final()]);
   const tag = cipher.getAuthTag();
   return `${ENCRYPTED_PREFIX}${iv.toString('base64url')}.${tag.toString('base64url')}.${encrypted.toString('base64url')}`;
 };
 
-export const decryptSmtpPassword = (stored: string) => {
+export const decryptEmailCredential = (stored: string) => {
   if (!stored?.startsWith(ENCRYPTED_PREFIX)) return stored;
   const [ivPart, tagPart, encryptedPart] = stored.slice(ENCRYPTED_PREFIX.length).split('.');
-  if (!ivPart || !tagPart || !encryptedPart) throw new Error('Invalid encrypted SMTP credential');
+  if (!ivPart || !tagPart || !encryptedPart) throw new Error('Invalid encrypted email credential');
   const decipher = crypto.createDecipheriv('aes-256-gcm', encryptionKey(), Buffer.from(ivPart, 'base64url'));
   decipher.setAuthTag(Buffer.from(tagPart, 'base64url'));
   return Buffer.concat([
@@ -29,6 +29,9 @@ export const decryptSmtpPassword = (stored: string) => {
     decipher.final(),
   ]).toString('utf8');
 };
+
+export const encryptSmtpPassword = encryptEmailCredential;
+export const decryptSmtpPassword = decryptEmailCredential;
 
 export const createUnsubscribeToken = (email: string) => jwt.sign(
   { purpose: 'email-unsubscribe', email: email.trim().toLowerCase() },

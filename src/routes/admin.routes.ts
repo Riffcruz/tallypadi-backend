@@ -16,6 +16,7 @@ import {
   clearBroadcastQueue,
   getGlobalSettings,
   updateGlobalSettings,
+  testHostingerReach,
   adminTopUpUserAdsWallet,
   adminAddStaff,
   deleteStaffMember,
@@ -118,6 +119,7 @@ router.delete('/blog/:id', deleteAdminBlogPost);
 // Global Settings
 router.get('/settings', getGlobalSettings);
 router.put('/settings', updateGlobalSettings);
+router.post('/settings/hostinger-reach/test', testHostingerReach);
 
 // User Management
 router.get('/users', getAllUsers);

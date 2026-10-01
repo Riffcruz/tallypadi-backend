@@ -1,7 +1,7 @@
 'use client';
 import React from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
-import { Activity, Users, Shield, Crown, TrendingUp, type LucideIcon } from 'lucide-react';
+import { Activity, Bot, Users, Shield, Crown, TrendingUp, type LucideIcon } from 'lucide-react';
 
 interface StatCardProps {
     title: string;
@@ -42,6 +42,7 @@ interface OverviewStats {
     financials: { gmv: number, txCount: number };
     users: { total: number, active24h: number, ogaBoss: number, tycoon: number };
     graph: { date: string, sales: number }[];
+    referrals?: { chatgpt: number, range: string };
 }
 
 export default function OverviewTab({ stats }: { stats: OverviewStats | null }) {
@@ -55,6 +56,10 @@ export default function OverviewTab({ stats }: { stats: OverviewStats | null }) 
                 <StatCard title="Total Users" value={stats.users.total} sub={`${stats.users.active24h} active today`} color="white" icon={Users} />
                 <StatCard title="Oga Boss Plan" value={stats.users.ogaBoss} sub="Standard Users" color="blue" icon={Shield} />
                 <StatCard title="Tycoon Plan" value={stats.users.tycoon} sub="Premium Users" color="purple" icon={Crown} />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <StatCard title="ChatGPT Referrals" value={stats.referrals?.chatgpt || 0} sub={`Visits in selected ${stats.referrals?.range || 'range'}`} color="green" icon={Bot} />
             </div>
 
             <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 h-96 shadow-xl">

@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { LayoutDashboard, Users, Settings as SettingsIcon, Send, ShieldAlert, Briefcase, Headphones, MessageSquare, Megaphone, BadgeCheck, Newspaper, Gift, Activity, type LucideIcon } from 'lucide-react';
+import { LayoutDashboard, Users, Settings as SettingsIcon, Send, ShieldAlert, Briefcase, Headphones, MessageSquare, Megaphone, BadgeCheck, Newspaper, Gift, Activity, Mail, type LucideIcon } from 'lucide-react';
 
 type AdminMenuItem = { id: string; icon: LucideIcon; label: string; href?: string };
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
@@ -20,6 +20,7 @@ export default function Sidebar({ tab, setTab }: { tab: string, setTab: (t: stri
         { id: 'live_support', icon: MessageSquare, label: 'Live Support', href: '/admin/support' },
         { id: 'queues', icon: Activity, label: 'Queue Monitor', href: `${API_URL}/admin/queues` },
         { id: 'settings', icon: SettingsIcon, label: 'Global Settings' },
+        { id: 'reach', icon: Mail, label: 'Hostinger Reach' },
         { id: 'broadcast', icon: Send, label: 'Broadcast' },
     ];
 
@@ -37,7 +38,7 @@ export default function Sidebar({ tab, setTab }: { tab: string, setTab: (t: stri
                 <ShieldAlert className="shrink-0" /> GOD MODE
             </h1>
             
-            <nav className="flex flex-col gap-2">
+            <nav className="flex flex-1 flex-col gap-2 overflow-y-auto pr-1">
                 {menu.map((item) => {
                     const Icon = item.icon;
                     return item.href ? (

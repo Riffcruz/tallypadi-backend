@@ -242,6 +242,7 @@ const serializeListing = (listing: any) => ({
   sizes: listing.sizes || [],
   inStock: listing.inStock !== false,
   isBoosted: Number(listing.boostScore || 0) > 0,
+  updatedAt: listing.productUpdatedAt || listing.indexedAt,
   boosts: (listing.activeBoosts || []).map((boost: any) => ({
     platform: boost.platform,
     planId: boost.planId,

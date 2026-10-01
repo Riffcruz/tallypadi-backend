@@ -188,6 +188,7 @@ export const listPublishedBlogPosts = async (req: Request, res: Response) => {
   try {
     res.set('Cache-Control', blogCacheControl);
     const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 20));
+    const page = Math.max(1, Number(req.query.page) || 1);
     const q = cleanString(req.query.q, 80);
 
     const query: Record<string, unknown> = {
@@ -198,13 +199,26 @@ export const listPublishedBlogPosts = async (req: Request, res: Response) => {
 
     if (q) query.$text = { $search: q };
 
-    const posts = await BlogPost.find(query)
-      .sort({ publishedAt: -1, createdAt: -1 })
-      .limit(limit)
-      .select(publicProjection)
-      .lean();
+    const [posts, totalItems] = await Promise.all([
+      BlogPost.find(query)
+        .sort({ publishedAt: -1, createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .select(publicProjection)
+        .lean(),
+      BlogPost.countDocuments(query),
+    ]);
 
-    return res.json({ posts });
+    return res.json({
+      posts,
+      pagination: {
+        page,
+        limit,
+        totalItems,
+        totalPages: Math.ceil(totalItems / limit),
+        hasMore: page * limit < totalItems,
+      },
+    });
   } catch (error) {
     console.error('listPublishedBlogPosts error:', error);
     return res.status(500).json({ error: 'Failed to load blog posts' });

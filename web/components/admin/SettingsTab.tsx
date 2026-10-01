@@ -59,6 +59,7 @@ export default function SettingsTab({
         ...settings // Overwrite defaults with actual data
     });
     const [saving, setSaving] = useState(false);
+    const [activeSection, setActiveSection] = useState<'general' | 'email' | 'business' | 'template'>('general');
 
     useEffect(() => {
         if (settings) {
@@ -146,13 +147,33 @@ export default function SettingsTab({
     if (!localSettings) return null;
 
     return (
-        <div className="max-w-xl mx-auto space-y-6 animate-in fade-in duration-300">
-            <div className="bg-slate-800 p-8 rounded-2xl border border-slate-700 shadow-lg">
+        <div className="max-w-3xl mx-auto space-y-6 animate-in fade-in duration-300">
+            <div className="bg-slate-800 p-5 sm:p-8 rounded-2xl border border-slate-700 shadow-lg">
                 
                 <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
                     <Shield className="text-blue-400" /> Global Configuration
                 </h2>
 
+                <div className="mb-7 grid grid-cols-2 gap-2 rounded-xl border border-slate-700 bg-slate-900/60 p-1.5 sm:grid-cols-4">
+                    {([
+                        ['general', 'General'],
+                        ['email', 'Email Server'],
+                        ['business', 'Plans'],
+                        ['template', 'Email Template'],
+                    ] as const).map(([id, label]) => (
+                        <button
+                            key={id}
+                            type="button"
+                            onClick={() => setActiveSection(id)}
+                            className={`rounded-lg px-3 py-2.5 text-xs font-bold transition sm:text-sm ${activeSection === id ? 'bg-green-600 text-white shadow' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
+                        >
+                            {label}
+                        </button>
+                    ))}
+                </div>
+
+                {activeSection === 'general' && (
+                <>
                 {/* 1. Public Contact Config */}
                 <div className="space-y-4 mb-8">
                     <h3 className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-2">Public Contact</h3>
@@ -235,8 +256,11 @@ export default function SettingsTab({
                         </button>
                     </div>
                 </div>
+                </>
+                )}
 
                 {/* 4. SMTP Settings */}
+                {activeSection === 'email' && (
                 <div className="space-y-4 mb-8">
                     <h3 className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-3">SMTP Mailserver</h3>
                     <div className="p-5 bg-slate-900/50 rounded-xl border border-slate-700 space-y-4">
@@ -279,8 +303,11 @@ export default function SettingsTab({
                         </div>
                     </div>
                 </div>
+                )}
 
                 {/* 5. Ads Pricing Plans */}
+                {activeSection === 'business' && (
+                <>
                 <div className="space-y-4 mb-8">
                     <div className="flex justify-between items-center mb-3">
                       <h3 className="text-slate-400 text-xs font-bold uppercase tracking-wider">Ads & Boost Pricing Plans</h3>
@@ -413,8 +440,11 @@ export default function SettingsTab({
                         </div>
                     </div>
                 </div>
+                </>
+                )}
 
                 {/* 7. Global Email Layout Wrapper */}
+                {activeSection === 'template' && (
                 <div className="space-y-4 mb-8">
                     <h3 className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-3">Global Email Layout Wrapper</h3>
                     <div className="p-5 bg-slate-900/50 rounded-xl border border-slate-700 space-y-4">
@@ -442,6 +472,7 @@ export default function SettingsTab({
                         </div>
                     </div>
                 </div>
+                )}
                 
                 {/* Save Button */}
                 <button 
@@ -450,7 +481,7 @@ export default function SettingsTab({
                     className="w-full mt-8 bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl transition-colors flex justify-center items-center gap-2 disabled:opacity-50 shadow-lg shadow-green-900/20"
                 >
                     {saving ? <Loader2 className="animate-spin w-5 h-5" /> : <Save className="w-5 h-5" />}
-                    Save All Settings
+                    {activeSection === 'template' ? 'Save Email Template' : activeSection === 'email' ? 'Save Email Server' : activeSection === 'business' ? 'Save Plans' : 'Save General Settings'}
                 </button>
 
                 <div className="mt-6 p-4 bg-orange-900/20 border border-orange-900/50 rounded-xl flex gap-3">

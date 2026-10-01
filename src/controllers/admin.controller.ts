@@ -9,11 +9,13 @@ import { AdminSettings } from '../models/adminSettings.model';
 import { AdminAuditLog } from '../models/adminAuditLog.model';
 import { EmailTemplate } from '../models/emailTemplate.model';
 import { invalidateSmtpTransport } from '../services/email.service';
-import { encryptSmtpPassword } from '../services/emailSecurity.service';
+import { encryptEmailCredential, encryptSmtpPassword } from '../services/emailSecurity.service';
 import { queueBroadcastMessage, broadcastQueue } from '../services/queue.service';
+import { prepareHostingerReachCampaign, testHostingerReachConnection, triggerHostingerReachAutomation } from '../services/hostingerReach.service';
 import { DailyStats } from '../models/dailyStats.model';
 import { ProcessedMessage } from '../models/processedMessage.model';
 import { Debtor } from '../models/debtor.model';
+import { TrafficVisit } from '../models/trafficVisit.model';
 
 import { sendWhatsAppText, sendWhatsAppMediaById } from '../services/whatsapp.service';
 import { executeGlobalPushNotification } from '../services/push.service';
@@ -85,6 +87,15 @@ const updateGlobalSettingsSchema = z
         secure: z.boolean().optional().default(true),
         dailyLimit: z.coerce.number().int().min(1).max(100000).optional().default(300)
     }).optional(),
+    hostingerReach: z.object({
+      enabled: z.boolean().optional().default(false),
+      apiToken: z.string().optional().default(''),
+      profileUuid: z.string().trim().max(100).optional().default(''),
+      senderName: z.string().trim().min(1).max(50).optional().default('TallyPadi'),
+      senderEmail: z.union([z.literal(''), z.string().trim().email()]).optional().default(''),
+      automationTagUuid: z.string().trim().max(100).optional().default(''),
+      automationUuid: z.string().trim().max(100).optional().default(''),
+    }).optional(),
     adsPlans: z.array(z.object({
       id: z.string(),
       durationDays: z.coerce.number().int().min(3).max(30),
@@ -118,6 +129,8 @@ const broadcastSchema = z
     sendPush: z.boolean().optional().default(false),
     sendWhatsapp: z.boolean().optional().default(true),
     sendEmail: z.boolean().optional().default(false),
+    emailProvider: z.enum(['smtp', 'hostinger_reach']).optional().default('smtp'),
+    reachMode: z.enum(['draft', 'automation']).optional().default('draft'),
     emailTemplateId: z.string().trim().optional(),
     emailSubject: z.string().trim().optional(),
     emailDelayMs: z.coerce.number().int().min(1000).max(60000).optional().default(1000),
@@ -213,11 +226,15 @@ export const getSystemAnalytics = async (req: Request, res: Response) => {
 
     const activeFilter = { subscriptionStatus: { $in: ['active', 'trial'] as const }, role: 'OWNER' };
 
-    const [totalUsers, tycoonUsers, ogaBossUsers, activeUsers24h] = await Promise.all([
+    const [totalUsers, tycoonUsers, ogaBossUsers, activeUsers24h, chatgptTraffic] = await Promise.all([
       User.countDocuments({ role: 'OWNER' }),
       User.countDocuments({ ...activeFilter, planType: 'TYCOON' } as any),
       User.countDocuments({ ...activeFilter, planType: 'OGA_BOSS' } as any),
       User.countDocuments({ updatedAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } }),
+      TrafficVisit.aggregate([
+        { $match: { source: 'chatgpt', date: { $gte: startDate.toISOString().slice(0, 10) } } },
+        { $group: { _id: null, total: { $sum: '$count' } } },
+      ]),
     ]);
 
     // NOTE: original GMV was lifetime; I’m making it RANGE-BASED to match the graph.
@@ -244,6 +261,7 @@ export const getSystemAnalytics = async (req: Request, res: Response) => {
       users: { total: totalUsers, tycoon: tycoonUsers, ogaBoss: ogaBossUsers, active24h: activeUsers24h },
       financials: { gmv, txCount, range, startDate: startDate.toISOString() },
       graph: graphData.map((x) => ({ date: x._id, sales: x.sales })),
+      referrals: { chatgpt: chatgptTraffic[0]?.total || 0, range },
     });
   } catch (error) {
     console.error('Admin Analytics Error:', error);
@@ -717,10 +735,14 @@ export const manageUser = async (req: Request, res: Response) => {
 // -------------------------
 export const getGlobalSettings = async (_req: Request, res: Response) => {
   try {
-    let settings = await AdminSettings.findOne();
+    let settings = await AdminSettings.findOne().select('+hostingerReach.apiToken');
     if (!settings) settings = await AdminSettings.create({});
     const safeSettings = settings.toObject();
     if (safeSettings.smtp) (safeSettings.smtp as any).pass = '';
+    if (safeSettings.hostingerReach) {
+      (safeSettings.hostingerReach as any).apiTokenConfigured = Boolean((safeSettings.hostingerReach as any).apiToken);
+      (safeSettings.hostingerReach as any).apiToken = '';
+    }
     res.json(safeSettings);
   } catch (error) {
     console.error('Get Settings Error:', error);
@@ -733,7 +755,7 @@ export const updateGlobalSettings = async (req: Request, res: Response) => {
     const parsed = updateGlobalSettingsSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
-    const { autoSuspendOnJailbreak, maxMessageHistory, maxStaffAccounts, whatsappUrl, smtp, adsPlans, referralProgram, globalEmailTemplate } = parsed.data;
+    const { autoSuspendOnJailbreak, maxMessageHistory, maxStaffAccounts, whatsappUrl, smtp, hostingerReach, adsPlans, referralProgram, globalEmailTemplate } = parsed.data;
 
     const updatePayload: any = {};
     if (whatsappUrl !== undefined) updatePayload.whatsappUrl = whatsappUrl;
@@ -749,18 +771,44 @@ export const updateGlobalSettings = async (req: Request, res: Response) => {
       updatePayload['smtp.dailyLimit'] = smtp.dailyLimit;
       if (smtp.pass) updatePayload['smtp.pass'] = encryptSmtpPassword(smtp.pass);
     }
+    if (hostingerReach !== undefined) {
+      updatePayload['hostingerReach.enabled'] = hostingerReach.enabled;
+      updatePayload['hostingerReach.profileUuid'] = hostingerReach.profileUuid;
+      updatePayload['hostingerReach.senderName'] = hostingerReach.senderName;
+      updatePayload['hostingerReach.senderEmail'] = hostingerReach.senderEmail.toLowerCase();
+      updatePayload['hostingerReach.automationTagUuid'] = hostingerReach.automationTagUuid;
+      updatePayload['hostingerReach.automationUuid'] = hostingerReach.automationUuid;
+      if (hostingerReach.apiToken) {
+        updatePayload['hostingerReach.apiToken'] = encryptEmailCredential(hostingerReach.apiToken);
+      }
+    }
     if (adsPlans !== undefined) updatePayload.adsPlans = adsPlans;
     if (referralProgram !== undefined) updatePayload.referralProgram = referralProgram;
     if (globalEmailTemplate !== undefined) updatePayload.globalEmailTemplate = globalEmailTemplate;
 
-    const settings = await AdminSettings.findOneAndUpdate({}, { $set: updatePayload }, { new: true, upsert: true });
+    const settings = await AdminSettings.findOneAndUpdate({}, { $set: updatePayload }, { new: true, upsert: true })
+      .select('+hostingerReach.apiToken');
     if (smtp !== undefined) invalidateSmtpTransport();
     const safeSettings = settings?.toObject();
     if (safeSettings?.smtp) (safeSettings.smtp as any).pass = '';
+    if (safeSettings?.hostingerReach) {
+      (safeSettings.hostingerReach as any).apiTokenConfigured = Boolean((safeSettings.hostingerReach as any).apiToken);
+      (safeSettings.hostingerReach as any).apiToken = '';
+    }
     res.json({ success: true, settings: safeSettings });
   } catch (error) {
     console.error('Update Settings Error:', error);
     res.status(500).json({ error: 'Error' });
+  }
+};
+
+export const testHostingerReach = async (_req: Request, res: Response) => {
+  try {
+    const result = await testHostingerReachConnection();
+    res.json({ success: true, ...result });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Hostinger Reach connection failed.';
+    res.status(400).json({ error: message });
   }
 };
 
@@ -773,13 +821,15 @@ export const broadcastMessage = async (req: Request, res: Response) => {
     const parsed = broadcastSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
-    const { target, message, mediaId, mediaType, sendPush, sendWhatsapp, sendEmail, emailTemplateId, emailDelayMs, specificIdentifier, includeUnsubscribed } = parsed.data;
+    const { target, message, mediaId, mediaType, sendPush, sendWhatsapp, sendEmail, emailProvider, reachMode, emailTemplateId, emailDelayMs, specificIdentifier, includeUnsubscribed } = parsed.data;
 
     // Build the Query
     const query: any = { role: 'OWNER' };
     if (sendEmail) {
       query.emailDeliveryStatus = { $ne: 'HARD_BOUNCED' };
-      if (!includeUnsubscribed) query.emailSubscribed = { $ne: false };
+      if (!includeUnsubscribed || (emailProvider === 'hostinger_reach' && reachMode === 'automation')) {
+        query.emailSubscribed = { $ne: false };
+      }
     }
     if (target === 'tycoon') query.planType = 'TYCOON';
     else if (target === 'oga_boss') query.planType = 'OGA_BOSS';
@@ -799,7 +849,7 @@ export const broadcastMessage = async (req: Request, res: Response) => {
 
     // Prepare Email Template early to avoid repeated DB lookups
     let template: any = null;
-    if (sendEmail) {
+    if (sendEmail && !(emailProvider === 'hostinger_reach' && reachMode === 'automation')) {
        if (emailTemplateId) {
            template = await EmailTemplate.findById(emailTemplateId).lean();
            if (!template) return res.status(400).json({ error: 'The selected Email Template was not found.' });
@@ -808,7 +858,34 @@ export const broadcastMessage = async (req: Request, res: Response) => {
        }
     }
 
-    // 1. Send PWA Push Notification Instantly (If requested)
+    // Fetch Admin Settings for global layout wrapper
+    const settings = await AdminSettings.findOne().lean();
+    const globalEmailTemplate = settings?.globalEmailTemplate;
+    const emailDailyLimit = Math.max(1, Number(settings?.smtp?.dailyLimit || 300));
+
+    let reachCampaign: Awaited<ReturnType<typeof prepareHostingerReachCampaign>> | null = null;
+    let reachAutomation: Awaited<ReturnType<typeof triggerHostingerReachAutomation>> | null = null;
+    if (sendEmail && emailProvider === 'hostinger_reach' && reachMode === 'draft') {
+      const basicHtml = `<div style="font-family:Arial,sans-serif;white-space:pre-wrap;line-height:1.6">${String(message || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')}</div>`;
+      let reachHtml = template?.htmlBody || basicHtml;
+      if (globalEmailTemplate?.includes('{{message}}')) {
+        reachHtml = globalEmailTemplate.replace('{{message}}', reachHtml);
+      }
+      reachCampaign = await prepareHostingerReachCampaign({
+        recipients,
+        target,
+        subject: parsed.data.emailSubject || template?.subject || '',
+        title: template?.title || parsed.data.emailSubject || 'TallyPadi campaign',
+        html: reachHtml,
+      });
+    } else if (sendEmail && emailProvider === 'hostinger_reach' && reachMode === 'automation') {
+      reachAutomation = await triggerHostingerReachAutomation({ recipients, target });
+    }
+
+    // Send PWA push only after any Reach preparation succeeds, avoiding a partial campaign.
     if (sendPush && message) {
       executeGlobalPushNotification({
         title: 'TallyPadi Update',
@@ -816,16 +893,12 @@ export const broadcastMessage = async (req: Request, res: Response) => {
       }).catch(err => console.error('Failed to trigger global PWA broadcast:', err));
     }
 
-    // Fetch Admin Settings for global layout wrapper
-    const settings = await AdminSettings.findOne().lean();
-    const globalEmailTemplate = settings?.globalEmailTemplate;
-    const emailDailyLimit = Math.max(1, Number(settings?.smtp?.dailyLimit || 300));
-
     // Replace Async Dispatch Loop with Broadcast Queue
     let emailRecipientIndex = 0;
     for (const u of recipients) {
+      if (!sendWhatsapp && !(sendEmail && emailProvider === 'smtp')) continue;
       const jobPayload = {
-        sendEmail,
+        sendEmail: sendEmail && emailProvider === 'smtp',
         sendWhatsapp,
         mediaId,
         mediaType,
@@ -839,22 +912,28 @@ export const broadcastMessage = async (req: Request, res: Response) => {
       };
       
       // Dispatch individually to Queue
-      const emailDayOffset = sendEmail && u.email
+      const emailDayOffset = sendEmail && emailProvider === 'smtp' && u.email
         ? Math.floor(emailRecipientIndex++ / emailDailyLimit)
         : 0;
       await queueBroadcastMessage(u, jobPayload, undefined, emailDayOffset * 24 * 60 * 60 * 1000);
     }
 
-    const scheduledDays = sendEmail && emailRecipientIndex
+    const scheduledDays = sendEmail && emailProvider === 'smtp' && emailRecipientIndex
       ? Math.ceil(emailRecipientIndex / emailDailyLimit)
       : 1;
     res.json({
       success: true,
-      message: `Broadcast queued to ${recipients.length} recipients${scheduledDays > 1 ? ` across ${scheduledDays} days` : ''}.`,
+      message: reachAutomation
+        ? `${reachAutomation.contactsQueued} valid contacts were synced to “${reachAutomation.audienceTag}”; ${reachAutomation.contactsSkipped} without a usable email were skipped and ${reachAutomation.triggerCandidates} are new trigger candidates.${sendWhatsapp ? ` WhatsApp delivery was queued for ${recipients.length} recipients.` : ''} Reach will process them using the active automation rules.`
+        : reachCampaign
+        ? `Reach draft created with ${reachCampaign.contactsQueued} valid contacts under “${reachCampaign.audienceTag}”; ${reachCampaign.contactsSkipped} without a usable email were skipped.${sendWhatsapp ? ` WhatsApp delivery was queued for ${recipients.length} recipients.` : ''} Open Hostinger Reach to select that tag and send the email campaign.`
+        : `Broadcast queued to ${recipients.length} recipients${scheduledDays > 1 ? ` across ${scheduledDays} days` : ''}.`,
+      reachCampaign,
+      reachAutomation,
     });
   } catch (error) {
     console.error('Broadcast Error:', error);
-    res.status(500).json({ error: 'Broadcast Error' });
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Broadcast Error' });
   }
 };
 

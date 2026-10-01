@@ -64,6 +64,7 @@ import { requireOwnerAccount, requireStaffPermission } from './middleware/staffP
 import { verifyUnsubscribeToken } from './services/emailSecurity.service';
 import { User } from './models/user.model';
 import { AdminSettings } from './models/adminSettings.model';
+import { recordPublicTraffic } from './controllers/traffic.controller';
 
 // --- CONTROLLERS ---
 import { getDashboardData } from './controllers/dashboard.controller';
@@ -193,6 +194,16 @@ const marketplaceLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: 'Marketplace is receiving too many requests from this IP. Please try again shortly.',
+});
+
+const publicTrafficLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  store: rateLimitStore('rl:public-traffic'),
+  passOnStoreError: true,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many traffic events' },
 });
 
 // ✅ Login: IP limiter
@@ -351,6 +362,7 @@ app.get('/api/public/settings', async (_req: Request, res: Response) => {
   const settings = await AdminSettings.findOne().select('whatsappUrl').lean();
   return res.json({ whatsappUrl: settings?.whatsappUrl || '' });
 });
+app.post('/api/public/traffic', publicTrafficLimiter, recordPublicTraffic);
 
 // ==========================================
 // ✅ WEBHOOK ROUTES (No Auth Required)

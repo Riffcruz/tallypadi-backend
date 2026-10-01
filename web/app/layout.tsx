@@ -4,6 +4,7 @@ import "./globals.css";
 
 // Keeping your existing InstallPrompt component import
 import InstallPrompt from "../components/InstallPrompt";
+import ReferralTracker from "../components/ReferralTracker";
 
 // Configure the fonts required by the new Tailwind config
 const inter = Inter({
@@ -124,6 +125,7 @@ export default function RootLayout({
     <html lang="en" className="scroll-smooth">
       <body className={`${inter.variable} ${poppins.variable} font-sans antialiased`}>
         {children}
+        <ReferralTracker />
         <InstallPrompt />
       </body>
     </html>

@@ -23,6 +23,8 @@ export default function BroadcastTab({ headers }: { headers: Record<string, stri
 
     // Email States
     const [sendEmail, setSendEmail] = useState(false);
+    const [emailProvider, setEmailProvider] = useState<'smtp' | 'hostinger_reach'>('smtp');
+    const [reachMode, setReachMode] = useState<'draft' | 'automation'>('automation');
     const [includeUnsubscribed, setIncludeUnsubscribed] = useState(false);
     const [emailDelayMs, setEmailDelayMs] = useState(1000);
     const [specificIdentifier, setSpecificIdentifier] = useState('');
@@ -107,13 +109,14 @@ export default function BroadcastTab({ headers }: { headers: Record<string, stri
     };
 
     const send = async () => {
+        const reachAutomationMode = sendEmail && emailProvider === 'hostinger_reach' && reachMode === 'automation';
         if (!sendWhatsapp && !sendPush && !sendEmail) {
              return Swal.fire('Error', 'You must select at least one delivery method (WhatsApp, Push, or Email).', 'error');
         }
         if ((sendWhatsapp || sendPush) && !msg) {
              return Swal.fire('Missing Field', 'Please enter a message body for WhatsApp/Push.', 'warning');
         }
-        if (sendEmail && !selectedTemplateId && (!emailSubject || !msg)) {
+        if (sendEmail && !reachAutomationMode && !selectedTemplateId && (!emailSubject || !msg)) {
              return Swal.fire('Missing Configuration', 'Please select an Email Template OR provide an Email Subject and Basic Text Body.', 'warning');
         }
         if (target === 'particular_user' && !specificIdentifier) {
@@ -122,7 +125,7 @@ export default function BroadcastTab({ headers }: { headers: Record<string, stri
 
         const res = await Swal.fire({
             title: 'Confirm Broadcast',
-            text: `Send to: ${target}? ${sendWhatsapp ? '📱 WhatsApp ' : ''}${sendPush ? '🔔 Push ' : ''}${sendEmail ? '✉️ Email' : ''}`,
+            text: `Send to: ${target}? ${sendWhatsapp ? '📱 WhatsApp ' : ''}${sendPush ? '🔔 Push ' : ''}${sendEmail ? (emailProvider === 'smtp' ? '✉️ SMTP Email' : reachMode === 'automation' ? '⚡ Reach Automation' : '✉️ Reach Draft') : ''}`,
             icon: 'warning',
             showCancelButton: true,
             confirmButtonText: 'Send Now'
@@ -147,8 +150,10 @@ export default function BroadcastTab({ headers }: { headers: Record<string, stri
                     sendWhatsapp,
                     sendPush,
                     sendEmail,
+                    emailProvider,
+                    reachMode,
                     emailDelayMs,
-                    includeUnsubscribed,
+                    includeUnsubscribed: reachAutomationMode ? false : includeUnsubscribed,
                     specificIdentifier
                 };
 
@@ -161,12 +166,12 @@ export default function BroadcastTab({ headers }: { headers: Record<string, stri
                     payload.mediaType = mediaType;
                 }
 
-                if (sendEmail && selectedTemplateId) {
+                if (sendEmail && !reachAutomationMode && selectedTemplateId) {
                     payload.emailTemplateId = selectedTemplateId;
                 }
 
                 const response = await axios.post(`${API_URL}/admin/broadcast`, payload, { headers });
-                Swal.fire('Sent', response.data.message || 'Broadcast queued successfully.', 'success');
+                Swal.fire(reachAutomationMode ? 'Reach audience synced' : emailProvider === 'hostinger_reach' && sendEmail ? 'Reach draft ready' : 'Sent', response.data.message || 'Broadcast queued successfully.', 'success');
                 setMsg('');
                 setMediaId('');
             } catch (e: unknown) {
@@ -263,7 +268,7 @@ export default function BroadcastTab({ headers }: { headers: Record<string, stri
                             <label className={`flex items-center justify-between p-4 rounded-xl border cursor-pointer transition-all ${sendEmail ? 'bg-indigo-500/10 border-indigo-500 text-indigo-400' : 'bg-slate-800 border-slate-600 text-slate-400 hover:border-slate-500'}`}>
                                 <div className="flex items-center gap-3">
                                     <Mail size={20} />
-                                    <span className="font-semibold text-sm">Email (SMTP)</span>
+                                    <span className="font-semibold text-sm">Email Marketing</span>
                                 </div>
                                 <input type="checkbox" className="w-5 h-5 accent-indigo-500" checked={sendEmail} onChange={(e) => setSendEmail(e.target.checked)} />
                             </label>
@@ -298,6 +303,54 @@ export default function BroadcastTab({ headers }: { headers: Record<string, stri
                     )}
 
                     {sendEmail && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setEmailProvider('smtp')}
+                                className={`rounded-xl border p-4 text-left transition ${emailProvider === 'smtp' ? 'border-indigo-500 bg-indigo-500/10 text-indigo-300' : 'border-slate-700 bg-slate-900/50 text-slate-400 hover:border-slate-500'}`}
+                            >
+                                <span className="block text-sm font-bold">SMTP — send now</span>
+                                <span className="mt-1 block text-xs">Queued direct delivery from TallyPadi.</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setEmailProvider('hostinger_reach')}
+                                className={`rounded-xl border p-4 text-left transition ${emailProvider === 'hostinger_reach' ? 'border-violet-500 bg-violet-500/10 text-violet-300' : 'border-slate-700 bg-slate-900/50 text-slate-400 hover:border-slate-500'}`}
+                            >
+                                <span className="block text-sm font-bold">Hostinger Reach</span>
+                                <span className="mt-1 block text-xs">Sync an automation audience or create a draft.</span>
+                            </button>
+                        </div>
+                    )}
+
+                    {sendEmail && emailProvider === 'hostinger_reach' && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl border border-violet-900/60 bg-violet-950/20 p-3">
+                            <button
+                                type="button"
+                                onClick={() => setReachMode('automation')}
+                                className={`rounded-lg border px-4 py-3 text-left transition ${reachMode === 'automation' ? 'border-violet-400 bg-violet-500/15 text-violet-200' : 'border-slate-700 text-slate-400 hover:border-slate-500'}`}
+                            >
+                                <span className="block text-sm font-bold">Run automation</span>
+                                <span className="mt-1 block text-xs">Upload this audience to the configured Reach tag.</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setReachMode('draft')}
+                                className={`rounded-lg border px-4 py-3 text-left transition ${reachMode === 'draft' ? 'border-violet-400 bg-violet-500/15 text-violet-200' : 'border-slate-700 text-slate-400 hover:border-slate-500'}`}
+                            >
+                                <span className="block text-sm font-bold">Create campaign draft</span>
+                                <span className="mt-1 block text-xs">Use the TallyPadi email editor and finish in Reach.</span>
+                            </button>
+                        </div>
+                    )}
+
+                    {sendEmail && emailProvider === 'hostinger_reach' && reachMode === 'automation' && (
+                        <p className="rounded-lg border border-violet-500/20 bg-violet-500/5 px-4 py-3 text-xs text-violet-200">
+                            Reach controls the email content and timing. TallyPadi sends the selected users into the configured automation audience.
+                        </p>
+                    )}
+
+                    {sendEmail && !(emailProvider === 'hostinger_reach' && reachMode === 'automation') && (
                         <button
                             type="button"
                             onClick={() => setIncludeUnsubscribed((current) => !current)}
@@ -309,7 +362,7 @@ export default function BroadcastTab({ headers }: { headers: Record<string, stri
                     )}
 
                     {/* EMAIL TEMPLATE SECTION */}
-                    {sendEmail && (
+                    {sendEmail && !(emailProvider === 'hostinger_reach' && reachMode === 'automation') && (
                         <div className="bg-slate-900/50 p-5 rounded-xl border border-indigo-900/50 space-y-5 animate-in slide-in-from-top-2">
                              <div className="flex items-center justify-between border-b border-slate-700 pb-3">
                                 <h3 className="font-bold text-indigo-400 flex items-center gap-2">
@@ -380,9 +433,15 @@ export default function BroadcastTab({ headers }: { headers: Record<string, stri
                                         </div>
                                     )}
                                     <div className="pt-3 border-t border-slate-700">
-                                            <label className="block text-xs font-bold text-slate-400 mb-1">Email Dispatch Throttle Delay (Milliseconds)</label>
-                                            <p className="text-[10px] text-slate-500 mb-2">Wait interval between each sent email. Recommedations: 1000 - 3000ms</p>
-                                            <input type="number" value={emailDelayMs} onChange={e=>setEmailDelayMs(Number(e.target.value))} className="w-32 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500 text-sm text-center" />
+                                            {emailProvider === 'smtp' ? (
+                                                <>
+                                                    <label className="block text-xs font-bold text-slate-400 mb-1">Email Dispatch Throttle Delay (Milliseconds)</label>
+                                                    <p className="text-[10px] text-slate-500 mb-2">Wait interval between each sent email. Recommendation: 1000 - 3000ms</p>
+                                                    <input type="number" value={emailDelayMs} onChange={e=>setEmailDelayMs(Number(e.target.value))} className="w-32 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500 text-sm text-center" />
+                                                </>
+                                            ) : (
+                                                <p className="text-xs text-violet-300">Reach will place the matching contacts in a new audience tag and prepare the campaign. Final sending happens in Hostinger Reach.</p>
+                                            )}
                                     </div>
                                  </div>
                              )}
@@ -390,9 +449,9 @@ export default function BroadcastTab({ headers }: { headers: Record<string, stri
                     )}
 
                     {/* Basic Message Body */}
-                    {(sendWhatsapp || sendPush || sendEmail) && (
+                    {(sendWhatsapp || sendPush || (sendEmail && !(emailProvider === 'hostinger_reach' && reachMode === 'automation'))) && (
                         <div className="animate-in slide-in-from-top-2 space-y-4">
-                            {sendEmail && (
+                            {sendEmail && !(emailProvider === 'hostinger_reach' && reachMode === 'automation') && (
                                 <div>
                                     <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Email Subject {selectedTemplateId ? '(Overrides Template Subject)' : ''}</label>
                                     <input type="text" className="w-full bg-slate-900 border border-slate-600 rounded-xl px-4 py-3 text-white focus:border-indigo-500 outline-none transition-colors" placeholder="e.g. Important Update for ##usershopname##" value={emailSubject} onChange={(e) => setEmailSubject(e.target.value)} />
@@ -447,7 +506,7 @@ export default function BroadcastTab({ headers }: { headers: Record<string, stri
                             (!sendWhatsapp && !sendPush && !sendEmail) ? 'bg-slate-700 text-slate-500 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-900/20'
                         }`}
                     >
-                        <Send size={18} /> Launch Mass Campaign
+                        <Send size={18} /> {sendEmail && emailProvider === 'hostinger_reach' && reachMode === 'automation' && !sendWhatsapp && !sendPush ? 'Run Reach Automation' : sendEmail && emailProvider === 'hostinger_reach' && !sendWhatsapp && !sendPush ? 'Prepare Reach Campaign' : 'Launch Mass Campaign'}
                     </button>
                 </div>
                 )}
