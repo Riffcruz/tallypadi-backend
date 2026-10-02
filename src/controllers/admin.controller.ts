@@ -8,7 +8,7 @@ import { Inventory } from '../models/inventory.model';
 import { AdminSettings } from '../models/adminSettings.model';
 import { AdminAuditLog } from '../models/adminAuditLog.model';
 import { EmailTemplate } from '../models/emailTemplate.model';
-import { invalidateSmtpTransport } from '../services/email.service';
+import { invalidateSmtpTransport, sendAdminPersonalEmail } from '../services/email.service';
 import { encryptEmailCredential, encryptSmtpPassword } from '../services/emailSecurity.service';
 import { queueBroadcastMessage, broadcastQueue } from '../services/queue.service';
 import { listHostingerReachUnsubscribedContacts, prepareHostingerReachCampaign, testHostingerReachConnection, triggerHostingerReachAutomation } from '../services/hostingerReach.service';
@@ -21,6 +21,7 @@ import { sendWhatsAppText, sendWhatsAppMediaById } from '../services/whatsapp.se
 import { executeGlobalPushNotification } from '../services/push.service';
 import { walletService } from '../services/wallet.service';
 import { toMinorUnits } from '../services/Campaign/adBudget.service';
+import { generateAdminPersonalMessage } from '../services/adminMessageAi.service';
 
 import bcrypt from 'bcryptjs';
 
@@ -138,6 +139,20 @@ const broadcastSchema = z
     specificIdentifier: z.string().trim().optional(), // For specific user test
   })
   .strict();
+
+const personalMessageDraftSchema = z.object({
+  brief: z.string().trim().min(5).max(4000),
+  channels: z.array(z.enum(['email', 'whatsapp'])).min(1).max(2)
+    .refine((channels) => new Set(channels).size === channels.length, 'Duplicate channels are not allowed'),
+}).strict();
+
+const personalMessageSendSchema = z.object({
+  channels: z.array(z.enum(['email', 'whatsapp'])).min(1).max(2)
+    .refine((channels) => new Set(channels).size === channels.length, 'Duplicate channels are not allowed'),
+  subject: z.string().trim().max(160).optional().default(''),
+  message: z.string().trim().min(1).max(5000),
+  includeUnsubscribed: z.boolean().optional().default(false),
+}).strict();
 
 const manageUserSchema = z
   .object({
@@ -574,6 +589,129 @@ export const getUserDeepDive = async (req: Request, res: Response) => {
   } catch (error) {
     console.error('getUserDeepDive error:', error);
     res.status(500).json({ error: 'Server Error' });
+  }
+};
+
+const resolveAdminMessageRecipient = async (id: string) => {
+  const selected = await User.findById(id);
+  if (!selected) return null;
+  const role = String(selected.role || '').toUpperCase();
+  if (role === 'STAFF' && selected.ownerId) {
+    return (await User.findById(selected.ownerId)) || selected;
+  }
+  return selected;
+};
+
+export const composePersonalUserMessage = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params as { id: string };
+    if (!isValidObjectId(id)) return res.status(400).json({ error: 'Invalid user ID' });
+    const parsed = personalMessageDraftSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+    const recipient = await resolveAdminMessageRecipient(id);
+    if (!recipient) return res.status(404).json({ error: 'User not found' });
+
+    const draft = await generateAdminPersonalMessage({
+      ...parsed.data,
+      recipientName: recipient.name,
+      businessName: recipient.businessName,
+      planType: recipient.planType,
+      subscriptionStatus: recipient.subscriptionStatus,
+    });
+
+    return res.json({ success: true, draft });
+  } catch (error) {
+    console.error('Compose Personal User Message Error:', error);
+    return res.status(500).json({ error: 'Could not compose the message.' });
+  }
+};
+
+export const sendPersonalUserMessage = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params as { id: string };
+    if (!isValidObjectId(id)) return res.status(400).json({ error: 'Invalid user ID' });
+    const parsed = personalMessageSendSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+    const recipient = await resolveAdminMessageRecipient(id);
+    if (!recipient) return res.status(404).json({ error: 'User not found' });
+
+    const { channels, subject, message, includeUnsubscribed } = parsed.data;
+    if (channels.includes('email') && !recipient.email) {
+      return res.status(400).json({ error: 'This user does not have an email address.' });
+    }
+    if (channels.includes('email') && !subject) {
+      return res.status(400).json({ error: 'An email subject is required.' });
+    }
+    if (channels.includes('email') && recipient.emailSubscribed === false && !includeUnsubscribed) {
+      return res.status(409).json({ error: 'This user unsubscribed from email. Enable the emergency override only for an essential account message.' });
+    }
+    if (channels.includes('whatsapp') && !recipient.phoneNumber) {
+      return res.status(400).json({ error: 'This user does not have a WhatsApp number.' });
+    }
+
+    const replacePersonalFields = (value: string) => value
+      .replace(/##usershopname##/g, recipient.businessName || 'Your Shop')
+      .replace(/##phonenumber##/g, recipient.phoneNumber || '')
+      .replace(/##name##/g, recipient.name || recipient.businessName || 'there');
+    const personalizedMessage = replacePersonalFields(message);
+
+    const deliveries = await Promise.allSettled(channels.map(async (channel) => {
+      if (channel === 'email') {
+        await sendAdminPersonalEmail({
+          email: String(recipient.email),
+          subject,
+          message,
+          name: recipient.name,
+          businessName: recipient.businessName,
+          phoneNumber: recipient.phoneNumber,
+        });
+      } else {
+        await sendWhatsAppText(String(recipient.phoneNumber), personalizedMessage);
+      }
+      return channel;
+    }));
+
+    const results = deliveries.map((delivery, index) => ({
+      channel: channels[index],
+      success: delivery.status === 'fulfilled',
+      error: delivery.status === 'rejected'
+        ? String((delivery.reason as { message?: string })?.message || 'Delivery failed').slice(0, 300)
+        : '',
+    }));
+    const sentChannels = results.filter((result) => result.success).map((result) => result.channel);
+
+    try {
+      await AdminAuditLog.create({
+        admin: req.user?.id || null,
+        action: 'Admin personal user message',
+        afterValue: {
+          userId: String(recipient._id),
+          channels,
+          sentChannels,
+          emergencyEmailOverride: includeUnsubscribed,
+          subject: subject || null,
+        },
+        ipAddress: req.ip,
+        userAgent: String(req.headers['user-agent'] || ''),
+      });
+    } catch (auditError) {
+      console.error('Personal User Message Audit Error:', auditError);
+    }
+
+    if (!sentChannels.length) {
+      return res.status(502).json({ error: 'The message could not be delivered.', results });
+    }
+    return res.json({
+      success: sentChannels.length === channels.length,
+      partial: sentChannels.length !== channels.length,
+      message: `Sent by ${sentChannels.join(' and ')}.`,
+      results,
+    });
+  } catch (error) {
+    console.error('Send Personal User Message Error:', error);
+    return res.status(500).json({ error: error instanceof Error ? error.message : 'Could not send the message.' });
   }
 };
 

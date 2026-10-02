@@ -22,7 +22,7 @@ export const initSocket = (httpServer: HttpServer) => {
       const decoded = jwt.verify(token, getJwtSecret()) as { agentId?: string; id?: string; role?: string };
       const role = String(decoded.role || '').toUpperCase();
       const isAgent = role === 'AGENT' && Boolean(decoded.agentId);
-      const isAdmin = ['ADMIN', 'SUPER_ADMIN'].includes(role) && Boolean(decoded.id);
+      const isAdmin = ['ADMIN', 'SUPER_ADMIN', 'SUPERADMIN'].includes(role) && Boolean(decoded.id);
       if (!isAgent && !isAdmin) return next(new Error('Unauthorized'));
       socket.data.agentId = decoded.agentId;
       socket.data.isAdmin = isAdmin;
@@ -65,6 +65,10 @@ export const initSocket = (httpServer: HttpServer) => {
     socket.on('join_ticket', (ticketId: string) => {
       console.log(`🔌 Socket ${socket.id} joined ticket room: ticket:${ticketId}`);
       socket.join(`ticket:${ticketId}`);
+    });
+
+    socket.on('leave_ticket', (ticketId: string) => {
+      socket.leave(`ticket:${ticketId}`);
     });
 
     socket.on('disconnect', () => {

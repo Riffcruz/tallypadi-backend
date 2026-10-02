@@ -13,6 +13,9 @@ export const env = {
   webhookVerifyToken: process.env.WEBHOOK_VERIFY_TOKEN as string,
   paystackSecretKey: process.env.PAYSTACK_SECRET_KEY as string,
   appBaseUrl: process.env.APP_BASE_URL || 'http://localhost:3000',
+  turnstileSecretKey: process.env.TURNSTILE_SECRET_KEY || '',
+  turnstileExpectedHostname: process.env.TURNSTILE_EXPECTED_HOSTNAME || '',
+  supportTicketAdminEmail: process.env.SUPPORT_TICKET_ADMIN_EMAIL || '',
 
   // Cloudflare R2
   cfAccountId: process.env.CF_ACCOUNT_ID as string,

@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useState, useRef, Suspense } from 'react';
+import { useCallback, useEffect, useState, useRef, Suspense } from 'react';
 import { useRouter } from 'next/navigation';
 import io, { Socket } from 'socket.io-client';
 import { 
-  Trash2, Search, User, Clock, MessageSquare, ArrowLeft, RefreshCw, AlertTriangle, Send
+  Trash2, Search, User, MessageSquare, ArrowLeft, RefreshCw, Send, LayoutDashboard, Wifi, WifiOff
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 
@@ -29,19 +29,19 @@ interface Message {
   timestamp: string;
 }
 
-function safeDate(d: any) {
+function safeDate(d: unknown) {
     if (!d) return null;
-    const date = new Date(d);
+    const date = d instanceof Date ? new Date(d.getTime()) : new Date(String(d));
     return isNaN(date.getTime()) ? null : date;
 }
 
-function formatTime(d: any) {
+function formatTime(d: unknown) {
     const date = safeDate(d);
     if (!date) return '';
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-function formatDate(d: any) {
+function formatDate(d: unknown) {
     const date = safeDate(d);
     if (!date) return '';
     return date.toLocaleDateString();
@@ -49,7 +49,8 @@ function formatDate(d: any) {
 
 function AdminSupportContent() {
   const router = useRouter();
-  const [socket, setSocket] = useState<Socket | null>(null);
+  const socketRef = useRef<Socket | null>(null);
+  const [socketConnected, setSocketConnected] = useState(false);
   
   // Data
   const [tickets, setTickets] = useState<Ticket[]>([]);
@@ -62,6 +63,8 @@ function AdminSupportContent() {
   const [searchTerm, setSearchTerm] = useState('');
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [sending, setSending] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -69,7 +72,64 @@ function AdminSupportContent() {
     selectedTicketRef.current = selectedTicket;
   }, [selectedTicket]);
 
-  // ... (keep init logic)
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
+    window.setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior }), 60);
+  }, []);
+
+  const fetchTickets = useCallback(async (silent = false) => {
+    if (!silent) setRefreshing(true);
+    try {
+      const res = await fetch(`${API_URL}/support/admin/tickets`, { headers: adminHeaders() });
+      if (res.status === 401 || res.status === 403) {
+        router.replace('/admin');
+        return;
+      }
+      if (res.ok) {
+        const data = await res.json();
+        setTickets(Array.isArray(data) ? data : []);
+        setSelectedTicket((current) => {
+          if (!current) return current;
+          const fresh = (Array.isArray(data) ? data : []).find((ticket: Ticket) => ticket._id === current._id);
+          if (!fresh) return null;
+          const currentAgent = typeof current.assignedAgentId === 'object' ? current.assignedAgentId?._id : current.assignedAgentId;
+          const freshAgent = typeof fresh.assignedAgentId === 'object' ? fresh.assignedAgentId?._id : fresh.assignedAgentId;
+          return current.status === fresh.status
+            && current.lastMessageAt === fresh.lastMessageAt
+            && current.priority === fresh.priority
+            && currentAgent === freshAgent
+            ? current
+            : fresh;
+        });
+      }
+    } catch (error) {
+      console.error('Could not load support tickets', error);
+    } finally {
+      if (!silent) setRefreshing(false);
+      setLoading(false);
+    }
+  }, [router]);
+
+  const fetchMessages = useCallback(async (ticketId: string, silent = false) => {
+    try {
+      const res = await fetch(`${API_URL}/support/admin/tickets/${ticketId}/messages`, { headers: adminHeaders() });
+      if (res.status === 401 || res.status === 403) {
+        router.replace('/admin');
+        return;
+      }
+      if (res.ok) {
+        const data: Message[] = await res.json();
+        if (selectedTicketRef.current?._id !== ticketId) return;
+        setMessages((current) => {
+          const pending = current.filter((message) => message._id.startsWith('temp-'));
+          const merged = [...(Array.isArray(data) ? data : []), ...pending];
+          return Array.from(new Map(merged.map((message) => [message._id, message])).values());
+        });
+        if (!silent) scrollToBottom('auto');
+      }
+    } catch (error) {
+      console.error('Could not load support messages', error);
+    }
+  }, [router, scrollToBottom]);
 
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -88,6 +148,7 @@ function AdminSupportContent() {
     scrollToBottom();
 
     try {
+        setSending(true);
         const res = await fetch(`${API_URL}/support/admin/tickets/${selectedTicket._id}/send`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...adminHeaders() },
@@ -96,130 +157,156 @@ function AdminSupportContent() {
         
         if (res.ok) {
             const realMsg = await res.json();
-            setMessages(prev => prev.map(m => m._id === tempId ? realMsg : m));
+            setMessages(prev => {
+                const withoutTemporary = prev.filter(message => message._id !== tempId);
+                if (withoutTemporary.some(message => message._id === realMsg._id)) return withoutTemporary;
+                return [...withoutTemporary, realMsg];
+            });
+            void fetchTickets(true);
         } else {
-             console.error('Failed to send');
-             // maybe remove tempMsg or show error
+             const error = await res.json().catch(() => ({}));
+             setMessages(prev => prev.filter(message => message._id !== tempId));
+             setInputText(tempMsg.text);
+             Swal.fire('Send failed', error?.error || 'The reply could not be sent.', 'error');
         }
-    } catch (e) {
-        console.error(e);
+    } catch (error) {
+        console.error(error);
+        setMessages(prev => prev.filter(message => message._id !== tempId));
+        setInputText(tempMsg.text);
+        Swal.fire('Network problem', 'The reply was not sent. Please try again.', 'error');
+    } finally {
+        setSending(false);
     }
   };
-
-  // ... (keep fetch functions)
 
   // Init
   useEffect(() => {
-    const init = async () => {
-        try {
-            // 1. Socket
-            const baseUrl = API_URL.endsWith('/api') ? API_URL.slice(0, -4) : API_URL;
-            const socketConn = io(baseUrl, { auth: { token: getAdminToken() } });
-            setSocket(socketConn);
+    const token = getAdminToken();
+    if (!token) {
+      router.replace('/admin');
+      return;
+    }
 
-            socketConn.on('connect', () => {
-                // Join 'agents' room to receive global ticket updates (list view)
-                socketConn.emit('join_agent', 'ADMIN_VIEWER');
-            });
+    const baseUrl = API_URL.endsWith('/api') ? API_URL.slice(0, -4) : API_URL;
+    const socketConn = io(baseUrl, {
+      auth: { token },
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      timeout: 10000,
+    });
+    socketRef.current = socketConn;
 
-            // ... (keep listeners)
-
-            // 3. Fetch Tickets
-        } catch (e) {
-            console.error(e);
-        } finally {
-            setLoading(false);
-        }
+    const upsertTicket = (incoming: Ticket) => {
+      if (!incoming?._id) return;
+      setTickets((current) => [incoming, ...current.filter((ticket) => ticket._id !== incoming._id)]);
     };
 
-    init();
+    const onConnect = () => {
+      setSocketConnected(true);
+      socketConn.emit('join_agent', 'ADMIN_VIEWER');
+      if (selectedTicketRef.current?._id) socketConn.emit('join_ticket', selectedTicketRef.current._id);
+      void fetchTickets(true);
+    };
+    const onDisconnect = () => setSocketConnected(false);
+    const onConnectError = (error: Error) => {
+      setSocketConnected(false);
+      console.warn('Support socket connection failed; polling remains active.', error.message);
+    };
+    const onQueued = (ticket: Ticket) => upsertTicket(ticket);
+    const onAssigned = (ticket: Ticket) => upsertTicket(ticket);
+    const onRemoved = (data: { ticketId?: string }) => {
+      const ticketId = String(data?.ticketId || '');
+      if (!ticketId) return;
+      setTickets((current) => current.filter((ticket) => ticket._id !== ticketId));
+      if (selectedTicketRef.current?._id === ticketId) {
+        setSelectedTicket(null);
+        setMessages([]);
+        setShowSidebar(true);
+      }
+    };
+    const onMessage = (data: { ticketId: string; message: Message }) => {
+      const ticketId = String(data?.ticketId || '');
+      if (!ticketId || !data?.message?._id) return;
+      if (selectedTicketRef.current?._id === ticketId) {
+        setMessages((current) => current.some((message) => message._id === data.message._id)
+          ? current
+          : [...current, data.message]);
+      }
+      setTickets((current) => {
+        const target = current.find((ticket) => ticket._id === ticketId);
+        if (!target) return current;
+        const updated = { ...target, lastMessageAt: data.message.timestamp };
+        return [updated, ...current.filter((ticket) => ticket._id !== ticketId)];
+      });
+      void fetchTickets(true);
+    };
+
+    socketConn.on('connect', onConnect);
+    socketConn.on('disconnect', onDisconnect);
+    socketConn.on('connect_error', onConnectError);
+    socketConn.on('ticket:queued', onQueued);
+    socketConn.on('ticket:assigned', onAssigned);
+    socketConn.on('ticket:removed', onRemoved);
+    socketConn.on('ticket:message', onMessage);
+
+    const initialTicketFetch = window.setTimeout(() => void fetchTickets(), 0);
+    const ticketPoll = window.setInterval(() => void fetchTickets(true), 8000);
+    const syncWhenVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void fetchTickets(true);
+        if (selectedTicketRef.current?._id) void fetchMessages(selectedTicketRef.current._id, true);
+      }
+    };
+    document.addEventListener('visibilitychange', syncWhenVisible);
+    window.addEventListener('focus', syncWhenVisible);
 
     return () => {
-        socket?.disconnect();
+      window.clearTimeout(initialTicketFetch);
+      window.clearInterval(ticketPoll);
+      document.removeEventListener('visibilitychange', syncWhenVisible);
+      window.removeEventListener('focus', syncWhenVisible);
+      socketConn.off('connect', onConnect);
+      socketConn.off('disconnect', onDisconnect);
+      socketConn.off('connect_error', onConnectError);
+      socketConn.off('ticket:queued', onQueued);
+      socketConn.off('ticket:assigned', onAssigned);
+      socketConn.off('ticket:removed', onRemoved);
+      socketConn.off('ticket:message', onMessage);
+      socketConn.disconnect();
+      socketRef.current = null;
     };
-  }, []);
-
-  // Socket: Join Ticket Room & Listen
-  useEffect(() => {
-      if (!socket) return;
-      
-      const onMessage = (data: { ticketId: string, message: Message }) => {
-          // 1. Update Chat View
-          if (selectedTicketRef.current?._id === data.ticketId) {
-              setMessages(prev => [...prev, data.message]);
-              scrollToBottom();
-          }
-
-          // 2. Update List View (Real-time)
-          setTickets(prev => {
-              const targetIndex = prev.findIndex(t => t._id === data.ticketId);
-              if (targetIndex === -1) return prev; // Ticket not in current list (maybe filtered out)
-
-              const updatedTicket = { 
-                  ...prev[targetIndex], 
-                  lastMessageAt: data.message.timestamp 
-              };
-              
-              // Move to top
-              const newTickets = [...prev];
-              newTickets.splice(targetIndex, 1);
-              return [updatedTicket, ...newTickets];
-          });
-      };
-
-      socket.on('ticket:message', onMessage);
-
-      return () => {
-          socket.off('ticket:message', onMessage);
-      };
-  }, [socket]);
+  }, [fetchMessages, fetchTickets, router]);
 
   // Join Room when ticket selected
   useEffect(() => {
-    if (socket && selectedTicket) {
-        socket.emit('join_ticket', selectedTicket._id);
-    }
-  }, [socket, selectedTicket]);
+    const activeSocket = socketRef.current;
+    if (!activeSocket || !selectedTicket) return;
+    activeSocket.emit('join_ticket', selectedTicket._id);
+    return () => { activeSocket.emit('leave_ticket', selectedTicket._id); };
+  }, [selectedTicket]);
 
   // Poll messages (Backup)
   useEffect(() => {
-      let interval: NodeJS.Timeout;
+      let interval: ReturnType<typeof setInterval> | undefined;
+      let initialFetch: ReturnType<typeof setTimeout> | undefined;
       if (selectedTicket) {
-          fetchMessages(selectedTicket._id); // Initial fetch
+          initialFetch = setTimeout(() => void fetchMessages(selectedTicket._id), 0);
           interval = setInterval(() => {
-              fetchMessages(selectedTicket._id, true); // Silent update
-          }, 3000);
+              void fetchMessages(selectedTicket._id, true);
+          }, 4000);
       }
-      return () => clearInterval(interval);
-  }, [selectedTicket]);
+      return () => {
+        if (initialFetch) clearTimeout(initialFetch);
+        if (interval) clearInterval(interval);
+      };
+  }, [fetchMessages, selectedTicket]);
 
-  const fetchTickets = async () => {
-    try {
-      // Fetch all
-      const res = await fetch(`${API_URL}/support/admin/tickets`, {
-         headers: adminHeaders()
-      });
-      if (res.ok) {
-          const data = await res.json();
-          setTickets(data);
-      }
-    } catch (e) { console.error(e); }
-  };
-
-  const fetchMessages = async (ticketId: string, silent = false) => {
-    try {
-      const res = await fetch(`${API_URL}/support/admin/tickets/${ticketId}/messages`, { headers: adminHeaders() });
-      if (res.ok) {
-          const data = await res.json();
-          setMessages(data);
-          if (!silent) scrollToBottom();
-      }
-    } catch (e) { console.error(e); }
-  };
-
-  const scrollToBottom = () => {
-      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
-  };
+  useEffect(() => {
+    if (messages.length) scrollToBottom();
+  }, [messages.length, scrollToBottom]);
 
   const deleteTicket = async () => {
     if (!selectedTicket) return;
@@ -237,11 +324,12 @@ function AdminSupportContent() {
         try {
             await fetch(`${API_URL}/support/admin/tickets/${selectedTicket._id}`, { method: 'DELETE', headers: adminHeaders() });
             setTickets(prev => prev.filter(t => t._id !== selectedTicket._id));
+            selectedTicketRef.current = null;
             setSelectedTicket(null);
             setMessages([]);
             setShowSidebar(true);
             Swal.fire('Deleted', '', 'success');
-        } catch (e) {
+        } catch {
             Swal.fire('Error', 'Failed to delete', 'error');
         }
     }
@@ -253,8 +341,15 @@ function AdminSupportContent() {
       return matchStatus && matchSearch;
   });
 
+  const openTicket = (ticket: Ticket) => {
+    selectedTicketRef.current = ticket;
+    setSelectedTicket(ticket);
+    setMessages([]);
+    setShowSidebar(false);
+  };
+
   return (
-    <div className="flex h-screen bg-slate-50 font-sans text-slate-900">
+    <div className="flex h-[100dvh] bg-slate-50 font-sans text-slate-900">
       {/* SIDEBAR */}
       <div className={`
         flex-col bg-white border-r border-slate-200 
@@ -262,10 +357,30 @@ function AdminSupportContent() {
         ${showSidebar ? 'flex' : 'hidden md:flex'}
       `}>
           <div className="p-4 border-b border-slate-200 bg-slate-50">
+              <button
+                type="button"
+                onClick={() => router.push('/admin')}
+                className="mb-3 inline-flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-600 transition hover:bg-slate-200 hover:text-slate-900"
+              >
+                <ArrowLeft size={15} /> Back to Admin Dashboard
+              </button>
               <div className="flex items-center justify-between mb-4">
-                  <h1 className="font-bold text-lg text-slate-800">Support Admin</h1>
-                  <button onClick={fetchTickets} className="p-2 hover:bg-slate-200 rounded-full text-slate-500">
-                      <RefreshCw size={18} />
+                  <div>
+                    <h1 className="font-bold text-lg text-slate-800">Live Support</h1>
+                    <div className={`mt-1 flex items-center gap-1.5 text-[11px] font-semibold ${socketConnected ? 'text-emerald-600' : 'text-amber-600'}`}>
+                      {socketConnected ? <Wifi size={12} /> : <WifiOff size={12} />}
+                      {socketConnected ? 'Live updates connected' : 'Reconnecting · auto-refresh active'}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void fetchTickets()}
+                    disabled={refreshing}
+                    className="p-2 hover:bg-slate-200 rounded-full text-slate-500 disabled:opacity-50"
+                    aria-label="Refresh support tickets"
+                    title="Refresh tickets"
+                  >
+                      <RefreshCw size={18} className={refreshing ? 'animate-spin' : ''} />
                   </button>
               </div>
               
@@ -284,7 +399,7 @@ function AdminSupportContent() {
               {/* Filters */}
               <div className="flex gap-2">
                   {['ALL', 'QUEUED', 'ASSIGNED', 'CLOSED'].map(s => (
-                      <button 
+                      <button
                         key={s}
                         onClick={() => setFilterStatus(s)}
                         className={`px-3 py-1 rounded-lg text-[10px] font-bold border ${
@@ -308,7 +423,7 @@ function AdminSupportContent() {
                   filteredTickets.map(ticket => (
                       <div 
                         key={ticket._id}
-                        onClick={() => { setSelectedTicket(ticket); setShowSidebar(false); }}
+                        onClick={() => openTicket(ticket)}
                         className={`p-3 rounded-xl cursor-pointer border ${
                             selectedTicket?._id === ticket._id 
                             ? 'bg-indigo-50 border-indigo-200 ring-1 ring-indigo-500/20' 
@@ -359,13 +474,23 @@ function AdminSupportContent() {
                             </p>
                         </div>
                     </div>
-                    <button 
-                        onClick={deleteTicket}
-                        className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                        title="Delete Ticket"
-                    >
-                        <Trash2 size={18} />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                          type="button"
+                          onClick={() => router.push('/admin')}
+                          className="hidden sm:inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100"
+                          title="Return to Admin Dashboard"
+                      >
+                          <LayoutDashboard size={16} /> Dashboard
+                      </button>
+                      <button
+                          onClick={deleteTicket}
+                          className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Delete Ticket"
+                      >
+                          <Trash2 size={18} />
+                      </button>
+                    </div>
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/50">
@@ -399,12 +524,13 @@ function AdminSupportContent() {
                             value={inputText}
                             onChange={e => setInputText(e.target.value)}
                         />
-                        <button 
+                        <button
                             type="submit" 
-                            disabled={!inputText.trim()}
+                            disabled={sending || !inputText.trim()}
                             className="p-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-indigo-600/20"
+                            aria-label="Send reply"
                         >
-                            <Send size={20} />
+                            {sending ? <RefreshCw size={20} className="animate-spin" /> : <Send size={20} />}
                         </button>
                     </form>
                 </div>

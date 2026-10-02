@@ -316,6 +316,7 @@ export const supportService = {
 
     // 4. Emit real-time update
     safeEmit(`ticket:${ticket._id}`, 'ticket:message', { ticketId: ticket._id, message: msg });
+    safeEmit('agents', 'ticket:message', { ticketId: ticket._id, message: msg });
     
     return msg;
   },
@@ -470,6 +471,7 @@ export const supportService = {
 
     // 4. Emit real-time update
     safeEmit(`ticket:${ticket._id}`, 'ticket:message', { ticketId: ticket._id, message: msg });
+    safeEmit('agents', 'ticket:message', { ticketId: ticket._id, message: msg });
     
     // Also emit to assigned agent if any, so they see admin's message
     if (ticket.assignedAgentId) {
@@ -488,9 +490,8 @@ export const supportService = {
     if (ticket.assignedAgentId && (ticket.status === 'ASSIGNED' || ticket.status === 'ACTIVE')) {
         await SupportAgent.findByIdAndUpdate(ticket.assignedAgentId, { $inc: { activeTicketsCount: -1 } });
         safeEmit(`agent:${ticket.assignedAgentId}`, 'ticket:removed', { ticketId });
-    } else if (ticket.status === 'QUEUED') {
-        safeEmit('agents', 'ticket:removed', { ticketId });
     }
+    safeEmit('agents', 'ticket:removed', { ticketId });
 
     await SupportMessage.deleteMany({ ticketId });
     await SupportTicket.findByIdAndDelete(ticketId);

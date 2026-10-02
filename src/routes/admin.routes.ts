@@ -9,6 +9,8 @@ import {
   getAllUsers,
   manageUser,
   getUserDeepDive,
+  composePersonalUserMessage,
+  sendPersonalUserMessage,
   broadcastMessage,
   getBroadcastQueueStatus,
   pauseBroadcastQueue,
@@ -65,6 +67,11 @@ import {
   unpublishAdminBlogPost,
   updateAdminBlogPost,
 } from '../controllers/blog.controller';
+import {
+  getAdminContactTicket,
+  listAdminContactTickets,
+  updateAdminContactTicket,
+} from '../controllers/contactTicket.controller';
 
 const router = Router();
 const blogAiLimiter = rateLimit({
@@ -75,8 +82,21 @@ const blogAiLimiter = rateLimit({
   keyGenerator: (req) => `admin:${req.user?.id || 'authenticated'}`,
   message: { error: 'Too many AI article requests. Please wait before generating another draft.' },
 });
+const personalMessageAiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => `admin-message:${req.user?.id || 'authenticated'}`,
+  message: { error: 'Too many AI message requests. Please wait before generating another draft.' },
+});
 
 router.use(verifyAdmin);
+
+// Contact form tickets
+router.get('/contact-tickets', listAdminContactTickets);
+router.get('/contact-tickets/:id', getAdminContactTicket);
+router.patch('/contact-tickets/:id', updateAdminContactTicket);
 
 // Dashboard
 router.get('/analytics', getSystemAnalytics);
@@ -127,6 +147,8 @@ router.get('/settings/hostinger-reach/unsubscribed', getHostingerReachUnsubscrib
 router.get('/users', getAllUsers);
 router.get('/referrals', getAdminReferralTransactions);
 router.get('/users/:id/details', getUserDeepDive);
+router.post('/users/:id/messages/compose', personalMessageAiLimiter, composePersonalUserMessage);
+router.post('/users/:id/messages/send', sendPersonalUserMessage);
 router.post('/users/:id/ads-wallet/top-up', adminTopUpUserAdsWallet);
 
 // Investor Management

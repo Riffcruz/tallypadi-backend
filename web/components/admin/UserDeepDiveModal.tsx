@@ -10,6 +10,8 @@ import {
   Loader2,
   Trash2,
   MessageSquare,
+  Mail,
+  Sparkles,
   Send,
   Unlink,
   ExternalLink,
@@ -45,6 +47,8 @@ export interface DeepDiveUser {
 }
 
 export interface UserProfile {
+  _id?: string;
+  name?: string;
   businessName?: string;
   phoneNumber?: string;
   email?: string;
@@ -54,6 +58,7 @@ export interface UserProfile {
   nextBillingDate?: string | Date;
   planType?: string;
   shopSlug?: string;
+  emailSubscribed?: boolean;
 }
 
 export interface DeepDiveDetails {
@@ -88,6 +93,12 @@ export default function UserDeepDiveModal({
   const [target, setTarget] = useState<'user' | 'staff'>('user');
   const [staffTarget, setStaffTarget] = useState<string>(''); // phone number
   const [msg, setMsg] = useState('');
+  const [emailSubject, setEmailSubject] = useState('');
+  const [sendEmail, setSendEmail] = useState(false);
+  const [sendWhatsapp, setSendWhatsapp] = useState(true);
+  const [includeUnsubscribed, setIncludeUnsubscribed] = useState(false);
+  const [aiBrief, setAiBrief] = useState('');
+  const [composing, setComposing] = useState(false);
   const [sending, setSending] = useState(false);
 
   const [deletingUser, setDeletingUser] = useState(false);
@@ -101,16 +112,15 @@ export default function UserDeepDiveModal({
     [adminToken]
   );
 
-  if (!adminToken) {
-  Swal.fire('Auth Error', 'Missing admin token. Please login again.', 'error');
-  onClose();
-  return null;
-}
-
+  useEffect(() => {
+    if (!adminToken) {
+      void Swal.fire('Auth Error', 'Missing admin token. Please login again.', 'error').then(onClose);
+    }
+  }, [adminToken, onClose]);
 
   // ✅ Central refresh (prevents stale UI after deletes)
   const refreshDetails = useCallback(async () => {
-    if (!userId) return;
+    if (!userId || !adminToken) return;
 
     setLoadingDetails(true);
     try {
@@ -128,7 +138,7 @@ export default function UserDeepDiveModal({
     } finally {
       setLoadingDetails(false);
     }
-  }, [userId, authHeaders]);
+  }, [userId, adminToken, authHeaders, role]);
 
   // ── Admin: Delete one inventory item ────────────────────────────────────────
   const handleDeleteInventoryItem = async (itemId: string, itemName: string) => {
@@ -186,14 +196,16 @@ export default function UserDeepDiveModal({
   };
 
   useEffect(() => {
-    refreshDetails();
+    const timer = window.setTimeout(() => void refreshDetails(), 0);
+    return () => window.clearTimeout(timer);
   }, [refreshDetails]);
 
   // auto-set default staff target when staff loads
   useEffect(() => {
     const staff = details?.staff || [];
     if (staff.length && !staffTarget) {
-      setStaffTarget(String(staff[0]?.phoneNumber || ''));
+      const timer = window.setTimeout(() => setStaffTarget(String(staff[0]?.phoneNumber || '')), 0);
+      return () => window.clearTimeout(timer);
     }
   }, [details?.staff, staffTarget]);
 
@@ -451,19 +463,53 @@ export default function UserDeepDiveModal({
   };
 
   const sendIndividualMessage = async (directTo?: string) => {
-    const to =
-      directTo ||
-      (target === 'user'
-        ? (details?.profile?.phoneNumber || user?.phoneNumber || '')
-        : staffTarget);
-
     const text = String(msg || '').trim();
-    if (!to) return Swal.fire('Error', 'No phone number found for target.', 'error');
     if (!text) return;
 
+    const selectedStaff = (details?.staff || []).find((staff) => String(staff.phoneNumber || '') === staffTarget);
+    const recipientId = target === 'user'
+      ? String(details?.profile?._id || userId)
+      : String(selectedStaff?._id || '');
+    const recipientPhone = directTo || (target === 'user'
+      ? (details?.profile?.phoneNumber || user?.phoneNumber || '')
+      : staffTarget);
+    const recipientEmail = target === 'user'
+      ? details?.profile?.email
+      : String(selectedStaff?.email || '');
+    const channels = [sendEmail ? 'email' : '', sendWhatsapp ? 'whatsapp' : ''].filter(Boolean);
+
+    if (role === 'agent') {
+      if (!recipientPhone) return Swal.fire('Error', 'No phone number found for target.', 'error');
+      const confirmation = await Swal.fire({
+        title: 'Confirm WhatsApp message',
+        text: `Send to: ${recipientPhone}`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Send Now',
+      });
+      if (!confirmation.isConfirmed) return;
+      try {
+        setSending(true);
+        await onAction(userId, 'send_message', { to: recipientPhone, message: text });
+        Swal.fire('Sent', 'WhatsApp message sent.', 'success');
+        setMsg('');
+      } catch {
+        Swal.fire('Error', 'Message failed', 'error');
+      } finally {
+        setSending(false);
+      }
+      return;
+    }
+
+    if (!recipientId) return Swal.fire('Error', 'No recipient was selected.', 'error');
+    if (!channels.length) return Swal.fire('Choose a channel', 'Select Email, WhatsApp, or both.', 'warning');
+    if (sendEmail && !recipientEmail) return Swal.fire('No email', 'This recipient does not have an email address.', 'warning');
+    if (sendEmail && !emailSubject.trim()) return Swal.fire('Subject required', 'Add an email subject before sending.', 'warning');
+    if (sendWhatsapp && !recipientPhone) return Swal.fire('No WhatsApp number', 'This recipient does not have a WhatsApp number.', 'warning');
+
     const res = await Swal.fire({
-      title: 'Confirm Message',
-      text: `Send to: ${to}`,
+      title: 'Send personal message?',
+      text: `Send by ${channels.join(' and ')} to ${target === 'user' ? details?.profile?.businessName || 'this user' : String(selectedStaff?.name || 'this staff member')}?`,
       icon: 'warning',
       showCancelButton: true,
       confirmButtonText: 'Send Now',
@@ -472,13 +518,55 @@ export default function UserDeepDiveModal({
 
     try {
       setSending(true);
-      await onAction(userId, 'send_message', { to, message: text });
-      Swal.fire('Sent', 'Message queued', 'success');
+      const response = await axios.post(`${API_URL}/admin/users/${recipientId}/messages/send`, {
+        channels,
+        subject: emailSubject.trim(),
+        message: text,
+        includeUnsubscribed,
+      }, { headers: authHeaders });
+      await Swal.fire(
+        response.data?.partial ? 'Partly sent' : 'Sent',
+        response.data?.message || 'Personal message sent.',
+        response.data?.partial ? 'warning' : 'success'
+      );
       setMsg('');
-    } catch (e) {
-      Swal.fire('Error', 'Message failed', 'error');
+      setEmailSubject('');
+      setAiBrief('');
+    } catch (error: unknown) {
+      const message = axios.isAxiosError(error) ? error.response?.data?.error : undefined;
+      Swal.fire('Message failed', message || 'The message could not be delivered.', 'error');
     } finally {
       setSending(false);
+    }
+  };
+
+  const composeMessageWithAi = async () => {
+    const brief = aiBrief.trim();
+    if (brief.length < 5) return Swal.fire('Add context', 'Tell the AI what you want to say.', 'warning');
+    const selectedStaff = (details?.staff || []).find((staff) => String(staff.phoneNumber || '') === staffTarget);
+    const recipientId = target === 'user'
+      ? String(details?.profile?._id || userId)
+      : String(selectedStaff?._id || '');
+    const channels = [sendEmail ? 'email' : '', sendWhatsapp ? 'whatsapp' : ''].filter(Boolean);
+    if (!recipientId || !channels.length) return Swal.fire('Choose a recipient and channel', '', 'warning');
+
+    setComposing(true);
+    try {
+      const response = await axios.post(`${API_URL}/admin/users/${recipientId}/messages/compose`, {
+        brief,
+        channels,
+      }, { headers: authHeaders });
+      const draft = response.data?.draft;
+      setMsg(String(draft?.message || ''));
+      if (sendEmail) setEmailSubject(String(draft?.subject || ''));
+      if (draft?.source === 'FALLBACK') {
+        Swal.fire('Draft prepared', 'AI was temporarily unavailable, so a simple editable draft was prepared.', 'info');
+      }
+    } catch (error: unknown) {
+      const message = axios.isAxiosError(error) ? error.response?.data?.error : undefined;
+      Swal.fire('Could not compose', message || 'Try again or write the message manually.', 'error');
+    } finally {
+      setComposing(false);
     }
   };
 
@@ -605,6 +693,14 @@ export default function UserDeepDiveModal({
     `px-4 sm:px-6 py-3 text-sm font-semibold capitalize whitespace-nowrap ${
       view === m ? 'text-emerald-300 border-b-2 border-emerald-400' : 'text-slate-400 hover:text-white'
     }`;
+
+  const selectedStaffRecord = (details?.staff || []).find((staff) => String(staff.phoneNumber || '') === staffTarget);
+  const activeRecipient = target === 'user' ? details?.profile : selectedStaffRecord;
+  const activeRecipientEmail = String(activeRecipient?.email || '');
+  const activeRecipientPhone = String(activeRecipient?.phoneNumber || '');
+  const activeRecipientUnsubscribed = activeRecipient?.emailSubscribed === false;
+
+  if (!adminToken) return null;
 
   return (
     <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-0 sm:p-4 backdrop-blur-sm">
@@ -770,7 +866,7 @@ export default function UserDeepDiveModal({
               <div className="space-y-4">
                 <div className="p-4 bg-slate-700/30 rounded-xl border border-slate-600">
                   <h3 className="text-slate-400 text-xs uppercase font-extrabold mb-3 flex items-center gap-2">
-                    <MessageSquare size={14} className="text-purple-300" /> Send Individual Message
+                    <MessageSquare size={14} className="text-purple-300" /> Personal message
                   </h3>
 
                   <div className="space-y-3">
@@ -780,7 +876,10 @@ export default function UserDeepDiveModal({
                         <select
                           className="w-full bg-slate-900 border border-slate-600 rounded-xl px-4 py-3 text-white focus:border-green-500 outline-none"
                           value={target}
-                          onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setTarget(e.target.value as 'user' | 'staff')}
+                          onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+                            setTarget(e.target.value as 'user' | 'staff');
+                            setIncludeUnsubscribed(false);
+                          }}
                         >
                           <option value="user">User (Main Number)</option>
                           <option value="staff">Staff</option>
@@ -790,14 +889,18 @@ export default function UserDeepDiveModal({
                       <div>
                         <label className="block text-[10px] font-extrabold text-slate-400 uppercase mb-1">Recipient</label>
                         {target === 'user' ? (
-                          <div className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white text-sm font-mono truncate">
-                            {details?.profile?.phoneNumber || '—'}
+                          <div className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white text-sm truncate">
+                            <span className="block font-mono">{details?.profile?.phoneNumber || '—'}</span>
+                            {details?.profile?.email && <span className="mt-1 block truncate text-xs text-slate-500">{details.profile.email}</span>}
                           </div>
                         ) : (
                           <select
                             className="w-full bg-slate-900 border border-slate-600 rounded-xl px-4 py-3 text-white focus:border-green-500 outline-none"
                             value={staffTarget}
-                            onChange={(e) => setStaffTarget(e.target.value)}
+                            onChange={(e) => {
+                              setStaffTarget(e.target.value);
+                              setIncludeUnsubscribed(false);
+                            }}
                           >
                             {(details?.staff || []).length ? (
                               (details.staff as Record<string, unknown>[]).map((s) => (
@@ -813,23 +916,99 @@ export default function UserDeepDiveModal({
                       </div>
                     </div>
 
+                    {role !== 'agent' && (
+                      <>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setSendWhatsapp((current) => !current)}
+                            className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-bold transition ${sendWhatsapp ? 'border-emerald-500 bg-emerald-500/15 text-emerald-300' : 'border-slate-600 bg-slate-900 text-slate-400'}`}
+                          >
+                            <MessageSquare size={16} /> WhatsApp
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setSendEmail((current) => !current)}
+                            className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-bold transition ${sendEmail ? 'border-blue-500 bg-blue-500/15 text-blue-300' : 'border-slate-600 bg-slate-900 text-slate-400'}`}
+                          >
+                            <Mail size={16} /> Email
+                          </button>
+                        </div>
+
+                        <div className="rounded-xl border border-purple-500/25 bg-purple-500/10 p-3">
+                          <label className="mb-2 flex items-center gap-2 text-[10px] font-extrabold uppercase text-purple-200">
+                            <Sparkles size={14} /> Compose with AI
+                          </label>
+                          <textarea
+                            className="h-20 w-full resize-none rounded-lg border border-slate-600 bg-slate-900 p-3 text-sm text-white outline-none focus:border-purple-500"
+                            placeholder="Example: Remind the user that their subscription expires on Friday and ask them to renew. Keep it friendly."
+                            value={aiBrief}
+                            onChange={(event) => setAiBrief(event.target.value)}
+                            maxLength={4000}
+                          />
+                          <button
+                            type="button"
+                            disabled={composing || aiBrief.trim().length < 5 || (!sendEmail && !sendWhatsapp)}
+                            onClick={composeMessageWithAi}
+                            className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-purple-600 px-3 py-2.5 text-sm font-extrabold text-white transition hover:bg-purple-500 disabled:opacity-50"
+                          >
+                            {composing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles size={16} />}
+                            Write draft
+                          </button>
+                        </div>
+
+                        {sendEmail && (
+                          <div>
+                            <label className="mb-1 block text-[10px] font-extrabold uppercase text-slate-400">Email subject</label>
+                            <input
+                              type="text"
+                              className="w-full rounded-xl border border-slate-600 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500"
+                              placeholder="Subject"
+                              value={emailSubject}
+                              onChange={(event) => setEmailSubject(event.target.value)}
+                              maxLength={160}
+                            />
+                          </div>
+                        )}
+
+                        {sendEmail && activeRecipientUnsubscribed && (
+                          <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100">
+                            <input
+                              type="checkbox"
+                              checked={includeUnsubscribed}
+                              onChange={(event) => setIncludeUnsubscribed(event.target.checked)}
+                              className="mt-0.5 h-4 w-4 accent-amber-500"
+                            />
+                            <span><strong>Emergency email override.</strong> This user unsubscribed. Use only for an essential account message.</span>
+                          </label>
+                        )}
+
+                        <div className="rounded-lg bg-slate-900/70 px-3 py-2 text-xs text-slate-400">
+                          {sendWhatsapp && <span className={activeRecipientPhone ? '' : 'text-amber-300'}>WhatsApp: {activeRecipientPhone || 'missing'}</span>}
+                          {sendWhatsapp && sendEmail && <span> · </span>}
+                          {sendEmail && <span className={activeRecipientEmail ? '' : 'text-amber-300'}>Email: {activeRecipientEmail || 'missing'}</span>}
+                        </div>
+                      </>
+                    )}
+
                     <div>
                       <label className="block text-[10px] font-extrabold text-slate-400 uppercase mb-1">Message</label>
                       <textarea
-                        className="w-full h-28 bg-slate-900 border border-slate-600 rounded-xl p-4 text-white focus:border-green-500 outline-none resize-none"
-                        placeholder="Type message..."
+                        className="w-full h-36 bg-slate-900 border border-slate-600 rounded-xl p-4 text-white focus:border-green-500 outline-none resize-none"
+                        placeholder="Write or generate the message, then edit it here..."
                         value={msg}
                         onChange={(e) => setMsg(e.target.value)}
+                        maxLength={5000}
                       />
                     </div>
 
                     <button
-                      disabled={sending || !msg.trim() || (target === 'staff' && !staffTarget)}
+                      disabled={sending || !msg.trim() || (target === 'staff' && !staffTarget) || (role !== 'agent' && !sendEmail && !sendWhatsapp)}
                       onClick={() => sendIndividualMessage()}
                       className="w-full bg-blue-600 hover:bg-blue-500 text-white font-extrabold py-4 rounded-xl shadow-lg shadow-blue-900/20 transition-all disabled:opacity-60 flex items-center justify-center gap-2"
                     >
                       {sending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send size={18} />}
-                      Send Message
+                      {role === 'agent' ? 'Send WhatsApp Message' : `Send${sendEmail && sendWhatsapp ? ' Email + WhatsApp' : sendEmail ? ' Email' : sendWhatsapp ? ' WhatsApp' : ' Message'}`}
                     </button>
                   </div>
                 </div>

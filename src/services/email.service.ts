@@ -1,6 +1,7 @@
 import nodemailer from 'nodemailer';
+import { env } from '../config/env';
 import { AdminSettings } from '../models/adminSettings.model';
-import { decryptSmtpPassword, encryptSmtpPassword } from './emailSecurity.service';
+import { createUnsubscribeToken, decryptSmtpPassword, encryptSmtpPassword } from './emailSecurity.service';
 
 type SmtpConfig = {
     host: string;
@@ -45,6 +46,9 @@ const createSmtpTransport = async () => {
         pool: true,
         maxConnections: 2,
         maxMessages: 100,
+        connectionTimeout: 10000,
+        greetingTimeout: 10000,
+        socketTimeout: 20000,
         host: smtpConfig.host,
         port: smtpConfig.port,
         secure: smtpConfig.secure,
@@ -122,6 +126,134 @@ export const sendBroadcastEmail = async (
         console.error(`Failed to send Broadcast Email to ${email}:`, error);
         throw error;
     }
+};
+
+export const sendAdminPersonalEmail = async ({
+    email,
+    subject,
+    message,
+    name,
+    businessName,
+    phoneNumber,
+}: {
+    email: string;
+    subject: string;
+    message: string;
+    name?: string;
+    businessName?: string;
+    phoneNumber?: string;
+}) => {
+    const { transporter, smtpConfig } = await createSmtpTransport();
+    const settings = await AdminSettings.findOne().lean();
+    const replacePersonalFields = (value: string) => value
+        .replace(/##usershopname##/g, businessName || 'Your Shop')
+        .replace(/##phonenumber##/g, phoneNumber || '')
+        .replace(/##name##/g, name || businessName || 'there');
+    const replaceHtmlFields = (value: string) => value
+        .replace(/##usershopname##/g, escapeHtml(businessName || 'Your Shop'))
+        .replace(/##phonenumber##/g, escapeHtml(phoneNumber || ''))
+        .replace(/##name##/g, escapeHtml(name || businessName || 'there'));
+
+    const personalizedSubject = replacePersonalFields(subject).slice(0, 160);
+    const personalizedMessage = replacePersonalFields(message);
+    let html = `<div style="font-family:Arial,sans-serif;white-space:pre-wrap;line-height:1.7">${escapeHtml(personalizedMessage)}</div>`;
+    const globalTemplate = String(settings?.globalEmailTemplate || '');
+    if (/\{\{\s*message\s*\}\}/i.test(globalTemplate)) {
+        html = globalTemplate.replace(/\{\{\s*message\s*\}\}/i, html);
+    }
+    const unsubscribeToken = createUnsubscribeToken(email);
+    const apiBaseUrl = String(process.env.API_BASE_URL || 'https://tallypadi.com/api').replace(/\/$/, '');
+    const unsubscribeUrl = `${apiBaseUrl}/public/unsubscribe?token=${encodeURIComponent(unsubscribeToken)}`;
+    html = replaceHtmlFields(html).replace(/\{\{unsubscribe_link\}\}/g, unsubscribeUrl);
+
+    await transporter.sendMail({
+        from: `TallyPadi <${smtpConfig.fromAddress || smtpConfig.user}>`,
+        to: email,
+        subject: personalizedSubject,
+        html,
+        headers: {
+            'List-Unsubscribe': `<${unsubscribeUrl}>`,
+            'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+        },
+    });
+
+    return true;
+};
+
+export const sendSupportTicketAdminNotification = async ({
+    ticketId,
+    ticketNumber,
+    name,
+    email,
+    phone,
+    category,
+    subject,
+    message,
+}: {
+    ticketId: string;
+    ticketNumber: string;
+    name: string;
+    email: string;
+    phone?: string;
+    category: string;
+    subject: string;
+    message: string;
+}) => {
+    const { transporter, smtpConfig } = await createSmtpTransport();
+    const settings = await AdminSettings.findOne().lean();
+    const adminEmail = String(
+        env.supportTicketAdminEmail || smtpConfig.fromAddress || smtpConfig.user || ''
+    ).trim();
+    if (!adminEmail) throw new Error('Support ticket admin email is not configured');
+
+    const appBaseUrl = String(process.env.APP_BASE_URL || 'https://tallypadi.com').replace(/\/$/, '');
+    const ticketUrl = `${appBaseUrl}/admin/tickets?ticket=${encodeURIComponent(ticketId)}`;
+    const safe = {
+        ticketNumber: escapeHtml(ticketNumber),
+        name: escapeHtml(name),
+        email: escapeHtml(email),
+        phone: escapeHtml(phone || 'Not provided'),
+        category: escapeHtml(category),
+        subject: escapeHtml(subject),
+        message: escapeHtml(message).replace(/\n/g, '<br>'),
+        ticketUrl: escapeHtml(ticketUrl),
+    };
+
+    const content = `
+        <div style="font-family:Arial,sans-serif;max-width:640px;margin:0 auto;color:#172033;line-height:1.6">
+            <h2 style="margin:0 0 8px;color:#064e3b">New support ticket</h2>
+            <p style="margin:0 0 20px;color:#64748b">${safe.ticketNumber}</p>
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse">
+                <tr><td style="padding:8px 0;color:#64748b;width:120px">From</td><td style="padding:8px 0;font-weight:700">${safe.name}</td></tr>
+                <tr><td style="padding:8px 0;color:#64748b">Email</td><td style="padding:8px 0">${safe.email}</td></tr>
+                <tr><td style="padding:8px 0;color:#64748b">Phone</td><td style="padding:8px 0">${safe.phone}</td></tr>
+                <tr><td style="padding:8px 0;color:#64748b">Category</td><td style="padding:8px 0">${safe.category}</td></tr>
+                <tr><td style="padding:8px 0;color:#64748b">Subject</td><td style="padding:8px 0;font-weight:700">${safe.subject}</td></tr>
+            </table>
+            <div style="margin:20px 0;padding:18px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px">${safe.message}</div>
+            <a href="${safe.ticketUrl}" style="display:inline-block;background:#059669;color:#fff;text-decoration:none;font-weight:700;padding:12px 18px;border-radius:8px">Open ticket</a>
+        </div>
+    `;
+
+    const globalTemplate = String(settings?.globalEmailTemplate || '');
+    let html = /\{\{\s*message\s*\}\}/i.test(globalTemplate)
+        ? globalTemplate.replace(/\{\{\s*message\s*\}\}/i, content)
+        : content;
+    html = html
+        .replace(/\{\{unsubscribe_link\}\}/g, safe.ticketUrl)
+        .replace(/##usershopname##/g, 'TallyPadi Support')
+        .replace(/##phonenumber##/g, safe.phone)
+        .replace(/##name##/g, safe.name);
+
+    await transporter.sendMail({
+        from: `TallyPadi <${smtpConfig.fromAddress || smtpConfig.user}>`,
+        to: adminEmail,
+        replyTo: email,
+        subject: `[${ticketNumber}] ${subject}`.slice(0, 180),
+        html,
+    });
+
+    return true;
 };
 
 export const sendSubscriptionExpiryEmail = async ({

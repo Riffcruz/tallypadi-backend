@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { Mail, MapPin, MessageCircle, ShieldCheck } from 'lucide-react';
 import MarketingNavbar from '../../components/MarketingNavbar';
 import MarketingFooter from '../../components/MarketingFooter';
+import SupportTicketForm from '../../components/SupportTicketForm';
 
 export const metadata: Metadata = {
   title: 'Contact TallyPadi',
@@ -65,7 +66,16 @@ export default function ContactPage() {
           </div>
         </section>
 
-        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 lg:py-16">
+        <section className="mx-auto grid max-w-7xl gap-8 px-4 py-12 sm:px-6 lg:grid-cols-[0.7fr_1.3fr] lg:px-8 lg:py-16">
+          <div>
+            <p className="text-sm font-bold uppercase tracking-wider text-emerald-700">Send a ticket</p>
+            <h2 className="mt-3 text-3xl font-black text-stone-950">Tell us what happened.</h2>
+            <p className="mt-4 leading-7 text-stone-600">We’ll send your request directly to the support team.</p>
+          </div>
+          <SupportTicketForm />
+        </section>
+
+        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-14 lg:pb-16">
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {contacts.map((item) => {
               const Icon = item.icon;

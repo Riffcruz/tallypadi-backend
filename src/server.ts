@@ -65,6 +65,7 @@ import { verifyUnsubscribeToken } from './services/emailSecurity.service';
 import { User } from './models/user.model';
 import { AdminSettings } from './models/adminSettings.model';
 import { recordPublicTraffic } from './controllers/traffic.controller';
+import { createPublicContactTicket } from './controllers/contactTicket.controller';
 
 // --- CONTROLLERS ---
 import { getDashboardData } from './controllers/dashboard.controller';
@@ -204,6 +205,16 @@ const publicTrafficLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many traffic events' },
+});
+
+const contactTicketLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  store: rateLimitStore('rl:contact-ticket'),
+  passOnStoreError: true,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many support requests from this connection. Please try again later.' },
 });
 
 // ✅ Login: IP limiter
@@ -426,6 +437,8 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
 // ==========================================
 
 // --- AUTH & DASHBOARD ---
+app.post('/api/public/contact-tickets', contactTicketLimiter, createPublicContactTicket);
+
 // ✅ APPLY: IP + identity + email + phone limiters
 app.post('/api/login', loginLimiterIp, loginLimiterIdentity, emailLimiter, phoneLimiter, loginUser);
 app.post('/api/login/staff/request-otp', loginLimiterIp, phoneLimiter, requestStaffLoginOTP);
