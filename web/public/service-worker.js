@@ -1,20 +1,9 @@
-const CACHE_NAME = 'tallypadi-v1';
-const urlsToCache = [
-  '/',
-  '/login',
-  '/dashboard',
-  '/manifest.json',
-  '/icon-192x192.png',
-  '/icon-512x512.png'
-];
+const CACHE_PREFIX = 'tallypadi-';
+const CACHE_NAME = 'tallypadi-v2';
 
-self.addEventListener('install', event => {
-  event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => {
-        return cache.addAll(urlsToCache);
-      })
-  );
+self.addEventListener('install', () => {
+  // Do not pre-cache Next.js pages. Their HTML references build-specific
+  // chunks and becomes unsafe as soon as a new deployment goes live.
   self.skipWaiting();
 });
 
@@ -23,30 +12,13 @@ self.addEventListener('activate', event => {
     caches.keys().then(cacheNames => {
       return Promise.all(
         cacheNames.map(cacheName => {
-          if (cacheName !== CACHE_NAME) {
+          if (cacheName.startsWith(CACHE_PREFIX) && cacheName !== CACHE_NAME) {
             return caches.delete(cacheName);
           }
+          return Promise.resolve(false);
         })
       );
-    })
-  );
-  self.clients.claim();
-});
-
-self.addEventListener('fetch', event => {
-  // Network first for API
-  if (event.request.url.includes('/api/')) {
-    return;
-  }
-  
-  event.respondWith(
-    caches.match(event.request)
-      .then(response => {
-        if (response) {
-          return response;
-        }
-        return fetch(event.request);
-      })
+    }).then(() => self.clients.claim())
   );
 });
 

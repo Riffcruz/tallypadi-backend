@@ -3,13 +3,29 @@
 
 import { AlertOctagon } from "lucide-react";
 
-export default function GlobalError({
-  error,
-  reset,
-}: {
-  error: Error & { digest?: string };
-  reset: () => void;
-}) {
+export default function GlobalError() {
+  const reloadCleanly = async () => {
+    try {
+      if ('caches' in window) {
+        const cacheNames = await window.caches.keys();
+        await Promise.all(
+          cacheNames
+            .filter((cacheName) => cacheName.startsWith('tallypadi-'))
+            .map((cacheName) => window.caches.delete(cacheName))
+        );
+      }
+
+      if ('serviceWorker' in navigator) {
+        const registration = await navigator.serviceWorker.getRegistration();
+        await registration?.update();
+      }
+    } catch (recoveryError) {
+      console.error('TallyPadi cache recovery failed:', recoveryError);
+    } finally {
+      window.location.reload();
+    }
+  };
+
   return (
     <html>
       <body className="bg-slate-50 text-slate-900 font-sans antialiased">
@@ -24,7 +40,7 @@ export default function GlobalError({
           </p>
           
           <button
-            onClick={() => reset()}
+            onClick={() => void reloadCleanly()}
             className="bg-red-600 hover:bg-red-700 text-white font-bold py-4 px-10 rounded-full shadow-lg transition-transform hover:scale-105"
           >
             Reload Application
