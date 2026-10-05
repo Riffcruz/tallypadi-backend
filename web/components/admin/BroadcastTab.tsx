@@ -20,6 +20,12 @@ export default function BroadcastTab({ headers }: { headers: Record<string, stri
     const [sendPush, setSendPush] = useState(false);
     const [mediaId, setMediaId] = useState('');
     const [mediaType, setMediaType] = useState<'image' | 'video' | 'document' | 'audio'>('image');
+    const [whatsappDeliveryMode, setWhatsappDeliveryMode] = useState<'approved_template' | 'session_text'>('approved_template');
+    const [whatsappTemplateName, setWhatsappTemplateName] = useState('tallypadi_update');
+    const [whatsappLanguageCode, setWhatsappLanguageCode] = useState('en_US');
+    const [whatsappUpdateTitle, setWhatsappUpdateTitle] = useState('');
+    const [whatsappUpdateMessage, setWhatsappUpdateMessage] = useState('');
+    const [whatsappButtonUrlParameter, setWhatsappButtonUrlParameter] = useState('');
 
     // Email States
     const [sendEmail, setSendEmail] = useState(false);
@@ -110,11 +116,15 @@ export default function BroadcastTab({ headers }: { headers: Record<string, stri
 
     const send = async () => {
         const reachAutomationMode = sendEmail && emailProvider === 'hostinger_reach' && reachMode === 'automation';
+        const usesWhatsappTemplate = sendWhatsapp && whatsappDeliveryMode === 'approved_template';
         if (!sendWhatsapp && !sendPush && !sendEmail) {
              return Swal.fire('Error', 'You must select at least one delivery method (WhatsApp, Push, or Email).', 'error');
         }
-        if ((sendWhatsapp || sendPush) && !msg) {
-             return Swal.fire('Missing Field', 'Please enter a message body for WhatsApp/Push.', 'warning');
+        if (usesWhatsappTemplate && (!whatsappTemplateName.trim() || !whatsappUpdateTitle.trim() || !whatsappUpdateMessage.trim())) {
+             return Swal.fire('Missing WhatsApp details', 'Enter the exact approved template name, update title, and update message.', 'warning');
+        }
+        if ((sendPush || (sendWhatsapp && whatsappDeliveryMode === 'session_text')) && !msg.trim()) {
+             return Swal.fire('Missing Field', 'Please enter a message body for web push or WhatsApp session text.', 'warning');
         }
         if (sendEmail && !reachAutomationMode && !selectedTemplateId && (!emailSubject || !msg)) {
              return Swal.fire('Missing Configuration', 'Please select an Email Template OR provide an Email Subject and Basic Text Body.', 'warning');
@@ -148,6 +158,7 @@ export default function BroadcastTab({ headers }: { headers: Record<string, stri
                     target, 
                     message: msg,
                     sendWhatsapp,
+                    whatsappDeliveryMode,
                     sendPush,
                     sendEmail,
                     emailProvider,
@@ -157,11 +168,21 @@ export default function BroadcastTab({ headers }: { headers: Record<string, stri
                     specificIdentifier
                 };
 
+                if (usesWhatsappTemplate) {
+                    payload.whatsappTemplateName = whatsappTemplateName.trim();
+                    payload.whatsappLanguageCode = whatsappLanguageCode.trim();
+                    payload.whatsappUpdateTitle = whatsappUpdateTitle.trim();
+                    payload.whatsappUpdateMessage = whatsappUpdateMessage.trim();
+                    if (whatsappButtonUrlParameter.trim()) {
+                        payload.whatsappButtonUrlParameter = whatsappButtonUrlParameter.trim();
+                    }
+                }
+
                 if (emailSubject) {
                     payload.emailSubject = emailSubject;
                 }
 
-                if (sendWhatsapp && mediaId.trim()) {
+                if (sendWhatsapp && whatsappDeliveryMode === 'session_text' && mediaId.trim()) {
                     payload.mediaId = mediaId.trim();
                     payload.mediaType = mediaType;
                 }
@@ -174,12 +195,20 @@ export default function BroadcastTab({ headers }: { headers: Record<string, stri
                 Swal.fire(reachAutomationMode ? 'Reach audience synced' : emailProvider === 'hostinger_reach' && sendEmail ? 'Reach draft ready' : 'Sent', response.data.message || 'Broadcast queued successfully.', 'success');
                 setMsg('');
                 setMediaId('');
+                setWhatsappUpdateTitle('');
+                setWhatsappUpdateMessage('');
+                setWhatsappButtonUrlParameter('');
             } catch (e: unknown) {
                 const error = e as { response?: { data?: { error?: string } } };
                 Swal.fire('Error', error?.response?.data?.error || 'Broadcast failed', 'error');
             }
         }
     };
+
+    const usesWhatsappTemplate = sendWhatsapp && whatsappDeliveryMode === 'approved_template';
+    const needsBasicMessage = sendPush
+        || (sendWhatsapp && whatsappDeliveryMode === 'session_text')
+        || (sendEmail && !(emailProvider === 'hostinger_reach' && reachMode === 'automation'));
 
     return (
         <div className="max-w-4xl mx-auto animate-in fade-in duration-300 pb-20">
@@ -300,6 +329,108 @@ export default function BroadcastTab({ headers }: { headers: Record<string, stri
                                 className="w-full bg-slate-900 border border-slate-600 rounded-xl px-4 py-3 text-white focus:border-green-500 outline-none transition-colors"
                             />
                          </div>
+                    )}
+
+                    {sendWhatsapp && (
+                        <div className="rounded-xl border border-green-900/60 bg-green-950/20 p-5 space-y-5 animate-in slide-in-from-top-2">
+                            <div className="flex items-center justify-between gap-4 border-b border-green-900/50 pb-4">
+                                <div>
+                                    <h3 className="font-bold text-green-300">WhatsApp delivery</h3>
+                                    <p className="mt-1 text-xs text-slate-400">Use the approved Meta template for marketing broadcasts.</p>
+                                </div>
+                                <div className="flex rounded-lg border border-slate-700 bg-slate-900 p-1 text-xs font-bold">
+                                    <button
+                                        type="button"
+                                        onClick={() => setWhatsappDeliveryMode('approved_template')}
+                                        className={`rounded-md px-3 py-2 transition ${whatsappDeliveryMode === 'approved_template' ? 'bg-green-600 text-white' : 'text-slate-400 hover:text-white'}`}
+                                    >
+                                        Approved template
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setWhatsappDeliveryMode('session_text')}
+                                        className={`rounded-md px-3 py-2 transition ${whatsappDeliveryMode === 'session_text' ? 'bg-amber-600 text-white' : 'text-slate-400 hover:text-white'}`}
+                                    >
+                                        24-hour text
+                                    </button>
+                                </div>
+                            </div>
+
+                            {whatsappDeliveryMode === 'approved_template' ? (
+                                <div className="space-y-4">
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                        <div className="sm:col-span-2">
+                                            <label className="mb-1 block text-xs font-bold uppercase text-slate-400">Approved template name</label>
+                                            <input
+                                                type="text"
+                                                value={whatsappTemplateName}
+                                                onChange={(event) => setWhatsappTemplateName(event.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+                                                placeholder="tallypadi_update"
+                                                className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-sm text-white outline-none focus:border-green-500"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="mb-1 block text-xs font-bold uppercase text-slate-400">Language</label>
+                                            <input
+                                                type="text"
+                                                value={whatsappLanguageCode}
+                                                onChange={(event) => setWhatsappLanguageCode(event.target.value)}
+                                                placeholder="en_US"
+                                                className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-sm text-white outline-none focus:border-green-500"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label className="mb-1 block text-xs font-bold uppercase text-slate-400">Update title</label>
+                                        <input
+                                            type="text"
+                                            maxLength={100}
+                                            value={whatsappUpdateTitle}
+                                            onChange={(event) => setWhatsappUpdateTitle(event.target.value)}
+                                            placeholder="New invoice and receipt tools"
+                                            className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-sm text-white outline-none focus:border-green-500"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <div className="mb-1 flex items-center justify-between gap-3">
+                                            <label className="block text-xs font-bold uppercase text-slate-400">Update message</label>
+                                            <span className="text-[11px] text-slate-500">{whatsappUpdateMessage.length}/700</span>
+                                        </div>
+                                        <textarea
+                                            maxLength={700}
+                                            value={whatsappUpdateMessage}
+                                            onChange={(event) => setWhatsappUpdateMessage(event.target.value)}
+                                            placeholder="Tell customers what changed and why it matters."
+                                            className="h-32 w-full resize-none rounded-lg border border-slate-600 bg-slate-900 p-3 text-sm text-white outline-none focus:border-green-500"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="mb-1 block text-xs font-bold uppercase text-slate-400">Dynamic button URL value <span className="normal-case font-normal text-slate-500">(optional)</span></label>
+                                        <input
+                                            type="text"
+                                            maxLength={512}
+                                            value={whatsappButtonUrlParameter}
+                                            onChange={(event) => setWhatsappButtonUrlParameter(event.target.value)}
+                                            placeholder="Leave blank when the approved button uses a fixed URL"
+                                            className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-sm text-white outline-none focus:border-green-500"
+                                        />
+                                    </div>
+
+                                    <div className="rounded-xl border border-green-900/60 bg-slate-950/70 p-4 text-sm leading-6 text-slate-300">
+                                        <p>Hello <span className="font-semibold text-green-300">customer shop/name</span>,</p>
+                                        <p className="mt-3">Here is a new update from TallyPadi.</p>
+                                        <p className="mt-3 font-bold text-white">{whatsappUpdateTitle || 'Your update title'}</p>
+                                        <p className="mt-3 whitespace-pre-wrap">{whatsappUpdateMessage || 'Your update message'}</p>
+                                        <p className="mt-3">Tap the button below to learn more.</p>
+                                    </div>
+                                </div>
+                            ) : (
+                                <p className="text-xs text-amber-200">Free-text messages only deliver when the customer has messaged TallyPadi within WhatsApp&apos;s active support window.</p>
+                            )}
+                        </div>
                     )}
 
                     {sendEmail && (
@@ -449,7 +580,7 @@ export default function BroadcastTab({ headers }: { headers: Record<string, stri
                     )}
 
                     {/* Basic Message Body */}
-                    {(sendWhatsapp || sendPush || (sendEmail && !(emailProvider === 'hostinger_reach' && reachMode === 'automation'))) && (
+                    {needsBasicMessage && (
                         <div className="animate-in slide-in-from-top-2 space-y-4">
                             {sendEmail && !(emailProvider === 'hostinger_reach' && reachMode === 'automation') && (
                                 <div>
@@ -458,7 +589,7 @@ export default function BroadcastTab({ headers }: { headers: Record<string, stri
                                 </div>
                             )}
                             <div>
-                                <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Basic Text Body (WhatsApp, PWA, Basic Email)</label>
+                                <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Basic Text Body {usesWhatsappTemplate ? '(PWA / Basic Email)' : '(WhatsApp / PWA / Basic Email)'}</label>
                                 <textarea className="w-full h-32 bg-slate-900 border border-slate-600 rounded-xl p-4 text-white focus:border-green-500 outline-none resize-none transition-colors" placeholder="Type your generic message here..." value={msg} onChange={(e) => setMsg(e.target.value)}></textarea>
                                 <p className="text-xs text-slate-500 mt-2">Will be used as caption for WhatsApp media, or email body if no template is chosen.</p>
                             </div>
@@ -466,7 +597,7 @@ export default function BroadcastTab({ headers }: { headers: Record<string, stri
                     )}
 
                     {/* Media Attachments */}
-                    {sendWhatsapp && (
+                    {sendWhatsapp && whatsappDeliveryMode === 'session_text' && (
                         <div className="bg-slate-900/50 p-5 rounded-xl border border-slate-700 space-y-4 animate-in slide-in-from-top-2">
                             <label className="block text-xs font-bold text-slate-400 uppercase flex items-center gap-2">
                                 <ImageIcon size={14} /> Optional Meta API Attachment (Whatsapp)

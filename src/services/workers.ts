@@ -2,7 +2,7 @@
 import { Worker } from 'bullmq'; // ✅ Switched to BullMQ
 import axios from 'axios';
 import { createRedisConnection, messageQueue } from './queue.service'; // ✅ Factory for dedicated connections
-import { sendWhatsAppText, sendWhatsAppButtons, sendWhatsAppList, sendWhatsAppDocumentBuffer, sendWhatsAppFlow, sendTypingIndicator, sendWhatsAppCtaUrl, sendWhatsAppMediaById } from './whatsapp.service';
+import { sendWhatsAppText, sendWhatsAppButtons, sendWhatsAppList, sendWhatsAppDocumentBuffer, sendWhatsAppFlow, sendTypingIndicator, sendWhatsAppCtaUrl, sendWhatsAppMediaById, sendWhatsAppTemplate } from './whatsapp.service';
 import { generateSaleReceiptPdfBuffer } from '../controllers/receipt.controller';
 import { Invoice } from '../models/invoice.model';
 import { generateInvoicePdf } from './invoice.pdf.service';
@@ -24,6 +24,7 @@ import {
 } from './marketplaceIndex.service';
 import { sendBroadcastEmail } from './email.service';
 import { createUnsubscribeToken } from './emailSecurity.service';
+import { buildTallyPadiUpdateTemplateComponents } from './whatsappBroadcastTemplate.service';
 
 const escapeEmailHtml = (value: unknown) => String(value ?? '')
   .replace(/&/g, '&amp;')
@@ -575,7 +576,25 @@ export const broadcastWorker = new Worker(
   async (job: import('bullmq').Job) => {
     if (job.name === 'send-broadcast') {
       const { recipient: u, jobPayload } = job.data;
-      const { sendEmail, sendWhatsapp, mediaId, mediaType, message, emailSubject, emailDelayMs, templateHtml, globalEmailTemplate, apiBaseUrl, includeUnsubscribed } = jobPayload;
+      const {
+        sendEmail,
+        sendWhatsapp,
+        whatsappDeliveryMode,
+        whatsappTemplateName,
+        whatsappLanguageCode,
+        whatsappUpdateTitle,
+        whatsappUpdateMessage,
+        whatsappButtonUrlParameter,
+        mediaId,
+        mediaType,
+        message,
+        emailSubject,
+        emailDelayMs,
+        templateHtml,
+        globalEmailTemplate,
+        apiBaseUrl,
+        includeUnsubscribed,
+      } = jobPayload;
 
       // Unsubscribe check
       if (sendEmail && u.email) {
@@ -649,15 +668,27 @@ export const broadcastWorker = new Worker(
       }
 
       // WhatsApp Broadcast
-      if (sendWhatsapp && u.phoneNumber && message) {
-        if (mediaId && mediaType) {
+      if (sendWhatsapp && u.phoneNumber) {
+        if (whatsappDeliveryMode === 'approved_template') {
+          await sendWhatsAppTemplate({
+            to: u.phoneNumber,
+            name: whatsappTemplateName,
+            languageCode: whatsappLanguageCode || 'en_US',
+            components: buildTallyPadiUpdateTemplateComponents({
+              customerName: u.businessName || u.name || 'there',
+              updateTitle: whatsappUpdateTitle,
+              updateMessage: whatsappUpdateMessage,
+              buttonUrlParameter: whatsappButtonUrlParameter,
+            }),
+          });
+        } else if (message && mediaId && mediaType) {
           await sendWhatsAppMediaById({
             to: u.phoneNumber,
             mediaId,
             type: mediaType as any,
             caption: message
           });
-        } else {
+        } else if (message) {
           await sendWhatsAppText(u.phoneNumber, message);
         }
       }

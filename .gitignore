@@ -43,6 +43,9 @@ Thumbs.db
 .vscode/
 .idea/
 
+# --- Local companion projects ---
+spirit_tally/
+
 # --- Testing ---
 coverage/
 

@@ -315,11 +315,13 @@ export async function sendWhatsAppTemplate(opts: {
 
   if (components?.length) (payload.template as Record<string, unknown>).components = components;
 
-  await axios.post(messagesUrl(), payload, {
+  const response = await axios.post(messagesUrl(), payload, {
     headers: authHeaders(),
     timeout: 20_000,
     httpsAgent,
   });
+
+  return response.data?.messages?.[0]?.id;
 }
 
 // ============================================================
@@ -443,4 +445,3 @@ export async function sendWhatsAppCtaUrl(
     });
   }
 }
-

@@ -129,6 +129,12 @@ const broadcastSchema = z
     mediaType: z.enum(['image', 'video', 'document', 'audio']).optional(),
     sendPush: z.boolean().optional().default(false),
     sendWhatsapp: z.boolean().optional().default(true),
+    whatsappDeliveryMode: z.enum(['approved_template', 'session_text']).optional().default('session_text'),
+    whatsappTemplateName: z.string().trim().min(1).max(512).regex(/^[a-z0-9_]+$/).optional(),
+    whatsappLanguageCode: z.string().trim().min(2).max(10).regex(/^[a-z]{2,3}(?:_[A-Z]{2})?$/).optional().default('en_US'),
+    whatsappUpdateTitle: z.string().trim().min(1).max(100).optional(),
+    whatsappUpdateMessage: z.string().trim().min(1).max(700).optional(),
+    whatsappButtonUrlParameter: z.string().trim().max(512).optional(),
     sendEmail: z.boolean().optional().default(false),
     emailProvider: z.enum(['smtp', 'hostinger_reach']).optional().default('smtp'),
     reachMode: z.enum(['draft', 'automation']).optional().default('draft'),
@@ -138,7 +144,31 @@ const broadcastSchema = z
     includeUnsubscribed: z.boolean().optional().default(false),
     specificIdentifier: z.string().trim().optional(), // For specific user test
   })
-  .strict();
+  .strict()
+  .superRefine((data, ctx) => {
+    if (data.sendPush && !data.message) {
+      ctx.addIssue({ code: 'custom', path: ['message'], message: 'A message is required for web push.' });
+    }
+
+    if (!data.sendWhatsapp) return;
+
+    if (data.whatsappDeliveryMode === 'session_text') {
+      if (!data.message) {
+        ctx.addIssue({ code: 'custom', path: ['message'], message: 'A message is required for WhatsApp session text.' });
+      }
+      return;
+    }
+
+    if (!data.whatsappTemplateName) {
+      ctx.addIssue({ code: 'custom', path: ['whatsappTemplateName'], message: 'The approved WhatsApp template name is required.' });
+    }
+    if (!data.whatsappUpdateTitle) {
+      ctx.addIssue({ code: 'custom', path: ['whatsappUpdateTitle'], message: 'The WhatsApp update title is required.' });
+    }
+    if (!data.whatsappUpdateMessage) {
+      ctx.addIssue({ code: 'custom', path: ['whatsappUpdateMessage'], message: 'The WhatsApp update message is required.' });
+    }
+  });
 
 const personalMessageDraftSchema = z.object({
   brief: z.string().trim().min(5).max(4000),
@@ -993,7 +1023,27 @@ export const broadcastMessage = async (req: Request, res: Response) => {
     const parsed = broadcastSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
-    const { target, message, mediaId, mediaType, sendPush, sendWhatsapp, sendEmail, emailProvider, reachMode, emailTemplateId, emailDelayMs, specificIdentifier, includeUnsubscribed } = parsed.data;
+    const {
+      target,
+      message,
+      mediaId,
+      mediaType,
+      sendPush,
+      sendWhatsapp,
+      whatsappDeliveryMode,
+      whatsappTemplateName,
+      whatsappLanguageCode,
+      whatsappUpdateTitle,
+      whatsappUpdateMessage,
+      whatsappButtonUrlParameter,
+      sendEmail,
+      emailProvider,
+      reachMode,
+      emailTemplateId,
+      emailDelayMs,
+      specificIdentifier,
+      includeUnsubscribed,
+    } = parsed.data;
 
     // Build the Query
     const query: any = { role: 'OWNER' };
@@ -1072,6 +1122,12 @@ export const broadcastMessage = async (req: Request, res: Response) => {
       const jobPayload = {
         sendEmail: sendEmail && emailProvider === 'smtp',
         sendWhatsapp,
+        whatsappDeliveryMode,
+        whatsappTemplateName,
+        whatsappLanguageCode,
+        whatsappUpdateTitle,
+        whatsappUpdateMessage,
+        whatsappButtonUrlParameter,
         mediaId,
         mediaType,
         message,
