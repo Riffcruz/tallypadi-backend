@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useEffect, useState } from 'react';
+import React, { useCallback, useMemo, useEffect, useState } from 'react';
 import axios from 'axios';
 import {
   Search,
@@ -15,6 +15,12 @@ import {
 import { InventoryItem, UserProfile } from './page';
 import { getCookie } from '../../utils/cookies';
 import dynamic from 'next/dynamic'; // Dynamic import for BarcodeScanner
+import {
+  cacheInventoryItems,
+  listOfflineSales,
+  OFFLINE_SALES_CHANGE_EVENT,
+  readCachedInventory,
+} from '../../lib/offlineSales';
 
 // Dynamically import BarcodeScanner to avoid SSR issues with camera
 const BarcodeScanner = dynamic(() => import('../../components/BarcodeScanner'), { ssr: false });
@@ -27,6 +33,19 @@ interface ProductGridProps {
   currencyCode: string;
 }
 
+interface RawInventoryItem {
+  _id?: string;
+  id?: string;
+  name?: string;
+  quantity?: number;
+  stock?: number;
+  lastUnitPrice?: number;
+  price?: number;
+  costPrice?: number;
+  barcode?: string;
+  sku?: string | null;
+}
+
 export default function ProductGrid({ user, onAddToCart, currencyCode }: ProductGridProps) {
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -35,9 +54,16 @@ export default function ProductGrid({ user, onAddToCart, currencyCode }: Product
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [showScanner, setShowScanner] = useState(false);
+  const [queuedQuantities, setQueuedQuantities] = useState<Record<string, number>>({});
   const observerTarget = React.useRef<HTMLDivElement>(null);
+  const userId = String(user?.id || user?._id || '');
 
-  const fetchInventory = async (pageNum: number, searchQuery: string, isLoadMore = false) => {
+  const availableInventory = useMemo(() => inventory.map((item) => ({
+    ...item,
+    stock: Math.max(0, item.stock - (queuedQuantities[item.id] || 0)),
+  })), [inventory, queuedQuantities]);
+
+  const fetchInventory = useCallback(async (pageNum: number, searchQuery: string, isLoadMore = false) => {
     const token = getCookie('tallyToken');
     if (!token) {
       setLoading(false);
@@ -50,25 +76,42 @@ export default function ProductGrid({ user, onAddToCart, currencyCode }: Product
     try {
       const res = await axios.get(`${API_URL}/inventory`, {
         headers: { Authorization: `Bearer ${token}` },
-        params: { page: pageNum, limit: 20, search: searchQuery }
+        params: { page: pageNum, limit: 20, search: searchQuery },
+        timeout: 8_000,
       });
 
       // Handle the new paginated API format or fallback to array
-      const rawData = res.data?.data ? res.data.data : (Array.isArray(res.data) ? res.data : []);
+      const rawData: RawInventoryItem[] = res.data?.data ? res.data.data : (Array.isArray(res.data) ? res.data : []);
       const paginationInfo = res.data?.pagination || { hasMore: false };
 
-      const clean = rawData.map((item: any) => ({
-        id: item._id || item.id,
-        name: item.name,
+      const clean: InventoryItem[] = rawData.map((item) => ({
+        id: String(item._id || item.id || ''),
+        name: String(item.name || ''),
         stock: Number(item.quantity ?? item.stock ?? 0),
         price: Number(item.lastUnitPrice ?? item.price ?? 0),
         costPrice: Number(item.costPrice ?? 0),
         barcode: item.barcode,
+        sku: item.sku || null,
       }));
+
+      if (userId) {
+        void cacheInventoryItems(
+          userId,
+          clean.map((item: InventoryItem) => ({
+            id: item.id,
+            name: item.name,
+            stock: item.stock,
+            price: item.price,
+            barcode: item.barcode,
+            sku: item.sku,
+          })),
+          pageNum === 1 && searchQuery.trim() === ''
+        ).catch(() => undefined);
+      }
 
       if (isLoadMore) {
         setInventory(prev => {
-          const newItems = clean.filter((c: any) => !prev.some(p => p.id === c.id));
+          const newItems = clean.filter((candidate) => !prev.some((item) => item.id === candidate.id));
           return [...prev, ...newItems];
         });
       } else {
@@ -78,11 +121,61 @@ export default function ProductGrid({ user, onAddToCart, currencyCode }: Product
       setHasMore(paginationInfo.hasMore || false);
     } catch (err) {
       console.error('Inventory Error:', err);
+      if (userId) {
+        try {
+          const cached = await readCachedInventory(userId);
+          const query = searchQuery.trim().toLowerCase();
+          const filtered = query
+            ? cached.filter((item) =>
+                item.name.toLowerCase().includes(query)
+                || String(item.barcode || '').toLowerCase().includes(query)
+                || String(item.sku || '').toLowerCase().includes(query)
+              )
+            : cached;
+          if (filtered.length > 0 || !isLoadMore) setInventory(filtered);
+          setHasMore(false);
+        } catch {
+          // Keep the already-loaded product list visible if local storage fails.
+        }
+      }
     } finally {
       setLoading(false);
       setLoadingMore(false);
     }
-  };
+  }, [userId]);
+
+  useEffect(() => {
+    if (!userId) return;
+    const refreshReservations = async () => {
+      try {
+        const records = await listOfflineSales(userId);
+        const quantities: Record<string, number> = {};
+        for (const record of records) {
+          for (const item of record.payload.items) {
+            quantities[item.itemId] = (quantities[item.itemId] || 0) + item.quantity;
+          }
+        }
+        setQueuedQuantities(quantities);
+      } catch {
+        // The server still validates stock if this browser cannot read its cache.
+      }
+    };
+    const initial = window.setTimeout(() => void refreshReservations(), 0);
+    let inventoryRefresh: number | undefined;
+    const onChange = () => {
+      void refreshReservations();
+      if (navigator.onLine) {
+        window.clearTimeout(inventoryRefresh);
+        inventoryRefresh = window.setTimeout(() => void fetchInventory(1, '', false), 300);
+      }
+    };
+    window.addEventListener(OFFLINE_SALES_CHANGE_EVENT, onChange);
+    return () => {
+      window.clearTimeout(initial);
+      window.clearTimeout(inventoryRefresh);
+      window.removeEventListener(OFFLINE_SALES_CHANGE_EVENT, onChange);
+    };
+  }, [fetchInventory, userId]);
 
   useEffect(() => {
     // Reset page and fetch when search changes (with basic debounce)
@@ -91,14 +184,14 @@ export default function ProductGrid({ user, onAddToCart, currencyCode }: Product
       fetchInventory(1, search, false);
     }, 300);
     return () => clearTimeout(timeoutId);
-  }, [search]);
+  }, [fetchInventory, search]);
 
   useEffect(() => {
     // Fetch more when page increments
-    if (page > 1) {
-      fetchInventory(page, search, true);
-    }
-  }, [page]);
+    if (page <= 1) return;
+    const timeout = window.setTimeout(() => void fetchInventory(page, search, true), 0);
+    return () => window.clearTimeout(timeout);
+  }, [fetchInventory, page, search]);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -116,6 +209,18 @@ export default function ProductGrid({ user, onAddToCart, currencyCode }: Product
 
     return () => observer.disconnect();
   }, [hasMore, loading, loadingMore]);
+
+  const handleScan = useCallback((code: string) => {
+    setShowScanner(false);
+
+    const exactMatch = availableInventory.find((item) => item.barcode === code);
+    if (exactMatch) {
+      onAddToCart(exactMatch);
+      setSearch('');
+    } else {
+      setSearch(code);
+    }
+  }, [availableInventory, onAddToCart]);
 
   useEffect(() => {
     // USB Scanner Detection
@@ -147,22 +252,7 @@ export default function ProductGrid({ user, onAddToCart, currencyCode }: Product
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [inventory]); // Re-bind when inventory changes so handleScan has latest data
-
-  const handleScan = (code: string) => {
-    setShowScanner(false);
-    
-    // 1. Try to find exact match by barcode in current list
-    const exactMatch = inventory.find(i => i.barcode === code);
-    
-    if (exactMatch) {
-      onAddToCart(exactMatch);
-      setSearch('');
-    } else {
-      // 2. If no exact match (or it's on a further page), set search to let backend find it
-      setSearch(code);
-    }
-  };
+  }, [handleScan]);
 
   const formatPrice = (amount: number) => {
     return new Intl.NumberFormat(user?.locale || 'en-NG', {
@@ -194,7 +284,7 @@ export default function ProductGrid({ user, onAddToCart, currencyCode }: Product
                   Products
                 </span>
                 <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-full">
-                  {loading ? '...' : inventory.length}
+                  {loading ? '...' : availableInventory.length}
                 </span>
               </div>
             </div>
@@ -259,7 +349,7 @@ export default function ProductGrid({ user, onAddToCart, currencyCode }: Product
       {showScanner && (
         <BarcodeScanner
           onScan={(code) => {
-            const item = inventory.find((i) => i.barcode === code);
+            const item = availableInventory.find((i) => i.barcode === code);
             if (item) {
               onAddToCart(item);
               setShowScanner(false);
@@ -297,7 +387,7 @@ export default function ProductGrid({ user, onAddToCart, currencyCode }: Product
               </div>
             ))}
           </div>
-        ) : inventory.length === 0 ? (
+        ) : availableInventory.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center bg-white rounded-3xl border border-dashed border-slate-200">
             <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center mb-4 border border-slate-200">
               <PackageOpen className="w-8 h-8 text-slate-300" />
@@ -309,7 +399,7 @@ export default function ProductGrid({ user, onAddToCart, currencyCode }: Product
           </div>
         ) : (
           <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 pb-24">
-            {inventory.map((item, index) => {
+            {availableInventory.map((item) => {
               const tone = stockTone(item.stock);
 
               const badge =
@@ -428,7 +518,7 @@ export default function ProductGrid({ user, onAddToCart, currencyCode }: Product
               </div>
             )}
             
-            {!hasMore && inventory.length > 0 && (
+            {!hasMore && availableInventory.length > 0 && (
               <div className="col-span-2 lg:col-span-3 py-8 flex items-center justify-center">
                 <span className="text-xs font-bold text-slate-300 uppercase tracking-widest">End of catalog</span>
               </div>

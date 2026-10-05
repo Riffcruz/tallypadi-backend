@@ -8,6 +8,8 @@ import {
   BadgeCheck,
   Building2,
   Check,
+  ChevronLeft,
+  ChevronRight,
   CircleDollarSign,
   MapPin,
   Megaphone,
@@ -402,20 +404,51 @@ function TrustStrip() {
 
 function MarketplaceShowcase() {
   const [products, setProducts] = useState<MarketplacePreviewProduct[]>([]);
+  const [activePage, setActivePage] = useState(0);
+  const [rotationPaused, setRotationPaused] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://tallypadi.com/api";
 
-    fetch(`${apiUrl}/marketplace?limit=4&sort=recommended`, { signal: controller.signal })
+    fetch(`${apiUrl}/marketplace?limit=12&sort=recommended`, { signal: controller.signal })
       .then((response) => (response.ok ? response.json() : null))
       .then((data) => {
-        if (Array.isArray(data?.products)) setProducts(data.products.slice(0, 4));
+        if (!Array.isArray(data?.products)) return;
+        const incomingProducts = data.products as MarketplacePreviewProduct[];
+        const prioritized = [...incomingProducts]
+          .slice(0, 12)
+          .sort((a, b) => Number(Boolean(b?.isBoosted)) - Number(Boolean(a?.isBoosted)));
+        setProducts(prioritized);
+        setActivePage(0);
       })
       .catch(() => undefined);
 
     return () => controller.abort();
   }, []);
+
+  const pageCount = Math.ceil(products.length / 4);
+  const visibleProducts = products.length <= 4
+    ? products
+    : Array.from(
+        { length: 4 },
+        (_, index) => products[((activePage * 4) + index) % products.length]
+      );
+
+  useEffect(() => {
+    if (pageCount <= 1 || rotationPaused) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    const timer = window.setInterval(() => {
+      setActivePage((current) => (current + 1) % pageCount);
+    }, 7000);
+
+    return () => window.clearInterval(timer);
+  }, [pageCount, rotationPaused]);
+
+  const changePage = (direction: -1 | 1) => {
+    setActivePage((current) => (current + direction + pageCount) % pageCount);
+  };
 
   const formatPrice = (product: MarketplacePreviewProduct) => {
     try {
@@ -450,26 +483,69 @@ function MarketplaceShowcase() {
         </div>
 
         {products.length > 0 && (
-          <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-5">
-            {products.map((product) => (
-              <Link key={product.id} href={`/marketplace/product/${product.id}`} className="group overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-lg">
-                <div className="relative aspect-square overflow-hidden bg-emerald-50 sm:aspect-[4/3]">
-                  {product.image ? (
-                    <img src={product.image} alt={product.name} loading="lazy" className="h-full w-full object-cover transition duration-300 group-hover:scale-105" />
-                  ) : (
-                    <div className="flex h-full items-center justify-center text-4xl font-black uppercase text-emerald-700">{product.name.slice(0, 1)}</div>
-                  )}
-                  {product.isBoosted && (
-                    <span className="absolute left-2 top-2 rounded bg-amber-300 px-2 py-1 text-[10px] font-black uppercase text-stone-950">Sponsored</span>
-                  )}
+          <div
+            className="mt-8"
+            onMouseEnter={() => setRotationPaused(true)}
+            onMouseLeave={() => setRotationPaused(false)}
+            onFocusCapture={() => setRotationPaused(true)}
+            onBlurCapture={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget)) setRotationPaused(false);
+            }}
+          >
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-5">
+              {visibleProducts.map((product) => (
+                <Link key={product.id} href={`/marketplace/product/${product.id}`} className="group overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-lg">
+                  <div className="relative aspect-square overflow-hidden bg-emerald-50 sm:aspect-[4/3]">
+                    {product.image ? (
+                      <img src={product.image} alt={product.name} loading="lazy" className="h-full w-full object-cover transition duration-300 group-hover:scale-105" />
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-4xl font-black uppercase text-emerald-700">{product.name.slice(0, 1)}</div>
+                    )}
+                    {product.isBoosted && (
+                      <span className="absolute left-2 top-2 rounded bg-amber-300 px-2 py-1 text-[10px] font-black uppercase text-stone-950">Sponsored</span>
+                    )}
+                  </div>
+                  <div className="p-3 sm:p-4">
+                    <p className="truncate text-sm font-black text-stone-950 sm:text-base">{product.name}</p>
+                    <p className="mt-1 text-sm font-black text-emerald-700">{formatPrice(product)}</p>
+                    {product.shop?.name && <p className="mt-2 truncate text-xs font-semibold text-stone-500">{product.shop.name}</p>}
+                  </div>
+                </Link>
+              ))}
+            </div>
+
+            {pageCount > 1 && (
+              <div className="mt-5 flex items-center justify-center gap-3" aria-label="Marketplace product rotation">
+                <button
+                  type="button"
+                  onClick={() => changePage(-1)}
+                  className="rounded-full border border-stone-300 p-2 text-stone-700 transition hover:border-emerald-600 hover:text-emerald-700"
+                  aria-label="Show previous products"
+                >
+                  <ChevronLeft size={18} />
+                </button>
+                <div className="flex gap-1.5">
+                  {Array.from({ length: pageCount }, (_, index) => (
+                    <button
+                      key={index}
+                      type="button"
+                      onClick={() => setActivePage(index)}
+                      className={`h-2 rounded-full transition-all ${activePage === index ? 'w-6 bg-emerald-700' : 'w-2 bg-stone-300 hover:bg-stone-400'}`}
+                      aria-label={`Show product group ${index + 1}`}
+                      aria-current={activePage === index ? 'true' : undefined}
+                    />
+                  ))}
                 </div>
-                <div className="p-3 sm:p-4">
-                  <p className="truncate text-sm font-black text-stone-950 sm:text-base">{product.name}</p>
-                  <p className="mt-1 text-sm font-black text-emerald-700">{formatPrice(product)}</p>
-                  {product.shop?.name && <p className="mt-2 truncate text-xs font-semibold text-stone-500">{product.shop.name}</p>}
-                </div>
-              </Link>
-            ))}
+                <button
+                  type="button"
+                  onClick={() => changePage(1)}
+                  className="rounded-full border border-stone-300 p-2 text-stone-700 transition hover:border-emerald-600 hover:text-emerald-700"
+                  aria-label="Show next products"
+                >
+                  <ChevronRight size={18} />
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

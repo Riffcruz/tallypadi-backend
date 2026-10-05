@@ -50,6 +50,9 @@ export interface ITransaction extends Document {
   timestamp: Date;
   date: string; // Format: YYYY-MM-DD
   messageId?: string; // For WhatsApp linkage
+  clientSaleId?: string | null;
+  clientRecordedAt?: Date | null;
+  source?: 'WEB' | 'WEB_OFFLINE' | 'WHATSAPP' | null;
   notes?: string;
   
   createdAt: Date;
@@ -178,6 +181,9 @@ const transactionSchema = new Schema<ITransaction>(
       unique: true, 
       sparse: true 
     },
+    clientSaleId: { type: String, trim: true, default: null },
+    clientRecordedAt: { type: Date, default: null },
+    source: { type: String, enum: ['WEB', 'WEB_OFFLINE', 'WHATSAPP', null], default: null },
     notes: { type: String, default: null },
   },
   { timestamps: true }
@@ -198,5 +204,13 @@ transactionSchema.pre('save', async function () {
 // --- INDEXES ---
 transactionSchema.index({ user: 1, date: 1, type: 1 });
 transactionSchema.index({ debtor: 1, isUndone: 1 });
+transactionSchema.index(
+  { user: 1, clientSaleId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { clientSaleId: { $type: 'string' } },
+    name: 'unique_client_sale_per_user',
+  }
+);
 
 export const Transaction = model<ITransaction>('Transaction', transactionSchema);

@@ -28,6 +28,7 @@ import {
 import { CartItem, UserProfile } from './page';
 import { getCookie } from '../../utils/cookies';
 import SalesCalculator from './SalesCalculator';
+import { createClientSaleId, OfflineSalePayload, submitDurableSale } from '../../lib/offlineSales';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 
@@ -335,6 +336,16 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess, on
   const doCheckout = async (alsoPrint: boolean) => {
     if (cart.length === 0) return;
 
+    if (paymentMethod === 'POINTS' && typeof navigator !== 'undefined' && navigator.onLine === false) {
+      Swal.fire({
+        title: 'Connection required for points',
+        text: 'Choose cash, transfer, POS or card while offline. Customer points must be verified online.',
+        icon: 'info',
+        confirmButtonColor: '#0F766E',
+      });
+      return;
+    }
+
     setLoading(true);
     setMsg({ text: '', type: '' });
     setReceipt(null);
@@ -347,23 +358,47 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess, on
     }
 
     try {
-      const payload = {
+      const userId = String(user?.id || user?._id || '').trim();
+      if (!userId) throw new Error('Could not identify the signed-in user. Please sign in again.');
+
+      const payload: OfflineSalePayload = {
+        clientSaleId: createClientSaleId(),
+        recordedAt: new Date().toISOString(),
+        offlineCreated: typeof navigator !== 'undefined' && navigator.onLine === false,
         paymentMethod, // ✅ Add this
         customerId: selectedCustomer?._id || undefined,
         discountAmount: discountAmount || 0,
         items: cart.map((i) => ({
-          itemId: i.id || (i as any)._id || (i as any).itemId,
+          itemId: i.id,
           quantity: Number(i.sellQty),
-          price: Number(i.sellPrice ?? i.price ?? (i as any).lastUnitPrice ?? 0),
+          price: Number(i.sellPrice ?? i.price ?? 0),
+          name: i.name,
         })),
       };
 
-      const res = await axios.post(`${API_URL}/sales`, payload, {
-        headers: { Authorization: `Bearer ${token}` },
-        timeout: 60_000,
-      });
+      // The sale is committed to IndexedDB before the network request starts.
+      // A timeout or tab close can therefore be retried with the same server key.
+      const delivery = await submitDurableSale(userId, payload, token, API_URL);
+      if (delivery.state === 'queued') {
+        setMsg({ text: 'Sale saved safely. It will upload automatically when the connection is available.', type: 'success' });
+        onCheckoutSuccess();
+        setConfirmOpen(false);
+        await Swal.fire({
+          title: 'Sale saved offline',
+          text: 'You can continue selling. This sale will sync automatically without being recorded twice.',
+          icon: 'success',
+          confirmButtonColor: '#0F766E',
+        });
+        return;
+      }
+      if (delivery.state === 'needs_attention') {
+        throw new Error(delivery.message);
+      }
 
-      const data = res.data || {};
+      const data = delivery.data || {};
+      const transactionData = data.transaction && typeof data.transaction === 'object'
+        ? data.transaction as Record<string, unknown>
+        : undefined;
 
       // ✅ FIX: robust saleId parsing
       const saleId = extractSaleId(data);
@@ -372,7 +407,7 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess, on
       const directReceiptUrl =
         (typeof data.receiptUrl === 'string' && data.receiptUrl) ||
         (typeof data.pdfUrl === 'string' && data.pdfUrl) ||
-        (typeof data.transaction?.receiptUrl === 'string' && data.transaction.receiptUrl) ||
+        (typeof transactionData?.receiptUrl === 'string' && transactionData.receiptUrl) ||
         undefined;
 
       setMsg({ text: '✅ Sale recorded successfully!', type: 'success' });

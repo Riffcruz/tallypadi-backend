@@ -11,6 +11,7 @@ import { ShoppingCart, History, Menu, Loader2, Sparkles, PauseCircle, Clock, X, 
 import ProductGrid from './ProductGrid';
 import CartSidebar from './CartSidebar';
 import SalesHistory from './SalesHistory';
+import OfflineSalesStatus from './OfflineSalesStatus';
 
 import Swal from 'sweetalert2';
 import { getCookie } from '../../utils/cookies';
@@ -46,6 +47,7 @@ export interface CartItem extends InventoryItem {
 }
 export interface UserProfile {
   id: string;
+  _id?: string;
   planType: 'OGA_BOSS' | 'TYCOON';
   subscriptionStatus?: string;
   trialEndsAt?: string;
@@ -65,6 +67,18 @@ export interface UserProfile {
     }
   };
 }
+
+const tokenUserId = (token: string) => {
+  try {
+    const payload = token.split('.')[1];
+    if (!payload) return '';
+    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const decoded = JSON.parse(window.atob(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=')));
+    return String(decoded.id || decoded._id || decoded.userId || '');
+  } catch {
+    return '';
+  }
+};
 
 export default function SalesPage() {
   const router = useRouter();
@@ -93,15 +107,43 @@ export default function SalesPage() {
       return;
     }
 
-    axios.get(`${API_URL}/dashboard`, { headers: { Authorization: `Bearer ${token}` } })
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/service-worker.js').then(async () => {
+        const registration = await navigator.serviceWorker.ready;
+        const staticAssets = performance.getEntriesByType('resource')
+          .map((entry) => entry.name)
+          .filter((url) => url.startsWith(window.location.origin) && url.includes('/_next/static/'));
+        registration.active?.postMessage({
+          type: 'CACHE_SALES_SHELL',
+          urls: ['/sales', ...staticAssets],
+        });
+      }).catch(() => undefined);
+    }
+
+    const authenticatedUserId = tokenUserId(token);
+    const profileCacheKey = authenticatedUserId ? `tally_sales_profile:${authenticatedUserId}` : '';
+
+    axios.get(`${API_URL}/dashboard`, {
+      headers: { Authorization: `Bearer ${token}` },
+      timeout: 8_000,
+    })
       .then((res) => {
         if (res.data?.user) {
           setUser(res.data.user);
+          if (profileCacheKey) localStorage.setItem(profileCacheKey, JSON.stringify(res.data.user));
           setLoadingUser(false);
         }
       })
       .catch((err) => {
         console.error('User fetch error:', err);
+        if (navigator.onLine === false && profileCacheKey) {
+          try {
+            const cachedUser = localStorage.getItem(profileCacheKey);
+            if (cachedUser) setUser(JSON.parse(cachedUser));
+          } catch {
+            // Stay signed in but do not trust an unreadable profile cache.
+          }
+        }
         setLoadingUser(false);
       });
 
@@ -236,6 +278,9 @@ const handleAddToCart = (item: InventoryItem) => {
             </div>
             
             <div className="flex items-center gap-2">
+              {(user?.id || user?._id) && (
+                <OfflineSalesStatus userId={String(user.id || user._id)} apiUrl={API_URL} />
+              )}
               {heldCarts.length > 0 && (
                  <button onClick={() => setShowHeldCarts(true)} className="flex items-center gap-2 px-3 py-1.5 bg-yellow-50 text-yellow-700 font-bold rounded-lg border border-yellow-200 shadow-sm hover:bg-yellow-100 transition-colors">
                     <Clock className="w-4 h-4" /> {heldCarts.length} Held

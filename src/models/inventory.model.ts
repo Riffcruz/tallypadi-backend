@@ -15,6 +15,7 @@ export interface IInventoryItem extends Document {
   lowStockThreshold?: number;  // Alert owner when qty drops below this
   supplierName?: string;       // Pre-fills restock WhatsApp message
   supplierPhone?: string;      // Optional: deep-link to supplier's WhatsApp
+  saleSyncKeys?: string[];     // Internal guards for crash-safe offline sale replay
 
   // ── Marketplace/Shop Front ──
   isPublished?: boolean;
@@ -60,6 +61,7 @@ export interface IInventoryItem extends Document {
       lowStockThreshold: { type: Number, default: null },
       supplierName: { type: String, trim: true },
       supplierPhone: { type: String, trim: true },
+      saleSyncKeys: { type: [String], select: false, default: [] },
 
       // ── Marketplace/Shop Front ──
       isPublished: { type: Boolean, default: true },

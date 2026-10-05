@@ -9,6 +9,13 @@ import { queueMarketplaceProductRefresh, queuePushNotification } from './queue.s
 import { Customer } from '../models/customer.model';
 import { activityService } from './activity.service';
 
+export interface RecordSaleOptions {
+  clientSaleId?: string | null;
+  clientRecordedAt?: Date;
+  source?: 'WEB' | 'WEB_OFFLINE' | 'WHATSAPP';
+  stockMutationKey?: string | null;
+}
+
 export class SalesService {
 
   // --- Helpers ---
@@ -32,16 +39,17 @@ export class SalesService {
     paymentMethod: string,
     customerId: string | null = null,
     discountAmount: number = 0,
-    session: ClientSession
+    session?: ClientSession,
+    options: RecordSaleOptions = {}
   ) {
     // 1. Fetch User & Validate Subscription
-    const user = await User.findById(userId).session(session) as (mongoose.Document & IUser & { ownerId?: mongoose.Types.ObjectId, role?: string }) | null;
+    const user = await User.findById(userId).session(session || null) as (mongoose.Document & IUser & { ownerId?: mongoose.Types.ObjectId, role?: string }) | null;
     if (!user) throw new Error("User not found");
 
     const ownerIdForSub = (user.role === 'STAFF' && user.ownerId) ? user.ownerId : user._id;
     let ownerForSub: (mongoose.Document & IUser & { ownerId?: mongoose.Types.ObjectId, role?: string }) | null = user;
     if (user.role === 'STAFF' && user.ownerId) {
-      ownerForSub = await User.findById(ownerIdForSub).session(session) as (mongoose.Document & IUser & { ownerId?: mongoose.Types.ObjectId, role?: string }) | null;
+      ownerForSub = await User.findById(ownerIdForSub).session(session || null) as (mongoose.Document & IUser & { ownerId?: mongoose.Types.ObjectId, role?: string }) | null;
     }
     if (!ownerForSub) {
       throw new Error("Owner account invalid");
@@ -77,7 +85,7 @@ export class SalesService {
     const inventoryItems = await Inventory.find({
       _id: { $in: itemIds },
       user: inventoryOwnerId
-    }).session(session);
+    }).select('+saleSyncKeys').session(session || null);
 
     const inventoryMap = new Map(inventoryItems.map(i => [String(i._id), i]));
 
@@ -85,6 +93,7 @@ export class SalesService {
     const bulkOps: mongoose.AnyBulkWriteOperation<any>[] = [];
     const txItems: Record<string, unknown>[] = [];
     const lowStockAlerts: Array<{ itemId: string; name: string; previousStock: number; currentStock: number }> = [];
+    const stockMutationKey = options.stockMutationKey || null;
     let totalMoney = 0;
 
     for (const it of finalItems) {
@@ -93,17 +102,31 @@ export class SalesService {
         throw new Error(`Item not found: ${it.itemId}`);
       }
 
-      if ((invItem.quantity || 0) < it.quantity) {
+      const stockWasAlreadyApplied = Boolean(
+        stockMutationKey && Array.isArray(invItem.saleSyncKeys) && invItem.saleSyncKeys.includes(stockMutationKey)
+      );
+
+      if (!stockWasAlreadyApplied && (invItem.quantity || 0) < it.quantity) {
         throw new Error(`Insufficient stock for '${invItem.name}'. Available: ${invItem.quantity}, Requested: ${it.quantity}`);
       }
 
       // Add to bulk update (atomic decrement with condition)
-      bulkOps.push({
-        updateOne: {
-          filter: { _id: it.itemId, quantity: { $gte: it.quantity } },
-          update: { $inc: { quantity: -it.quantity } }
-        }
-      });
+      if (!stockWasAlreadyApplied) {
+        bulkOps.push({
+          updateOne: {
+            filter: {
+              _id: it.itemId,
+              user: inventoryOwnerId,
+              quantity: { $gte: it.quantity },
+              ...(stockMutationKey ? { saleSyncKeys: { $ne: stockMutationKey } } : {}),
+            },
+            update: {
+              $inc: { quantity: -it.quantity },
+              ...(stockMutationKey ? { $addToSet: { saleSyncKeys: stockMutationKey } } : {}),
+            }
+          }
+        });
+      }
 
       // Low Stock Alert Logic
       const newStock = (invItem.quantity || 0) - it.quantity;
@@ -151,7 +174,7 @@ export class SalesService {
       const pointValue = ownerForSub.settings.royalty.redemptionValuePerPoint || 1;
       const pointsRequired = Math.ceil(finalAmountPaid / pointValue);
       
-      const customer = await Customer.findById(customerId).session(session);
+      const customer = await Customer.findOne({ _id: customerId, shopId: ownerForSub._id }).session(session || null);
       if (!customer) throw new Error("Customer not found.");
       if ((customer.royaltyPoints || 0) < pointsRequired) {
         throw new Error(`Insufficient points. Customer has ${customer.royaltyPoints || 0} pts, but ${pointsRequired} pts are required.`);
@@ -177,7 +200,20 @@ export class SalesService {
     // 5. Execute Bulk Write
     if (bulkOps.length > 0) {
       const bulkResult = await Inventory.bulkWrite(bulkOps, { session });
-      if (bulkResult.modifiedCount !== finalItems.length) {
+      let stockAppliedCompletely = bulkResult.modifiedCount === bulkOps.length;
+
+      // On an interrupted standalone-Mongo request, some stock rows may already
+      // contain this sale's marker. Treat those rows as applied, never decrement twice.
+      if (!stockAppliedCompletely && stockMutationKey) {
+        const guardedRows = await Inventory.find({
+          _id: { $in: itemIds },
+          user: inventoryOwnerId,
+          saleSyncKeys: stockMutationKey,
+        }).select('_id').session(session || null).lean();
+        stockAppliedCompletely = guardedRows.length === finalItems.length;
+      }
+
+      if (!stockAppliedCompletely) {
         // Concurrency check failed (stock changed between read and write)
         throw new Error("Transaction failed: Stock modified during processing. Please try again.");
       }
@@ -187,6 +223,7 @@ export class SalesService {
     }
 
     // 6. Create Transaction
+    const transactionTime = options.clientRecordedAt || new Date();
     const createdTx = await Transaction.create([{
       user: userId,
       type: 'SALE',
@@ -198,15 +235,18 @@ export class SalesService {
       amountPaid: finalAmountPaid, // Net 
       customerId: customerId || null,
       pointsEarned: pointsEarned,
-      date: this.getCurrentDateString(),
-      timestamp: new Date()
+      date: transactionTime.toISOString().split('T')[0],
+      timestamp: transactionTime,
+      clientSaleId: options.clientSaleId || null,
+      clientRecordedAt: options.clientRecordedAt || null,
+      source: options.source || null,
     } as any], { session });
 
     // 7. Update Customer Points asynchronously if earned (Only if NOT paying with points)
     if (paymentMethod !== 'POINTS' && customerId && pointsEarned > 0) {
       // Background update
       await Customer.updateOne(
-        { _id: customerId }, 
+        { _id: customerId, shopId: ownerForSub._id },
         { 
            $inc: { royaltyPoints: pointsEarned, totalSpent: finalAmountPaid },
            $set: { lastPurchaseAt: new Date() }
@@ -241,6 +281,37 @@ export class SalesService {
     }
 
     return createdTx[0];
+  }
+
+  static async rollbackSaleStock(userId: string, itemsInput: any[], stockMutationKey: string) {
+    const user = await User.findById(userId).select('_id role ownerId').lean();
+    if (!user) return;
+    const inventoryOwnerId = user.role === 'STAFF' && user.ownerId ? user.ownerId : user._id;
+
+    const merged = new Map<string, number>();
+    for (const item of itemsInput) {
+      const itemId = String(item?.itemId || item?.id || item?._id || item?.productId || item?.inventoryId || '').trim();
+      const quantity = this.toNumber(item?.quantity ?? item?.qty ?? item?.sellQty);
+      if (!itemId || quantity === null || quantity <= 0) continue;
+      merged.set(itemId, (merged.get(itemId) || 0) + quantity);
+    }
+
+    await Promise.all(Array.from(merged.entries()).map(([itemId, quantity]) =>
+      Inventory.updateOne(
+        { _id: itemId, user: inventoryOwnerId, saleSyncKeys: stockMutationKey },
+        { $inc: { quantity }, $pull: { saleSyncKeys: stockMutationKey } }
+      )
+    ));
+  }
+
+  static async clearSaleStockMarkers(userId: string, itemIds: string[], stockMutationKey: string) {
+    const user = await User.findById(userId).select('_id role ownerId').lean();
+    if (!user) return;
+    const inventoryOwnerId = user.role === 'STAFF' && user.ownerId ? user.ownerId : user._id;
+    await Inventory.updateMany(
+      { _id: { $in: itemIds }, user: inventoryOwnerId, saleSyncKeys: stockMutationKey },
+      { $pull: { saleSyncKeys: stockMutationKey } }
+    );
   }
 
   // --- 2. GET SALES HISTORY (Paginated) ---
