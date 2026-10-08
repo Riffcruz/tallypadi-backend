@@ -8,6 +8,13 @@ import { sendRegistrationOTP } from '../services/email.service';
 import { isSubActive, isTycoon } from '../utils/permissions';
 import { PushSubscription } from '../models/pushSubscription.model';
 import { referralService } from '../services/referral.service';
+import {
+  createPasswordResetCode,
+  hashPasswordResetCode,
+  passwordResetCodeMatches,
+  validateResetPassword,
+} from '../services/passwordReset.service';
+import { queueOutboundMessage, queuePasswordResetEmail } from '../services/queue.service';
 
 // --- Helpers ---
 const sanitizeString = (input: unknown): string | null => {
@@ -475,87 +482,139 @@ export const verifyRegistrationOTP = async (req: Request, res: Response) => {
 
 // --- Forgot Password ---
 
+const passwordResetRequestMessage = 'If an account matches those details, a reset code will be sent to its registered email and available WhatsApp number.';
+
+const findPasswordResetUser = (identifier: string) => {
+  const normalized = identifier.trim().toLowerCase();
+  const query = isValidEmail(normalized)
+    ? { email: normalized }
+    : { phoneNumber: { $in: buildPhoneCandidates(identifier) } };
+
+  return User.findOne(query).select(
+    '+passwordResetCodeHash +passwordResetExpires +passwordResetAttempts email phoneNumber name businessName lastSeen'
+  );
+};
+
 export const requestForgotPasswordOTP = async (req: Request, res: Response) => {
   try {
-    const { identifier } = req.body;
-    if (!identifier) return res.status(400).json({ error: 'Please provide phone number' });
-
-    // Normalize input
-    const digits = normalizePhone(identifier);
-    // Try to find user. Handle 0-prefix or 234-prefix.
-    // We'll use the buildPhoneCandidates helper logic implicitly or just query.
-    // User might enter '090...' or '23490...'
-    const candidates = buildPhoneCandidates(identifier);
-    
-    const user = await User.findOne({ phoneNumber: { $in: candidates } });
-    if (!user) {
-      // Security: don't reveal user existence? 
-      // For this app context (business tool), clear feedback might be better for UX.
-      return res.status(404).json({ error: 'User not found' });
+    const identifier = sanitizeString(req.body?.identifier);
+    if (!identifier || identifier.length > 254) {
+      return res.status(400).json({ error: 'Please provide a valid email address or phone number.' });
     }
 
-    // Check 24h interaction
-    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    
-    // Check if user has been seen (lastSeen) in the last 24h
-    if (!user.lastSeen || user.lastSeen < oneDayAgo) {
-      // Fallback: Check ProcessedMessage (for older interactions before lastSeen was added)
-      const lastMsg = await ProcessedMessage.findOne({
-        user: user._id,
-        createdAt: { $gte: oneDayAgo }
-      });
+    const user = await findPasswordResetUser(identifier);
+    if (user) {
+      const otp = createPasswordResetCode();
+      const expires = new Date(Date.now() + 10 * 60 * 1000);
+      const codeHash = hashPasswordResetCode(String(user._id), otp);
 
-      if (!lastMsg) {
-        return res.status(400).json({ 
-          error: 'No recent interaction. Please send a "Hello" to the bot on WhatsApp first to enable OTP.' 
-        });
+      await User.updateOne(
+        { _id: user._id },
+        {
+          $set: {
+            passwordResetCodeHash: codeHash,
+            passwordResetExpires: expires,
+            passwordResetAttempts: 0,
+          },
+        }
+      );
+
+      const deliveries: Promise<unknown>[] = [];
+      if (user.email) {
+        deliveries.push(queuePasswordResetEmail({
+          email: user.email,
+          otp,
+          name: user.name || user.businessName,
+        }));
       }
+
+      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      let canSendWhatsApp = Boolean(user.lastSeen && user.lastSeen >= oneDayAgo);
+      if (!canSendWhatsApp) {
+        canSendWhatsApp = Boolean(await ProcessedMessage.exists({
+          user: user._id,
+          createdAt: { $gte: oneDayAgo },
+        }));
+      }
+      if (canSendWhatsApp && user.phoneNumber) {
+        deliveries.push(queueOutboundMessage(
+          user.phoneNumber,
+          `Your TallyPadi password reset code is ${otp}. It expires in 10 minutes. Do not share this code.`
+        ));
+      }
+
+      const deliveryResults = await Promise.allSettled(deliveries);
+      deliveryResults.forEach((result) => {
+        if (result.status === 'rejected') console.error('Password reset delivery could not be queued:', result.reason);
+      });
     }
 
-    // Generate OTP
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const expires = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
-
-    user.otp = otp;
-    user.otpExpires = expires;
-    await user.save();
-
-    // Send via WhatsApp
-    await sendWhatsAppText(user.phoneNumber, `Your TallyPadi Password Reset OTP is: ${otp}`);
-
-    return res.json({ success: true, message: 'OTP sent to WhatsApp' });
+    return res.json({ success: true, message: passwordResetRequestMessage });
   } catch (err) {
     console.error('Forgot Password Request Error:', err);
-    return res.status(500).json({ error: 'Server Error' });
+    return res.status(500).json({ error: 'Password reset is temporarily unavailable. Please try again.' });
   }
 };
 
 export const resetPassword = async (req: Request, res: Response) => {
   try {
-    const { identifier, otp, newPassword } = req.body;
+    const identifier = sanitizeString(req.body?.identifier);
+    const otp = sanitizeString(req.body?.otp);
+    const newPassword = req.body?.newPassword;
+    const confirmPassword = req.body?.confirmPassword;
     if (!identifier || !otp || !newPassword) {
       return res.status(400).json({ error: 'Missing fields' });
     }
+    if (confirmPassword !== undefined && newPassword !== confirmPassword) {
+      return res.status(400).json({ error: 'Passwords do not match.' });
+    }
+    const passwordError = validateResetPassword(newPassword);
+    if (passwordError) return res.status(400).json({ error: passwordError });
 
-    const candidates = buildPhoneCandidates(identifier);
-    const user = await User.findOne({ phoneNumber: { $in: candidates } }).select('+password +otp +otpExpires');
-
-    if (!user) return res.status(404).json({ error: 'User not found' });
-
-    if (!user.otp || user.otp !== otp) {
-      return res.status(400).json({ error: 'Invalid OTP' });
+    const user = await findPasswordResetUser(identifier);
+    const invalidCodeMessage = 'The reset code is invalid or expired. Request a new code and try again.';
+    if (!user?.passwordResetCodeHash || !user.passwordResetExpires || user.passwordResetExpires <= new Date()) {
+      return res.status(400).json({ error: invalidCodeMessage });
     }
 
-    if (!user.otpExpires || user.otpExpires < new Date()) {
-      return res.status(400).json({ error: 'OTP expired' });
+    if ((user.passwordResetAttempts || 0) >= 5 || !passwordResetCodeMatches({
+      userId: String(user._id),
+      code: otp,
+      expectedHash: user.passwordResetCodeHash,
+    })) {
+      const incremented = await User.findOneAndUpdate(
+        {
+          _id: user._id,
+          passwordResetCodeHash: user.passwordResetCodeHash,
+          passwordResetAttempts: { $lt: 4 },
+        },
+        { $inc: { passwordResetAttempts: 1 } },
+        { new: true }
+      );
+      if (!incremented) {
+        await User.updateOne(
+          { _id: user._id, passwordResetCodeHash: user.passwordResetCodeHash },
+          { $unset: { passwordResetCodeHash: 1, passwordResetExpires: 1, passwordResetAttempts: 1 } }
+        );
+      }
+      return res.status(400).json({ error: invalidCodeMessage });
     }
 
-    // Reset
-    const salt = await bcrypt.genSalt(10);
-    user.password = await bcrypt.hash(newPassword, salt);
-    user.otp = undefined;
-    user.otpExpires = undefined;
-    await user.save();
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    const resetResult = await User.updateOne(
+      {
+        _id: user._id,
+        passwordResetCodeHash: user.passwordResetCodeHash,
+        passwordResetExpires: { $gt: new Date() },
+      },
+      {
+        $set: { password: passwordHash, passwordChangedAt: new Date() },
+        $unset: { passwordResetCodeHash: 1, passwordResetExpires: 1, passwordResetAttempts: 1 },
+      }
+    );
+    if (resetResult.modifiedCount !== 1) {
+      return res.status(400).json({ error: invalidCodeMessage });
+    }
 
     return res.json({ success: true, message: 'Password updated successfully' });
   } catch (err) {

@@ -79,6 +79,19 @@ export const notificationQueue = new Queue('push-notifications', {
 });
 
 // ============================================================
+// ✅ TRANSACTIONAL EMAIL: password resets and support alerts
+// ============================================================
+export const transactionalEmailQueue = new Queue('transactional-email', {
+  connection: createRedisConnection('queue-transactional-email') as any,
+  defaultJobOptions: {
+    attempts: 5,
+    backoff: { type: 'exponential', delay: 5000 },
+    removeOnComplete: true,
+    removeOnFail: 1000,
+  },
+});
+
+// ============================================================
 // ✅ BROADCAST: Mass Email and WhatsApp messages
 // Queue name: broadcast-queue
 // ============================================================
@@ -137,6 +150,42 @@ export function safeJobId(id: string) {
 export const queuePushNotification = async (payload: { type: 'SINGLE' | 'GLOBAL'; agentId?: string; title: string; body: string; data?: Record<string, unknown> }) => {
   const finalJobId = safeJobId(`push_${payload.type}_${Date.now()}_${Math.random()}`);
   await notificationQueue.add('send-push', payload, { jobId: finalJobId });
+};
+
+export const queuePasswordResetEmail = async (payload: {
+  email: string;
+  otp: string;
+  name?: string;
+}) => {
+  const finalJobId = safeJobId(`password_reset_email_${Date.now()}_${Math.random()}`);
+  await transactionalEmailQueue.add('send-password-reset-email', payload, { jobId: finalJobId });
+};
+
+export const queueContactTicketEmail = async (payload: {
+  contactTicketId: string;
+  ticketId: string;
+  ticketNumber: string;
+  name: string;
+  email: string;
+  phone?: string;
+  category: string;
+  subject: string;
+  message: string;
+}) => {
+  const finalJobId = safeJobId(`contact_ticket_email_${payload.contactTicketId}`);
+  await transactionalEmailQueue.add('send-contact-ticket-email', payload, { jobId: finalJobId });
+};
+
+export const queueLiveSupportEmail = async (payload: {
+  ticketId: string;
+  phone: string;
+  name?: string;
+  businessName?: string;
+  email?: string;
+  message: string;
+}) => {
+  const finalJobId = safeJobId(`live_support_email_${payload.ticketId}`);
+  await transactionalEmailQueue.add('send-live-support-email', payload, { jobId: finalJobId });
 };
 
 export const queueAdProviderSubmission = async (providerCampaignId: string, reason = 'admin-approved') => {

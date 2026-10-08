@@ -23,6 +23,7 @@ async function boot() {
     if (workers.bulkWorker) closePromises.push(workers.bulkWorker.close());
     if (workers.messageWorker) closePromises.push(workers.messageWorker.close());
     if (workers.notificationWorker) closePromises.push(workers.notificationWorker.close());
+    if (workers.transactionalEmailWorker) closePromises.push(workers.transactionalEmailWorker.close());
     if (workers.adAutomationWorker) closePromises.push(workers.adAutomationWorker.close());
     if (workers.marketplaceIndexWorker) closePromises.push(workers.marketplaceIndexWorker.close());
     if (workers.broadcastWorker) closePromises.push(workers.broadcastWorker.close());

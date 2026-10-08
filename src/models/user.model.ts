@@ -120,6 +120,10 @@ export interface IUser extends Document {
   otp?: string;
   otpExpires?: Date;
   tempPhone?: string;
+  passwordResetCodeHash?: string;
+  passwordResetExpires?: Date;
+  passwordResetAttempts?: number;
+  passwordChangedAt?: Date;
 
   createdAt: Date;
   updatedAt: Date;
@@ -286,6 +290,10 @@ const userSchema = new Schema<IUser>(
     otp: { type: String, select: false },
     otpExpires: { type: Date, select: false },
     tempPhone: { type: String, select: false },
+    passwordResetCodeHash: { type: String, select: false },
+    passwordResetExpires: { type: Date, select: false },
+    passwordResetAttempts: { type: Number, default: 0, select: false },
+    passwordChangedAt: { type: Date },
   },
   { timestamps: true }
 );

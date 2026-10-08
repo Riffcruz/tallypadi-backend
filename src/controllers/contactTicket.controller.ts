@@ -8,7 +8,7 @@ import {
   CONTACT_TICKET_STATUSES,
   ContactTicket,
 } from '../models/contactTicket.model';
-import { sendSupportTicketAdminNotification } from '../services/email.service';
+import { queueContactTicketEmail } from '../services/queue.service';
 import { verifyTurnstileToken } from '../services/turnstile.service';
 
 const publicTicketSchema = z.object({
@@ -71,7 +71,8 @@ export const createPublicContactTicket = async (req: Request, res: Response) => 
     });
 
     try {
-      await sendSupportTicketAdminNotification({
+      await queueContactTicketEmail({
+        contactTicketId: String(ticket._id),
         ticketId: String(ticket._id),
         ticketNumber: ticket.ticketNumber,
         name: ticket.name,
@@ -81,13 +82,9 @@ export const createPublicContactTicket = async (req: Request, res: Response) => 
         subject: ticket.subject,
         message: ticket.message,
       });
-      await ContactTicket.updateOne(
-        { _id: ticket._id },
-        { $set: { emailNotificationStatus: 'SENT' }, $unset: { emailNotificationError: 1 } }
-      );
     } catch (emailError) {
-      const reason = emailError instanceof Error ? emailError.message : 'Email notification failed';
-      console.error(`Support ticket ${ticket.ticketNumber} email notification failed:`, reason);
+      const reason = emailError instanceof Error ? emailError.message : 'Email notification could not be queued';
+      console.error(`Support ticket ${ticket.ticketNumber} email notification queue failed:`, reason);
       await ContactTicket.updateOne(
         { _id: ticket._id },
         { $set: { emailNotificationStatus: 'FAILED', emailNotificationError: reason.slice(0, 500) } }

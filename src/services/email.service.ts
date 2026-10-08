@@ -66,6 +66,12 @@ const escapeHtml = (value: unknown) =>
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
 
+export const getSupportNotificationRecipients = () => Array.from(new Set(
+    ['support@tallypadi.com', env.supportTicketAdminEmail]
+        .map((value) => String(value || '').trim().toLowerCase())
+        .filter(Boolean)
+));
+
 export const sendRegistrationOTP = async (email: string, otp: string) => {
     // Dynamically retrieve SMTP settings from the DB
     const { transporter, smtpConfig } = await createSmtpTransport();
@@ -98,6 +104,40 @@ export const sendRegistrationOTP = async (email: string, otp: string) => {
         console.error('Failed to send OTP email via NodeMailer:', error);
         throw error;
     }
+};
+
+export const sendPasswordResetOTP = async ({
+    email,
+    otp,
+    name,
+}: {
+    email: string;
+    otp: string;
+    name?: string;
+}) => {
+    const { transporter, smtpConfig } = await createSmtpTransport();
+    const safeName = escapeHtml(name || 'there');
+    const safeOtp = escapeHtml(otp);
+
+    await transporter.sendMail({
+        from: `TallyPadi <${smtpConfig.fromAddress || smtpConfig.user}>`,
+        to: email,
+        subject: 'Your TallyPadi password reset code',
+        html: `
+            <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#172033;line-height:1.7">
+                <h2 style="margin:0 0 16px;color:#064e3b">Reset your TallyPadi password</h2>
+                <p>Hello ${safeName},</p>
+                <p>Use this one-time code to reset your password:</p>
+                <div style="margin:24px 0;padding:20px;text-align:center;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px">
+                    <strong style="font-size:32px;letter-spacing:7px;color:#065f46">${safeOtp}</strong>
+                </div>
+                <p>This code expires in 10 minutes and can only be used once.</p>
+                <p style="color:#64748b;font-size:14px">If you did not request this reset, ignore this email. Never share the code with anyone.</p>
+            </div>
+        `,
+    });
+
+    return true;
 };
 
 export const sendBroadcastEmail = async (
@@ -201,10 +241,7 @@ export const sendSupportTicketAdminNotification = async ({
 }) => {
     const { transporter, smtpConfig } = await createSmtpTransport();
     const settings = await AdminSettings.findOne().lean();
-    const adminEmail = String(
-        env.supportTicketAdminEmail || smtpConfig.fromAddress || smtpConfig.user || ''
-    ).trim();
-    if (!adminEmail) throw new Error('Support ticket admin email is not configured');
+    const adminEmails = getSupportNotificationRecipients();
 
     const appBaseUrl = String(process.env.APP_BASE_URL || 'https://tallypadi.com').replace(/\/$/, '');
     const ticketUrl = `${appBaseUrl}/admin/tickets?ticket=${encodeURIComponent(ticketId)}`;
@@ -247,10 +284,51 @@ export const sendSupportTicketAdminNotification = async ({
 
     await transporter.sendMail({
         from: `TallyPadi <${smtpConfig.fromAddress || smtpConfig.user}>`,
-        to: adminEmail,
+        to: adminEmails,
         replyTo: email,
         subject: `[${ticketNumber}] ${subject}`.slice(0, 180),
         html,
+    });
+
+    return true;
+};
+
+export const sendLiveSupportAdminNotification = async ({
+    ticketId,
+    phone,
+    name,
+    businessName,
+    email,
+    message,
+}: {
+    ticketId: string;
+    phone: string;
+    name?: string;
+    businessName?: string;
+    email?: string;
+    message: string;
+}) => {
+    const { transporter, smtpConfig } = await createSmtpTransport();
+    const adminEmails = getSupportNotificationRecipients();
+    const appBaseUrl = String(process.env.APP_BASE_URL || 'https://tallypadi.com').replace(/\/$/, '');
+    const ticketUrl = `${appBaseUrl}/admin/support?ticket=${encodeURIComponent(ticketId)}`;
+    const displayName = businessName || name || phone;
+
+    await transporter.sendMail({
+        from: `TallyPadi <${smtpConfig.fromAddress || smtpConfig.user}>`,
+        to: adminEmails,
+        replyTo: email || undefined,
+        subject: `New live-support request from ${displayName}`.slice(0, 180),
+        html: `
+            <div style="font-family:Arial,sans-serif;max-width:640px;margin:0 auto;color:#172033;line-height:1.7">
+                <h2 style="margin:0 0 16px;color:#064e3b">New WhatsApp support request</h2>
+                <p><strong>Customer:</strong> ${escapeHtml(displayName)}</p>
+                <p><strong>Phone:</strong> ${escapeHtml(phone)}</p>
+                ${email ? `<p><strong>Email:</strong> ${escapeHtml(email)}</p>` : ''}
+                <div style="margin:20px 0;padding:18px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px">${escapeHtml(message).replace(/\n/g, '<br>')}</div>
+                <a href="${escapeHtml(ticketUrl)}" style="display:inline-block;background:#059669;color:#fff;text-decoration:none;font-weight:700;padding:12px 18px;border-radius:8px">Open live support</a>
+            </div>
+        `,
     });
 
     return true;

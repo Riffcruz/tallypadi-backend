@@ -2,10 +2,10 @@
 
 import React, { useState } from 'react';
 import axios from 'axios';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   Phone,
+  Mail,
   Lock,
   Eye,
   EyeOff,
@@ -16,6 +16,13 @@ import {
 } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
+
+const getApiError = (error: unknown, fallback: string) => {
+  if (axios.isAxiosError<{ error?: string }>(error)) {
+    return error.response?.data?.error || fallback;
+  }
+  return fallback;
+};
 
 const COUNTRY_CODES = [
   { code: '+234', flag: '🇳🇬', name: 'Nigeria' },
@@ -48,18 +55,16 @@ function buildPhoneIdentifier(input: string, selectedCountryCode: string) {
 }
 
 export default function ForgotPasswordPage() {
-  const router = useRouter();
-
-  // Step 1: Phone
-  // Step 2: OTP + New Password (simplified UI to just one screen after OTP sent)
-  // Actually, typically you enter OTP then Password. 
-  // Let's do: Step 1 (Request), Step 2 (Verify & Reset)
   const [step, setStep] = useState<1 | 2 | 3>(1); // 1: Request, 2: Reset, 3: Success
 
   const [countryCode, setCountryCode] = useState('+234');
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [email, setEmail] = useState('');
+  const [recoveryMethod, setRecoveryMethod] = useState<'email' | 'phone'>('email');
+  const [requestedIdentifier, setRequestedIdentifier] = useState('');
   const [otp, setOtp] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
   const [loading, setLoading] = useState(false);
@@ -72,9 +77,15 @@ export default function ForgotPasswordPage() {
     setError('');
     setMsg('');
 
-    const identifier = buildPhoneIdentifier(phoneNumber, countryCode);
+    const identifier = recoveryMethod === 'email'
+      ? email.trim().toLowerCase()
+      : buildPhoneIdentifier(phoneNumber, countryCode);
     if (!identifier) {
-      setError('Please enter a valid phone number');
+      setError(`Please enter a valid ${recoveryMethod === 'email' ? 'email address' : 'phone number'}`);
+      return;
+    }
+    if (recoveryMethod === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier)) {
+      setError('Please enter a valid email address');
       return;
     }
 
@@ -82,11 +93,12 @@ export default function ForgotPasswordPage() {
     try {
       const res = await axios.post(`${API_URL}/auth/forgot-password`, { identifier });
       if (res.data.success) {
+        setRequestedIdentifier(identifier);
         setStep(2);
-        setMsg('OTP sent! Check your WhatsApp.');
+        setMsg(res.data.message || 'Check your registered email or WhatsApp for the reset code.');
       }
-    } catch (err: any) {
-      setError(err?.response?.data?.error || 'Failed to send OTP');
+    } catch (err: unknown) {
+      setError(getApiError(err, 'Failed to send OTP'));
     } finally {
       setLoading(false);
     }
@@ -102,25 +114,29 @@ export default function ForgotPasswordPage() {
       setError('Enter the 6-digit OTP');
       return;
     }
-    if (newPassword.length < 6) {
-      setError('Password too short');
+    if (newPassword.length < 8 || !/[A-Za-z]/.test(newPassword) || !/\d/.test(newPassword)) {
+      setError('Use at least 8 characters with a letter and a number');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError('Passwords do not match');
       return;
     }
 
-    const identifier = buildPhoneIdentifier(phoneNumber, countryCode);
     setLoading(true);
 
     try {
       const res = await axios.post(`${API_URL}/auth/reset-password`, {
-        identifier,
+        identifier: requestedIdentifier,
         otp,
-        newPassword
+        newPassword,
+        confirmPassword,
       });
       if (res.data.success) {
         setStep(3);
       }
-    } catch (err: any) {
-      setError(err?.response?.data?.error || 'Failed to reset password');
+    } catch (err: unknown) {
+      setError(getApiError(err, 'Failed to reset password'));
     } finally {
       setLoading(false);
     }
@@ -157,11 +173,8 @@ export default function ForgotPasswordPage() {
               </div>
               <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Forgot Password?</h1>
               <p className="text-slate-500 text-sm mt-2">
-                Enter your WhatsApp number to receive a reset OTP.
+                Receive a secure one-time code using your registered email or WhatsApp number.
               </p>
-              <div className="mt-4 p-3 bg-amber-50 border border-amber-100 rounded-xl text-xs text-amber-800 text-left">
-                <strong>Important:</strong> You must have sent a message to the TallyPadi bot on WhatsApp within the last 24 hours to receive this code.
-              </div>
             </div>
 
             {error && (
@@ -171,6 +184,41 @@ export default function ForgotPasswordPage() {
             )}
 
             <form onSubmit={handleRequestOTP} className="space-y-5">
+              <div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1">
+                <button
+                  type="button"
+                  onClick={() => setRecoveryMethod('email')}
+                  className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-bold transition ${recoveryMethod === 'email' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500'}`}
+                >
+                  <Mail size={16} /> Email
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRecoveryMethod('phone')}
+                  className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-bold transition ${recoveryMethod === 'phone' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500'}`}
+                >
+                  <Phone size={16} /> WhatsApp
+                </button>
+              </div>
+
+              {recoveryMethod === 'email' ? (
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">
+                    Registered Email
+                  </label>
+                  <div className="relative">
+                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                    <input
+                      type="email"
+                      className="w-full h-12 pl-11 pr-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all outline-none text-slate-900 placeholder:text-slate-400 font-medium"
+                      placeholder="you@example.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      autoComplete="email"
+                    />
+                  </div>
+                </div>
+              ) : (
               <div className="space-y-1.5">
                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">
                   WhatsApp Number
@@ -198,6 +246,7 @@ export default function ForgotPasswordPage() {
                   />
                 </div>
               </div>
+              )}
 
               <button
                 disabled={loading}
@@ -217,7 +266,7 @@ export default function ForgotPasswordPage() {
               </div>
               <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Reset Password</h1>
               <p className="text-slate-500 text-sm mt-2">
-                OTP sent! Check your WhatsApp and enter it below.
+                Enter the 6-digit code sent to the account&apos;s registered email or available WhatsApp number.
               </p>
             </div>
 
@@ -259,6 +308,21 @@ export default function ForgotPasswordPage() {
                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
                 </div>
+                <p className="text-xs text-slate-500">At least 8 characters with a letter and a number.</p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Retype New Password</label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    className="w-full h-12 pl-4 pr-11 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all outline-none text-slate-900 font-medium"
+                    placeholder="Retype new password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    autoComplete="new-password"
+                  />
+                </div>
               </div>
 
               <button
@@ -270,10 +334,15 @@ export default function ForgotPasswordPage() {
 
               <button
                 type="button"
-                onClick={() => setStep(1)}
+                onClick={() => {
+                  setStep(1);
+                  setRequestedIdentifier('');
+                  setOtp('');
+                  setMsg('');
+                }}
                 className="w-full text-slate-400 text-sm py-2 hover:text-slate-600 transition-colors"
               >
-                Wrong number? Go back
+                Wrong email or number? Go back
               </button>
             </form>
           </>

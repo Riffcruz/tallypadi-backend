@@ -18,7 +18,7 @@ import { verifyAdmin } from './middleware/admin.middleware';
 import { createBullBoard } from '@bull-board/api';
 import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 import { ExpressAdapter } from '@bull-board/express';
-import { replyQueue, bulkQueue, messageQueue, notificationQueue, marketplaceIndexQueue } from './services/queue.service';
+import { replyQueue, bulkQueue, messageQueue, notificationQueue, marketplaceIndexQueue, transactionalEmailQueue } from './services/queue.service';
 
 // --- ROUTERS ---
 import whatsappRouter from './routes/whatsapp.routes';
@@ -323,7 +323,24 @@ const forgotPasswordLimiter = rateLimit({
   keyGenerator: (req: Request) => {
     const identifier = normalizeStr(req.body?.identifier);
     if (!identifier) return `ip:${rateLimitIpKey(req)}`;
+    if (looksLikeEmail(identifier)) return `fp:email:${identifier}`;
     return `fp:${normalizePhoneDigits(identifier)}`;
+  },
+});
+
+const passwordResetAttemptLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  store: rateLimitStore('rl:password-reset-attempt'),
+  passOnStoreError: true,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: 'Too many reset attempts. Request a new code and try again later.',
+  keyGenerator: (req: Request) => {
+    const identifier = normalizeStr(req.body?.identifier);
+    if (!identifier) return `ip:${rateLimitIpKey(req)}`;
+    if (looksLikeEmail(identifier)) return `reset:email:${identifier}`;
+    return `reset:phone:${normalizePhoneDigits(identifier)}`;
   },
 });
 
@@ -449,7 +466,7 @@ app.post('/api/register/verify', verifyRegistrationOTP); // Does not need rate l
 
 // ✅ Forgot Password
 app.post('/api/auth/forgot-password', forgotPasswordLimiter, requestForgotPasswordOTP);
-app.post('/api/auth/reset-password', loginLimiterIp, resetPassword);
+app.post('/api/auth/reset-password', loginLimiterIp, passwordResetAttemptLimiter, resetPassword);
 
 // ✅ Change Phone Number
 app.post('/api/auth/change-phone', authRequired, requestChangePhoneOTP);
@@ -527,6 +544,7 @@ createBullBoard({
     new BullMQAdapter(bulkQueue),
     new BullMQAdapter(messageQueue),
     new BullMQAdapter(notificationQueue),
+    new BullMQAdapter(transactionalEmailQueue),
     new BullMQAdapter(marketplaceIndexQueue)
   ],
   serverAdapter: serverAdapter,

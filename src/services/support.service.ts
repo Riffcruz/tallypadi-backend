@@ -5,9 +5,10 @@ import { SupportTicket, ISupportTicket } from '../models/supportTicket.model';
 import { SupportMessage } from '../models/supportMessage.model';
 import { sendPushNotification, sendGlobalPushNotification } from './push.service';
 import { sendWhatsAppText } from './whatsapp.service';
-import { queueOutboundMessage, queueOutboundButtons, publishSocketEvent } from './queue.service';
+import { queueLiveSupportEmail, queueOutboundMessage, queueOutboundButtons, publishSocketEvent } from './queue.service';
 import { getIO } from '../socket';
 import { env } from '../config/env';
+import { User } from '../models/user.model';
 
 const MAX_ACTIVE_TICKETS = Number(process.env.MAX_ACTIVE_TICKETS_PER_AGENT || 1);
 
@@ -35,6 +36,7 @@ export const supportService = {
       status: { $in: ['QUEUED', 'ASSIGNED', 'ACTIVE'] }
     });
 
+    const isNewTicket = !ticket;
     if (!ticket) {
       // Create new ticket
       ticket = await SupportTicket.create({
@@ -65,6 +67,24 @@ export const supportService = {
       waMessageId,
       timestamp: new Date()
     });
+
+    if (isNewTicket) {
+      try {
+        const user = await User.findOne({ phoneNumber: { $in: [from, `+${from}`] } })
+          .select('email name businessName')
+          .lean();
+        await queueLiveSupportEmail({
+          ticketId: String(ticket._id),
+          phone: from,
+          name: user?.name || profileName,
+          businessName: user?.businessName,
+          email: user?.email,
+          message: text,
+        });
+      } catch (emailQueueError) {
+        console.error(`Could not queue live-support email for ticket ${ticket._id}:`, emailQueueError);
+      }
+    }
 
     // Notify assigned agent if any
     if (ticket.assignedAgentId) {

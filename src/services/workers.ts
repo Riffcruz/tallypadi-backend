@@ -22,9 +22,15 @@ import {
   refreshMarketplaceListing,
   refreshMarketplaceOwnerListings,
 } from './marketplaceIndex.service';
-import { sendBroadcastEmail } from './email.service';
+import {
+  sendBroadcastEmail,
+  sendLiveSupportAdminNotification,
+  sendPasswordResetOTP,
+  sendSupportTicketAdminNotification,
+} from './email.service';
 import { createUnsubscribeToken } from './emailSecurity.service';
 import { buildTallyPadiUpdateTemplateComponents } from './whatsappBroadcastTemplate.service';
+import { ContactTicket } from '../models/contactTicket.model';
 
 const escapeEmailHtml = (value: unknown) => String(value ?? '')
   .replace(/&/g, '&amp;')
@@ -484,6 +490,54 @@ export const notificationWorker = new Worker(
 notificationWorker.on('completed', (job: import('bullmq').Job) => console.log(`🔔 Push sent: ${job.data?.type}`));
 notificationWorker.on('failed', (job: import('bullmq').Job | undefined, err: Error) =>
   console.error(`❌ Push failed: ${err.message}`)
+);
+
+// ============================================================
+// WORKER: TRANSACTIONAL EMAIL
+// Keeps SMTP latency and retries away from user-facing requests.
+// ============================================================
+export const transactionalEmailWorker = new Worker(
+  'transactional-email',
+  async (job: import('bullmq').Job) => {
+    if (job.name === 'send-password-reset-email') {
+      await sendPasswordResetOTP(job.data);
+      return;
+    }
+
+    if (job.name === 'send-live-support-email') {
+      await sendLiveSupportAdminNotification(job.data);
+      return;
+    }
+
+    if (job.name === 'send-contact-ticket-email') {
+      const { contactTicketId, ...notification } = job.data;
+      try {
+        await sendSupportTicketAdminNotification(notification);
+        await ContactTicket.updateOne(
+          { _id: contactTicketId },
+          { $set: { emailNotificationStatus: 'SENT' }, $unset: { emailNotificationError: 1 } }
+        );
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : 'Email notification failed';
+        await ContactTicket.updateOne(
+          { _id: contactTicketId },
+          { $set: { emailNotificationStatus: 'FAILED', emailNotificationError: reason.slice(0, 500) } }
+        );
+        throw error;
+      }
+      return;
+    }
+
+    throw new Error(`Unknown transactional email job: ${job.name}`);
+  },
+  {
+    connection: createRedisConnection('worker-transactional-email') as any,
+    concurrency: 5,
+  }
+);
+
+transactionalEmailWorker.on('failed', (job: import('bullmq').Job | undefined, err: Error) =>
+  console.error(`❌ Transactional email failed [${job?.name || 'unknown'}]: ${err.message}`)
 );
 
 // ============================================================
