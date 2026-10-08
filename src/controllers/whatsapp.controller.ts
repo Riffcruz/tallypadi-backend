@@ -2581,8 +2581,8 @@ Tap a button below to subscribe:`;
         // ───────────────────────────────────────────────────────────────────
 
         // ─── Instant feedback to prevent perceived bottleneck ──────────────
-        if (/^invoice\s+for/i.test(rawText.trim())) {
-            sendWhatsAppText(from, "⏳ Analyzing invoice details. This may take a few seconds...").catch(() => {});
+        if (/^(?:receipt|invoice)\s+for/i.test(rawText.trim())) {
+            sendWhatsAppText(from, "⏳ Reading document details...").catch(() => {});
         }
         // ───────────────────────────────────────────────────────────────────
 
@@ -2755,6 +2755,47 @@ Tap a button below to subscribe:`;
             console.error('❌ Failed to queue sale buttons:', e);
           }
         }
+        break;
+      }
+
+      case 'CREATE_RECEIPT': {
+        if (parsed.needs_clarification || !parsed.customer_name || !parsed.items?.length || !parsed.total_money) {
+          await queueOutboundMessage(
+            from,
+            parsed.reply_text || 'Please include the customer name, item details, and amount paid.'
+          );
+          break;
+        }
+
+        const saleParsed = {
+          ...parsed,
+          intent: 'SALE' as const,
+          is_credit: Boolean(parsed.is_credit),
+        };
+
+        await processTransaction(shopId as any, saleParsed, messageId, actor);
+        const tx = await Transaction.findOne({ user: actor._id, messageId });
+
+        if (!tx?._id) {
+          await queueOutboundMessage(from, saleParsed.reply_text || 'I could not create that receipt. Please check the item details and try again.');
+          break;
+        }
+
+        tx.customerName = parsed.customer_name;
+        tx.notes = parsed.order_params?.description || null;
+        tx.source = 'WHATSAPP';
+        await tx.save();
+
+        actor.messageHistory = [];
+        await actor.save();
+
+        sendWhatsAppText(from, `🧾 Generating receipt for *${parsed.customer_name}*…`).catch(() => {});
+        await queueSaleReceipt(
+          from,
+          String(actor._id),
+          String(tx._id),
+          `receipt_${tx._id}_${messageId}`
+        );
         break;
       }
 
@@ -3955,26 +3996,33 @@ Tap a button below to subscribe:`;
               }
 
               // 5. Create Invoice Record
+              const suppliedPaymentStatus = String(parsed.order_params?.status || '').trim().toLowerCase();
+              const invoiceStatus = suppliedPaymentStatus === 'paid' ? 'PAID' : 'GENERATED';
+
               const inv = await Invoice.create({
                   user: actor._id, // Created by (Staff/Owner)
                   customerName: parsed.customer_name,
                   items: invoiceItems,
                   totalAmount: totalAmount,
                   invoiceNumber: `INV-${Date.now().toString().slice(-6)}`, // Simple unique-ish number
-                  status: 'GENERATED',
+                  status: invoiceStatus,
                   bankDetailsSnapshot: shopOwner.bankDetails,
                   description: parsed.order_params?.description || 'Goods/Services'
               });
 
               // 6. Send PDF + Buttons in ONE queued job (guaranteed ordering: PDF first, then buttons)
+              const invoiceButtons = invoiceStatus === 'PAID'
+                ? [{ id: invoiceBtnId('CANCEL', String(inv._id)), title: '🚫 Cancel' }]
+                : [
+                    { id: invoiceBtnId('PAID', String(inv._id)), title: '✅ Mark Paid' },
+                    { id: invoiceBtnId('CANCEL', String(inv._id)), title: '🚫 Cancel' },
+                  ];
+
               await queueInvoicePdfWithButtons(
                   from,
                   String(inv._id),
                   `Invoice for *${inv.customerName}* (${symbol}${totalAmount.toLocaleString(locale)})\nWhat next?`,
-                  [
-                      { id: invoiceBtnId('PAID', String(inv._id)), title: '✅ Mark Paid' },
-                      { id: invoiceBtnId('CANCEL', String(inv._id)), title: '🚫 Cancel' }
-                  ]
+                  invoiceButtons
               );
 
           } catch (e) {

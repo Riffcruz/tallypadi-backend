@@ -527,6 +527,32 @@ function renderReceiptPdf(doc: PdfDoc, payload: {
     y += rowH;
   });
 
+  const receiptNotes = String(tx.notes || '').trim().slice(0, 900);
+  if (receiptNotes) {
+      y += isThermal ? 8 : 14;
+      if (isThermal) {
+          doc.font(boldFont).fontSize(is58mm ? 7 : 8).fillColor(THEME_INVOICE.dark);
+          doc.text('DETAILS', margin, y, { width: contentW });
+          y += 10;
+          doc.font(regFont).fontSize(is58mm ? 6 : 8).fillColor(THEME_INVOICE.dark);
+          const notesHeight = doc.heightOfString(receiptNotes, { width: contentW, align: 'left' });
+          doc.text(receiptNotes, margin, y, { width: contentW, align: 'left' });
+          y += notesHeight + 4;
+      } else {
+          doc.font(boldFont).fontSize(9);
+          const notesTextWidth = contentW - 28;
+          const notesHeight = doc.heightOfString(receiptNotes, { width: notesTextWidth, align: 'left' });
+          const detailsBoxH = Math.max(54, notesHeight + 34);
+          doc.roundedRect(margin, y, contentW, detailsBoxH, 10).fill(THEME_INVOICE.bgLight);
+          doc.fillColor(THEME_INVOICE.muted).font(boldFont).fontSize(8).text('DETAILS', margin + 14, y + 10);
+          doc.fillColor(THEME_INVOICE.dark).font(regFont).fontSize(9).text(receiptNotes, margin + 14, y + 25, {
+            width: notesTextWidth,
+            align: 'left',
+          });
+          y += detailsBoxH;
+      }
+  }
+
   // --- TOTALS ---
   y += isThermal ? 8 : 16;
 

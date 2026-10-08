@@ -522,6 +522,23 @@ export const generateInvoicePdf = async (
       y += rowH;
     });
 
+    const invoiceDetails = String(invoice.description || '').trim().slice(0, 900);
+    if (invoiceDetails && invoiceDetails !== 'Goods/Services') {
+      y += 14;
+      const detailsTextWidth = contentWidth - 28;
+      doc.font('Regular').fontSize(9);
+      const detailsTextHeight = doc.heightOfString(invoiceDetails, { width: detailsTextWidth, align: 'left' });
+      const detailsBoxH = Math.max(54, detailsTextHeight + 34);
+
+      doc.roundedRect(margin, y, contentWidth, detailsBoxH, 10).fill(THEME.bgLight);
+      doc.fillColor(THEME.muted).font('Bold').fontSize(8).text('DETAILS', margin + 14, y + 10);
+      doc.fillColor(THEME.dark).font('Regular').fontSize(9).text(invoiceDetails, margin + 14, y + 25, {
+        width: detailsTextWidth,
+        align: 'left',
+      });
+      y += detailsBoxH;
+    }
+
     // --- TOTALS BOX ---
     y += 16;
     y = ensureSpace(110, y);

@@ -31,6 +31,7 @@ export type ParsedIntent =
   | 'HQ_DASHBOARD'
   | 'HQ_COMPARE_BRANCHES'
   | 'HQ_STOCK_TRANSFER'
+  | 'CREATE_RECEIPT'
   | 'CREATE_INVOICE'
   | 'UPDATE_BANK_DETAILS'
   | 'EXPENSE'

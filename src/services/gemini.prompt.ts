@@ -530,7 +530,7 @@ Distinct from "Sales" (which are immediate).
 
 *** 7. OUTPUT SCHEMA ***
 {
-  "intent": "SALE|RESTOCK|SET_STOCK|DELETED_STOCK|DELETE_ALL_INVENTORY|DEFINE_PRICE|PRICE_CHECK|REPORT_SALES|REPORT_STOCK|REPORT_FULL|REPORT_DEBTS|REPORT_RECENT|DEBT_PAYMENT|CLOSE_BOOK|ADD_STAFF|DOWNLOAD_REPORT|UNDO_LAST_SALE|SETTINGS|CHANGE_LANGUAGE|SHOW_SETTINGS|CREATE_ORDER|LIST_ORDERS|UPDATE_ORDER|CANCEL_ORDER|GET_SHOP_LINK|HQ_DASHBOARD|HQ_COMPARE_BRANCHES|HQ_STOCK_TRANSFER|CREATE_INVOICE|UPDATE_BANK_DETAILS|EXPENSE|HELP|UNKNOWN"
+  "intent": "SALE|RESTOCK|SET_STOCK|DELETED_STOCK|DELETE_ALL_INVENTORY|DEFINE_PRICE|PRICE_CHECK|REPORT_SALES|REPORT_STOCK|REPORT_FULL|REPORT_DEBTS|REPORT_RECENT|DEBT_PAYMENT|CLOSE_BOOK|ADD_STAFF|DOWNLOAD_REPORT|UNDO_LAST_SALE|SETTINGS|CHANGE_LANGUAGE|SHOW_SETTINGS|CREATE_ORDER|LIST_ORDERS|UPDATE_ORDER|CANCEL_ORDER|GET_SHOP_LINK|HQ_DASHBOARD|HQ_COMPARE_BRANCHES|HQ_STOCK_TRANSFER|CREATE_RECEIPT|CREATE_INVOICE|UPDATE_BANK_DETAILS|EXPENSE|HELP|UNKNOWN"
   "is_credit": boolean,
   "customer_name": string | null,
   "staffPhoneNumber": string | null,
@@ -610,6 +610,17 @@ Distinct from "Sales" (which are immediate).
   transfer_params = { from_branch: "Warehouse", to_branch: "Surulere" }
 
 *** 5H. INVOICE & BANKING ***
+
+0) CREATE_RECEIPT
+- Triggers: "Create receipt for <Customer>", "Generate receipt for <Customer>", or a labelled block beginning with "Receipt for".
+- ACTION: Record the paid sale and immediately generate its receipt.
+- EXTRACTION RULES:
+  - customer_name: MUST be extracted.
+  - items: Extract product name, quantity, and price. Combine useful identifiers such as brand, product/watch ID, and type into the item name.
+  - total_money and amount_paid: Extract the paid amount.
+  - order_params.description: Preserve delivery location, delivery charge, product description, reference ID, and payment status when supplied.
+  - is_credit: true only when payment status says unpaid, credit, owing, or pending.
+- Output: intent = CREATE_RECEIPT
 
 1) UPDATE_BANK_DETAILS
 - Triggers: "Update bank details", "Save my account number", "My bank is Access 1234567890", "Change bank details".

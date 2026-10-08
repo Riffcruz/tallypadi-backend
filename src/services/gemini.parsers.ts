@@ -125,7 +125,7 @@ export function safeParsedResult(p: any): ParsedResult {
     'DOWNLOAD_REPORT', 'UNDO_LAST_SALE', 'REPORT_DEBTS', 'REPORT_RECENT',
     'SHOW_SETTINGS', 'CREATE_ORDER', 'LIST_ORDERS', 'UPDATE_ORDER', 'CANCEL_ORDER',
     'GET_SHOP_LINK', 'HQ_DASHBOARD', 'HQ_COMPARE_BRANCHES', 'HQ_STOCK_TRANSFER',
-    'CREATE_INVOICE', 'UPDATE_BANK_DETAILS', 'EXPENSE', 'REPORT_EXPENSE',
+    'CREATE_RECEIPT', 'CREATE_INVOICE', 'UPDATE_BANK_DETAILS', 'EXPENSE', 'REPORT_EXPENSE',
     'BEST_SELLING', 'COMPARE_SALES', 'HELP', 'UNKNOWN',
   ];
 
@@ -206,7 +206,7 @@ export function safeParsedResult(p: any): ParsedResult {
       description: typeof p?.expense_params?.description === 'string' ? sanitizeInput(p.expense_params.description) : null,
     },
     order_params: {
-      description: p?.order_params?.description || null,
+      description: typeof p?.order_params?.description === 'string' ? sanitizeInput(p.order_params.description) : null,
       delivery_date: p?.order_params?.delivery_date || null,
       status: p?.order_params?.status || null,
     },
@@ -228,8 +228,145 @@ export function safeParsedResult(p: any): ParsedResult {
   };
 }
 
+const STRUCTURED_DOCUMENT_PREFIX = /^\s*(?:(?:please\s+)?(?:create|generate|make|prepare|send)\s+)?(receipt|invoice)\s+for\b\s*/i;
+
+const STRUCTURED_FIELD_ALIASES: Record<string, string> = {
+  name: 'customer_name',
+  customer: 'customer_name',
+  'customer name': 'customer_name',
+  client: 'customer_name',
+  'client name': 'customer_name',
+  'delivery location': 'delivery_location',
+  'delivery address': 'delivery_location',
+  location: 'delivery_location',
+  address: 'delivery_location',
+  'watch id': 'product_id',
+  'product id': 'product_id',
+  'item id': 'product_id',
+  sku: 'product_id',
+  code: 'product_id',
+  reference: 'product_id',
+  brand: 'brand',
+  description: 'description',
+  'item description': 'description',
+  'product description': 'description',
+  'watch type': 'product_type',
+  'product type': 'product_type',
+  'item type': 'product_type',
+  type: 'product_type',
+  quantity: 'quantity',
+  qty: 'quantity',
+  'amount paid': 'amount_paid',
+  amount: 'amount_paid',
+  price: 'amount_paid',
+  total: 'amount_paid',
+  'total amount': 'amount_paid',
+  delivery: 'delivery',
+  'delivery fee': 'delivery',
+  shipping: 'delivery',
+  'shipping fee': 'delivery',
+  'payment status': 'payment_status',
+  status: 'payment_status',
+};
+
+const cleanStructuredValue = (value: string): string => sanitizeInput(
+  String(value || '')
+    .replace(/^[\s"'“”‘’]+/, '')
+    .replace(/[\s"'“”‘’]+$/, '')
+    .trim()
+);
+
+/**
+ * Parses labelled receipt/invoice blocks locally so document creation remains
+ * fast and reliable even when the AI provider is slow or unavailable.
+ */
+export function parseStructuredDocumentRequest(message: string): ParsedResult | null {
+  const stripped = stripWhatsAppExportLine(message || '');
+  const prefix = stripped.match(STRUCTURED_DOCUMENT_PREFIX);
+  if (!prefix) return null;
+
+  const documentType = prefix[1].toLowerCase();
+  const body = stripped.slice(prefix[0].length)
+    .replace(/^[\s"'“”‘’]+/, '')
+    .replace(/[\s"'“”‘’]+$/, '')
+    .trim();
+
+  const fields: Record<string, string> = {};
+  const unknownLines: string[] = [];
+
+  for (const rawLine of body.split(/\r?\n/)) {
+    const line = cleanStructuredValue(rawLine);
+    if (!line) continue;
+
+    const match = line.match(/^([^:]{1,40})\s*:\s*(.+)$/);
+    if (!match) {
+      unknownLines.push(line);
+      continue;
+    }
+
+    const rawLabel = match[1].trim().toLowerCase().replace(/[._-]+/g, ' ').replace(/\s+/g, ' ');
+    const field = STRUCTURED_FIELD_ALIASES[rawLabel];
+    const value = cleanStructuredValue(match[2]);
+    if (field && value) fields[field] = value;
+  }
+
+  const amount = parseMoney(fields.amount_paid);
+  const quantityRaw = Number(String(fields.quantity || '1').replace(/[^\d.]/g, ''));
+  const quantity = Number.isFinite(quantityRaw) && quantityRaw > 0 ? quantityRaw : 1;
+  const hasProduct = Boolean(fields.brand || fields.product_type || fields.product_id || fields.description || unknownLines.length);
+
+  // Do not intercept ordinary prose such as "invoice for John". Those remain
+  // available to the AI parser, which is better at conversational requests.
+  if (!fields.customer_name || amount == null || !hasProduct) return null;
+
+  const productParts = [fields.brand, fields.product_type]
+    .filter(Boolean)
+    .filter((value, index, values) => values.findIndex((candidate) => candidate.toLowerCase() === value.toLowerCase()) === index);
+  const hasWatchLabels = /(^|\n)\s*watch\s+(?:id|type)\s*:/i.test(body);
+  if (hasWatchLabels && !productParts.some((part) => /\bwatch\b/i.test(part))) productParts.push('Watch');
+
+  let itemName = productParts.join(' ').trim();
+  if (!itemName) itemName = fields.description || unknownLines[0] || 'Item';
+  if (fields.product_id) itemName += ` (${fields.product_id})`;
+
+  const paymentStatus = String(fields.payment_status || '').toLowerCase();
+  const isCredit = /\b(unpaid|not\s+paid|credit|owing|pending)\b/i.test(paymentStatus);
+  const detailLines = [
+    fields.description ? `Description: ${fields.description}` : '',
+    fields.product_id ? `Product ID: ${fields.product_id}` : '',
+    fields.delivery_location ? `Delivery location: ${fields.delivery_location}` : '',
+    fields.delivery ? `Delivery: ${fields.delivery}` : '',
+    fields.payment_status ? `Payment status: ${fields.payment_status}` : '',
+  ].filter(Boolean);
+
+  return safeParsedResult({
+    intent: documentType === 'receipt' ? 'CREATE_RECEIPT' : 'CREATE_INVOICE',
+    is_credit: isCredit,
+    customer_name: fields.customer_name,
+    items: [{
+      name: itemName,
+      qty: quantity,
+      unit: 'pcs',
+      unit_price: amount / quantity,
+      category: hasWatchLabels ? 'Watches' : null,
+    }],
+    total_money: amount,
+    amount_paid: isCredit ? 0 : amount,
+    needs_clarification: false,
+    order_params: {
+      description: detailLines.join('\n') || fields.description || null,
+      delivery_date: null,
+      status: fields.payment_status || null,
+    },
+    reply_text: documentType === 'receipt' ? 'Generating receipt…' : 'Generating invoice…',
+  });
+}
+
 // ─── Local fallback regex parser (no Gemini call) ────────────
 export function fallbackParse(message: string): ParsedResult | null {
+  const structuredDocument = parseStructuredDocumentRequest(message);
+  if (structuredDocument) return structuredDocument;
+
   const raw = sanitizeInput(stripWhatsAppExportLine(message));
   if (/^\d+$/.test(raw)) return null;
 
