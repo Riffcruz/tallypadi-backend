@@ -34,6 +34,7 @@ import {
   MapPin,
   Building,
   CreditCard,
+  TicketPercent,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { getCookie } from '../../utils/cookies';
@@ -79,6 +80,8 @@ export default function SettingsPage() {
   const [bankName, setBankName] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
   const [accountName, setAccountName] = useState('');
+  const [promoCode, setPromoCode] = useState('');
+  const [redeemingPromo, setRedeemingPromo] = useState(false);
 
   // ✅ Location State
   const [countryCode, setCountryCode] = useState('NG'); // defaults to Nigeria
@@ -214,6 +217,37 @@ export default function SettingsPage() {
     }).then((result) => {
       if (result.isConfirmed) router.push('/payment');
     });
+  };
+
+  const redeemPromoCode = async () => {
+    const token = getTokenOrRedirect();
+    const code = promoCode.trim();
+    if (!token || !code) return;
+
+    setRedeemingPromo(true);
+    try {
+      const response = await axios.post(
+        `${API_URL}/promotions/redeem`,
+        { code },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const promotion = response.data?.promotion;
+      const updatedUser = {
+        ...user,
+        planType: promotion?.planType || user?.planType,
+        subscriptionStatus: 'active',
+        nextBillingDate: promotion?.nextBillingDate || user?.nextBillingDate,
+      };
+      setUser(updatedUser);
+      sessionStorage.setItem('tallyUser', JSON.stringify(updatedUser));
+      setPromoCode('');
+      await Swal.fire('Code activated', response.data?.message || 'Your plan is now active.', 'success');
+    } catch (error: unknown) {
+      const message = axios.isAxiosError(error) ? error.response?.data?.error : null;
+      Swal.fire('Code not activated', message || 'Please check the code and try again.', 'error');
+    } finally {
+      setRedeemingPromo(false);
+    }
   };
 
   const handleSave = async () => {
@@ -708,6 +742,38 @@ export default function SettingsPage() {
                   </div>
                 )}
               </div>
+
+              {!isStaffReadOnly && (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                  <div className="mb-3 flex items-center gap-2 text-amber-900">
+                    <TicketPercent size={18} />
+                    <span className="text-sm font-black">Promotional code</span>
+                  </div>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <input
+                      value={promoCode}
+                      onChange={(event) => setPromoCode(event.target.value.toUpperCase())}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault();
+                          redeemPromoCode();
+                        }
+                      }}
+                      maxLength={32}
+                      placeholder="Enter code"
+                      className="h-11 flex-1 rounded-xl border border-amber-200 bg-white px-4 text-sm font-black uppercase text-slate-900 outline-none focus:border-amber-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={redeemPromoCode}
+                      disabled={redeemingPromo || !promoCode.trim()}
+                      className="h-11 rounded-xl bg-slate-950 px-5 text-sm font-black text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {redeemingPromo ? 'Activating…' : 'Activate'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

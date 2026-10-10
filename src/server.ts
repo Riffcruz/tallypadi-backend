@@ -42,6 +42,7 @@ import activityRouter from './routes/activity.routes';
 import marketplaceRouter from './routes/marketplace.routes';
 import blogRouter from './routes/blog.routes';
 import referralRouter from './routes/referral.routes';
+import promoCodeRouter from './routes/promoCode.routes';
 
 // --- SERVICES & CONFIG ---
 import {
@@ -528,6 +529,7 @@ app.use('/api/draft', draftRouter); // Magic Draft Link (no auth required)
 app.use('/api/ads', adsRouter);
 app.use('/api/activities', authRequired, activityRouter);
 app.use('/api/referrals', authRequired, referralRouter);
+app.use('/api/promotions', authRequired, promoCodeRouter);
 
 // --- LIVE SUPPORT ---
 app.use('/api/support', supportRouter);

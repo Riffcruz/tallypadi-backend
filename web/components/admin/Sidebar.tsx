@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { LayoutDashboard, Users, Settings as SettingsIcon, Send, ShieldAlert, Briefcase, Headphones, MessageSquare, Megaphone, BadgeCheck, Newspaper, Gift, Activity, Mail, Ticket, type LucideIcon } from 'lucide-react';
+import { LayoutDashboard, Users, Settings as SettingsIcon, Send, ShieldAlert, Briefcase, Headphones, MessageSquare, Megaphone, BadgeCheck, Newspaper, Gift, Activity, Mail, Ticket, TicketPercent, type LucideIcon } from 'lucide-react';
 
 type AdminMenuItem = { id: string; icon: LucideIcon; label: string; href?: string };
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
@@ -13,6 +13,7 @@ export default function Sidebar({ tab, setTab }: { tab: string, setTab: (t: stri
         { id: 'users', icon: Users, label: 'User Management' },
         { id: 'ads', icon: Megaphone, label: 'Ads Review' },
         { id: 'referrals', icon: Gift, label: 'Referrals' },
+        { id: 'promo_codes', icon: TicketPercent, label: 'Promo Codes' },
         { id: 'blog', icon: Newspaper, label: 'Blog CMS' },
         { id: 'verifications', icon: BadgeCheck, label: 'Verifications' },
         { id: 'investors', icon: Briefcase, label: 'Investors' },

@@ -83,6 +83,11 @@ interface DashboardResponse {
     currencyCode?: string; // e.g. NGN, USD, GHS
     locale?: string; // e.g. en-NG
     countryCode?: string; // optional
+    role?: string;
+    planType?: 'OGA_BOSS' | 'TYCOON';
+    subscriptionStatus?: string;
+    trialEndsAt?: string;
+    nextBillingDate?: string;
   };
   stats?: {
     revenue?: number; // in user's currency
@@ -245,6 +250,8 @@ export default function DashboardPage() {
   const [chatOpen, setChatOpen] = useState(false);
   const [chatSending, setChatSending] = useState(false);
   const [showExpiredModal, setShowExpiredModal] = useState(false);
+  const [promoCode, setPromoCode] = useState('');
+  const [redeemingPromo, setRedeemingPromo] = useState(false);
 
   const router = useRouter();
 
@@ -475,6 +482,34 @@ const topTransactions = filteredTransactions.slice(0, 6);
       console.error('Chat send failed', e);
     } finally {
       setChatSending(false);
+    }
+  };
+
+  const redeemPromo = async () => {
+    const headers = authHeaders();
+    const code = promoCode.trim();
+    if (!headers || !code) return;
+
+    setRedeemingPromo(true);
+    try {
+      const response = await axios.post(`${API_URL}/promotions/redeem`, { code }, { headers });
+      const promotion = response.data?.promotion;
+      setData((current) => current ? {
+        ...current,
+        user: {
+          ...current.user,
+          planType: promotion?.planType || current.user?.planType,
+          subscriptionStatus: 'active',
+          nextBillingDate: promotion?.nextBillingDate || current.user?.nextBillingDate,
+        },
+      } : current);
+      setPromoCode('');
+      setShowExpiredModal(false);
+    } catch (error: unknown) {
+      const message = axios.isAxiosError(error) ? error.response?.data?.error : null;
+      window.alert(message || 'Could not activate this promotional code.');
+    } finally {
+      setRedeemingPromo(false);
     }
   };
 
@@ -962,6 +997,26 @@ const topTransactions = filteredTransactions.slice(0, 6);
               Your subscription plan has expired. Please renew to continue accessing all features.
             </p>
             <div className="flex flex-col gap-3">
+              <div className="flex gap-2">
+                <input
+                  value={promoCode}
+                  onChange={(event) => setPromoCode(event.target.value.toUpperCase())}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') redeemPromo();
+                  }}
+                  maxLength={32}
+                  placeholder="Promo code"
+                  className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 text-sm font-black uppercase outline-none focus:border-amber-500"
+                />
+                <button
+                  type="button"
+                  onClick={redeemPromo}
+                  disabled={redeemingPromo || !promoCode.trim()}
+                  className="rounded-xl bg-amber-400 px-4 text-sm font-black text-slate-950 hover:bg-amber-300 disabled:opacity-50"
+                >
+                  {redeemingPromo ? '…' : 'Use'}
+                </button>
+              </div>
               <button
                 onClick={() => router.push('/payment')}
                 className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold transition-all shadow-lg shadow-emerald-200 active:scale-95"

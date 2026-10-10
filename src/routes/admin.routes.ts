@@ -72,6 +72,11 @@ import {
   listAdminContactTickets,
   updateAdminContactTicket,
 } from '../controllers/contactTicket.controller';
+import {
+  createAdminPromoCode,
+  listAdminPromoCodes,
+  updateAdminPromoCode,
+} from '../controllers/promoCode.controller';
 
 const router = Router();
 const blogAiLimiter = rateLimit({
@@ -100,6 +105,11 @@ router.patch('/contact-tickets/:id', updateAdminContactTicket);
 
 // Dashboard
 router.get('/analytics', getSystemAnalytics);
+
+// Promotional subscription codes
+router.get('/promo-codes', listAdminPromoCodes);
+router.post('/promo-codes', createAdminPromoCode);
+router.patch('/promo-codes/:id', updateAdminPromoCode);
 
 // Ads Review
 router.get('/ads', getAdminAdCampaigns);

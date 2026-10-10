@@ -42,6 +42,7 @@ export interface IUser extends Document {
 
   // Plan & Staff Fields
   planType?: 'OGA_BOSS' | 'TYCOON';
+  redeemedPromoCodes?: Types.ObjectId[];
   // interface
   role?: 'OWNER' | 'STAFF' | 'ADMIN' | 'SUPER_ADMIN' | 'INVESTOR' | 'HQ';
   isHqManager?: boolean;
@@ -191,6 +192,7 @@ const userSchema = new Schema<IUser>(
       enum: ['OGA_BOSS', 'TYCOON'],
       default: 'TYCOON',
     },
+    redeemedPromoCodes: [{ type: Schema.Types.ObjectId, ref: 'PromoCode' }],
 
     // schema
   role: {

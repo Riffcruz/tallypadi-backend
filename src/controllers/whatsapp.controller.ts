@@ -62,6 +62,12 @@ import {
 import { generatePdfReport } from '../services/pdf.service';
 import { STAFF_PERMISSION_DEFAULTS, StaffPermission } from '../middleware/staffPermission';
 import { toUserLocalDate } from '../utils/dates';
+import {
+  PromoRedemptionError,
+  extractPromoCodeCandidate,
+  promoCodeExists,
+  redeemPromotionForUser,
+} from '../services/promoCode.service';
 
 // =====================================================
 // 🌍 Currency
@@ -1183,6 +1189,40 @@ export const handleMessageLogic = async (
     if (shopUser.subscriptionStatus === 'suspended') {
       await queueOutboundMessage(from, `🛑 Account suspended.\nReason: ${shopUser.suspensionReason || 'Security policy'}`);
       return;
+    }
+
+    // Promotional codes must remain usable by expired owners, so this secure
+    // server-side redemption path intentionally runs before the subscription gate.
+    const promoCandidate = extractPromoCodeCandidate(rawText);
+    if (promoCandidate) {
+      const knownCode = await promoCodeExists(promoCandidate.code);
+      if (knownCode || promoCandidate.explicit) {
+        if (!['OWNER', 'HQ'].includes(String(actor.role || '').toUpperCase())) {
+          await queueOutboundMessage(from, 'Only the shop owner can activate a promotional code.');
+          return;
+        }
+
+        try {
+          const promotion = await redeemPromotionForUser(actor._id, promoCandidate.code, 'WHATSAPP');
+          const planName = promotion.planType.replace(/_/g, ' ');
+          const expiry = promotion.nextBillingDate.toLocaleDateString('en-NG', {
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric',
+            timeZone: 'Africa/Lagos',
+          });
+          await queueOutboundMessage(
+            from,
+            `✅ *Promotional code activated*\n\nYour *${planName}* plan is active until *${expiry}*.\nThis code cannot be used again on this account.`
+          );
+        } catch (error) {
+          const message = error instanceof PromoRedemptionError
+            ? error.message
+            : 'Could not activate that promotional code. Please try again.';
+          await queueOutboundMessage(from, `❌ ${message}`);
+        }
+        return;
+      }
     }
 
     // ✅ subscription check uses OWNER if staff

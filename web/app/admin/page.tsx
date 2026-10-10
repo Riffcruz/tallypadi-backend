@@ -18,10 +18,11 @@ import AdsTab from '../../components/admin/AdsTab';
 import MarketplaceVerificationsTab from '../../components/admin/MarketplaceVerificationsTab';
 import BlogTab from '../../components/admin/BlogTab';
 import ReferralsTab from '../../components/admin/ReferralsTab';
+import PromoCodesTab from '../../components/admin/PromoCodesTab';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 const TOKEN_KEY = 'adminToken';
-type AdminTab = 'overview' | 'users' | 'settings' | 'reach' | 'broadcast' | 'investors' | 'support' | 'ads' | 'verifications' | 'blog' | 'referrals';
+type AdminTab = 'overview' | 'users' | 'settings' | 'reach' | 'broadcast' | 'investors' | 'support' | 'ads' | 'verifications' | 'blog' | 'referrals' | 'promo_codes';
 type OverviewStats = React.ComponentProps<typeof OverviewTab>['stats'];
 type AdminSettingsData = Partial<SettingsProfile> & { hostingerReach?: Partial<HostingerReachSettings> };
 
@@ -276,6 +277,8 @@ export default function AdminDashboard() {
   {tab === 'ads' && <AdsTab adminToken={token} />}
 
   {tab === 'referrals' && <ReferralsTab adminToken={token} />}
+
+  {tab === 'promo_codes' && <PromoCodesTab adminToken={token} />}
 
   {tab === 'verifications' && <MarketplaceVerificationsTab adminToken={token} />}
 
