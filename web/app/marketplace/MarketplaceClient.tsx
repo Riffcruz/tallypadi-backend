@@ -421,7 +421,6 @@ export default function MarketplaceClient() {
   const [selectedCity, setSelectedCity] = useState('');
   const [sort, setSort] = useState('recommended');
   const [hasMore, setHasMore] = useState(false);
-  const [totalItems, setTotalItems] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
@@ -480,7 +479,6 @@ export default function MarketplaceClient() {
       setCategories(data.categories.length ? data.categories : FALLBACK_CATEGORIES);
       setLocations(data.locations || []);
       setHasMore(Boolean(data.pagination?.hasMore));
-      setTotalItems(data.pagination?.totalItems || 0);
     } catch {
       setError('Marketplace could not load right now.');
     } finally {
@@ -680,7 +678,7 @@ export default function MarketplaceClient() {
                 <span>{activeLocationLabel}</span>
               </div>
               <h2 className="text-lg font-black text-stone-950 sm:mt-1 sm:text-xl">
-                {loading ? 'Finding products' : `${totalItems.toLocaleString()} product${totalItems === 1 ? '' : 's'}`}
+                {loading ? 'Finding products' : activeCategoryLabel || 'Products for you'}
               </h2>
             </div>
 
