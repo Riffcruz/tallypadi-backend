@@ -5,7 +5,22 @@ import axios from 'axios';
 import { useRouter } from 'next/navigation';
 import Sidebar from '../../components/Sidebar';
 import Preloader from '../../components/Preloader';
-import { ShoppingCart, History, Menu, Loader2, Sparkles, PauseCircle, Clock, X, Trash2, ShieldAlert } from 'lucide-react';
+import {
+  ShoppingCart,
+  History,
+  Menu,
+  Loader2,
+  Sparkles,
+  PauseCircle,
+  Clock,
+  X,
+  Trash2,
+  ShieldAlert,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Maximize2,
+  Minimize2,
+} from 'lucide-react';
 
 // Import Components
 import ProductGrid from './ProductGrid';
@@ -106,6 +121,8 @@ export default function SalesPage() {
   const [activeTab, setActiveTab] = useState<'new' | 'history'>('new');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isDesktopSidebarHidden, setIsDesktopSidebarHidden] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [loadingUser, setLoadingUser] = useState(true);
 
   // Hold Cart state
@@ -121,6 +138,30 @@ export default function SalesPage() {
   const [submittingZReport, setSubmittingZReport] = useState(false);
   const canViewHistory = user?.role !== 'STAFF' || user?.settings?.staffPermissions?.canViewSalesHistory === true;
   const canViewReports = user?.role !== 'STAFF' || user?.settings?.staffPermissions?.canViewReports === true;
+
+  useEffect(() => {
+    const savedSidebarState = localStorage.getItem('tally_sales_sidebar_hidden') === 'true';
+    const restoreTimer = window.setTimeout(() => setIsDesktopSidebarHidden(savedSidebarState), 0);
+    const onFullscreenChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
+    const onKeyboardShortcut = (event: KeyboardEvent) => {
+      if (event.altKey && event.key.toLowerCase() === 'm') {
+        event.preventDefault();
+        setIsDesktopSidebarHidden((current) => {
+          const next = !current;
+          localStorage.setItem('tally_sales_sidebar_hidden', String(next));
+          return next;
+        });
+      }
+    };
+
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    window.addEventListener('keydown', onKeyboardShortcut);
+    return () => {
+      window.clearTimeout(restoreTimer);
+      document.removeEventListener('fullscreenchange', onFullscreenChange);
+      window.removeEventListener('keydown', onKeyboardShortcut);
+    };
+  }, []);
 
   useEffect(() => {
     const token = getCookie('tallyToken');
@@ -354,6 +395,27 @@ const handleAddToCart = (item: InventoryItem) => {
   });
 };
 
+  const toggleDesktopSidebar = () => {
+    setIsDesktopSidebarHidden((current) => {
+      const next = !current;
+      localStorage.setItem('tally_sales_sidebar_hidden', String(next));
+      return next;
+    });
+  };
+
+  const toggleFullscreen = async () => {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else if (document.fullscreenEnabled) await document.documentElement.requestFullscreen();
+      else throw new Error('Fullscreen is not supported on this device.');
+    } catch (error: unknown) {
+      toast.fire({
+        icon: 'info',
+        title: error instanceof Error ? error.message : 'Fullscreen is unavailable in this browser.',
+      });
+    }
+  };
+
 
   const handleClearCart = () => setCart([]);
 
@@ -374,15 +436,28 @@ const handleAddToCart = (item: InventoryItem) => {
       )}
 
       {/* Sidebar */}
-      <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 transform transition-transform duration-300 md:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+      <div className={`fixed inset-y-0 left-0 z-50 w-64 transform border-r border-gray-200 bg-white transition-transform duration-300 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} ${isDesktopSidebarHidden ? 'md:-translate-x-full' : 'md:translate-x-0'}`}>
         <Sidebar />
       </div>
 
+      {isDesktopSidebarHidden && (
+        <button
+          type="button"
+          onClick={toggleDesktopSidebar}
+          className="fixed left-4 top-4 z-40 hidden min-h-11 items-center gap-2 rounded-2xl border border-emerald-200 bg-white px-4 text-sm font-black text-emerald-800 shadow-lg shadow-slate-900/10 transition hover:bg-emerald-50 md:inline-flex"
+          title="Show side menu (Alt + M)"
+          aria-label="Show side menu"
+        >
+          <PanelLeftOpen className="h-5 w-5" />
+          Show menu
+        </button>
+      )}
+
       {/* Main Content */}
-      <main className="relative z-10 min-h-screen w-full min-w-0 max-w-full overflow-x-clip p-4 md:pl-72 md:pr-8 md:py-8">
+      <main className={`relative z-10 min-h-screen w-full min-w-0 max-w-full overflow-x-clip p-4 transition-[padding] duration-300 md:py-8 ${isDesktopSidebarHidden ? 'md:px-8 md:pt-20' : 'md:pl-72 md:pr-8'}`}>
         
         {/* Header Section */}
-        <header className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-6">
+        <header className="mb-8 flex flex-col items-start justify-between gap-6 xl:flex-row xl:items-end">
           <div className="flex items-center gap-4">
             <button onClick={() => setIsMobileMenuOpen(true)} className="p-2 -ml-2 md:hidden bg-white rounded-xl shadow-sm border border-gray-200 text-gray-700">
               <Menu className="w-6 h-6" />
@@ -422,8 +497,33 @@ const handleAddToCart = (item: InventoryItem) => {
             </div>
           </div>
 
-          {/* Segmented Tab Control */}
-          <div className="flex p-1.5 bg-gray-200/50 backdrop-blur-sm rounded-xl border border-gray-200 w-full lg:w-auto">
+          <div className="flex w-full flex-wrap items-center justify-end gap-2 xl:w-auto">
+            {!isDesktopSidebarHidden && (
+              <button
+                type="button"
+                onClick={toggleDesktopSidebar}
+                className="hidden min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 shadow-sm transition hover:border-emerald-300 hover:text-emerald-800 md:inline-flex"
+                title="Hide side menu (Alt + M)"
+                aria-label="Hide side menu"
+              >
+                <PanelLeftClose className="h-4 w-4" /> Hide menu
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => void toggleFullscreen()}
+              className="hidden min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 shadow-sm transition hover:border-emerald-300 hover:text-emerald-800 md:inline-flex"
+              title={isFullscreen ? 'Exit full screen' : 'Use full screen'}
+              aria-label={isFullscreen ? 'Exit full screen' : 'Use full screen'}
+              aria-pressed={isFullscreen}
+            >
+              {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+              {isFullscreen ? 'Exit full screen' : 'Full screen'}
+            </button>
+
+            {/* Segmented Tab Control */}
+            <div className="flex flex-1 rounded-xl border border-gray-200 bg-gray-200/50 p-1.5 backdrop-blur-sm lg:flex-none">
             <button
               onClick={() => setActiveTab('new')}
               className={`flex-1 lg:flex-none flex items-center justify-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all duration-200 ${
@@ -444,6 +544,7 @@ const handleAddToCart = (item: InventoryItem) => {
             >
               <History className="w-4 h-4" /> History
             </button>}
+            </div>
           </div>
         </header>
 

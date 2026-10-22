@@ -1936,26 +1936,33 @@ export default function InventoryPage() {
 
       {/* ✅ EDIT MODAL (Popup edit = no scrolling around the page) */}
       {editOpen && editingId && (
-        <div className="fixed inset-0 z-[95] flex items-end md:items-center justify-center">
+        <div className="fixed inset-0 z-[95] flex items-end justify-center md:items-center md:p-4">
           <div className="absolute inset-0 bg-slate-900/45 backdrop-blur-sm" onClick={cancelEditing} />
-          <div className="relative w-full md:max-w-lg bg-white rounded-t-3xl md:rounded-3xl border border-slate-200 shadow-2xl overflow-hidden">
-            <div className="p-5 border-b border-slate-200 flex items-start justify-between gap-3">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="edit-item-title"
+            className="relative flex max-h-[96dvh] w-full flex-col overflow-hidden rounded-t-3xl border border-slate-200 bg-white shadow-2xl md:max-h-[calc(100dvh-2rem)] md:max-w-2xl md:rounded-3xl"
+          >
+            <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-200 p-4 md:px-5">
               <div className="min-w-0">
-                <p className="text-slate-900 font-black text-lg truncate">Edit Item</p>
+                <p id="edit-item-title" className="truncate text-lg font-black text-slate-900">Edit Item</p>
                 <p className="text-slate-500 text-sm font-semibold mt-1 truncate">{editingName}</p>
               </div>
               <button
+                type="button"
                 className="w-10 h-10 rounded-2xl border border-slate-200 bg-white hover:bg-slate-50 flex items-center justify-center"
                 onClick={cancelEditing}
+                aria-label="Close edit item"
               >
                 <X className="w-4 h-4 text-slate-700" />
               </button>
             </div>
 
-            <div className="p-5 space-y-4">
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 md:p-5">
               
-              <div className="flex justify-center mb-4">
-                <div className="relative w-24 h-24 group">
+              <div className="mb-4 flex justify-center">
+                <div className="group relative h-24 w-24 md:h-20 md:w-20">
                   <input
                     type="file"
                     accept="image/*"
@@ -2156,25 +2163,27 @@ export default function InventoryPage() {
                   <span className="text-xs font-bold text-slate-700">{Number(editStock || 0)} units</span>
                 </div>
               </div>
+            </div>
 
-              <div className="flex gap-3 pt-1">
-                <button
-                  onClick={cancelEditing}
-                  className="flex-1 py-3 rounded-2xl font-extrabold border border-slate-200 bg-white hover:bg-slate-50 text-slate-900 transition inline-flex items-center justify-center gap-2"
-                >
-                  <X className="w-4 h-4" />
-                  Cancel
-                </button>
+            <div className="flex shrink-0 gap-3 border-t border-slate-200 bg-white p-4 md:px-5">
+              <button
+                type="button"
+                onClick={cancelEditing}
+                className="flex-1 py-3 rounded-2xl font-extrabold border border-slate-200 bg-white hover:bg-slate-50 text-slate-900 transition inline-flex items-center justify-center gap-2"
+              >
+                <X className="w-4 h-4" />
+                Cancel
+              </button>
 
-                <button
-                  onClick={() => editingId && saveEdit(editingId)}
-                  disabled={isUploadingImage}
-                  className="flex-1 py-3 rounded-2xl font-extrabold bg-emerald-600 hover:bg-emerald-700 text-white transition inline-flex items-center justify-center gap-2"
-                >
-                  <Check className="w-4 h-4" />
-                  Save
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => editingId && saveEdit(editingId)}
+                disabled={isUploadingImage}
+                className="flex-1 py-3 rounded-2xl font-extrabold bg-emerald-600 hover:bg-emerald-700 text-white transition inline-flex items-center justify-center gap-2"
+              >
+                <Check className="w-4 h-4" />
+                Save
+              </button>
             </div>
           </div>
         </div>
