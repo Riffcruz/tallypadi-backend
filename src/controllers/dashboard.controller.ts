@@ -209,7 +209,7 @@ export const getDashboardData = async (req: Request, res: Response) => {
             qty: { $sum: '$items.qty' },
           },
         },
-        { $sort: { revenue: -1 } },
+        { $sort: { qty: -1, revenue: -1 } },
         { $limit: 5 },
       ]),
 

@@ -161,6 +161,9 @@ export class SalesService {
     }
 
     const finalDiscount = discountAmount > 0 ? discountAmount : 0;
+    if (!Number.isFinite(finalDiscount) || finalDiscount > totalMoney) {
+      throw new Error('Discount cannot exceed the sale total');
+    }
     const finalAmountPaid = totalMoney > finalDiscount ? totalMoney - finalDiscount : 0;
 
     // Loyalty Points Calculation / Redemption

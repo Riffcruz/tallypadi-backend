@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import axios from 'axios';
 import Swal from 'sweetalert2';
@@ -24,8 +24,9 @@ import {
   Banknote,
   Search,
   Star,
+  PauseCircle,
 } from 'lucide-react';
-import { CartItem, UserProfile } from './page';
+import { CartItem, RestoredSaleDraft, SaleCustomer, SaleDraftDetails, UserProfile } from './page';
 import { getCookie } from '../../utils/cookies';
 import SalesCalculator from './SalesCalculator';
 import { createClientSaleId, OfflineSalePayload, submitDurableSale } from '../../lib/offlineSales';
@@ -37,7 +38,8 @@ interface CartSidebarProps {
   setCart: React.Dispatch<React.SetStateAction<CartItem[]>>;
   user: UserProfile | null;
   onCheckoutSuccess: () => void;
-  onHoldCart: () => void;
+  onHoldCart: (details: SaleDraftDetails) => void;
+  restoredDraft: RestoredSaleDraft | null;
 }
 
 function currencyPrefix(code?: string) {
@@ -80,7 +82,7 @@ function openPdfInNewTab(url: string) {
   }
 }
 
-async function presentPdfActions(url: string, fileName: string) {
+async function presentPdfActions(url: string) {
   const result = await Swal.fire({
     icon: 'success',
     title: 'Sale Complete ✅',
@@ -163,8 +165,10 @@ async function fetchReceiptPdfForSale(token: string, saleId?: string, directRece
         timeout: 60_000,
       });
       return new Blob([r.data], { type: 'application/pdf' });
-    } catch {
-      // try without auth (if public link)
+    } catch (error) {
+      // Retry without auth only when the link explicitly rejected credentials.
+      // A timeout must not trigger another full 60-second request.
+      if (!axios.isAxiosError(error) || ![401, 403].includes(Number(error.response?.status))) throw error;
       const r = await axios.get(url, { responseType: 'blob', timeout: 60_000 });
       return new Blob([r.data], { type: 'application/pdf' });
     }
@@ -173,48 +177,54 @@ async function fetchReceiptPdfForSale(token: string, saleId?: string, directRece
   const query = receiptFormat === 'standard' ? '' : `?format=${receiptFormat}`;
 
   // 2) Otherwise call your receipt endpoint
-  const endpoints = [
-    `${API_URL}/sales/${saleId}/receipt${query}`, // ✅ your real route
-    `${API_URL}/sales/${saleId}/pdf${query}`, // optional fallback if you add it later
-    `${API_URL}/sales/receipt?saleId=${encodeURIComponent(String(saleId))}${receiptFormat === 'standard' ? '' : `&format=${receiptFormat}`}`, // optional fallback
-  ];
-
-  let lastErr: any = null;
-
-  for (const url of endpoints) {
-    try {
-      const res = await axios.get(url, {
-        headers: { Authorization: `Bearer ${token}` },
-        responseType: 'blob',
-        timeout: 60_000,
-      });
-
-      return new Blob([res.data], { type: 'application/pdf' });
-    } catch (e) {
-      lastErr = e;
-    }
-  }
-
-  throw lastErr || new Error('Receipt endpoint failed');
+  const res = await axios.get(`${API_URL}/sales/${saleId}/receipt${query}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    responseType: 'blob',
+    timeout: 60_000,
+  });
+  return new Blob([res.data], { type: 'application/pdf' });
 }
 
-function extractSaleId(data: any): string | undefined {
+function extractSaleId(data: Record<string, unknown>): string | undefined {
+  const transaction = data.transaction && typeof data.transaction === 'object'
+    ? data.transaction as Record<string, unknown>
+    : {};
   // ✅ Handles: { saleId }, { transaction: { _id } }, etc.
   const raw =
-    data?.saleId ||
-    data?.transactionId ||
-    data?.txId ||
-    data?.id ||
-    data?._id ||
-    data?.transaction?._id ||
-    data?.transaction?.id ||
-    data?.transaction?.saleId;
+    data.saleId ||
+    data.transactionId ||
+    data.txId ||
+    data.id ||
+    data._id ||
+    transaction._id ||
+    transaction.id ||
+    transaction.saleId;
 
   const s = String(raw || '').trim();
   return s ? s : undefined;
 }
 
-export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess, onHoldCart }: CartSidebarProps) {
+function messageFromError(error: unknown, fallback: string): string {
+  if (axios.isAxiosError(error)) {
+    const data = error.response?.data;
+    if (data && typeof data === 'object') {
+      const record = data as Record<string, unknown>;
+      if (record.message || record.error) return String(record.message || record.error);
+    }
+    if (error.message) return error.message;
+  }
+  if (error instanceof Error && error.message) return error.message;
+  return fallback;
+}
+
+export default function CartSidebar({
+  cart,
+  setCart,
+  user,
+  onCheckoutSuccess,
+  onHoldCart,
+  restoredDraft,
+}: CartSidebarProps) {
   const router = useRouter();
 
   const [loading, setLoading] = useState(false);
@@ -223,25 +233,60 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess, on
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [printReceipt, setPrintReceipt] = useState(true);
   const [receiptType, setReceiptType] = useState<'standard' | 'thermal' | 'thermal58'>('thermal');
-  const [paymentMethod, setPaymentMethod] = useState<string>('CASH');
+  const [paymentMethod, setPaymentMethod] = useState<string>(restoredDraft?.paymentMethod || 'CASH');
   
   const [customerSearch, setCustomerSearch] = useState('');
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
-  const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
+  const [selectedCustomer, setSelectedCustomer] = useState<SaleCustomer | null>(restoredDraft?.customer || null);
 
-  const [discountAmount, setDiscountAmount] = useState<number>(0);
-  const [customers, setCustomers] = useState<any[]>([]);
+  const [discountAmount, setDiscountAmount] = useState<number>(Math.max(0, Number(restoredDraft?.discountAmount) || 0));
+  const [customers, setCustomers] = useState<SaleCustomer[]>([]);
+  const customersFetchedAt = useRef(0);
 
-  useEffect(() => {
+  const refreshCustomers = useCallback((force = false) => {
+    if (!force && Date.now() - customersFetchedAt.current < 30_000) return;
     const token = getCookie('tallyToken');
     if (!token) return;
     axios.get(`${API_URL}/customers`, { headers: { Authorization: `Bearer ${token}` } })
-      .then(res => setCustomers(Array.isArray(res.data) ? res.data : (res.data?.customers || res.data?.data || [])))
+      .then(res => {
+        const next = Array.isArray(res.data) ? res.data : (res.data?.customers || res.data?.data || []);
+        setCustomers(Array.isArray(next) ? next : []);
+        customersFetchedAt.current = Date.now();
+      })
       .catch(console.error);
   }, []);
 
+  useEffect(() => {
+    refreshCustomers(true);
+  }, [refreshCustomers]);
+
   // store blob url + saleId so buttons work after generation
   const [receipt, setReceipt] = useState<{ saleId?: string; url?: string } | null>(null);
+
+  const clearReceipt = useCallback(() => {
+    setReceipt((current) => {
+      if (current?.url?.startsWith('blob:')) {
+        try { URL.revokeObjectURL(current.url); } catch {}
+      }
+      return null;
+    });
+  }, []);
+
+  const resetOrderFields = useCallback((includeReceipt = true) => {
+    setSelectedCustomer(null);
+    setCustomerSearch('');
+    setShowCustomerDropdown(false);
+    setDiscountAmount(0);
+    setPaymentMethod('CASH');
+    setConfirmOpen(false);
+    if (includeReceipt) clearReceipt();
+  }, [clearReceipt]);
+
+  const previousCartLength = useRef(cart.length);
+  useEffect(() => {
+    if (previousCartLength.current === 0 && cart.length > 0) clearReceipt();
+    previousCartLength.current = cart.length;
+  }, [cart.length, clearReceipt]);
 
   // ✅ cleanup old blob urls
   useEffect(() => {
@@ -252,11 +297,11 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess, on
         } catch {}
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [receipt?.url]);
 
   const total = useMemo(() => cart.reduce((acc, item) => acc + item.sellQty * item.sellPrice, 0), [cart]);
-  const netTotal = Math.max(0, total - discountAmount);
+  const effectiveDiscount = Math.min(Math.max(0, discountAmount), Math.max(0, total));
+  const netTotal = Math.max(0, total - effectiveDiscount);
 
   const royaltySettings = user?.settings?.royalty;
   const isRoyaltyEnabled = royaltySettings?.enabled;
@@ -282,30 +327,60 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess, on
   };
 
   const updateQty = (id: string, delta: number) => {
-    setCart((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, sellQty: Math.max(1, item.sellQty + delta) } : item))
-    );
+    const current = cart.find((item) => item.id === id);
+    if (!current) return;
+    const availableStock = Math.max(0, Number(current.stock) || 0);
+    const nextQuantity = Math.min(availableStock, Math.max(1, current.sellQty + delta));
+    if (delta > 0 && current.sellQty >= availableStock) {
+      setMsg({ type: 'error', text: `Only ${availableStock} unit${availableStock === 1 ? '' : 's'} of ${current.name} are available.` });
+      window.setTimeout(() => setMsg({ text: '', type: '' }), 3000);
+      return;
+    }
+    const nextCart = cart.map((item) => (item.id === id ? { ...item, sellQty: nextQuantity } : item));
+    setCart(nextCart);
+    const nextTotal = nextCart.reduce((sum, item) => sum + item.sellQty * item.sellPrice, 0);
+    setDiscountAmount((value) => Math.min(value, nextTotal));
   };
 
   const updatePrice = (id: string, val: number) => {
-    setCart((prev) => prev.map((item) => (item.id === id ? { ...item, sellPrice: val } : item)));
+    const safeValue = Number.isFinite(val) ? Math.min(1_000_000_000_000, Math.max(0, val)) : 0;
+    const nextCart = cart.map((item) => (item.id === id ? { ...item, sellPrice: safeValue } : item));
+    setCart(nextCart);
+    const nextTotal = nextCart.reduce((sum, item) => sum + item.sellQty * item.sellPrice, 0);
+    setDiscountAmount((value) => Math.min(value, nextTotal));
   };
 
-  const remove = (id: string) => setCart((prev) => prev.filter((i) => i.id !== id));
+  const remove = (id: string) => {
+    const nextCart = cart.filter((item) => item.id !== id);
+    setCart(nextCart);
+    const nextTotal = nextCart.reduce((sum, item) => sum + item.sellQty * item.sellPrice, 0);
+    setDiscountAmount((value) => Math.min(value, nextTotal));
+  };
+
+  const holdCurrentOrder = () => {
+    onHoldCart({ customer: selectedCustomer, discountAmount: effectiveDiscount, paymentMethod });
+    resetOrderFields(true);
+  };
+
+  const clearCurrentOrder = () => {
+    setCart([]);
+    resetOrderFields(true);
+    setMsg({ text: '', type: '' });
+  };
 
   const handleShareReceipt = async () => {
     if (!receipt?.url) return;
 
     try {
       // Prefer file share when available
-      if ((navigator as any).canShare) {
+      if (navigator.canShare) {
         const r = await fetch(receipt.url);
         const blob = await r.blob();
         const file = new File([blob], `TallyPadi_Receipt_${buildStamp()}_${receipt.saleId || ''}.pdf`, {
           type: 'application/pdf',
         });
 
-        if ((navigator as any).canShare({ files: [file] }) && navigator.share) {
+        if (navigator.canShare({ files: [file] }) && navigator.share) {
           await navigator.share({
             title: 'TallyPadi Receipt',
             text: 'Receipt PDF',
@@ -336,6 +411,23 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess, on
   const doCheckout = async (alsoPrint: boolean) => {
     if (cart.length === 0) return;
 
+    const invalidItem = cart.find((item) => (
+      !Number.isFinite(Number(item.sellQty))
+      || item.sellQty <= 0
+      || item.sellQty > Math.max(0, Number(item.stock) || 0)
+      || !Number.isFinite(Number(item.sellPrice))
+      || item.sellPrice < 0
+    ));
+    if (invalidItem) {
+      Swal.fire({
+        title: 'Check this order',
+        text: `${invalidItem.name} has an invalid quantity or selling price.`,
+        icon: 'warning',
+        confirmButtonColor: '#0F766E',
+      });
+      return;
+    }
+
     if (paymentMethod === 'POINTS' && typeof navigator !== 'undefined' && navigator.onLine === false) {
       Swal.fire({
         title: 'Connection required for points',
@@ -365,9 +457,9 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess, on
         clientSaleId: createClientSaleId(),
         recordedAt: new Date().toISOString(),
         offlineCreated: typeof navigator !== 'undefined' && navigator.onLine === false,
-        paymentMethod, // ✅ Add this
+        paymentMethod,
         customerId: selectedCustomer?._id || undefined,
-        discountAmount: discountAmount || 0,
+        discountAmount: effectiveDiscount,
         items: cart.map((i) => ({
           itemId: i.id,
           quantity: Number(i.sellQty),
@@ -382,7 +474,7 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess, on
       if (delivery.state === 'queued') {
         setMsg({ text: 'Sale saved safely. It will upload automatically when the connection is available.', type: 'success' });
         onCheckoutSuccess();
-        setConfirmOpen(false);
+        resetOrderFields(true);
         await Swal.fire({
           title: 'Sale saved offline',
           text: 'You can continue selling. This sale will sync automatically without being recorded twice.',
@@ -412,6 +504,7 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess, on
 
       setMsg({ text: '✅ Sale recorded successfully!', type: 'success' });
       onCheckoutSuccess();
+      resetOrderFields(false);
 
       if (!alsoPrint) return;
 
@@ -432,34 +525,42 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess, on
         return;
       }
 
-      Swal.fire({
-        title: 'Generating receipt PDF…',
-        html: 'Only this checkout items will be included.',
-        allowOutsideClick: false,
-        allowEscapeKey: false,
-        didOpen: () => Swal.showLoading(),
-      });
+      try {
+        Swal.fire({
+          title: 'Generating receipt PDF…',
+          html: 'The sale is already recorded. Please wait while the receipt is prepared.',
+          allowOutsideClick: false,
+          allowEscapeKey: false,
+          didOpen: () => Swal.showLoading(),
+        });
 
-      const pdfBlob = await fetchReceiptPdfForSale(token, saleId, directReceiptUrl, receiptType);
+        const pdfBlob = await fetchReceiptPdfForSale(token, saleId, directReceiptUrl, receiptType);
+        Swal.close();
 
-      Swal.close();
+        const blobUrl = URL.createObjectURL(pdfBlob);
+        setReceipt({ saleId, url: blobUrl });
 
-      const blobUrl = URL.createObjectURL(pdfBlob);
-      setReceipt({ saleId, url: blobUrl });
-
-      const fileName = `TallyPadi_Receipt_${buildStamp()}_${saleId || 'sale'}.pdf`;
-      await presentPdfActions(blobUrl, fileName);
-    } catch (err: any) {
+        await presentPdfActions(blobUrl);
+      } catch (receiptError: unknown) {
+        Swal.close();
+        console.error('Receipt generation error:', receiptError);
+        const receiptMessage = messageFromError(receiptError, 'The receipt could not be generated right now.');
+        setMsg({ text: 'Sale recorded. Receipt generation needs to be retried from Sales History.', type: 'success' });
+        await Swal.fire({
+          title: 'Sale recorded successfully',
+          text: `The receipt was not generated: ${receiptMessage}. You can generate it later from Sales History. Do not record the sale again.`,
+          icon: 'warning',
+          confirmButtonColor: '#0F766E',
+        });
+      }
+    } catch (err: unknown) {
       console.error('Checkout Error:', err);
-      const errorMsg = err.response?.data?.message || err.response?.data?.error || err.message || 'Checkout failed';
+      const errorMsg = messageFromError(err, 'Checkout failed');
       setMsg({ text: errorMsg, type: 'error' });
 
       Swal.fire({
-        title: 'Receipt/Checkout Failed',
-        text:
-          String(errorMsg).includes('Missing saleId')
-            ? 'Backend must return saleId from POST /api/sales so we can generate a receipt for only this checkout.'
-            : errorMsg,
+        title: 'Sale not recorded',
+        text: errorMsg,
         icon: 'error',
         confirmButtonColor: '#0F766E',
       });
@@ -477,7 +578,7 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess, on
   const prefix = currencyPrefix(user?.currencyCode);
 
   return (
-    <div className="relative flex w-full min-w-0 flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl shadow-slate-900/5 xl:sticky xl:top-4 xl:h-[calc(100vh-6rem)]">
+    <aside className="relative flex w-full min-w-0 flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl shadow-slate-900/5 xl:sticky xl:top-4 xl:h-[calc(100dvh-2rem)]">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-emerald-500/10 to-transparent" />
 
       {/* Header */}
@@ -496,18 +597,18 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess, on
           {cart.length > 0 && (
             <div className="ml-auto flex items-center gap-2">
               <button
-                onClick={onHoldCart}
-                className="text-xs font-bold text-yellow-600 bg-yellow-50 px-2 py-1 rounded-md hover:bg-yellow-100 transition"
+                onClick={holdCurrentOrder}
+                className="inline-flex min-h-9 items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-3 text-xs font-black text-amber-800 transition hover:bg-amber-100"
                 title="Hold Order"
               >
-                Hold
+                <PauseCircle className="h-4 w-4" /> Hold
               </button>
               <button
-                onClick={() => setCart([])}
-                className="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded-md hover:bg-slate-200 hover:text-slate-900 transition"
+                onClick={clearCurrentOrder}
+                className="inline-flex min-h-9 items-center gap-1.5 rounded-xl border border-red-200 bg-white px-3 text-xs font-black text-red-700 transition hover:bg-red-50"
                 title="Clear cart"
               >
-                Clear
+                <Trash2 className="h-4 w-4" /> Clear
               </button>
             </div>
           )}
@@ -519,8 +620,8 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess, on
         netTotal={netTotal}
         currencyCode={user?.currencyCode}
         locale={user?.locale}
-        discountAmount={discountAmount}
-        onApplyDiscount={(amount) => setDiscountAmount(Math.max(0, Number(amount) || 0))}
+        discountAmount={effectiveDiscount}
+        onApplyDiscount={(amount) => setDiscountAmount(Math.min(total, Math.max(0, Number(amount) || 0)))}
       />
 
       {/* Cart Items List */}
@@ -547,8 +648,9 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess, on
 
                 <button
                   onClick={() => remove(item.id)}
-                  className="text-slate-300 hover:text-red-600 transition-colors p-2 rounded-2xl hover:bg-red-50"
+                  className="rounded-xl border border-red-100 bg-red-50 p-2 text-red-600 transition-colors hover:border-red-200 hover:bg-red-100"
                   title="Remove item"
+                  aria-label={`Remove ${item.name} from order`}
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
@@ -558,7 +660,8 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess, on
                 <div className="flex items-center bg-slate-50 rounded-2xl border border-slate-200 p-1">
                   <button
                     onClick={() => updateQty(item.id, -1)}
-                    className="p-2 hover:bg-white hover:shadow-sm rounded-xl text-slate-700 transition-all"
+                    className="rounded-xl border border-slate-200 bg-white p-2 text-slate-800 shadow-sm transition-all hover:border-emerald-300"
+                    aria-label={`Reduce ${item.name} quantity`}
                   >
                     <Minus className="w-3.5 h-3.5" />
                   </button>
@@ -567,7 +670,9 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess, on
                   </span>
                   <button
                     onClick={() => updateQty(item.id, 1)}
-                    className="p-2 hover:bg-white hover:shadow-sm rounded-xl text-slate-700 transition-all"
+                    disabled={item.sellQty >= Math.max(0, Number(item.stock) || 0)}
+                    className="rounded-xl border border-emerald-200 bg-emerald-50 p-2 text-emerald-800 shadow-sm transition-all hover:bg-emerald-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+                    aria-label={`Increase ${item.name} quantity`}
                   >
                     <Plus className="w-3.5 h-3.5" />
                   </button>
@@ -581,6 +686,9 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess, on
                   </span>
                   <input
                     type="number"
+                    min="0"
+                    max="1000000000000"
+                    step="any"
                     className="w-full pl-10 pr-3 py-2.5 text-sm font-extrabold border border-slate-200 rounded-2xl outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 text-right bg-white"
                     value={item.sellPrice}
                     onChange={(e) => updatePrice(item.id, Number(e.target.value))}
@@ -675,7 +783,10 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess, on
                       setCustomerSearch(e.target.value);
                       setShowCustomerDropdown(true);
                     }}
-                    onFocus={() => setShowCustomerDropdown(true)}
+                    onFocus={() => {
+                      setShowCustomerDropdown(true);
+                      refreshCustomers();
+                    }}
                   />
                   
                   {showCustomerDropdown && (
@@ -701,8 +812,8 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess, on
                                 <p className="text-sm font-extrabold text-slate-800">{c.name}</p>
                                 <p className="text-[10px] font-bold text-slate-500">{c.phoneNumber}</p>
                               </div>
-                              {isRoyaltyEnabled && c.royaltyPoints > 0 && (
-                                <span className="text-[10px] font-black text-yellow-600 bg-yellow-50 px-2 py-1 rounded-md flex items-center gap-1"><Star className="w-3 h-3 fill-current" /> {c.royaltyPoints}</span>
+                              {isRoyaltyEnabled && Number(c.royaltyPoints || 0) > 0 && (
+                                <span className="text-[10px] font-black text-yellow-600 bg-yellow-50 px-2 py-1 rounded-md flex items-center gap-1"><Star className="w-3 h-3 fill-current" /> {Number(c.royaltyPoints || 0)}</span>
                               )}
                             </button>
                           ))
@@ -720,9 +831,12 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess, on
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">{prefix}</span>
                 <input 
                   type="number" 
+                  min="0"
+                  max={total}
+                  step="any"
                   className="w-full pl-7 pr-3 py-2 text-sm font-bold border border-slate-200 rounded-xl outline-none focus:border-emerald-500 text-right bg-slate-50"
-                  value={discountAmount || ''}
-                  onChange={(e) => setDiscountAmount(Number(e.target.value))}
+                  value={effectiveDiscount || ''}
+                  onChange={(e) => setDiscountAmount(Math.min(total, Math.max(0, Number(e.target.value) || 0)))}
                   placeholder="0"
                 />
               </div>
@@ -730,7 +844,7 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess, on
           </div>
         )}
 
-        {discountAmount > 0 && (
+        {effectiveDiscount > 0 && (
           <div className="flex justify-between items-end mb-1">
             <span className="text-slate-500 font-bold text-sm">Subtotal</span>
             <span className="text-sm font-bold text-slate-700">{formatMoney(total)}</span>
@@ -764,7 +878,7 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess, on
             className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
             onClick={() => (!loading ? setConfirmOpen(false) : null)}
           />
-          <div className="relative w-full max-w-md rounded-3xl bg-white border border-slate-200 shadow-2xl overflow-hidden">
+          <div className="relative max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-3xl border border-slate-200 bg-white shadow-2xl">
             <div className="p-5 border-b border-slate-200 flex items-start justify-between gap-3">
               <div>
                 <h3 className="text-slate-900 font-black text-lg">Confirm Sale</h3>
@@ -781,6 +895,36 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess, on
             </div>
 
             <div className="p-5 space-y-4">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <p className="text-xs font-black uppercase tracking-wider text-slate-500">Order summary</p>
+                  <span className="text-xs font-black text-slate-700">
+                    {cart.reduce((sum, item) => sum + item.sellQty, 0)} unit(s)
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  {cart.slice(0, 3).map((item) => (
+                    <div key={item.id} className="flex items-center justify-between gap-3 text-sm">
+                      <span className="min-w-0 truncate font-bold text-slate-700">{item.sellQty}× {item.name}</span>
+                      <span className="shrink-0 font-black text-slate-900">{formatMoney(item.sellQty * item.sellPrice)}</span>
+                    </div>
+                  ))}
+                  {cart.length > 3 && (
+                    <p className="text-xs font-bold text-slate-500">+{cart.length - 3} more product(s)</p>
+                  )}
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2 border-t border-slate-200 pt-3 text-xs">
+                  <div>
+                    <p className="font-bold text-slate-500">Customer</p>
+                    <p className="mt-0.5 truncate font-black text-slate-800">{selectedCustomer?.name || 'Guest'}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-bold text-slate-500">Discount</p>
+                    <p className="mt-0.5 font-black text-slate-800">{formatMoney(effectiveDiscount)}</p>
+                  </div>
+                </div>
+              </div>
+
               {/* Payment Method Selector */}
               <div className="space-y-2">
                 <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Payment Method</p>
@@ -917,6 +1061,6 @@ export default function CartSidebar({ cart, setCart, user, onCheckoutSuccess, on
         </div>,
         document.body
       )}
-    </div>
+    </aside>
   );
 }

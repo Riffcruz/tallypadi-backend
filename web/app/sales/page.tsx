@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
 import Sidebar from '../../components/Sidebar';
@@ -45,6 +45,25 @@ export interface CartItem extends InventoryItem {
   sellQty: number;
   sellPrice: number;
 }
+export interface SaleCustomer {
+  _id: string;
+  name?: string;
+  phoneNumber?: string;
+  royaltyPoints?: number;
+}
+export interface SaleDraftDetails {
+  customer: SaleCustomer | null;
+  discountAmount: number;
+  paymentMethod: string;
+}
+interface HeldCart extends SaleDraftDetails {
+  id: string;
+  timestamp: string;
+  items: CartItem[];
+}
+export interface RestoredSaleDraft extends SaleDraftDetails {
+  restoreId: string;
+}
 export interface UserProfile {
   id: string;
   _id?: string;
@@ -74,7 +93,7 @@ const tokenUserId = (token: string) => {
     if (!payload) return '';
     const normalized = payload.replace(/-/g, '+').replace(/_/g, '/');
     const decoded = JSON.parse(window.atob(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=')));
-    return String(decoded.id || decoded._id || decoded.userId || '');
+    return String(decoded.id || decoded._id || decoded.userId || decoded.sub || '');
   } catch {
     return '';
   }
@@ -90,7 +109,10 @@ export default function SalesPage() {
   const [loadingUser, setLoadingUser] = useState(true);
 
   // Hold Cart state
-  const [heldCarts, setHeldCarts] = useState<{ id: string; timestamp: Date; items: CartItem[] }[]>([]);
+  const [heldCarts, setHeldCarts] = useState<HeldCart[]>([]);
+  const heldCartStorageKey = useRef('');
+  const [restoredDraft, setRestoredDraft] = useState<RestoredSaleDraft | null>(null);
+  const [resumingHoldId, setResumingHoldId] = useState<string | null>(null);
   const [showHeldCarts, setShowHeldCarts] = useState(false);
   
   // Z-Report Close Register State
@@ -122,6 +144,8 @@ export default function SalesPage() {
 
     const authenticatedUserId = tokenUserId(token);
     const profileCacheKey = authenticatedUserId ? `tally_sales_profile:${authenticatedUserId}` : '';
+    const scopedHeldCartKey = authenticatedUserId ? `tally_held_carts:${authenticatedUserId}` : '';
+    heldCartStorageKey.current = scopedHeldCartKey;
 
     axios.get(`${API_URL}/dashboard`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -147,33 +171,122 @@ export default function SalesPage() {
         setLoadingUser(false);
       });
 
-    // Load held carts
-    const saved = localStorage.getItem('tally_held_carts');
+    // Held orders are deliberately scoped to the signed-in account. Never load
+    // the old global key because another account may use the same browser.
+    const saved = scopedHeldCartKey ? localStorage.getItem(scopedHeldCartKey) : null;
     if (saved) {
-      try { setHeldCarts(JSON.parse(saved)); } catch(e){}
+      try {
+        const parsed = JSON.parse(saved);
+        window.setTimeout(() => setHeldCarts(Array.isArray(parsed) ? parsed : []), 0);
+      } catch {
+        window.setTimeout(() => setHeldCarts([]), 0);
+      }
     }
   }, [router]);
 
-  const saveHeldCarts = (newCarts: any[]) => {
+  const saveHeldCarts = (newCarts: HeldCart[]) => {
     setHeldCarts(newCarts);
-    localStorage.setItem('tally_held_carts', JSON.stringify(newCarts));
+    if (heldCartStorageKey.current) localStorage.setItem(heldCartStorageKey.current, JSON.stringify(newCarts));
   };
 
-  const handleHoldCart = () => {
+  const handleHoldCart = (details: SaleDraftDetails) => {
     if (cart.length === 0) return;
-    const newHold = { id: Date.now().toString(), timestamp: new Date(), items: cart };
+    const timestamp = new Date().toISOString();
+    const newHold: HeldCart = {
+      id: timestamp,
+      timestamp,
+      items: cart,
+      ...details,
+    };
     const updated = [...heldCarts, newHold];
     saveHeldCarts(updated);
     setCart([]);
     toast.fire({ icon: 'info', title: 'Order paused' });
   };
 
-  const resumeHold = (holdId: string) => {
+  const resumeHold = async (holdId: string) => {
     const hold = heldCarts.find(h => h.id === holdId);
     if (!hold) return;
-    setCart(hold.items);
+
+    if (cart.length > 0) {
+      const result = await Swal.fire({
+        title: 'Replace current order?',
+        text: 'Resume this held order only if you no longer need the items currently in the cart.',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'Resume held order',
+        confirmButtonColor: '#0F766E',
+      });
+      if (!result.isConfirmed) return;
+    }
+
+    setResumingHoldId(holdId);
+    let restoredItems = hold.items;
+    let adjustedCount = 0;
+    let unavailableCount = 0;
+    let couldNotVerify = false;
+
+    if (typeof navigator !== 'undefined' && navigator.onLine) {
+      const token = getCookie('tallyToken');
+      if (token) {
+        const checks = await Promise.allSettled(
+          hold.items.map((item) => axios.get(`${API_URL}/inventory/${item.id}`, {
+            headers: { Authorization: `Bearer ${token}` },
+            timeout: 8_000,
+          }))
+        );
+
+        restoredItems = hold.items.flatMap((item, index) => {
+          const check = checks[index];
+          if (check.status === 'rejected') {
+            if (axios.isAxiosError(check.reason) && check.reason.response?.status === 404) {
+              unavailableCount += 1;
+              return [];
+            }
+            couldNotVerify = true;
+            return [item];
+          }
+
+          const currentStock = Math.max(0, Number(check.value.data?.stock ?? check.value.data?.quantity ?? 0));
+          if (currentStock <= 0) {
+            unavailableCount += 1;
+            return [];
+          }
+          const safeQuantity = Math.min(Math.max(1, Number(item.sellQty) || 1), currentStock);
+          if (safeQuantity !== item.sellQty) adjustedCount += 1;
+          return [{ ...item, stock: currentStock, sellQty: safeQuantity }];
+        });
+      }
+    } else {
+      couldNotVerify = true;
+    }
+
+    setResumingHoldId(null);
+    if (restoredItems.length === 0) {
+      await Swal.fire('Order unavailable', 'The products in this held order are no longer in stock.', 'warning');
+      return;
+    }
+
+    setCart(restoredItems);
+    setRestoredDraft({
+      restoreId: `${hold.id}:${new Date().toISOString()}`,
+      customer: hold.customer || null,
+      discountAmount: Math.max(0, Number(hold.discountAmount) || 0),
+      paymentMethod: hold.paymentMethod || 'CASH',
+    });
     saveHeldCarts(heldCarts.filter(h => h.id !== holdId));
     setShowHeldCarts(false);
+
+    if (adjustedCount > 0 || unavailableCount > 0 || couldNotVerify) {
+      const details = [
+        adjustedCount > 0 ? `${adjustedCount} quantity adjusted to available stock` : '',
+        unavailableCount > 0 ? `${unavailableCount} unavailable product removed` : '',
+        couldNotVerify ? 'Some stock will be checked again at checkout' : '',
+      ].filter(Boolean).join('. ');
+      toast.fire({ icon: 'warning', title: 'Held order reviewed', text: details });
+    } else {
+      toast.fire({ icon: 'success', title: 'Held order resumed' });
+    }
   };
 
   const deleteHold = (holdId: string) => {
@@ -192,8 +305,11 @@ export default function SalesPage() {
        setShowZReport(false);
        setPhysicalCash('');
        Swal.fire('Register Closed', `Expected: ${res.data.expectedCash} | Actual: ${res.data.physicalCash} | Discrepancy: ${res.data.discrepancy}. A report was pushed to the owner.`, 'success');
-     } catch (err: any) {
-       Swal.fire('Error', err.response?.data?.error || 'Could not close register', 'error');
+     } catch (err: unknown) {
+       const message = axios.isAxiosError(err) && err.response?.data?.error
+         ? String(err.response.data.error)
+         : 'Could not close register';
+       Swal.fire('Error', message, 'error');
      } finally {
        setSubmittingZReport(false);
      }
@@ -202,27 +318,38 @@ export default function SalesPage() {
 const handleAddToCart = (item: InventoryItem) => {
   setCart((prev) => {
     const existing = prev.find((i) => i.id === item.id);
+    const availableStock = Math.max(0, Number(item.stock) || 0);
+
+    if (availableStock <= 0) {
+      toast.fire({ icon: 'warning', title: `${item.name} is out of stock` });
+      return prev;
+    }
 
     if (existing) {
-      // ✅ Toast for increment
+      if (existing.sellQty >= availableStock) {
+        toast.fire({
+          icon: 'warning',
+          title: 'Available stock reached',
+          text: `${availableStock} unit${availableStock === 1 ? '' : 's'} available for ${item.name}.`,
+        });
+        return prev;
+      }
+
       toast.fire({
         icon: 'success',
         title: `+1 added • ${item.name}`,
       });
 
       return prev.map((i) =>
-        i.id === item.id ? { ...i, sellQty: i.sellQty + 1 } : i
+        i.id === item.id ? { ...i, stock: availableStock, sellQty: i.sellQty + 1 } : i
       );
     }
 
-    // ✅ Toast for new item
     toast.fire({
-  icon: 'success',
-  title: `Added • ${item.name}`,
-  text: `Qty: 1 • Price: ${item.price}`,
-});
-
-
+      icon: 'success',
+      title: `Added • ${item.name}`,
+      text: `Qty: 1 • Price: ${item.price}`,
+    });
     return [...prev, { ...item, sellQty: 1, sellPrice: item.price || 0 }];
   });
 };
@@ -235,7 +362,7 @@ const handleAddToCart = (item: InventoryItem) => {
   }
 
   return (
-    <div className="flex min-h-screen bg-slate-50 font-sans text-gray-900 relative overflow-x-hidden">
+    <div className="relative flex min-h-screen overflow-x-clip bg-slate-50 font-sans text-gray-900">
       
       {/* --- AMBIENT BACKGROUND BLOBS --- */}
       <div className="fixed -top-24 -left-24 w-96 h-96 bg-emerald-200/40 rounded-full blur-[100px] pointer-events-none z-0" />
@@ -252,7 +379,7 @@ const handleAddToCart = (item: InventoryItem) => {
       </div>
 
       {/* Main Content */}
-      <main className="relative z-10 min-h-screen w-full min-w-0 max-w-full overflow-x-hidden p-4 md:pl-72 md:pr-8 md:py-8">
+      <main className="relative z-10 min-h-screen w-full min-w-0 max-w-full overflow-x-clip p-4 md:pl-72 md:pr-8 md:py-8">
         
         {/* Header Section */}
         <header className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-6">
@@ -297,7 +424,7 @@ const handleAddToCart = (item: InventoryItem) => {
 
           {/* Segmented Tab Control */}
           <div className="flex p-1.5 bg-gray-200/50 backdrop-blur-sm rounded-xl border border-gray-200 w-full lg:w-auto">
-            {canViewHistory && <button
+            <button
               onClick={() => setActiveTab('new')}
               className={`flex-1 lg:flex-none flex items-center justify-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all duration-200 ${
                 activeTab === 'new' 
@@ -306,8 +433,8 @@ const handleAddToCart = (item: InventoryItem) => {
               }`}
             >
               <ShoppingCart className="w-4 h-4" /> New Sale
-            </button>}
-            <button
+            </button>
+            {canViewHistory && <button
               onClick={() => setActiveTab('history')}
               className={`flex-1 lg:flex-none flex items-center justify-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all duration-200 ${
                 activeTab === 'history' 
@@ -316,34 +443,40 @@ const handleAddToCart = (item: InventoryItem) => {
               }`}
             >
               <History className="w-4 h-4" /> History
-            </button>
+            </button>}
           </div>
         </header>
 
         {/* Content Area */}
-        {activeTab === 'new' ? (
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 xl:gap-8 relative animate-in fade-in slide-in-from-bottom-2 duration-500">
+        <div className={activeTab === 'new'
+          ? 'relative grid grid-cols-1 items-start gap-6 animate-in fade-in slide-in-from-bottom-2 duration-500 xl:grid-cols-3 xl:gap-8'
+          : 'hidden'}>
             <div className="min-w-0 xl:col-span-2">
               <ProductGrid 
                 user={user} 
                 onAddToCart={handleAddToCart} 
                 currencyCode={user?.currencyCode || 'NGN'} 
+                cart={cart}
               />
             </div>
 
-            <div className="min-w-0 xl:col-span-1">
+            <div className="min-w-0 xl:col-span-1 xl:self-start">
               <CartSidebar 
+                key={restoredDraft?.restoreId || 'active-sale'}
                 cart={cart} 
                 setCart={setCart} 
                 user={user} 
                 onCheckoutSuccess={handleClearCart}
                 onHoldCart={handleHoldCart}
+                restoredDraft={restoredDraft}
               />
             </div>
-          </div>
-        ) : (
-          // ✅ FIX: Removed 'max-w-5xl mx-auto' so it aligns left
-          <div className="w-full animate-in fade-in slide-in-from-bottom-4 duration-500">
+        </div>
+
+        {canViewHistory && (
+          <div className={activeTab === 'history'
+            ? 'w-full animate-in fade-in slide-in-from-bottom-4 duration-500'
+            : 'hidden'}>
             <SalesHistory user={user} />
           </div>
         )}
@@ -372,8 +505,8 @@ const handleAddToCart = (item: InventoryItem) => {
                           
                           <p className="text-sm font-bold text-gray-600 mb-4">{h.items.length} item(s) • {h.items.reduce((acc, item) => acc + item.sellQty * item.sellPrice, 0).toLocaleString()}</p>
                           
-                          <button onClick={() => resumeHold(h.id)} className="w-full py-2.5 bg-yellow-50 text-yellow-700 font-extrabold rounded-xl border border-yellow-200 hover:bg-yellow-100 hover:border-yellow-300 transition-colors">
-                             Resume Order
+                          <button disabled={resumingHoldId !== null} onClick={() => void resumeHold(h.id)} className="w-full py-2.5 bg-yellow-50 text-yellow-700 font-extrabold rounded-xl border border-yellow-200 hover:bg-yellow-100 hover:border-yellow-300 transition-colors disabled:cursor-wait disabled:opacity-60">
+                             {resumingHoldId === h.id ? 'Checking stock…' : 'Resume Order'}
                           </button>
                        </div>
                     ))}

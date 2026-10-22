@@ -71,6 +71,12 @@ interface ChartDataPoint {
   sales: number;
 }
 
+interface TopItem {
+  name: string;
+  revenue: number;
+  qty: number;
+}
+
 interface DashboardResponse {
   user?: {
     id?: string;
@@ -110,6 +116,7 @@ interface DashboardResponse {
   inventory?: InventoryItem[];
   transactions?: TransactionRow[];
   salesChart?: ChartDataPoint[];
+  topItems?: TopItem[];
 }
 
 // ✅ FX rates endpoint response (you’ll add it below)
@@ -464,6 +471,8 @@ const filteredTransactions = useMemo(() => {
 const topTransactions = filteredTransactions.slice(0, 6);
 
   const chartData = data?.salesChart || [];
+  const topItems = data?.topItems || [];
+  const highestTopItemQty = Math.max(1, ...topItems.map((item) => Number(item.qty) || 0));
 
   const sendChat = async (text: string) => {
     const token = getCookie('tallyToken');
@@ -741,6 +750,61 @@ const topTransactions = filteredTransactions.slice(0, 6);
             accent="emerald"
           />
         </div>
+
+        {/* Best-selling products */}
+        <section className="mt-6 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex items-center justify-between gap-4 border-b border-slate-100 bg-slate-50/60 px-5 py-4 sm:px-6">
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
+                <ShoppingBag className="h-5 w-5" />
+              </span>
+              <div className="min-w-0">
+                <h2 className="text-lg font-black text-slate-950">Best-selling products</h2>
+                <p className="text-xs font-bold text-slate-500">Ranked by quantity sold</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => router.push('/sales')}
+              className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-xl border border-emerald-200 bg-white px-3 text-xs font-black text-emerald-800 transition hover:bg-emerald-50"
+            >
+              Sales <ArrowRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
+
+          {topItems.length > 0 ? (
+            <div className="grid gap-px bg-slate-100 sm:grid-cols-2 lg:grid-cols-5">
+              {topItems.map((item, index) => {
+                const quantity = Number(item.qty) || 0;
+                const width = Math.max(8, Math.round((quantity / highestTopItemQty) * 100));
+                return (
+                  <div key={`${item.name}-${index}`} className="bg-white p-4 sm:p-5">
+                    <div className="flex items-start gap-3">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-slate-950 text-xs font-black text-white">
+                        {index + 1}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-black capitalize text-slate-900" title={item.name}>{item.name}</p>
+                        <p className="mt-1 text-xs font-bold text-slate-500">{quantity.toLocaleString()} unit{quantity === 1 ? '' : 's'} sold</p>
+                      </div>
+                    </div>
+                    <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
+                      <div className="h-full rounded-full bg-emerald-500" style={{ width: `${width}%` }} />
+                    </div>
+                    <p className="mt-3 text-sm font-black text-emerald-700">
+                      {formatCurrency(Number(item.revenue) || 0, currencyCode, userLocale)}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="px-6 py-10 text-center">
+              <p className="text-sm font-black text-slate-700">No product sales yet</p>
+              <p className="mt-1 text-xs font-semibold text-slate-500">Products will appear here after recorded sales.</p>
+            </div>
+          )}
+        </section>
 
         {/* Sales by Payment Method Grid */}
         {data?.stats?.paymentMethods && Object.keys(data.stats.paymentMethods).length > 0 && (

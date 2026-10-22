@@ -12,7 +12,7 @@ import {
   Sparkles,
   ScanBarcode, // Import ScanBarcode icon
 } from 'lucide-react';
-import { InventoryItem, UserProfile } from './page';
+import { CartItem, InventoryItem, UserProfile } from './page';
 import { getCookie } from '../../utils/cookies';
 import dynamic from 'next/dynamic'; // Dynamic import for BarcodeScanner
 import {
@@ -31,6 +31,7 @@ interface ProductGridProps {
   user: UserProfile | null;
   onAddToCart: (item: InventoryItem) => void;
   currencyCode: string;
+  cart: CartItem[];
 }
 
 interface RawInventoryItem {
@@ -46,7 +47,7 @@ interface RawInventoryItem {
   sku?: string | null;
 }
 
-export default function ProductGrid({ user, onAddToCart, currencyCode }: ProductGridProps) {
+export default function ProductGrid({ user, onAddToCart, currencyCode, cart }: ProductGridProps) {
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -62,6 +63,10 @@ export default function ProductGrid({ user, onAddToCart, currencyCode }: Product
     ...item,
     stock: Math.max(0, item.stock - (queuedQuantities[item.id] || 0)),
   })), [inventory, queuedQuantities]);
+  const cartQuantities = useMemo(() => cart.reduce<Record<string, number>>((quantities, item) => {
+    quantities[item.id] = (quantities[item.id] || 0) + Math.max(0, Number(item.sellQty) || 0);
+    return quantities;
+  }, {}), [cart]);
 
   const fetchInventory = useCallback(async (pageNum: number, searchQuery: string, isLoadMore = false) => {
     const token = getCookie('tallyToken');
@@ -292,12 +297,10 @@ export default function ProductGrid({ user, onAddToCart, currencyCode }: Product
             {search.trim() && (
               <button
                 onClick={() => setSearch('')}
-                className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600 hover:text-slate-900 transition"
+                className="inline-flex min-h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
               >
-                <span>Clear</span>
-                <span className="w-7 h-7 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center">
-                  <X className="w-4 h-4" />
-                </span>
+                <X className="h-4 w-4" />
+                <span>Clear search</span>
               </button>
             )}
           </div>
@@ -336,10 +339,12 @@ export default function ProductGrid({ user, onAddToCart, currencyCode }: Product
             {/* Barcode Scanner Button */}
             <button
               onClick={() => setShowScanner(true)}
-              className="p-3.5 bg-white border border-slate-200 rounded-2xl text-slate-600 hover:text-emerald-600 hover:border-emerald-300 transition-colors shadow-sm"
+              className="inline-flex min-h-12 shrink-0 items-center justify-center gap-2 rounded-2xl border border-emerald-600 bg-emerald-600 px-4 font-black text-white shadow-sm transition-colors hover:border-emerald-700 hover:bg-emerald-700"
               title="Scan Barcode"
+              aria-label="Scan a product barcode"
             >
               <ScanBarcode className="w-5 h-5" />
+              <span className="hidden sm:inline">Scan</span>
             </button>
           </div>
         </div>
@@ -400,7 +405,8 @@ export default function ProductGrid({ user, onAddToCart, currencyCode }: Product
         ) : (
           <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 pb-24">
             {availableInventory.map((item) => {
-              const tone = stockTone(item.stock);
+              const remainingStock = Math.max(0, item.stock - (cartQuantities[item.id] || 0));
+              const tone = stockTone(remainingStock);
 
               const badge =
                 tone === 'OUT' ? (
@@ -409,11 +415,11 @@ export default function ProductGrid({ user, onAddToCart, currencyCode }: Product
                   </span>
                 ) : tone === 'LOW' ? (
                   <span className="flex items-center gap-1 text-[10px] font-extrabold px-2.5 py-1 rounded-full bg-red-50 text-red-700 border border-red-100">
-                    <AlertTriangle className="w-3 h-3" /> {item.stock} left
+                    <AlertTriangle className="w-3 h-3" /> {remainingStock} left
                   </span>
                 ) : (
                   <span className="text-[10px] font-extrabold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100">
-                    {item.stock} in stock
+                    {remainingStock} available
                   </span>
                 );
 
@@ -421,13 +427,13 @@ export default function ProductGrid({ user, onAddToCart, currencyCode }: Product
                 <button
                   key={item.id}
                   onClick={() => onAddToCart(item)}
-                  disabled={item.stock <= 0}
+                  disabled={remainingStock <= 0}
                   className={`
-                    group relative flex flex-col text-left p-4 rounded-3xl border overflow-hidden
+                    group relative flex flex-col text-left p-4 rounded-2xl border-2 overflow-hidden
                     transition-all duration-200 active:scale-[0.98]
-                    ${item.stock <= 0
+                    ${remainingStock <= 0
                       ? 'bg-white border-slate-200 opacity-70 cursor-not-allowed'
-                      : 'bg-white border-slate-200 hover:border-emerald-300 hover:shadow-xl hover:shadow-emerald-500/10'}
+                      : 'bg-white border-slate-200 hover:border-emerald-500 hover:shadow-xl hover:shadow-emerald-500/10 focus-visible:border-emerald-600 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-emerald-500/20'}
                   `}
                 >
                   {/* animated glow */}
@@ -442,7 +448,7 @@ export default function ProductGrid({ user, onAddToCart, currencyCode }: Product
                           className={`
                             w-12 h-12 rounded-2xl border flex items-center justify-center
                             font-extrabold text-sm uppercase
-                            ${item.stock <= 0
+                            ${remainingStock <= 0
                               ? 'bg-slate-50 border-slate-200 text-slate-400'
                               : 'bg-emerald-50 border-emerald-100 text-emerald-700'}
                           `}
@@ -478,29 +484,24 @@ export default function ProductGrid({ user, onAddToCart, currencyCode }: Product
                         )}
                       </div>
 
-                      <div
+                      <span
                         className={`
-                          inline-flex items-center gap-2 px-3 py-2 rounded-2xl
+                          inline-flex items-center gap-2 px-3 py-2 rounded-xl
                           font-bold text-xs transition-all
-                          ${item.stock <= 0
+                          ${remainingStock <= 0
                             ? 'bg-slate-100 text-slate-500'
-                            : 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/20 opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0'}
+                            : 'bg-emerald-600 text-white shadow-md shadow-emerald-500/20 group-hover:bg-emerald-700'}
                         `}
                       >
                         <Plus className="w-4 h-4" />
-                        Add
-                      </div>
+                        {remainingStock <= 0 ? 'In cart' : 'Add'}
+                      </span>
                     </div>
 
-                    {/* subtle divider */}
-                    <div className="mt-4 h-px bg-gradient-to-r from-slate-200 to-transparent" />
-
-                    {/* micro info */}
-                    <div className="mt-3 flex items-center justify-between text-[11px] font-semibold text-slate-500">
-                      <span>ID</span>
-                      <span className="font-mono text-slate-600 truncate max-w-[120px]">
-                        {String(item.id).slice(-8)}
-                      </span>
+                    <div className="mt-4 border-t border-slate-100 pt-3 text-[11px] font-bold text-slate-500">
+                      {remainingStock <= 0
+                        ? (item.stock > 0 ? 'All available units are already in this order' : 'Restock this item before selling')
+                        : 'Tap this card to add it to the order'}
                     </div>
                   </div>
                 </button>

@@ -24,7 +24,7 @@ const saleErrorStatus = (error: unknown) => {
   if (error instanceof SaleRequestError) return error.status;
   const message = error instanceof Error ? error.message : '';
   if (/Insufficient|Stock modified|already used/i.test(message)) return 409;
-  if (/not found|No valid|Invalid|required|must be|older than/i.test(message)) return 400;
+  if (/not found|No valid|Invalid|required|must be|older than|discount/i.test(message)) return 400;
   if (/Subscription expired/i.test(message)) return 403;
   return 500;
 };

@@ -2176,7 +2176,7 @@ What's included in Oga Boss Plan:
             const tx = await Transaction.findById(txId);
             if (!tx) { await queueOutboundMessage(from, "⚠️ Transaction not found."); return; }
             
-            if (discount >= tx.totalMoney) {
+            if (!Number.isFinite(discount) || discount < 0 || discount > tx.totalMoney) {
                  await queueOutboundMessage(from, "⚠️ Discount cannot exceed total price.");
                  return;
             }
@@ -2184,13 +2184,16 @@ What's included in Oga Boss Plan:
             const newTotal = tx.totalMoney - discount;
 
             tx.set('discount', discount);
-            tx.totalMoney = newTotal;
 
             if (tx.paymentStatus !== 'CREDIT' && tx.paymentStatus !== 'PARTIAL') {
                 tx.amountPaid = newTotal;
                 tx.balance = 0;
             } else if (tx.paymentStatus === 'CREDIT') {
                 tx.balance = newTotal;
+            } else {
+                tx.amountPaid = Math.min(Number(tx.amountPaid || 0), newTotal);
+                tx.balance = Math.max(0, newTotal - Number(tx.amountPaid || 0));
+                if (tx.balance === 0) tx.paymentStatus = 'PAID';
             }
             await tx.save();
 
