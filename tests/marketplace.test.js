@@ -6,6 +6,7 @@ const {
   buildMarketplaceListCacheKey,
   buildMarketplaceListingFilter,
   getMarketplaceSortOptions,
+  inferMarketplaceCategory,
   parseMarketplaceListQuery,
 } = require('../dist/services/marketplaceQuery.service');
 const {
@@ -14,6 +15,7 @@ const {
 } = require('../dist/services/marketplaceCache.service');
 const {
   buildMarketplaceListingDocument,
+  diversifyDiscoveryListings,
 } = require('../dist/services/marketplaceIndex.service');
 
 test('normalizes marketplace query params and cache keys', () => {
@@ -57,6 +59,31 @@ test('builds indexed read-model filters for search, category, and location', () 
     cityKey: 'ikeja',
     'smartCategory.id': 'phones-tablets',
     $text: { $search: 'iphone' },
+  });
+});
+
+test('keeps user-entered specifications out of public marketplace categories', () => {
+  assert.deepEqual(inferMarketplaceCategory('500w', 'Cola 2000'), { id: 'other', label: 'Other' });
+  assert.deepEqual(inferMarketplaceCategory('3 Inches', 'Standing fan'), { id: 'electronics', label: 'Electronics' });
+  assert.deepEqual(inferMarketplaceCategory('Home & Appliances', 'New product'), { id: 'home-appliances', label: 'Home & Appliances' });
+
+  const otherQuery = parseMarketplaceListQuery({ category: '500w' });
+  assert.equal(otherQuery.categoryKey, 'other');
+  assert.deepEqual(buildMarketplaceListingFilter(otherQuery), {
+    isPublic: true,
+    'smartCategory.id': {
+      $nin: [
+        'phones-tablets',
+        'electronics',
+        'home-appliances',
+        'fashion',
+        'beauty-care',
+        'food-farming',
+        'tools-equipment',
+        'babies-kids',
+        'services',
+      ],
+    },
   });
 });
 
@@ -201,4 +228,50 @@ test('does not index unpublished, out-of-stock, or incomplete storefront product
   assert.equal(buildMarketplaceListingDocument(product, owner), null);
   assert.equal(buildMarketplaceListingDocument({ ...product, quantity: 2, isPublished: false }, owner), null);
   assert.equal(buildMarketplaceListingDocument({ ...product, quantity: 2 }, { ...owner, shopDescription: '' }), null);
+});
+
+test('discovery feed is deterministic and alternates shops before repeating one seller', () => {
+  const future = new Date(Date.now() + 60_000);
+  const listing = (owner, product, boosted = false) => ({
+    owner,
+    product,
+    productName: `Product ${product}`,
+    price: 1000,
+    smartCategory: { id: 'other', label: 'Other' },
+    activeBoosts: boosted
+      ? [{ platform: 'TALLYPADI_MARKETPLACE_BOOST', planId: '7_days', expiresAt: future }]
+      : [],
+    shop: { name: `Shop ${owner}` },
+    productCreatedAt: new Date(),
+  });
+  const listings = [
+    listing('shop-a', 'a1'),
+    listing('shop-a', 'a2'),
+    listing('shop-b', 'b1'),
+    listing('shop-c', 'c1', true),
+  ];
+
+  const first = diversifyDiscoveryListings(listings, 'visitor-one');
+  const second = diversifyDiscoveryListings(listings, 'visitor-one');
+
+  assert.deepEqual(first.map((product) => product.id), second.map((product) => product.id));
+  assert.equal(first[0].shop.id, 'shop-c');
+  assert.equal(new Set(first.slice(0, 3).map((product) => product.shop.id)).size, 3);
+});
+
+test('expired boosts lose sponsored priority when marketplace listings are serialized', () => {
+  const expired = new Date(Date.now() - 60_000);
+  const [product] = diversifyDiscoveryListings([{
+    owner: 'shop-a',
+    product: 'a1',
+    productName: 'Expired boost product',
+    price: 1000,
+    smartCategory: { id: 'other', label: 'Other' },
+    activeBoosts: [{ platform: 'TALLYPADI_MARKETPLACE_BOOST', planId: '7_days', expiresAt: expired }],
+    shop: { name: 'Shop A' },
+    productCreatedAt: new Date(),
+  }], 'visitor-one');
+
+  assert.equal(product.isBoosted, false);
+  assert.deepEqual(product.boosts, []);
 });

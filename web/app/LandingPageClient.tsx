@@ -5,7 +5,6 @@ import Image from "next/image";
 import Link from "next/link";
 import {
   ArrowRight,
-  BadgeCheck,
   Building2,
   Check,
   ChevronLeft,
@@ -22,6 +21,7 @@ import {
 } from "lucide-react";
 import MarketingFooter from "../components/MarketingFooter";
 import MarketingNavbar from "../components/MarketingNavbar";
+import MarketplaceImage from "../components/marketplace/MarketplaceImage";
 
 const DEFAULT_WHATSAPP_LINK = "https://wa.me/2349035664420?text=Hello%20Tallypadi";
 
@@ -61,6 +61,8 @@ type MarketplacePreviewProduct = {
   image?: string | null;
   isBoosted?: boolean;
   shop?: {
+    id?: string;
+    slug?: string;
     name?: string;
     currencyCode?: string;
   };
@@ -411,15 +413,13 @@ function MarketplaceShowcase() {
     const controller = new AbortController();
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://tallypadi.com/api";
 
-    fetch(`${apiUrl}/marketplace?limit=12&sort=recommended`, { signal: controller.signal })
+    const seed = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    fetch(`${apiUrl}/marketplace/discovery?limit=24&seed=${encodeURIComponent(seed)}`, { signal: controller.signal })
       .then((response) => (response.ok ? response.json() : null))
       .then((data) => {
         if (!Array.isArray(data?.products)) return;
         const incomingProducts = data.products as MarketplacePreviewProduct[];
-        const prioritized = [...incomingProducts]
-          .slice(0, 12)
-          .sort((a, b) => Number(Boolean(b?.isBoosted)) - Number(Boolean(a?.isBoosted)));
-        setProducts(prioritized);
+        setProducts(incomingProducts);
         setActivePage(0);
       })
       .catch(() => undefined);
@@ -441,7 +441,7 @@ function MarketplaceShowcase() {
 
     const timer = window.setInterval(() => {
       setActivePage((current) => (current + 1) % pageCount);
-    }, 7000);
+    }, 6000);
 
     return () => window.clearInterval(timer);
   }, [pageCount, rotationPaused]);
@@ -497,7 +497,12 @@ function MarketplaceShowcase() {
                 <Link key={product.id} href={`/marketplace/product/${product.id}`} className="group overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-lg">
                   <div className="relative aspect-square overflow-hidden bg-emerald-50 sm:aspect-[4/3]">
                     {product.image ? (
-                      <img src={product.image} alt={product.name} loading="lazy" className="h-full w-full object-cover transition duration-300 group-hover:scale-105" />
+                      <MarketplaceImage
+                        src={product.image}
+                        alt={product.name}
+                        sizes="(max-width: 640px) 50vw, 25vw"
+                        className="object-cover transition duration-300 group-hover:scale-105"
+                      />
                     ) : (
                       <div className="flex h-full items-center justify-center text-4xl font-black uppercase text-emerald-700">{product.name.slice(0, 1)}</div>
                     )}

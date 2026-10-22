@@ -1,3 +1,5 @@
+import marketplaceCategories from '../config/marketplaceCategories.json';
+
 export const DEFAULT_MARKETPLACE_LIMIT = 24;
 export const MAX_MARKETPLACE_LIMIT = 48;
 export const PUBLIC_MARKETPLACE_CACHE = 'public, max-age=60, s-maxage=180, stale-while-revalidate=300';
@@ -18,53 +20,12 @@ export type MarketplaceListQuery = {
   sort: MarketplaceSort;
 };
 
-export const MARKETPLACE_CATEGORY_GROUPS = [
-  {
-    id: 'phones-tablets',
-    label: 'Phones & Tablets',
-    terms: ['phone', 'iphone', 'android', 'samsung', 'tecno', 'infinix', 'redmi', 'tablet', 'ipad', 'charger', 'earbuds', 'power bank'],
-  },
-  {
-    id: 'electronics',
-    label: 'Electronics',
-    terms: ['laptop', 'computer', 'tv', 'television', 'speaker', 'camera', 'console', 'playstation', 'generator', 'fan', 'monitor'],
-  },
-  {
-    id: 'home-appliances',
-    label: 'Home & Appliances',
-    terms: ['chair', 'table', 'sofa', 'bed', 'mattress', 'fridge', 'freezer', 'cooker', 'blender', 'kettle', 'wardrobe', 'furniture'],
-  },
-  {
-    id: 'fashion',
-    label: 'Fashion',
-    terms: ['shoe', 'shirt', 'dress', 'bag', 'watch', 'jeans', 'wear', 'clothing', 'sneaker', 'fabric', 'lace', 'gown'],
-  },
-  {
-    id: 'beauty-care',
-    label: 'Beauty & Care',
-    terms: ['cream', 'lotion', 'perfume', 'makeup', 'wig', 'hair', 'skincare', 'soap', 'shampoo', 'cosmetic'],
-  },
-  {
-    id: 'food-farming',
-    label: 'Food & Farming',
-    terms: ['rice', 'beans', 'garri', 'yam', 'oil', 'flour', 'feed', 'fish', 'chicken', 'farm', 'tomato', 'pepper'],
-  },
-  {
-    id: 'tools-equipment',
-    label: 'Tools & Equipment',
-    terms: ['tool', 'machine', 'equipment', 'drill', 'spare', 'parts', 'engine', 'industrial', 'construction', 'pump'],
-  },
-  {
-    id: 'babies-kids',
-    label: 'Babies & Kids',
-    terms: ['baby', 'kids', 'toy', 'stroller', 'diaper', 'school bag', 'children', 'child'],
-  },
-  {
-    id: 'services',
-    label: 'Jobs & Services',
-    terms: ['service', 'repair', 'installation', 'training', 'design', 'consulting', 'cleaning', 'delivery', 'job', 'jobs', 'hiring', 'vacancy'],
-  },
-];
+export const MARKETPLACE_CATEGORY_GROUPS = marketplaceCategories;
+
+export const MARKETPLACE_CATEGORY_IDS = MARKETPLACE_CATEGORY_GROUPS.map((category) => category.id);
+
+export const isKnownMarketplaceCategoryId = (value: unknown) =>
+  MARKETPLACE_CATEGORY_IDS.includes(String(value || '').trim().toLowerCase());
 
 export const normalizeMarketplaceText = (value: unknown) =>
   String(value || '')
@@ -74,48 +35,36 @@ export const normalizeMarketplaceText = (value: unknown) =>
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
 
-export const slugifyMarketplaceValue = (value: unknown) =>
-  normalizeMarketplaceText(value).replace(/\s+/g, '-').slice(0, 60) || 'other';
+export const inferMarketplaceCategory = (category?: unknown, name?: unknown, description?: unknown) => {
+  const rawCategoryId = String(category || '').trim().toLowerCase();
+  const cleanCategory = normalizeMarketplaceText(category);
+  const exactGroup = MARKETPLACE_CATEGORY_GROUPS.find((candidate) =>
+    candidate.id === rawCategoryId || normalizeMarketplaceText(candidate.label) === cleanCategory
+  );
+  if (exactGroup) return { id: exactGroup.id, label: exactGroup.label };
 
-export const titleCaseMarketplaceValue = (value: unknown) =>
-  normalizeMarketplaceText(value)
-    .split(' ')
-    .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ');
-
-export const inferMarketplaceCategory = (category?: unknown, name?: unknown) => {
-  const text = normalizeMarketplaceText(`${category || ''} ${name || ''}`);
+  const text = normalizeMarketplaceText(`${category || ''} ${name || ''} ${description || ''}`);
   const group = MARKETPLACE_CATEGORY_GROUPS.find((candidate) =>
     candidate.terms.some((term) => text.includes(normalizeMarketplaceText(term)))
   );
 
   if (group) return { id: group.id, label: group.label };
 
-  const cleanCategory = normalizeMarketplaceText(category);
-  if (cleanCategory) {
-    return {
-      id: slugifyMarketplaceValue(cleanCategory),
-      label: titleCaseMarketplaceValue(cleanCategory),
-    };
-  }
-
   return { id: 'other', label: 'Other' };
 };
 
 export const normalizeMarketplaceCategoryFilter = (rawCategory: unknown) => {
+  const rawCategoryId = String(rawCategory || '').trim().toLowerCase();
   const normalized = normalizeMarketplaceText(rawCategory);
   if (!normalized || normalized === 'all') return null;
 
   const group = MARKETPLACE_CATEGORY_GROUPS.find((candidate) => {
-    return candidate.id === normalized || normalizeMarketplaceText(candidate.label) === normalized;
+    return candidate.id === rawCategoryId || normalizeMarketplaceText(candidate.label) === normalized;
   });
 
-  return {
-    id: group?.id || slugifyMarketplaceValue(normalized),
-    label: group?.label || titleCaseMarketplaceValue(normalized),
-    isKnownGroup: Boolean(group),
-  };
+  return group
+    ? { id: group.id, label: group.label, isKnownGroup: true }
+    : { id: 'other', label: 'Other', isKnownGroup: false };
 };
 
 export const parseMarketplaceListQuery = (raw: Record<string, unknown>): MarketplaceListQuery => {
@@ -178,7 +127,12 @@ export const buildMarketplaceListingFilter = (query: MarketplaceListQuery) => {
   if (query.cityKey) filter.cityKey = query.cityKey;
 
   const category = normalizeMarketplaceCategoryFilter(query.category);
-  if (category) filter['smartCategory.id'] = category.id;
+  if (category?.id === 'other') {
+    // Include legacy malformed categories until the background indexer rewrites them.
+    filter['smartCategory.id'] = { $nin: MARKETPLACE_CATEGORY_IDS };
+  } else if (category) {
+    filter['smartCategory.id'] = category.id;
+  }
 
   if (query.q) {
     filter.$text = { $search: query.q };

@@ -1,149 +1,35 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import Link from 'next/link';
 import { State } from 'country-state-city';
 import {
   ChevronDown,
-  BadgeCheck,
-  ExternalLink,
   Filter,
   Loader2,
   MapPin,
-  MessageCircle,
   Search,
   SlidersHorizontal,
-  Store,
-  TrendingUp,
   X,
 } from 'lucide-react';
+import MarketplaceCategoryGrid from '../../components/marketplace/MarketplaceCategoryGrid';
 import MarketplaceFooter from '../../components/marketplace/MarketplaceFooter';
 import MarketplaceHeader from '../../components/marketplace/MarketplaceHeader';
+import {
+  MarketplaceProductCard,
+  MarketplaceSponsoredProductCard,
+} from '../../components/marketplace/MarketplaceProductCards';
+import {
+  cleanMarketplaceCategories,
+  MARKETPLACE_CATEGORIES,
+  type SmartCategory,
+} from '../../lib/marketplaceCatalog';
+import type { MarketplaceLocation, MarketplaceProduct, MarketplaceResponse } from '../../lib/marketplaceTypes';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
-
-type SmartCategory = {
-  id: string;
-  label: string;
-  count?: number;
-};
-
-type MarketplaceLocation = {
-  state: string;
-  count: number;
-  cities: { city: string; count: number }[];
-};
-
-type MarketplaceProduct = {
-  id: string;
-  name: string;
-  price: number;
-  image?: string | null;
-  category?: string;
-  smartCategory: SmartCategory;
-  description?: string;
-  seo?: {
-    adDescription?: string;
-  };
-  inStock: boolean;
-  isBoosted: boolean;
-  shop: {
-    name: string;
-    slug?: string;
-    phone?: string;
-    currencyCode?: string;
-    location?: {
-      country?: string;
-      state?: string;
-      city?: string;
-      address?: string;
-    };
-    verification?: {
-      verified?: boolean;
-      label?: string | null;
-    };
-  };
-};
-
-type MarketplaceResponse = {
-  products: MarketplaceProduct[];
-  categories: SmartCategory[];
-  locations: MarketplaceLocation[];
-  pagination: {
-    page: number;
-    limit: number;
-    totalItems: number;
-    totalPages: number;
-    hasMore: boolean;
-  };
-};
-
-const FALLBACK_CATEGORIES: SmartCategory[] = [
-  { id: 'phones-tablets', label: 'Phones & Tablets' },
-  { id: 'electronics', label: 'Electronics' },
-  { id: 'home-appliances', label: 'Home & Appliances' },
-  { id: 'fashion', label: 'Fashion' },
-  { id: 'beauty-care', label: 'Beauty & Care' },
-  { id: 'food-farming', label: 'Food & Farming' },
-  { id: 'tools-equipment', label: 'Tools & Equipment' },
-  { id: 'babies-kids', label: 'Babies & Kids' },
-  { id: 'services', label: 'Jobs & Services' },
-];
-
-const CATEGORY_ICONS: Record<string, string> = {
-  'phones-tablets': '📱',
-  electronics: '💻',
-  'home-appliances': '🛋️',
-  fashion: '👗',
-  'beauty-care': '🧴',
-  'food-farming': '🌾',
-  'tools-equipment': '🛠️',
-  'babies-kids': '🧸',
-  services: '🧰',
-  other: '📦',
-};
-
-const formatMoney = (amount: number, currencyCode = 'NGN') => {
-  const localeMap: Record<string, string> = {
-    NGN: 'en-NG',
-    USD: 'en-US',
-    GBP: 'en-GB',
-    EUR: 'de-DE',
-    GHS: 'en-GH',
-    KES: 'en-KE',
-    ZAR: 'en-ZA',
-  };
-
-  return new Intl.NumberFormat(localeMap[currencyCode] || 'en-NG', {
-    style: 'currency',
-    currency: currencyCode,
-    maximumFractionDigits: 0,
-  }).format(amount || 0);
-};
-
-const titleCase = (value?: string) =>
-  String(value || '')
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(' ');
 
 const getStateLabel = (stateCode?: string, countryCode = 'NG') => {
   if (!stateCode) return '';
   return State.getStateByCodeAndCountry(stateCode, countryCode)?.name || stateCode;
-};
-
-const buildWhatsAppLink = (product: MarketplaceProduct) => {
-  const phone = String(product.shop.phone || '').replace(/[^\d]/g, '');
-  if (!phone) return null;
-
-  const shopUrl = product.shop.slug
-    ? `https://tallypadi.com/marketplace/product/${product.id}`
-    : 'https://tallypadi.com/marketplace';
-  const message = `Hello ${product.shop.name}, I saw ${product.name} on TallyPadi Marketplace. Is it available?\n\n${shopUrl}`;
-
-  return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
 };
 
 function FilterPanel({
@@ -262,157 +148,9 @@ function FilterPanel({
   );
 }
 
-function ProductCard({ product }: { product: MarketplaceProduct }) {
-  const productUrl = `/marketplace/product/${product.id}`;
-  const locationText = [product.shop.location?.city, getStateLabel(product.shop.location?.state, product.shop.location?.country || 'NG')]
-    .filter(Boolean)
-    .join(', ');
-  const whatsappLink = buildWhatsAppLink(product);
-  const previewDescription = product.description;
-
-  return (
-    <article
-      className={`group flex h-full flex-col overflow-hidden rounded-lg border bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg ${product.isBoosted ? 'border-amber-300 shadow-amber-100' : 'border-stone-200'
-        }`}
-    >
-      <Link href={productUrl} className="relative block aspect-square overflow-hidden bg-stone-100 sm:aspect-[4/3]">
-        {product.image ? (
-          <img
-            src={product.image}
-            alt={product.name}
-            loading="lazy"
-            className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center bg-emerald-50 text-5xl font-black uppercase text-emerald-700">
-            {product.name.slice(0, 1)}
-          </div>
-        )}
-        <div className="absolute left-2 top-2 flex flex-wrap gap-1.5 sm:left-3 sm:top-3 sm:gap-2">
-          {product.isBoosted && (
-            <span className="inline-flex items-center gap-1 rounded-md bg-amber-400 px-2 py-1 text-[11px] font-black text-stone-950 shadow">
-              <TrendingUp size={12} />
-              Boosted
-            </span>
-          )}
-          <span className="hidden rounded-md bg-white/90 px-2 py-1 text-[11px] font-black text-emerald-800 shadow sm:inline-flex">
-            {product.smartCategory.label}
-          </span>
-        </div>
-      </Link>
-
-      <div className="flex flex-1 flex-col p-3 sm:p-4">
-        <div className="mb-2 flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-base font-black text-emerald-700 sm:text-lg">
-              {formatMoney(product.price, product.shop.currencyCode)}
-            </p>
-            <Link href={productUrl} className="mt-1 block text-sm font-black leading-snug text-stone-950 line-clamp-2 hover:text-emerald-700">
-              {titleCase(product.name)}
-            </Link>
-          </div>
-        </div>
-
-        {previewDescription && (
-          <p className="mb-3 hidden text-xs leading-relaxed text-stone-500 line-clamp-2 sm:block">
-            {previewDescription}
-          </p>
-        )}
-
-        <div className="mt-auto space-y-2 border-t border-stone-100 pt-2.5 sm:space-y-3 sm:pt-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-1 text-sm font-bold text-stone-800">
-              <Store size={14} className="shrink-0 text-emerald-700" />
-              <span className="truncate">{product.shop.name}</span>
-              {product.shop.verification?.verified && (
-                <span title={product.shop.verification.label || 'Verified'} className="inline-flex shrink-0 text-blue-500">
-                  <BadgeCheck size={16} fill="currentColor" stroke="white" />
-                </span>
-              )}
-            </div>
-            {locationText && (
-              <div className="mt-1 hidden items-center gap-1.5 text-xs font-semibold text-stone-500 sm:flex">
-                <MapPin size={13} className="text-amber-600" />
-                <span className="truncate">{locationText}</span>
-              </div>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <Link
-              href={productUrl}
-              className="hidden items-center justify-center gap-1.5 rounded-lg border border-stone-200 px-3 py-2 text-xs font-black text-stone-700 transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-800 sm:inline-flex"
-            >
-              Details
-              <ExternalLink size={13} />
-            </Link>
-            {whatsappLink ? (
-              <a
-                href={whatsappLink}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-black text-white transition hover:bg-emerald-700"
-              >
-                <MessageCircle size={13} />
-                Chat
-              </a>
-            ) : (
-              <Link
-                href={productUrl}
-                className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-black text-white transition hover:bg-emerald-700"
-              >
-                <MessageCircle size={13} />
-                Ask
-              </Link>
-            )}
-          </div>
-        </div>
-      </div>
-    </article>
-  );
-}
-
-function SponsoredProductCard({ product }: { product: MarketplaceProduct }) {
-  const productUrl = `/marketplace/product/${product.id}`;
-
-  return (
-    <Link
-      href={productUrl}
-      className="group grid min-w-[260px] grid-cols-[88px_1fr] overflow-hidden rounded-lg border border-amber-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-amber-300 hover:shadow-md sm:min-w-0"
-    >
-      <div className="aspect-square overflow-hidden bg-emerald-50">
-        {product.image ? (
-          <img
-            src={product.image}
-            alt={product.name}
-            loading="lazy"
-            className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center text-3xl font-black uppercase text-emerald-700">
-            {product.name.slice(0, 1)}
-          </div>
-        )}
-      </div>
-      <div className="min-w-0 p-3">
-        <span className="inline-flex rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wide text-amber-900">
-          Sponsored
-        </span>
-        <h3 className="mt-1.5 line-clamp-1 text-sm font-black text-stone-950 group-hover:text-emerald-700">
-          {titleCase(product.name)}
-        </h3>
-        <p className="mt-1 text-sm font-black text-emerald-700">
-          {formatMoney(product.price, product.shop.currencyCode)}
-        </p>
-        <p className="mt-1 truncate text-xs font-semibold text-stone-500">{product.shop.name}</p>
-      </div>
-    </Link>
-  );
-}
-
 export default function MarketplaceClient() {
   const [products, setProducts] = useState<MarketplaceProduct[]>([]);
-  const [categories, setCategories] = useState<SmartCategory[]>(FALLBACK_CATEGORIES);
+  const [categories, setCategories] = useState<SmartCategory[]>(MARKETPLACE_CATEGORIES);
   const [locations, setLocations] = useState<MarketplaceLocation[]>([]);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -427,6 +165,7 @@ export default function MarketplaceClient() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const pageRef = useRef(1);
+  const discoverySeedRef = useRef('');
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(search), 450);
@@ -441,8 +180,16 @@ export default function MarketplaceClient() {
     () => products.filter((product) => product.isBoosted).slice(0, 4),
     [products]
   );
+  const sponsoredProductIds = useMemo(
+    () => new Set(sponsoredProducts.map((product) => product.id)),
+    [sponsoredProducts]
+  );
+  const regularProducts = useMemo(
+    () => products.filter((product) => !sponsoredProductIds.has(product.id)),
+    [products, sponsoredProductIds]
+  );
 
-  const displayCategories = categories.length > 0 ? categories : FALLBACK_CATEGORIES;
+  const displayCategories = categories.length > 0 ? categories : MARKETPLACE_CATEGORIES;
   const activeCategoryLabel = displayCategories.find((category) => category.id === selectedCategory)?.label;
   const activeLocationLabel = selectedCity
     ? selectedCity
@@ -468,7 +215,16 @@ export default function MarketplaceClient() {
       if (selectedState) params.set('state', selectedState);
       if (selectedCity) params.set('city', selectedCity);
 
-      const response = await fetch(`${API_URL}/marketplace?${params.toString()}`);
+      let endpoint = `${API_URL}/marketplace`;
+      if (sort === 'recommended') {
+        if (!discoverySeedRef.current) {
+          discoverySeedRef.current = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+        }
+        params.set('seed', discoverySeedRef.current);
+        endpoint = `${API_URL}/marketplace/discovery`;
+      }
+
+      const response = await fetch(`${endpoint}?${params.toString()}`);
 
       if (!response.ok) {
         throw new Error('Marketplace could not load right now.');
@@ -476,7 +232,7 @@ export default function MarketplaceClient() {
 
       const data = (await response.json()) as MarketplaceResponse;
       setProducts((current) => (reset ? data.products : [...current, ...data.products]));
-      setCategories(data.categories.length ? data.categories : FALLBACK_CATEGORIES);
+      setCategories(cleanMarketplaceCategories(data.categories || []));
       setLocations(data.locations || []);
       setHasMore(Boolean(data.pagination?.hasMore));
     } catch {
@@ -488,15 +244,12 @@ export default function MarketplaceClient() {
   }, [debouncedSearch, selectedCategory, selectedCity, selectedState, sort]);
 
   useEffect(() => {
-    pageRef.current = 1;
-    fetchListings(1, true);
+    const timer = window.setTimeout(() => {
+      pageRef.current = 1;
+      fetchListings(1, true);
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [fetchListings]);
-
-  useEffect(() => {
-    if (selectedCity && !selectedStateCities.some((entry) => entry.city === selectedCity)) {
-      setSelectedCity('');
-    }
-  }, [selectedCity, selectedStateCities]);
 
   const clearFilters = () => {
     setSearch('');
@@ -537,7 +290,7 @@ export default function MarketplaceClient() {
               <span className="hidden sm:inline">Shop products from trusted local businesses.</span>
             </h1>
             <p className="mt-3 hidden max-w-2xl text-sm font-medium leading-6 text-emerald-50 sm:block sm:text-base">
-              Find products near you and chat directly with verified independent sellers.
+              Find products near you and chat directly with independent sellers.
             </p>
 
             <form
@@ -594,6 +347,7 @@ export default function MarketplaceClient() {
               <button
                 type="button"
                 onClick={() => setFiltersOpen(true)}
+                aria-label="Open marketplace filters"
                 className="inline-flex h-11 w-11 items-center justify-center rounded-lg bg-amber-400 text-stone-950 transition hover:bg-amber-300 sm:h-12 sm:w-auto sm:gap-2 sm:px-4 lg:hidden"
               >
                 <Filter size={16} />
@@ -631,28 +385,11 @@ export default function MarketplaceClient() {
         </aside>
 
         <section className="min-w-0">
-          <section className="mb-4 rounded-lg border border-stone-200 bg-white p-4 shadow-sm lg:hidden">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-black text-stone-950">Browse categories</h2>
-              {selectedCategory && (
-                <button type="button" onClick={() => setSelectedCategory('')} className="text-xs font-black text-emerald-700">Clear</button>
-              )}
-            </div>
-            <div className="grid grid-cols-4 gap-x-2 gap-y-5">
-              <button type="button" onClick={() => setSelectedCategory('')} className="flex min-w-0 flex-col items-center gap-2 text-center">
-                <span className={`flex h-14 w-14 items-center justify-center rounded-xl text-2xl ${!selectedCategory ? 'bg-emerald-600 text-white ring-2 ring-emerald-200' : 'bg-stone-100'}`}>🛍️</span>
-                <span className="text-[11px] font-bold leading-4 text-stone-700">All products</span>
-              </button>
-              {displayCategories.map((item) => (
-                <button key={`mobile-${item.id}`} type="button" onClick={() => setSelectedCategory(item.id)} className="flex min-w-0 flex-col items-center gap-2 text-center">
-                  <span className={`flex h-14 w-14 items-center justify-center rounded-xl text-2xl ${selectedCategory === item.id ? 'bg-emerald-600 ring-2 ring-emerald-200' : 'bg-slate-100'}`}>
-                    {CATEGORY_ICONS[item.id] || '📦'}
-                  </span>
-                  <span className="line-clamp-2 text-[11px] font-bold leading-4 text-stone-700">{item.label}</span>
-                </button>
-              ))}
-            </div>
-          </section>
+          <MarketplaceCategoryGrid
+            categories={displayCategories}
+            selectedCategory={selectedCategory}
+            onCategoryChange={setSelectedCategory}
+          />
 
           {!loading && sponsoredProducts.length > 0 && (
             <section aria-labelledby="sponsored-products" className="mb-4 rounded-lg bg-amber-50 p-3 sm:p-4">
@@ -664,7 +401,7 @@ export default function MarketplaceClient() {
               </div>
               <div className="flex gap-3 overflow-x-auto pb-1 sm:grid sm:grid-cols-2 sm:overflow-visible xl:grid-cols-4">
                 {sponsoredProducts.map((product) => (
-                  <SponsoredProductCard key={`sponsored-${product.id}`} product={product} />
+                  <MarketplaceSponsoredProductCard key={`sponsored-${product.id}`} product={product} />
                 ))}
               </div>
             </section>
@@ -728,11 +465,13 @@ export default function MarketplaceClient() {
             </div>
           ) : products.length > 0 ? (
             <>
-              <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 xl:grid-cols-4">
-                {products.map((product) => (
-                  <ProductCard key={product.id} product={product} />
-                ))}
-              </div>
+              {regularProducts.length > 0 && (
+                <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 xl:grid-cols-4">
+                  {regularProducts.map((product) => (
+                    <MarketplaceProductCard key={product.id} product={product} />
+                  ))}
+                </div>
+              )}
 
               <div ref={loadMoreRef} className="h-12">
                 {loadingMore && (

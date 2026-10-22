@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { Types } from 'mongoose';
 import {
+  getMarketplaceDiscoveryFromReadModel,
   getMarketplaceListingsFromReadModel,
   getMarketplaceProductFromReadModel,
 } from '../services/marketplaceIndex.service';
@@ -20,6 +21,16 @@ export const getMarketplaceListings = async (req: Request, res: Response): Promi
     return res.json(payload);
   } catch (error) {
     console.error('Marketplace listings error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const getMarketplaceDiscovery = async (req: Request, res: Response): Promise<any> => {
+  try {
+    res.set('Cache-Control', PUBLIC_MARKETPLACE_CACHE);
+    return res.json(await getMarketplaceDiscoveryFromReadModel(req.query as Record<string, unknown>));
+  } catch (error) {
+    console.error('Marketplace discovery error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 };

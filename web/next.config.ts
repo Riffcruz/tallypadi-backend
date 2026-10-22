@@ -19,6 +19,9 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       { protocol: "https", hostname: "images.unsplash.com" },
       { protocol: "https", hostname: "static.dw.com" },
+      { protocol: "https", hostname: "tallypadi.com" },
+      { protocol: "https", hostname: "**.tallypadi.com" },
+      { protocol: "https", hostname: "**.r2.dev" },
     ],
   },
 };

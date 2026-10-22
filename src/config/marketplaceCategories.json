@@ -1,0 +1,56 @@
+[
+  {
+    "id": "phones-tablets",
+    "label": "Phones & Tablets",
+    "icon": "📱",
+    "terms": ["phone", "iphone", "android", "samsung", "tecno", "infinix", "redmi", "tablet", "ipad", "charger", "earbuds", "power bank"]
+  },
+  {
+    "id": "electronics",
+    "label": "Electronics",
+    "icon": "💻",
+    "terms": ["laptop", "computer", "tv", "television", "speaker", "camera", "console", "playstation", "generator", "fan", "monitor", "inverter", "solar", "battery", "voltage"]
+  },
+  {
+    "id": "home-appliances",
+    "label": "Home & Appliances",
+    "icon": "🛋️",
+    "terms": ["chair", "table", "sofa", "bed", "mattress", "fridge", "freezer", "cooker", "blender", "kettle", "wardrobe", "furniture", "appliance"]
+  },
+  {
+    "id": "fashion",
+    "label": "Fashion",
+    "icon": "👗",
+    "terms": ["shoe", "shirt", "dress", "bag", "watch", "jeans", "wear", "clothing", "sneaker", "fabric", "lace", "gown"]
+  },
+  {
+    "id": "beauty-care",
+    "label": "Beauty & Care",
+    "icon": "🧴",
+    "terms": ["cream", "lotion", "perfume", "makeup", "wig", "hair", "skincare", "soap", "shampoo", "cosmetic"]
+  },
+  {
+    "id": "food-farming",
+    "label": "Food & Farming",
+    "icon": "🌾",
+    "terms": ["food", "rice", "beans", "garri", "yam", "oil", "flour", "feed", "fish", "chicken", "farm", "tomato", "pepper"]
+  },
+  {
+    "id": "tools-equipment",
+    "label": "Tools & Equipment",
+    "icon": "🛠️",
+    "terms": ["tool", "machine", "equipment", "drill", "spare", "parts", "engine", "industrial", "construction", "pump"]
+  },
+  {
+    "id": "babies-kids",
+    "label": "Babies & Kids",
+    "icon": "🧸",
+    "terms": ["baby", "kids", "toy", "stroller", "diaper", "school bag", "children", "child"]
+  },
+  {
+    "id": "services",
+    "label": "Jobs & Services",
+    "icon": "🧰",
+    "terms": ["service", "repair", "installation", "training", "design", "consulting", "cleaning", "delivery", "job", "jobs", "hiring", "vacancy"]
+  }
+]

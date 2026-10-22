@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import { Types } from 'mongoose';
 import { Inventory } from '../models/inventory.model';
 import { MarketplaceListing } from '../models/marketplaceListing.model';
@@ -15,6 +16,8 @@ import {
   buildMarketplaceProductCacheKey,
   getMarketplaceSortOptions,
   inferMarketplaceCategory,
+  isKnownMarketplaceCategoryId,
+  MAX_MARKETPLACE_LIMIT,
   MARKETPLACE_CATEGORY_GROUPS,
   normalizeMarketplaceText,
   parseMarketplaceListQuery,
@@ -30,6 +33,7 @@ import {
 const MARKETPLACE_CACHE_TTL_SECONDS = 180;
 const MARKETPLACE_STALE_TTL_SECONDS = 300;
 const FACET_CACHE_KEY = 'marketplace:v2:facets';
+const DISCOVERY_MAX_LISTINGS = 2000;
 
 const OWNER_SELECT = [
   'businessName',
@@ -144,7 +148,7 @@ export const buildMarketplaceListingDocument = (
   const activeBoosts = activeBoostsForProduct(product, now);
   const primaryBoost = activeBoosts[0];
   const seo = getMarketplaceProductSeo(product, owner, primaryBoost);
-  const smartCategory = inferMarketplaceCategory(product.category, product.name);
+  const smartCategory = inferMarketplaceCategory(product.category, product.name, product.description);
   const location = owner.settings?.location || {};
   const category = String(product.category || smartCategory.label || '').trim();
   const searchKeywords = normalizeKeywords([
@@ -230,37 +234,87 @@ export const buildMarketplaceListingDocument = (
   };
 };
 
-const serializeListing = (listing: any) => ({
-  id: String(listing.product),
-  name: listing.productName,
-  price: listing.price || 0,
-  image: listing.image,
-  category: listing.category || listing.smartCategory?.label,
-  smartCategory: listing.smartCategory || { id: 'other', label: 'Other' },
-  description: listing.description || '',
-  colors: listing.colors || [],
-  sizes: listing.sizes || [],
-  inStock: listing.inStock !== false,
-  isBoosted: Number(listing.boostScore || 0) > 0,
-  updatedAt: listing.productUpdatedAt || listing.indexedAt,
-  boosts: (listing.activeBoosts || []).map((boost: any) => ({
-    platform: boost.platform,
-    planId: boost.planId,
-    expiresAt: boost.expiresAt,
-  })),
-  seo: listing.seo || {},
-  createdAt: listing.productCreatedAt,
-  shop: {
-    id: String(listing.owner),
-    name: listing.shop?.name || 'TallyPadi Shop',
-    slug: listing.shop?.slug || '',
-    phone: listing.shop?.phone || '',
-    themeColor: listing.shop?.themeColor || '#10b981',
-    currencyCode: listing.shop?.currencyCode || 'NGN',
-    location: listing.shop?.location || { country: 'NG', state: '', city: '', address: '' },
-    verification: listing.shop?.verification || {},
-  },
-});
+const serializeListing = (listing: any) => {
+  const now = Date.now();
+  const activeBoosts = (listing.activeBoosts || [])
+    .filter((boost: any) => new Date(boost.expiresAt).getTime() > now)
+    .map((boost: any) => ({
+      platform: boost.platform,
+      planId: boost.planId,
+      expiresAt: boost.expiresAt,
+    }));
+
+  return {
+    id: String(listing.product),
+    name: listing.productName,
+    price: listing.price || 0,
+    image: listing.image,
+    category: listing.category || listing.smartCategory?.label,
+    smartCategory: isKnownMarketplaceCategoryId(listing.smartCategory?.id)
+      ? listing.smartCategory
+      : { id: 'other', label: 'Other' },
+    description: listing.description || '',
+    colors: listing.colors || [],
+    sizes: listing.sizes || [],
+    inStock: listing.inStock !== false,
+    isBoosted: activeBoosts.length > 0,
+    updatedAt: listing.productUpdatedAt || listing.indexedAt,
+    boosts: activeBoosts,
+    seo: listing.seo || {},
+    createdAt: listing.productCreatedAt,
+    shop: {
+      id: String(listing.owner),
+      name: listing.shop?.name || 'TallyPadi Shop',
+      slug: listing.shop?.slug || '',
+      phone: listing.shop?.phone || '',
+      themeColor: listing.shop?.themeColor || '#10b981',
+      currencyCode: listing.shop?.currencyCode || 'NGN',
+      location: listing.shop?.location || { country: 'NG', state: '', city: '', address: '' },
+      verification: listing.shop?.verification || {},
+    },
+  };
+};
+
+const sanitizeDiscoverySeed = (value: unknown) => {
+  const seed = String(value || '').trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 48);
+  return seed || new Date().toISOString().slice(0, 10);
+};
+
+const discoveryHash = (seed: string, ownerId: string) =>
+  createHash('sha256').update(`${seed}:${ownerId}`).digest('hex');
+
+export const diversifyDiscoveryListings = (listings: any[], seed: string) => {
+  const shops = new Map<string, ReturnType<typeof serializeListing>[]>();
+  listings.map(serializeListing).forEach((product) => {
+    const ownerId = product.shop.id;
+    const queue = shops.get(ownerId) || [];
+    queue.push(product);
+    shops.set(ownerId, queue);
+  });
+
+  const queues = Array.from(shops.entries())
+    .map(([ownerId, products]) => ({
+      ownerId,
+      products: [
+        ...products.filter((product) => product.isBoosted),
+        ...products.filter((product) => !product.isBoosted),
+      ],
+      hasBoosted: products.some((product) => product.isBoosted),
+    }))
+    .sort((a, b) => {
+      const boostDifference = Number(b.hasBoosted) - Number(a.hasBoosted);
+      return boostDifference || discoveryHash(seed, a.ownerId).localeCompare(discoveryHash(seed, b.ownerId));
+    });
+
+  const diversified: ReturnType<typeof serializeListing>[] = [];
+  while (queues.some((queue) => queue.products.length > 0)) {
+    queues.forEach((queue) => {
+      const product = queue.products.shift();
+      if (product) diversified.push(product);
+    });
+  }
+  return diversified;
+};
 
 const estimateTotalItems = (
   facets: MarketplaceFacetSnapshot,
@@ -303,9 +357,11 @@ export const refreshMarketplaceFacets = async (): Promise<MarketplaceFacetSnapsh
 
   const categoryMap = new Map<string, { id: string; label: string; count: number }>();
   MARKETPLACE_CATEGORY_GROUPS.forEach(({ id, label }) => categoryMap.set(id, { id, label, count: 0 }));
+  categoryMap.set('other', { id: 'other', label: 'Other', count: 0 });
   categoryRows.forEach((row) => {
-    const id = row._id?.id || 'other';
-    const existing = categoryMap.get(id) || { id, label: row._id?.label || 'Other', count: 0 };
+    const rawId = row._id?.id || 'other';
+    const id = isKnownMarketplaceCategoryId(rawId) ? rawId : 'other';
+    const existing = categoryMap.get(id) || { id: 'other', label: 'Other', count: 0 };
     existing.count += row.count;
     categoryMap.set(id, existing);
   });
@@ -475,6 +531,64 @@ export const getMarketplaceListingsFromReadModel = async (rawQuery: Record<strin
   });
 
   return result.value;
+};
+
+export const getMarketplaceDiscoveryFromReadModel = async (rawQuery: Record<string, unknown>) => {
+  const query = parseMarketplaceListQuery({ ...rawQuery, sort: 'recommended' });
+  const seed = sanitizeDiscoverySeed(rawQuery.seed);
+  const version = await getMarketplaceCacheVersion();
+  const candidateKeyQuery = {
+    ...query,
+    page: 1,
+    limit: MAX_MARKETPLACE_LIMIT,
+    skip: 0,
+  };
+  const candidateCacheKey = `${buildMarketplaceListCacheKey(candidateKeyQuery, version)}:discovery-candidates`;
+
+  // The database candidate set is shared across visitors. Only the inexpensive
+  // seller round-robin order varies by seed, avoiding one large query/cache per visitor.
+  const candidates = await withJsonCache({
+    key: candidateCacheKey,
+    ttlSeconds: MARKETPLACE_CACHE_TTL_SECONDS,
+    staleSeconds: MARKETPLACE_STALE_TTL_SECONDS,
+    loader: async () => {
+      const [facets, listings] = await Promise.all([
+        getMarketplaceFacetsSnapshot(),
+        MarketplaceListing.find(buildMarketplaceListingFilter(query))
+          .sort(getMarketplaceSortOptions('recommended') as any)
+          .limit(DISCOVERY_MAX_LISTINGS)
+          .lean(),
+      ]);
+      return { facets, listings };
+    },
+  });
+
+  const { facets, listings } = candidates.value;
+  const diversified = diversifyDiscoveryListings(listings, seed);
+  const pageProducts = diversified.slice(query.skip, query.skip + query.limit);
+  const hasMore = query.skip + query.limit < diversified.length;
+  const totalItems = estimateTotalItems(facets, query, pageProducts.length, hasMore);
+
+  return {
+    products: pageProducts,
+    categories: facets.categories,
+    locations: facets.locations,
+    pagination: {
+      page: query.page,
+      limit: query.limit,
+      totalItems,
+      totalPages: Math.ceil(Math.min(totalItems, diversified.length) / query.limit),
+      hasMore,
+    },
+    appliedFilters: {
+      q: query.q,
+      category: query.category,
+      state: query.state,
+      city: query.city,
+      sort: 'recommended',
+    },
+    rotationSeed: seed,
+  };
 };
 
 export const getMarketplaceProductFromReadModel = async (productId: string) => {

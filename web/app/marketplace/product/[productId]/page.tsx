@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { ArrowLeft, BadgeCheck, ExternalLink, MapPin, MessageCircle, TrendingUp } from 'lucide-react';
 import MarketplaceFooter from '../../../../components/marketplace/MarketplaceFooter';
 import MarketplaceHeader from '../../../../components/marketplace/MarketplaceHeader';
+import MarketplaceImage from '../../../../components/marketplace/MarketplaceImage';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tallypadi.com/api';
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://tallypadi.com';
@@ -206,9 +207,15 @@ export default async function MarketplaceProductPage({ params }: Props) {
 
         <div className="mt-5 grid gap-6 lg:grid-cols-[1fr_380px]">
         <div className="overflow-hidden rounded-lg border border-stone-200 bg-white shadow-sm">
-          <div className="aspect-[4/3] bg-emerald-50">
+          <div className="relative aspect-[4/3] bg-emerald-50">
             {product.image ? (
-              <img src={product.image} alt={product.name} className="h-full w-full object-cover" />
+              <MarketplaceImage
+                src={product.image}
+                alt={product.name}
+                sizes="(max-width: 1024px) 100vw, 70vw"
+                className="object-cover"
+                priority
+              />
             ) : (
               <div className="flex h-full w-full items-center justify-center text-7xl font-black uppercase text-emerald-700">
                 {product.name.slice(0, 1)}
@@ -344,7 +351,14 @@ export default async function MarketplaceProductPage({ params }: Props) {
             {similarProducts.map((item) => (
               <Link key={item.id} href={`/marketplace/product/${item.id}`} className="group overflow-hidden rounded-lg border border-stone-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg">
                 <div className="relative aspect-square overflow-hidden bg-emerald-50 sm:aspect-[4/3]">
-                  {item.image ? <img src={item.image} alt={item.name} loading="lazy" className="h-full w-full object-cover transition duration-300 group-hover:scale-105" /> : <div className="flex h-full items-center justify-center text-4xl font-black uppercase text-emerald-700">{item.name.slice(0, 1)}</div>}
+                  {item.image ? (
+                    <MarketplaceImage
+                      src={item.image}
+                      alt={item.name}
+                      sizes="(max-width: 640px) 50vw, 25vw"
+                      className="object-cover transition duration-300 group-hover:scale-105"
+                    />
+                  ) : <div className="flex h-full items-center justify-center text-4xl font-black uppercase text-emerald-700">{item.name.slice(0, 1)}</div>}
                   {item.isBoosted && <span className="absolute left-2 top-2 rounded bg-amber-300 px-2 py-1 text-[10px] font-black uppercase text-stone-950">Sponsored</span>}
                 </div>
                 <div className="p-3 sm:p-4">
