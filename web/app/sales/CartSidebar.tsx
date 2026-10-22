@@ -578,7 +578,7 @@ export default function CartSidebar({
   const prefix = currencyPrefix(user?.currencyCode);
 
   return (
-    <aside className="relative flex w-full min-w-0 flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl shadow-slate-900/5 xl:h-[calc(100dvh-2rem)]">
+    <aside className="relative flex w-full min-w-0 flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl shadow-slate-900/5">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-emerald-500/10 to-transparent" />
 
       {/* Header */}
@@ -625,7 +625,7 @@ export default function CartSidebar({
       />
 
       {/* Cart Items List */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-thin scrollbar-thumb-slate-200">
+      <div className="space-y-3 p-4">
         {cart.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center p-8 opacity-70">
             <div className="w-20 h-20 bg-slate-50 rounded-3xl border border-slate-200 flex items-center justify-center mb-4">
