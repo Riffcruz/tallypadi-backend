@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
 import Sidebar from '../../components/Sidebar';
@@ -272,7 +272,7 @@ export default function InventoryPage() {
     );
   }, [inventory]);
 
-  const handleScan = (rawCode: string) => {
+  const handleScan = useCallback((rawCode: string) => {
     const code = rawCode.trim();
     if (!code) return;
     const now = Date.now();
@@ -308,43 +308,54 @@ export default function InventoryPage() {
       setScanNotice({ type: 'new', code });
       setAddOpen(true);
     }
-  };
+  }, [addOpen, editOpen, editingId, hasFeatureAccess, inventory, scannerTarget]);
 
   useEffect(() => {
     // USB/Bluetooth Scanner Hardware Detection
     let buffer = '';
-    let lastKeyTime = Date.now();
+    let lastKeyTime = 0;
+    let scanStartedAt = 0;
 
     const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+
         // Ignore if user is manually typing in an input field and it's not a rapid scan
         const target = e.target as HTMLElement;
         const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA';
 
         const currentTime = Date.now();
-        // Hardware scanners simulate keystrokes extremely fast (< 50ms)
-        if (currentTime - lastKeyTime > 50) {
+        // Hardware scanners simulate keystrokes rapidly. Reset a stale/manual sequence.
+        if (!lastKeyTime || currentTime - lastKeyTime > 80) {
             buffer = '';
+            scanStartedAt = currentTime;
         }
-        lastKeyTime = currentTime;
 
         if (e.key === 'Enter') {
-            if (buffer.length > 2) {
+            const averageKeyInterval = buffer.length > 1
+              ? (currentTime - scanStartedAt) / (buffer.length - 1)
+              : Number.POSITIVE_INFINITY;
+            const looksLikeHardwareScan = buffer.length >= 4 && averageKeyInterval <= 80;
+
+            if (looksLikeHardwareScan) {
                 // If we detected a fast string ending in Enter, it's a scan
                 e.preventDefault();
                 handleScan(buffer);
-                buffer = '';
                 
                 // If it originated in an input, blur it so they don't accidentally type normally over it
                 if (isInput) target.blur();
             }
+            buffer = '';
+            lastKeyTime = 0;
+            scanStartedAt = 0;
         } else if (e.key.length === 1) {
             buffer += e.key;
+            lastKeyTime = currentTime;
         }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [addOpen, editOpen]); // Rebind when modal states change so handleScan routes correctly
+  }, [handleScan]);
 
   const showLockedModal = () => {
     const isTrial = user?.subscriptionStatus === 'trial';

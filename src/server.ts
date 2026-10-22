@@ -73,6 +73,7 @@ import { getDashboardData } from './controllers/dashboard.controller';
 import {
   getInventory,
   getInventoryItem,
+  getInventoryItemByBarcode,
   addInventoryItem,
   updateInventoryItem,
   getCategories,
@@ -478,6 +479,7 @@ app.get('/api/dashboard', authRequired, getDashboardData);
 // --- INVENTORY ---
 app.get('/api/inventory', authRequired, getInventory);
 app.get('/api/inventory/categories', authRequired, getCategories);
+app.get('/api/inventory/lookup/barcode', authRequired, getInventoryItemByBarcode);
 app.get('/api/inventory/:id', authRequired, getInventoryItem);
 app.post('/api/inventory', authRequired, requireStaffPermission('canManageInventory'), addInventoryItem);
 app.post('/api/inventory/bulk-parse', authRequired, requireStaffPermission('canManageInventory'), bulkParseInventory);

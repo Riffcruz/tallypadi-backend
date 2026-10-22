@@ -33,6 +33,10 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
         Html5QrcodeSupportedFormats.EAN_8,
         Html5QrcodeSupportedFormats.CODE_128,
         Html5QrcodeSupportedFormats.CODE_39,
+        Html5QrcodeSupportedFormats.CODE_93,
+        Html5QrcodeSupportedFormats.ITF,
+        Html5QrcodeSupportedFormats.CODABAR,
+        Html5QrcodeSupportedFormats.QR_CODE,
       ];
 
       const html5QrCode = new Html5Qrcode(elementId, { verbose: false, formatsToSupport });

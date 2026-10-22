@@ -93,6 +93,7 @@ export interface IInventoryItem extends Document {
 
 inventorySchema.index({ user: 1, name: 1, isDeleted: 1 }, { unique: true });
 inventorySchema.index({ user: 1, sku: 1 }, { sparse: true }); // Fast SKU lookups
+inventorySchema.index({ user: 1, barcode: 1 }, { sparse: true }); // Fast POS barcode lookups
 inventorySchema.index({ user: 1, isPublished: 1, quantity: 1, createdAt: -1 });
 inventorySchema.index({ isPublished: 1, quantity: 1, category: 1, createdAt: -1 });
 inventorySchema.index({ 'boosts.expiresAt': 1 });

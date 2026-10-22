@@ -314,6 +314,46 @@ export const getInventoryItem = async (req: Request, res: Response) => {
   }
 };
 
+// GET one inventory item by an exact barcode (fast POS/scanner lookup)
+export const getInventoryItemByBarcode = async (req: Request, res: Response) => {
+  try {
+    const user = await getAuthUser(req);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+
+    const code = sanitizeString(req.query.code);
+    if (!code || code.length > 128) return res.status(400).json({ error: 'A valid barcode is required' });
+
+    const ownerId = getInventoryOwnerId(user);
+    let item = await Inventory.findOne({ user: ownerId, barcode: code }).lean();
+
+    // Preserve compatibility with older records that used different letter casing.
+    if (!item) {
+      const escapedCode = code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      item = await Inventory.findOne({
+        user: ownerId,
+        barcode: { $regex: `^${escapedCode}$`, $options: 'i' },
+      }).lean();
+    }
+
+    if (!item) return res.status(404).json({ error: 'No product found for this barcode' });
+
+    return res.json({
+      id: item._id,
+      name: item.name,
+      sku: item.sku || null,
+      stock: item.quantity,
+      quantity: item.quantity,
+      price: item.lastUnitPrice || 0,
+      lastUnitPrice: item.lastUnitPrice || 0,
+      costPrice: item.costPrice || 0,
+      barcode: item.barcode || null,
+    });
+  } catch (error) {
+    console.error('Barcode Lookup Error:', error);
+    return res.status(500).json({ error: 'Server Error' });
+  }
+};
+
 
 // ADD a new inventory item
 export const addInventoryItem = async (req: Request, res: Response) => {

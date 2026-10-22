@@ -47,6 +47,18 @@ interface RawInventoryItem {
   sku?: string | null;
 }
 
+const barcodeKey = (value?: string | null) => String(value || '').trim().toLowerCase();
+
+const toInventoryItem = (item: RawInventoryItem): InventoryItem => ({
+  id: String(item._id || item.id || ''),
+  name: String(item.name || ''),
+  stock: Number(item.quantity ?? item.stock ?? 0),
+  price: Number(item.lastUnitPrice ?? item.price ?? 0),
+  costPrice: Number(item.costPrice ?? 0),
+  barcode: item.barcode,
+  sku: item.sku || null,
+});
+
 export default function ProductGrid({ user, onAddToCart, currencyCode, cart }: ProductGridProps) {
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -55,8 +67,12 @@ export default function ProductGrid({ user, onAddToCart, currencyCode, cart }: P
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [showScanner, setShowScanner] = useState(false);
+  const [resolvingScan, setResolvingScan] = useState(false);
+  const [scanNotice, setScanNotice] = useState<string | null>(null);
   const [queuedQuantities, setQueuedQuantities] = useState<Record<string, number>>({});
   const observerTarget = React.useRef<HTMLDivElement>(null);
+  const scanInFlightRef = React.useRef(false);
+  const lastScanRef = React.useRef<{ code: string; at: number }>({ code: '', at: 0 });
   const userId = String(user?.id || user?._id || '');
 
   const availableInventory = useMemo(() => inventory.map((item) => ({
@@ -89,15 +105,7 @@ export default function ProductGrid({ user, onAddToCart, currencyCode, cart }: P
       const rawData: RawInventoryItem[] = res.data?.data ? res.data.data : (Array.isArray(res.data) ? res.data : []);
       const paginationInfo = res.data?.pagination || { hasMore: false };
 
-      const clean: InventoryItem[] = rawData.map((item) => ({
-        id: String(item._id || item.id || ''),
-        name: String(item.name || ''),
-        stock: Number(item.quantity ?? item.stock ?? 0),
-        price: Number(item.lastUnitPrice ?? item.price ?? 0),
-        costPrice: Number(item.costPrice ?? 0),
-        barcode: item.barcode,
-        sku: item.sku || null,
-      }));
+      const clean: InventoryItem[] = rawData.map(toInventoryItem);
 
       if (userId) {
         void cacheInventoryItems(
@@ -110,7 +118,7 @@ export default function ProductGrid({ user, onAddToCart, currencyCode, cart }: P
             barcode: item.barcode,
             sku: item.sku,
           })),
-          pageNum === 1 && searchQuery.trim() === ''
+          false
         ).catch(() => undefined);
       }
 
@@ -147,6 +155,61 @@ export default function ProductGrid({ user, onAddToCart, currencyCode, cart }: P
       setLoading(false);
       setLoadingMore(false);
     }
+  }, [userId]);
+
+  useEffect(() => {
+    if (!userId || !navigator.onLine) return;
+
+    let cancelled = false;
+    const syncTimer = window.setTimeout(() => {
+      void (async () => {
+        const token = getCookie('tallyToken');
+        if (!token) return;
+
+        try {
+          const catalog: InventoryItem[] = [];
+          let pageNumber = 1;
+          let hasAnotherPage = true;
+
+          // Cache up to 2,000 products so barcode sales remain available offline.
+          while (!cancelled && hasAnotherPage && pageNumber <= 20) {
+            const response = await axios.get(`${API_URL}/inventory`, {
+              headers: { Authorization: `Bearer ${token}` },
+              params: { page: pageNumber, limit: 100 },
+              timeout: 10_000,
+            });
+            const rawData: RawInventoryItem[] = response.data?.data
+              ? response.data.data
+              : (Array.isArray(response.data) ? response.data : []);
+            catalog.push(...rawData.map(toInventoryItem));
+            hasAnotherPage = Boolean(response.data?.pagination?.hasMore);
+            pageNumber += 1;
+          }
+
+          if (!cancelled) {
+            await cacheInventoryItems(
+              userId,
+              catalog.map((item) => ({
+                id: item.id,
+                name: item.name,
+                stock: item.stock,
+                price: item.price,
+                barcode: item.barcode,
+                sku: item.sku,
+              })),
+              true
+            );
+          }
+        } catch (error) {
+          console.warn('Could not refresh the offline barcode catalogue:', error);
+        }
+      })();
+    }, 800);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(syncTimer);
+    };
   }, [userId]);
 
   useEffect(() => {
@@ -215,43 +278,114 @@ export default function ProductGrid({ user, onAddToCart, currencyCode, cart }: P
     return () => observer.disconnect();
   }, [hasMore, loading, loadingMore]);
 
-  const handleScan = useCallback((code: string) => {
-    setShowScanner(false);
+  const handleScan = useCallback(async (rawCode: string) => {
+    const code = rawCode.trim();
+    const normalizedCode = barcodeKey(code);
+    if (!normalizedCode || scanInFlightRef.current) return;
 
-    const exactMatch = availableInventory.find((item) => item.barcode === code);
-    if (exactMatch) {
-      onAddToCart(exactMatch);
-      setSearch('');
-    } else {
+    const now = Date.now();
+    if (lastScanRef.current.code === normalizedCode && now - lastScanRef.current.at < 650) return;
+    lastScanRef.current = { code: normalizedCode, at: now };
+    scanInFlightRef.current = true;
+    setShowScanner(false);
+    setResolvingScan(true);
+    setScanNotice(null);
+
+    try {
+      let exactMatch = inventory.find((item) => barcodeKey(item.barcode) === normalizedCode);
+      let serverLookupFailed = false;
+
+      if (!exactMatch && navigator.onLine) {
+        const token = getCookie('tallyToken');
+        if (token) {
+          try {
+            const response = await axios.get(`${API_URL}/inventory/lookup/barcode`, {
+              headers: { Authorization: `Bearer ${token}` },
+              params: { code },
+              timeout: 5_000,
+            });
+            exactMatch = toInventoryItem(response.data || {});
+
+            if (userId && exactMatch.id) {
+              void cacheInventoryItems(userId, [exactMatch], false).catch(() => undefined);
+            }
+          } catch (error) {
+            if (!axios.isAxiosError(error) || error.response?.status !== 404) {
+              serverLookupFailed = true;
+            }
+          }
+        }
+      }
+
+      if (!exactMatch && userId && (!navigator.onLine || serverLookupFailed)) {
+        const cached = await readCachedInventory(userId);
+        const cachedMatch = cached.find((item) => barcodeKey(item.barcode) === normalizedCode);
+        if (cachedMatch) exactMatch = { ...cachedMatch, costPrice: 0 };
+      }
+
+      if (exactMatch) {
+        const sellableItem = {
+          ...exactMatch,
+          stock: Math.max(0, exactMatch.stock - (queuedQuantities[exactMatch.id] || 0)),
+        };
+        onAddToCart(sellableItem);
+        setSearch('');
+        return;
+      }
+
       setSearch(code);
+      setScanNotice(
+        serverLookupFailed
+          ? `The server could not be reached. Barcode ${code} was not found in this device's offline cache.`
+          : navigator.onLine
+          ? `No product has the exact barcode ${code}.`
+          : `Barcode ${code} is not available in this device's offline product cache.`
+      );
+    } catch (error) {
+      console.error('Barcode lookup failed:', error);
+      setSearch(code);
+      setScanNotice('The barcode lookup could not reach the server. Search results are shown instead.');
+    } finally {
+      scanInFlightRef.current = false;
+      setResolvingScan(false);
     }
-  }, [availableInventory, onAddToCart]);
+  }, [inventory, onAddToCart, queuedQuantities, userId]);
 
   useEffect(() => {
     // USB Scanner Detection
     let buffer = '';
-    let lastKeyTime = Date.now();
+    let lastKeyTime = 0;
+    let scanStartedAt = 0;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-        // Ignore if user is typing in an input field
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+
         const target = e.target as HTMLElement;
-        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
+        const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA';
 
         const currentTime = Date.now();
-        // If time between keys is too long (> 50ms), it's likely manual typing, so reset.
-        if (currentTime - lastKeyTime > 100) {
+        if (!lastKeyTime || currentTime - lastKeyTime > 80) {
             buffer = '';
+            scanStartedAt = currentTime;
         }
-        lastKeyTime = currentTime;
 
         if (e.key === 'Enter') {
-            if (buffer.length > 2) {
+            const averageKeyInterval = buffer.length > 1
+              ? (currentTime - scanStartedAt) / (buffer.length - 1)
+              : Number.POSITIVE_INFINITY;
+            const looksLikeHardwareScan = buffer.length >= 4 && averageKeyInterval <= 80;
+
+            if (looksLikeHardwareScan) {
                 e.preventDefault();
-                handleScan(buffer);
-                buffer = '';
+                void handleScan(buffer);
+                if (isInput) target.blur();
             }
+            buffer = '';
+            lastKeyTime = 0;
+            scanStartedAt = 0;
         } else if (e.key.length === 1) {
             buffer += e.key;
+            lastKeyTime = currentTime;
         }
     };
 
@@ -325,7 +459,10 @@ export default function ProductGrid({ user, onAddToCart, currencyCode, cart }: P
                   outline-none transition-all
                 "
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setScanNotice(null);
+                }}
               />
 
               {/* Right “kbd” hint */}
@@ -338,32 +475,33 @@ export default function ProductGrid({ user, onAddToCart, currencyCode, cart }: P
 
             {/* Barcode Scanner Button */}
             <button
-              onClick={() => setShowScanner(true)}
+              onClick={() => {
+                setScanNotice(null);
+                setShowScanner(true);
+              }}
+              disabled={resolvingScan}
               className="inline-flex min-h-12 shrink-0 items-center justify-center gap-2 rounded-2xl border border-emerald-600 bg-emerald-600 px-4 font-black text-white shadow-sm transition-colors hover:border-emerald-700 hover:bg-emerald-700"
               title="Scan Barcode"
               aria-label="Scan a product barcode"
             >
-              <ScanBarcode className="w-5 h-5" />
-              <span className="hidden sm:inline">Scan</span>
+              {resolvingScan ? <Loader2 className="h-5 w-5 animate-spin" /> : <ScanBarcode className="h-5 w-5" />}
+              <span className="hidden sm:inline">{resolvingScan ? 'Finding…' : 'Scan'}</span>
             </button>
           </div>
+
+          {scanNotice && (
+            <div className="mt-3 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs font-bold text-amber-800" role="status">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>{scanNotice}</span>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Barcode Scanner Overlay */}
       {showScanner && (
         <BarcodeScanner
-          onScan={(code) => {
-            const item = availableInventory.find((i) => i.barcode === code);
-            if (item) {
-              onAddToCart(item);
-              setShowScanner(false);
-              setSearch(''); // Clear search if match found
-            } else {
-               setSearch(code); // Set search if no match found
-               setShowScanner(false);
-            }
-          }}
+          onScan={(code) => { void handleScan(code); }}
           onClose={() => setShowScanner(false)}
         />
       )}
