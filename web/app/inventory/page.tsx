@@ -25,6 +25,10 @@ import {
   ScanBarcode, // Import ScanBarcode
   CheckCircle2,
   AlertTriangle,
+  Boxes,
+  CircleDollarSign,
+  Tags,
+  ChevronUp,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { getCookie } from '../../utils/cookies';
@@ -133,6 +137,7 @@ export default function InventoryPage() {
 
   // optional: mobile add modal (keeps the page clean)
   const [addOpen, setAddOpen] = useState(false);
+  const [desktopAddOpen, setDesktopAddOpen] = useState(false);
 
   const router = useRouter();
 
@@ -252,6 +257,20 @@ export default function InventoryPage() {
       String(item.barcode || '').toLowerCase().includes(q)
     );
   }, [inventory, searchTerm, selectedCategory]);
+
+  const inventorySummary = useMemo(() => {
+    return inventory.reduce(
+      (summary, item) => {
+        const stock = Math.max(0, Number(item.stock || 0));
+        const lowStockThreshold = Math.max(0, Number(item.lowStockThreshold ?? 5));
+        summary.units += stock;
+        summary.costValue += stock * Math.max(0, Number(item.costPrice || 0));
+        if (stock <= lowStockThreshold) summary.lowStock += 1;
+        return summary;
+      },
+      { units: 0, costValue: 0, lowStock: 0 }
+    );
+  }, [inventory]);
 
   const handleScan = (rawCode: string) => {
     const code = rawCode.trim();
@@ -829,6 +848,23 @@ export default function InventoryPage() {
     }
   };
 
+  const openAddProduct = () => {
+    if (!hasFeatureAccess) {
+      showLockedModal();
+      return;
+    }
+
+    if (window.matchMedia('(min-width: 1024px)').matches) {
+      setDesktopAddOpen(true);
+      window.setTimeout(() => {
+        document.getElementById('desktop-add-product')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 0);
+      return;
+    }
+
+    setAddOpen(true);
+  };
+
   if (loading) {
     return <Preloader />;
   }
@@ -836,10 +872,7 @@ export default function InventoryPage() {
   const showLockUI = !hasFeatureAccess;
 
   return (
-    <div className="flex min-h-screen bg-slate-50 font-sans text-slate-900 relative overflow-x-hidden">
-      {/* Ambient blobs */}
-      <div className="fixed -top-24 -left-24 w-96 h-96 bg-emerald-200/35 rounded-full blur-[100px] pointer-events-none z-0" />
-      <div className="fixed top-1/3 -right-24 w-96 h-96 bg-blue-200/25 rounded-full blur-[100px] pointer-events-none z-0" />
+    <div className="relative flex min-h-screen overflow-x-hidden bg-[#f6f8f7] font-sans text-slate-900">
 
       {/* Mobile Sidebar Overlay */}
       {isMobileMenuOpen && (
@@ -860,159 +893,130 @@ export default function InventoryPage() {
 
       <main className="relative z-10 min-h-screen w-full min-w-0 max-w-full overflow-x-hidden p-4 md:py-8 md:pl-72 md:pr-8">
         {/* Header */}
-        <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
-          <div className="flex items-start md:items-center justify-between gap-3">
+        <header className="mb-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-3">
               <button
+                type="button"
                 onClick={() => setIsMobileMenuOpen(true)}
-                className="p-2 -ml-2 text-slate-700 bg-white rounded-xl border border-slate-200 shadow-sm md:hidden"
+                className="-ml-2 rounded-xl border border-slate-200 bg-white p-2 text-slate-700 shadow-sm md:hidden"
+                aria-label="Open navigation"
               >
-                <Menu className="w-6 h-6" />
+                <Menu className="h-6 w-6" />
               </button>
-
               <div>
-                <div className="flex items-center gap-2">
-                  <h1 className="text-2xl md:text-3xl font-black tracking-tight">Stocks</h1>
-                  <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-extrabold uppercase tracking-wide rounded-full">
-                    <Sparkles className="w-3 h-3" /> Live
-                  </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="text-2xl font-black tracking-tight text-slate-950 md:text-3xl">Products</h1>
+                  {user && (
+                    <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${
+                      hasFeatureAccess
+                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                        : 'border-rose-200 bg-rose-50 text-rose-700'
+                    }`}>
+                      {hasFeatureAccess ? <Check className="h-3 w-3" /> : <Lock className="h-3 w-3" />}
+                      {hasFeatureAccess ? (user.subscriptionStatus === 'trial' ? `Trial${typeof trialDaysLeft === 'number' ? ` · ${trialDaysLeft}d` : ''}` : 'Active') : 'Locked'}
+                    </span>
+                  )}
                 </div>
-                <p className="text-slate-500 text-sm font-semibold mt-1">
-                  Scan, add and manage products • <span className="text-slate-700">{inventory.length} items</span>
-                </p>
+                <p className="mt-1 text-sm font-medium text-slate-500">Manage stock, pricing and product details.</p>
               </div>
             </div>
 
-            {/* ✅ Bulk Edit Button */}
-            <div className="hidden md:block">
-              <input 
-                type="file" 
-                ref={fileInputRef} 
-                onChange={handleFileChange} 
-                className="hidden" 
-                accept=".csv"
-              />
+            <div className="flex flex-wrap items-center gap-2">
+              <input ref={fileInputRef} type="file" onChange={handleFileChange} className="hidden" accept=".csv" />
               {isBulkMode ? (
-                <div className="flex items-center gap-2">
-                  <button onClick={toggleBulkMode} className="px-4 py-2 rounded-xl bg-slate-100 text-slate-600 font-bold text-xs flex items-center gap-2 hover:bg-slate-200">
-                    <XCircle className="w-4 h-4" /> Cancel
+                <>
+                  <button type="button" onClick={toggleBulkMode} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
+                    <XCircle className="h-4 w-4" /> Cancel edit
                   </button>
-                  <button onClick={saveBulkChanges} className="px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs flex items-center gap-2 hover:bg-emerald-700 shadow-lg shadow-emerald-200">
-                    <Save className="w-4 h-4" /> Save Changes
+                  <button type="button" onClick={saveBulkChanges} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-emerald-700 px-4 text-sm font-black text-white hover:bg-emerald-800">
+                    <Save className="h-4 w-4" /> Save costs
                   </button>
-                </div>
+                </>
               ) : (
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={handleImportClick}
-                    className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 transition flex items-center gap-2"
-                  >
-                    <Upload className="w-3.5 h-3.5" /> Import CSV
+                <>
+                  <button type="button" onClick={handleImportClick} className="hidden min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 hover:bg-slate-50 md:inline-flex">
+                    <Upload className="h-4 w-4" /> Import CSV
+                  </button>
+                  <button type="button" onClick={downloadTemplate} className="hidden min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 hover:bg-slate-50 xl:inline-flex">
+                    <FileDown className="h-4 w-4" /> CSV template
+                  </button>
+                  <button type="button" onClick={toggleBulkMode} className="hidden min-h-11 items-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 hover:bg-slate-50 lg:inline-flex">
+                    Edit costs
                   </button>
                   <button
-                    onClick={downloadTemplate}
-                    className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 transition flex items-center gap-2"
+                    type="button"
+                    onClick={openAddProduct}
+                    className={`inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl px-4 text-sm font-black transition sm:flex-none ${
+                      showLockUI ? 'border border-slate-200 bg-slate-100 text-slate-400' : 'bg-emerald-700 text-white hover:bg-emerald-800'
+                    }`}
                   >
-                    <FileDown className="w-3.5 h-3.5" /> Template
+                    {showLockUI ? <Lock className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                    Add product
                   </button>
-                  <button
-                    onClick={toggleBulkMode}
-                    className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 transition"
-                  >
-                    Bulk Edit Costs
-                  </button>
-                </div>
+                </>
               )}
-              </div>
-
-            {/* Status */}
-            {user ? (
-              hasFeatureAccess ? (
-                <div className="hidden md:flex bg-emerald-50 border border-emerald-100 text-emerald-700 px-4 py-2 rounded-2xl text-xs font-extrabold items-center gap-2">
-                  <Check size={14} />
-                  {user.subscriptionStatus === 'trial' ? (
-                    <>
-                      Trial Active
-                      {typeof trialDaysLeft === 'number' ? (
-                        <span className="text-emerald-700/80 font-bold">
-                          • {trialDaysLeft} day{trialDaysLeft === 1 ? '' : 's'} left
-                        </span>
-                      ) : null}
-                    </>
-                  ) : (
-                    <>Subscription Active</>
-                  )}
-                </div>
-              ) : (
-                <div
-                  onClick={() => router.push('/payment')}
-                  className="hidden md:flex bg-rose-50 border border-rose-100 text-rose-700 px-4 py-2 rounded-2xl text-xs font-extrabold items-center gap-2 cursor-pointer hover:bg-rose-100 transition"
-                >
-                  <Lock size={14} /> Locked
-                </div>
-              )
-            ) : null}
+            </div>
           </div>
 
-          {/* Sticky Mobile Search + Buttons */}
-          <div className="sticky top-3 z-20">
-            <div className="bg-white/85 backdrop-blur-xl border border-slate-200 rounded-3xl p-3 shadow-sm flex items-center gap-2">
-              <div className="relative flex-1 flex items-center gap-2">
-                 <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-                    <input
-                      type="text"
-                      placeholder="Search items…"
-                      value={searchTerm}
-                      onChange={(e) => { setSearchTerm(e.target.value); setScanNotice(null); }}
-                      className="w-full pl-9 pr-3 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-semibold outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500"
-                    />
-                 </div>
-                 <button
-                    type="button"
-                    onClick={() => {
-                        setScannerTarget('search');
-                        setShowScanner(true);
-                    }}
-                    className="p-3 bg-slate-100 rounded-2xl border border-slate-200 text-slate-600 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
-                    aria-label="Scan barcode to find a product"
-                    title="Scan barcode"
-                 >
-                    <ScanBarcode className="w-5 h-5" />
-                 </button>
+          <div className="sticky top-3 z-20 mt-5 rounded-2xl border border-slate-200 bg-white/95 p-2.5 shadow-sm backdrop-blur-xl">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 sm:grid-cols-[minmax(0,1fr)_200px_auto]">
+              <div className="relative min-w-0">
+                <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="search"
+                  placeholder="Search name, SKU or barcode"
+                  value={searchTerm}
+                  onChange={(e) => { setSearchTerm(e.target.value); setScanNotice(null); }}
+                  className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-3 text-sm font-semibold outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10"
+                />
               </div>
-
-              {/* Category Filter */}
-              <div className="hidden sm:block relative">
-                 <select
-                    value={selectedCategory}
-                    onChange={(e) => setSelectedCategory(e.target.value)}
-                    className="appearance-none pl-3 pr-8 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-semibold outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 max-w-[140px]"
-                 >
-                    <option value="">All Categories</option>
-                    {categories.map(c => <option key={c} value={c}>{c}</option>)}
-                 </select>
-                 <Filter className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 w-3.5 h-3.5 pointer-events-none" />
+              <div className="relative col-span-2 row-start-2 sm:col-span-1 sm:row-start-auto">
+                <select
+                  value={selectedCategory}
+                  onChange={(e) => setSelectedCategory(e.target.value)}
+                  className="h-12 w-full appearance-none rounded-xl border border-slate-200 bg-slate-50 pl-4 pr-10 text-sm font-bold text-slate-700 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10"
+                >
+                  <option value="">All categories</option>
+                  {categories.map((category) => <option key={category} value={category}>{category}</option>)}
+                </select>
+                <Filter className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               </div>
-
               <button
-                onClick={() => {
-                  if (!hasFeatureAccess) return showLockedModal();
-                  setAddOpen(true);
-                }}
-                className={`shrink-0 px-4 py-3 rounded-2xl font-extrabold text-sm inline-flex items-center gap-2 transition active:scale-[0.98] ${
-                  showLockUI
-                    ? 'bg-slate-100 text-slate-400 border border-slate-200'
-                    : 'bg-slate-900 hover:bg-black text-white'
-                }`}
-                title={showLockUI ? 'Upgrade to add items' : 'Add item'}
+                type="button"
+                onClick={() => { setScannerTarget('search'); setShowScanner(true); }}
+                className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 text-sm font-black text-emerald-800 hover:bg-emerald-100"
+                aria-label="Scan barcode to find a product"
               >
-                {showLockUI ? <Lock className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-                <span className="hidden sm:inline">Add</span>
+                <ScanBarcode className="h-5 w-5" />
+                <span className="hidden md:inline">Scan</span>
               </button>
             </div>
           </div>
         </header>
+
+        <section className="mb-6 grid grid-cols-2 gap-3 xl:grid-cols-4" aria-label="Inventory summary">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-700"><Boxes className="h-4 w-4" /></div>
+            <p className="text-2xl font-black text-slate-950">{inventory.length.toLocaleString()}</p>
+            <p className="mt-1 text-xs font-bold text-slate-500">Products</p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-700"><Package className="h-4 w-4" /></div>
+            <p className="text-2xl font-black text-slate-950">{inventorySummary.units.toLocaleString()}</p>
+            <p className="mt-1 text-xs font-bold text-slate-500">Units in stock</p>
+          </div>
+          <div className={`rounded-2xl border bg-white p-4 shadow-sm ${inventorySummary.lowStock ? 'border-amber-200' : 'border-slate-200'}`}>
+            <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl bg-amber-50 text-amber-700"><AlertTriangle className="h-4 w-4" /></div>
+            <p className="text-2xl font-black text-slate-950">{inventorySummary.lowStock.toLocaleString()}</p>
+            <p className="mt-1 text-xs font-bold text-slate-500">Need restocking</p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700"><CircleDollarSign className="h-4 w-4" /></div>
+            <p className="truncate text-xl font-black text-slate-950 sm:text-2xl">{formatMoney(inventorySummary.costValue)}</p>
+            <p className="mt-1 text-xs font-bold text-slate-500">Stock cost value</p>
+          </div>
+        </section>
 
         {scanNotice?.type === 'found' && scanNotice.item && (
           <div className="mb-6 flex flex-col gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -1031,8 +1035,9 @@ export default function InventoryPage() {
           </div>
         )}
 
-        {/* Desktop: Add form + stats */}
-        <div className="hidden lg:grid grid-cols-3 gap-6 mb-8">
+        {/* Desktop add workspace stays out of the way until requested. */}
+        {desktopAddOpen && (
+        <div id="desktop-add-product" className="mb-8 hidden scroll-mt-6 grid-cols-3 gap-6 lg:grid">
           <div className="col-span-2 bg-white rounded-3xl border border-slate-200 shadow-sm p-6 relative overflow-hidden group">
             <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-50 rounded-bl-full -mr-10 -mt-10 transition-transform group-hover:scale-110" />
             
@@ -1055,24 +1060,37 @@ export default function InventoryPage() {
                 </div>
               </div>
 
-              {/* TABS */}
-              <div className="bg-slate-100 p-1 rounded-xl flex items-center shadow-inner">
+              <div className="flex items-center gap-2">
+                {/* TABS */}
+                <div className="bg-slate-100 p-1 rounded-xl flex items-center shadow-inner">
+                  <button
+                    type="button"
+                    onClick={() => setActiveAddTab('single')}
+                    className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${
+                      activeAddTab === 'single' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    Single Product
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveAddTab('bulk')}
+                    className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors flex items-center gap-1.5 ${
+                      activeAddTab === 'bulk' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    Bulk AI Upload
+                  </button>
+                </div>
                 <button
-                  onClick={() => setActiveAddTab('single')}
-                  className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${
-                    activeAddTab === 'single' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                  }`}
+                  type="button"
+                  onClick={() => setDesktopAddOpen(false)}
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50 hover:text-slate-900"
+                  aria-label="Close add product panel"
+                  title="Close add product panel"
                 >
-                  Single Product
-                </button>
-                <button
-                  onClick={() => setActiveAddTab('bulk')}
-                  className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors flex items-center gap-1.5 ${
-                    activeAddTab === 'bulk' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                  }`}
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  Bulk AI Upload
+                  <ChevronUp className="h-4 w-4" />
                 </button>
               </div>
             </div>
@@ -1514,8 +1532,30 @@ export default function InventoryPage() {
             ) : null}
           </div>
         </div>
+        )}
 
         {/* Inventory List */}
+        <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <Tags className="h-5 w-5 text-emerald-700" />
+              <h2 className="text-lg font-black text-slate-950">Your products</h2>
+            </div>
+            <p className="mt-1 text-xs font-semibold text-slate-500">
+              Showing {filteredInventory.length.toLocaleString()} of {inventory.length.toLocaleString()}
+            </p>
+          </div>
+          {(searchTerm || selectedCategory) && (
+            <button
+              type="button"
+              onClick={() => { setSearchTerm(''); setSelectedCategory(''); setScanNotice(null); }}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 hover:bg-slate-50"
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
+
         {/* Desktop Table */}
         <div className="hidden md:block bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
@@ -1534,7 +1574,7 @@ export default function InventoryPage() {
 
               <tbody className="divide-y divide-slate-100">
                 {filteredInventory.map((item) => {
-                  const low = Number(item.stock || 0) < 5;
+                  const low = Number(item.stock || 0) <= Number(item.lowStockThreshold ?? 5);
                   const price = item.price || item.lastUnitPrice || 0;
 
                   return (
@@ -1661,7 +1701,7 @@ export default function InventoryPage() {
             </div>
           ) : (
             filteredInventory.map((item) => {
-              const low = Number(item.stock || 0) < 5;
+              const low = Number(item.stock || 0) <= Number(item.lowStockThreshold ?? 5);
               const price = item.price || item.lastUnitPrice || 0;
 
               return (
