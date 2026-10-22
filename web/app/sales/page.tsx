@@ -460,7 +460,7 @@ const handleAddToCart = (item: InventoryItem) => {
               />
             </div>
 
-            <div className="min-w-0 xl:col-span-1 xl:self-start">
+            <div className="min-w-0 xl:sticky xl:top-4 xl:col-span-1 xl:self-start">
               <CartSidebar 
                 key={restoredDraft?.restoreId || 'active-sale'}
                 cart={cart} 

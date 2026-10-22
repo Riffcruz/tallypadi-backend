@@ -578,7 +578,7 @@ export default function CartSidebar({
   const prefix = currencyPrefix(user?.currencyCode);
 
   return (
-    <aside className="relative flex w-full min-w-0 flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl shadow-slate-900/5 xl:sticky xl:top-4 xl:h-[calc(100dvh-2rem)]">
+    <aside className="relative flex w-full min-w-0 flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl shadow-slate-900/5 xl:h-[calc(100dvh-2rem)]">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-emerald-500/10 to-transparent" />
 
       {/* Header */}
