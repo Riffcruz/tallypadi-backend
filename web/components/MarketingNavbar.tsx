@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, Menu, MessageCircle, Store, X } from "lucide-react";
+import { Menu, MessageCircle, Store, X } from "lucide-react";
 
 interface MarketingNavbarProps { whatsappLink?: string }
 
@@ -15,15 +15,15 @@ const navLinks = [
   { href: "/faq", label: "FAQ" },
   { href: "/contact", label: "Contact" },
 ];
-const groups = [
-  { title: "Explore TallyPadi", links: navLinks.slice(0, 3) },
-  { title: "For your business", links: [
-    { href: "/marketplace", label: "Marketplace" },
-    { href: "/ai-bookkeeping-nigeria", label: "AI bookkeeping" },
-    { href: "/help", label: "Help center" },
-    { href: "/blog", label: "Business guides" },
-  ] },
-  { title: "Get to know us", links: navLinks.slice(3) },
+const mobileLinks = [
+  { href: "/", label: "Return to home" },
+  { href: "/#features", label: "Features" },
+  { href: "/#how-it-works", label: "How it works" },
+  { href: "/#pricing", label: "Pricing" },
+  { href: "/marketplace", label: "Marketplace" },
+  { href: "/about", label: "About" },
+  { href: "/faq", label: "FAQ" },
+  { href: "/contact", label: "Contact" },
 ];
 
 export default function MarketingNavbar({ whatsappLink = "https://wa.me/2349035664420?text=Hello%20Tallypadi" }: MarketingNavbarProps) {
@@ -67,20 +67,27 @@ export default function MarketingNavbar({ whatsappLink = "https://wa.me/23490356
           <Menu size={21} />Menu
         </button>
       </div>
-      <dialog ref={dialog} id="mobile-navigation" aria-labelledby="mobile-navigation-title" onClose={() => { setOpen(false); trigger.current?.focus(); }} onClick={event => { if (event.target === event.currentTarget) close(); }} className="fixed inset-y-0 right-0 left-auto m-0 h-dvh max-h-none w-full max-w-sm flex-col overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden border-0 bg-[#f7f0df] p-0 text-stone-950 shadow-2xl backdrop:bg-stone-950/60 backdrop:backdrop-blur-sm [&[open]]:flex">
-        <div className="flex shrink-0 items-center justify-between border-b border-stone-200 px-6 py-4">
-          <h2 id="mobile-navigation-title" className="text-lg font-bold tracking-tight">Explore TallyPadi</h2>
-          <button type="button" onClick={close} autoFocus aria-label="Close navigation menu" className="flex h-11 w-11 items-center justify-center rounded-full border border-stone-300 bg-white hover:bg-stone-100 focus-visible:outline-2 focus-visible:outline-stone-900"><X size={21} /></button>
+      <dialog ref={dialog} id="mobile-navigation" aria-labelledby="mobile-navigation-title" onClose={() => { setOpen(false); trigger.current?.focus(); }} onClick={event => { if (event.target === event.currentTarget) close(); }} className="fixed inset-y-0 right-0 left-auto m-0 h-dvh max-h-none w-[calc(100%_-_24px)] max-w-[340px] flex-col overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden border-0 bg-[#f7f0df] p-0 text-stone-950 shadow-2xl backdrop:bg-stone-950/50 [&[open]]:flex">
+        <div className="flex shrink-0 items-center justify-between gap-4 border-b border-stone-900/10 px-5 py-3">
+          <h2 id="mobile-navigation-title" className="sr-only">Navigation</h2>
+          <Link href="/" onClick={close} className="relative block h-9 w-[140px]" aria-label="TallyPadi home">
+            <Image src="/tallypadi-logo.png" alt="TallyPadi" fill sizes="140px" className="object-contain brightness-0" />
+          </Link>
+          <button type="button" onClick={close} autoFocus aria-label="Close navigation menu" className="flex h-11 w-11 shrink-0 items-center justify-center text-stone-700 hover:text-black focus-visible:outline-2 focus-visible:outline-stone-900"><X size={22} /></button>
         </div>
-        <div className="shrink-0 px-6 py-2">
-          {groups.map(group => <div key={group.title} className="border-b border-stone-200 py-4 last:border-0">
-            <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.16em] text-stone-500">{group.title}</p>
-            {group.links.map(item => <Link key={item.href} href={item.href} onClick={close} className="flex min-h-11 items-center justify-between gap-4 rounded-lg px-2 text-base font-semibold hover:bg-white/70 focus-visible:outline-2 focus-visible:outline-stone-900">{item.label}<ArrowRight size={16} className="text-stone-400" /></Link>)}
-          </div>)}
+        <div className="shrink-0 px-5 py-3">
+          {mobileLinks.map(item => <Link key={item.href} href={item.href} onClick={close} className="flex min-h-11 items-center px-1 text-base font-medium hover:underline hover:underline-offset-4 focus-visible:outline-2 focus-visible:outline-stone-900">{item.label}</Link>)}
         </div>
-        <div className="shrink-0 space-y-3 border-t border-stone-200 bg-white px-6 pt-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
-          <a href={whatsappLink} onClick={close} target="_blank" rel="noreferrer" className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#181816] px-4 font-bold text-white hover:bg-stone-700"><MessageCircle size={18} />Start on WhatsApp</a>
-          <Link href="/login" onClick={close} className="flex min-h-11 items-center justify-center rounded-xl border border-stone-300 font-semibold hover:bg-stone-50">Already have an account? Log in</Link>
+        <div className="mt-auto shrink-0 border-t border-stone-900/10 px-5 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
+          <div className="mb-2 flex items-center gap-5 text-sm text-stone-600">
+            <Link href="/help" onClick={close} className="inline-flex min-h-10 items-center hover:underline">Help center</Link>
+            <Link href="/blog" onClick={close} className="inline-flex min-h-10 items-center hover:underline">Blog</Link>
+          </div>
+          <div className="mb-2 grid grid-cols-2 gap-2">
+            <Link href="/register" onClick={close} className="flex min-h-11 items-center justify-center bg-[#181816] text-sm font-semibold text-white hover:bg-stone-700">Register</Link>
+            <Link href="/login" onClick={close} className="flex min-h-11 items-center justify-center border border-stone-900/25 text-sm font-semibold hover:bg-white/50">Log in</Link>
+          </div>
+          <a href={whatsappLink} onClick={close} target="_blank" rel="noreferrer" className="flex min-h-12 items-center justify-center gap-2 bg-amber-300 px-4 text-sm font-semibold text-stone-950 hover:bg-amber-200"><MessageCircle size={17} />Start on WhatsApp</a>
         </div>
       </dialog>
     </nav>
