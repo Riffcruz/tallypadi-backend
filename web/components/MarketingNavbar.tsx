@@ -47,23 +47,23 @@ export default function MarketingNavbar({ whatsappLink = "https://wa.me/23490356
   }, [open]);
 
   const close = () => dialog.current?.close();
-  const linkClass = "rounded-lg text-sm font-semibold text-white/85 transition hover:text-amber-200 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-amber-300";
+  const linkClass = "text-sm font-semibold text-stone-700 transition hover:text-stone-950 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-stone-900";
 
   return (
-    <nav aria-label="Main navigation" className="fixed inset-x-0 top-0 z-50 h-[72px] border-b border-white/10 bg-[#181816]/95 backdrop-blur-md">
+    <nav aria-label="Main navigation" className="fixed inset-x-0 top-0 z-50 h-[72px] border-b border-stone-900/10 bg-[#f7f0df]">
       <div className="mx-auto flex h-full max-w-[1480px] items-center justify-between gap-6 px-5 sm:px-10 2xl:px-20">
         <Link href="/" className="relative block h-11 w-[158px] shrink-0" aria-label="TallyPadi home">
-          <Image src="/tallypadi-logo.png" alt="TallyPadi" fill priority sizes="158px" className="object-contain" />
+          <Image src="/tallypadi-logo.png" alt="TallyPadi" fill priority sizes="158px" className="object-contain brightness-0 opacity-90" />
         </Link>
         <div className="hidden items-center gap-5 xl:flex">
           {navLinks.map(item => <Link key={item.href} href={item.href} className={linkClass}>{item.label}</Link>)}
         </div>
         <div className="hidden items-center gap-5 xl:flex">
-          <Link href="/marketplace" className="inline-flex items-center gap-2 rounded-lg border border-white/20 px-3 py-2.5 text-sm font-semibold text-white hover:bg-white/10"><Store size={16} />Marketplace</Link>
+          <Link href="/marketplace" className="inline-flex items-center gap-2 rounded-lg border border-stone-900/20 px-3 py-2.5 text-sm font-semibold text-stone-800 hover:bg-white/50"><Store size={16} />Marketplace</Link>
           <Link href="/login" className={linkClass}>Log in</Link>
           <a href={whatsappLink} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 whitespace-nowrap rounded-lg bg-amber-300 px-4 py-3 text-sm font-bold text-stone-950 hover:bg-amber-200"><MessageCircle size={17} />Start on WhatsApp</a>
         </div>
-        <button ref={trigger} type="button" onClick={() => setOpen(true)} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-white/20 px-3 text-sm font-semibold text-white focus-visible:outline-2 focus-visible:outline-amber-300 xl:hidden" aria-label="Open navigation menu" aria-haspopup="dialog" aria-controls="mobile-navigation" aria-expanded={open}>
+        <button ref={trigger} type="button" onClick={() => setOpen(true)} className="inline-flex min-h-11 items-center gap-2 px-1 text-sm font-semibold text-stone-800 hover:text-stone-950 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-stone-900 xl:hidden" aria-label="Open navigation menu" aria-haspopup="dialog" aria-controls="mobile-navigation" aria-expanded={open}>
           <Menu size={21} />Menu
         </button>
       </div>
