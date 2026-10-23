@@ -27,6 +27,7 @@ const footerColumns = [
     title: "RESOURCES",
     links: [
       { href: "/help", label: "Help Center" },
+      { href: "/ai-bookkeeping-nigeria", label: "AI Bookkeeping" },
       { href: "/faq", label: "FAQs" },
       { href: "/whatsapp-receipt-generator", label: "WhatsApp Receipts" },
       { href: "/inventory-stock-management", label: "Inventory Guide" },

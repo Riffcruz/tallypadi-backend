@@ -152,6 +152,7 @@ const seoHighlights: Feature[] = [
 ];
 
 const seoLinks: SeoLink[] = [
+  { label: "AI bookkeeping for small businesses", href: "/ai-bookkeeping-nigeria" },
   { label: "WhatsApp receipt generator", href: "/whatsapp-receipt-generator" },
   { label: "Inventory stock management", href: "/inventory-stock-management" },
   { label: "Sales tracking ledger", href: "/sales-tracking-ledger" },
@@ -315,9 +316,9 @@ function HeroSection({ whatsappLink }: { whatsappLink: string }) {
       <div className="relative z-10 mx-auto grid max-w-[1480px] lg:grid-cols-[48%_52%]">
         <div className="relative px-5 pb-10 pt-8 sm:px-10 lg:px-20 lg:pb-8 lg:pt-14">
           <div className="pointer-events-none absolute -left-28 top-12 h-52 w-52 rounded-full bg-emerald-400/10 blur-3xl lg:hidden" />
-          <div className="inline-flex items-center gap-2 border border-emerald-800/20 bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-900">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-600">
             The Complete Shop on WhatsApp
-          </div>
+          </p>
 
           <h1
             className="mt-5 max-w-[680px] text-[46px] font-black leading-[0.98] text-stone-950 sm:text-[64px] lg:text-[76px]"
@@ -329,7 +330,7 @@ function HeroSection({ whatsappLink }: { whatsappLink: string }) {
           </h1>
 
           <p className="mt-6 max-w-[540px] text-base font-semibold leading-7 text-stone-800">
-            Record sales, send receipts, track stock and manage your business. All on WhatsApp. No stress.
+            AI-assisted bookkeeping for small businesses in Nigeria and across Africa. Record sales, track expenses, send receipts and manage stock on WhatsApp and the web.
           </p>
 
           <div className="mt-7 flex flex-col gap-3 sm:flex-row">

@@ -3,11 +3,16 @@ import LandingPageClient from './LandingPageClient';
 
 export const metadata: Metadata = {
   title: {
-    absolute: 'TallyPadi — WhatsApp POS & Business Management Software for Africa',
+    absolute: 'TallyPadi — AI Bookkeeping & Sales Tracking for African SMEs',
   },
   description:
-    'TallyPadi is a WhatsApp POS, receipt generator, inventory tracker, sales ledger, debtor manager, storefront, managed ads, and business management software for Nigerian and African SMEs. It works on phones, web, and compatible POS machines.',
+    'AI-assisted bookkeeping for small businesses in Nigeria and Africa. Record sales, track expenses and customer debt, manage stock, and create receipts on WhatsApp and web.',
   keywords: [
+    'AI bookkeeping Nigeria',
+    'AI bookkeeping Africa',
+    'WhatsApp bookkeeping for small businesses',
+    'record daily sales Nigeria',
+    'business expense tracker Nigeria',
     'WhatsApp POS Africa',
     'WhatsApp POS Nigeria',
     'business management software Africa',
@@ -38,7 +43,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     url: 'https://tallypadi.com/',
-    title: 'TallyPadi — WhatsApp POS & Business Management Software for Africa',
+    title: 'TallyPadi — AI Bookkeeping & Sales Tracking for African SMEs',
     description:
       'Run sales, receipts, inventory, debtors, staff, storefronts, managed product boosts, and reports from WhatsApp, web, phones, and compatible POS machines. Built for Nigerian and African SMEs.',
     siteName: 'Tallypadi',

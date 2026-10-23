@@ -1,234 +1,101 @@
-import React from 'react';
-import Link from 'next/link';
-import FAQItemClient from './FAQItemClient';
-import { 
-  ArrowLeft, 
-  ChevronDown, 
-  ChevronUp, 
-  MessageSquare, 
-  Plus, 
-  DollarSign, 
-  FileText, 
-  Users 
-} from 'lucide-react';
 import type { Metadata } from 'next';
+import Link from 'next/link';
+import { ArrowRight, MessageCircle, Plus } from 'lucide-react';
+import MarketingNavbar from '../../components/MarketingNavbar';
+import MarketingFooter from '../../components/MarketingFooter';
 
 export const metadata: Metadata = {
-  title: 'Frequently Asked Questions & Support | TallyPadi',
-  description: 'Get answers to common questions about using TallyPadi. Learn how to generate WhatsApp receipts, track inventory, and manage your business ledger.',
-  alternates: {
-    canonical: 'https://tallypadi.com/faq',
-  }
+  title: 'Frequently Asked Questions',
+  description: 'How to register with TallyPadi, record sales on WhatsApp, track expenses and stock, create receipts and invoices, and set up your online storefront.',
+  alternates: { canonical: 'https://tallypadi.com/faq' },
+  openGraph: {
+    title: 'TallyPadi — Frequently Asked Questions',
+    description: 'Practical answers about WhatsApp bookkeeping, business records, receipts, inventory and your TallyPadi account.',
+    url: 'https://tallypadi.com/faq',
+    type: 'website',
+    images: [{ url: '/og.png', width: 1200, height: 630 }],
+  },
 };
+
+const topics = [
+  {
+    id: 'getting-started', label: 'Getting started',
+    questions: [
+      { question: 'What is TallyPadi?', answer: 'TallyPadi helps small businesses record sales, track expenses, manage stock and customer balances, and create receipts and invoices. You can use WhatsApp for everyday entries and the web dashboard to manage and review your records.' },
+      { question: 'How do I register my shop?', answer: 'Create an account on the website, or send Hello to our WhatsApp number and choose to register. Follow the prompts to provide your email, set and confirm a password, and choose your shop name. You can use your WhatsApp profile name or enter a different shop name.' },
+      { question: 'Do I need to download an app?', answer: 'No separate app is required. You can use TallyPadi through WhatsApp and open the web dashboard in your browser on a phone, tablet or computer.' },
+      { question: 'Is there a free trial?', answer: 'New accounts start with a seven-day Tycoon trial. You can review the current plans and features on our pricing section before choosing a subscription.' },
+    ],
+  },
+  {
+    id: 'sales-and-records', label: 'Sales, expenses & stock',
+    questions: [
+      { question: 'How do I record a sale on WhatsApp?', answer: 'Send the product, quantity and price in a message, for example: Sold 2 bags of rice at 50000 each. You can also record sales in the web dashboard. Check the saved quantity, price and payment details before relying on the record.' },
+      { question: 'How do I add stock or change a price?', answer: 'Use a message such as Add 20 sneakers to add stock. To change prices, be specific: Set shoe selling price to 15000 and cost price to 10000. You can also manage products, quantities and prices from your inventory dashboard.' },
+      { question: 'Can I track business expenses and customers who owe me?', answer: 'Yes. For an expense, try Spent 5000 on fuel. For a credit sale, include the customer name and state that it is on credit, for example: Sold 2 shoes to Emeka on credit. Review the customer balance and record payments when they come in.' },
+      { question: 'How can I check my sales or stock?', answer: 'Use the WhatsApp menu to view your sales report or track inventory, or check your web dashboard. Keep entries up to date so your reports reflect what happened in your business.' },
+      { question: 'Does AI do all the bookkeeping?', answer: 'AI helps interpret supported WhatsApp messages. The software stores your business records, calculates totals and generates documents. Review the details for accuracy, particularly when a message could be understood in more than one way. TallyPadi does not replace professional accounting or tax advice.' },
+    ],
+  },
+  {
+    id: 'receipts-and-invoices', label: 'Receipts & invoices',
+    questions: [
+      { question: 'How do I get a receipt for a sale?', answer: 'After recording a sale, choose the receipt action in WhatsApp and follow any prompts for the customer details. The receipt is generated from the sale record. You can also use the receipt tools on the website.' },
+      { question: 'What details do I need for an invoice?', answer: 'Include the customer name, items or services, quantities and prices. Save your business bank details when prompted so they can appear on the invoice. Check the customer details, totals and payment status before sharing the document.' },
+      { question: 'What should I do if a record or document is wrong?', answer: 'Check the underlying sale, item prices and customer information in your dashboard. Correct the relevant details using the available controls before sharing the document again. If you cannot find the right option, contact support with the record or document reference.' },
+    ],
+  },
+  {
+    id: 'shop-and-account', label: 'Your shop & account',
+    questions: [
+      { question: 'Can I give staff access to my shop?', answer: 'TallyPadi supports staff accounts and permissions. The owner can add staff and manage their access. Check the current plans for availability and staff limits before choosing a subscription.' },
+      { question: 'Can I manage more than one shop?', answer: 'TallyPadi includes HQ and branch workflows for businesses with multiple locations. Contact support to confirm the account setup and plan that fit your shops.' },
+      { question: 'What is the difference between my storefront and the marketplace?', answer: 'Your storefront is a public shop page you can share with customers. TallyPadi Marketplace lets shoppers browse published products from participating stores. Complete your store setup and choose the products you want to publish; your private sales records are separate from your public product listings.' },
+      { question: 'What happens when my subscription expires?', answer: 'Access to subscription features is restricted until you renew. Follow the renewal prompts in WhatsApp or your account. If you have a billing issue, contact support rather than creating another account for the same shop.' },
+      { question: 'Where can I read about privacy or request help with my data?', answer: 'Our privacy policy explains what information TallyPadi processes and how to request access or deletion. For privacy requests, email privacy@tallypadi.com. For product or account help, contact support@tallypadi.com.' },
+    ],
+  },
+];
 
 export default function FAQPage() {
   return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-600">
-      {/* Header */}
-      <nav className="bg-white shadow-sm w-full z-50 sticky top-0 border-b border-slate-100">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16 items-center">
-            <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition group">
-              <div className="bg-green-100 p-2 rounded-full group-hover:bg-green-200 transition">
-                <ArrowLeft className="text-green-600" size={20} />
-              </div>
-              <span className="font-heading font-bold text-lg tracking-tight text-slate-900">Back to Tallypadi</span>
-            </Link>
+    <div className="min-h-screen bg-[#f7f0df] text-[#181816]">
+      <MarketingNavbar />
+      <main className="pt-[72px]">
+        <header className="border-b border-stone-900/15">
+          <div className="mx-auto max-w-7xl px-5 py-12 sm:px-10 sm:py-20">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-stone-500">Frequently asked questions</p>
+            <h1 className="mt-5 max-w-3xl text-4xl font-bold leading-[1.12] tracking-tight sm:text-5xl">Questions about TallyPadi?</h1>
+            <p className="mt-5 max-w-2xl text-lg leading-8 text-stone-600">How to get started, keep your records and use the tools in your account.</p>
+            <div className="mt-7 flex flex-wrap gap-3">
+              <Link href="/register" className="inline-flex min-h-12 items-center gap-3 rounded-lg bg-[#181816] px-5 text-sm font-bold text-white hover:bg-stone-700">Create your account<ArrowRight size={17} /></Link>
+              <Link href="/help" className="inline-flex min-h-12 items-center rounded-lg border border-stone-900/20 px-5 text-sm font-bold hover:bg-white/60">Open help center</Link>
+            </div>
+          </div>
+        </header>
+        <div className="mx-auto grid max-w-7xl gap-10 px-5 py-12 sm:px-10 sm:py-16 lg:grid-cols-[260px_minmax(0,1fr)] lg:gap-16">
+          <aside>
+            <div className="lg:sticky lg:top-24">
+              <nav aria-label="FAQ topics" className="border-y border-stone-900/15 py-5">
+                <p className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-stone-500">On this page</p>
+                {topics.map(topic => <a key={topic.id} href={`#${topic.id}`} className="flex min-h-11 items-center justify-between gap-3 rounded-lg px-2 text-sm font-semibold hover:bg-white/60 focus-visible:outline-2 focus-visible:outline-stone-900">{topic.label}<ArrowRight size={15} className="shrink-0 text-stone-400" /></a>)}
+              </nav>
+              <div className="mt-7 hidden border-l-2 border-amber-400 pl-5 lg:block"><p className="font-bold">Can’t find your answer?</p><p className="mt-2 text-sm leading-6 text-stone-600">Talk to us about your shop, account or a particular record.</p><Link href="/contact" className="mt-4 inline-flex min-h-11 items-center gap-2 text-sm font-bold underline underline-offset-4">Contact support<ArrowRight size={15} /></Link></div>
+            </div>
+          </aside>
+          <div className="min-w-0 space-y-12 sm:space-y-16">
+            {topics.map((topic, index) => <section key={topic.id} id={topic.id} className="scroll-mt-28">
+              <div className="mb-5 flex items-baseline gap-4"><span className="text-xs text-stone-500">0{index + 1}</span><h2 className="text-2xl font-bold tracking-tight">{topic.label}</h2></div>
+              <div className="divide-y divide-stone-900/15 border-y border-stone-900/15">{topic.questions.map(faq => <details key={faq.question} className="group">
+                <summary className="flex min-h-16 cursor-pointer list-none items-center justify-between gap-5 py-5 text-base font-semibold leading-7 marker:content-none focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-stone-900 [&::-webkit-details-marker]:hidden"><span>{faq.question}</span><Plus aria-hidden="true" size={19} className="shrink-0 text-stone-500 transition-transform group-open:rotate-45" /></summary>
+                <p className="max-w-3xl pr-5 pb-6 text-sm leading-7 text-stone-600 sm:text-base sm:leading-8">{faq.answer}</p>
+              </details>)}</div>
+            </section>)}
+            <div className="border-t border-stone-900/15 pt-8"><h2 className="text-2xl font-bold tracking-tight">Still need help?</h2><p className="mt-3 max-w-lg leading-7 text-stone-600">Send us your question. Include the relevant record or invoice reference if you have one.</p><div className="mt-5 flex flex-wrap gap-3"><Link href="/contact" className="inline-flex min-h-12 items-center gap-2 rounded-lg bg-amber-300 px-5 text-sm font-bold hover:bg-amber-200">Contact support<ArrowRight size={17} /></Link><a href="https://wa.me/2349035664420?text=Hello%20TallyPadi%20support" className="inline-flex min-h-12 items-center gap-2 rounded-lg border border-stone-900/20 px-5 text-sm font-bold hover:bg-white/60"><MessageCircle size={17} />Ask on WhatsApp</a></div><p className="mt-6 text-sm text-stone-600"><Link href="/privacy-policy" className="underline underline-offset-4">Privacy policy</Link><span className="px-3" aria-hidden="true">·</span><Link href="/#pricing" className="underline underline-offset-4">Current plans</Link></p></div>
           </div>
         </div>
-      </nav>
-
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        
-        {/* Page Title */}
-        <div className="text-center mb-16">
-          <h1 className="text-3xl md:text-4xl font-heading font-bold text-slate-900 mb-4">How can we help you?</h1>
-          <p className="text-lg text-slate-500 max-w-2xl mx-auto">
-            Everything you need to know about using Tallypadi to manage your business.
-          </p>
-        </div>
-
-        {/* --- USER GUIDE SECTION --- */}
-        <div className="mb-20">
-          <div className="flex items-center gap-3 mb-8">
-            <div className="h-8 w-1 bg-green-500 rounded-full"></div>
-            <h2 className="text-2xl font-heading font-bold text-slate-900">Quick Start Guide</h2>
-          </div>
-
-          <div className="grid gap-6">
-            
-            {/* Command Card 1: Registration */}
-            <GuideCard 
-              icon={<MessageSquare size={24} />}
-              title="1. How to Register"
-              color="blue"
-              steps={[
-                "Save our number and send 'Hello' on WhatsApp.",
-                "The bot will ask for your email address to link your account.",
-                "Set a secure password when prompted.",
-                "Done! Your shop is created automatically using your WhatsApp name."
-              ]}
-            />
-
-            {/* Command Card 2: Adding Stock */}
-            <GuideCard 
-              icon={<Plus size={24} />}
-              title="2. Adding Inventory"
-              color="green"
-              description="Tell the bot what you have in your shop. You must add stock before you can sell it."
-              commands={[
-                { cmd: "Add 50 bags of Rice at 40k", desc: "Adds 50 items with a unit cost of 40,000" },
-                { cmd: "Restock 20 Coke", desc: "Adds more quantity to an existing item" },
-                { cmd: "Set price of Rice to 45000", desc: "Updates the selling price (optional)" }
-              ]}
-            />
-
-            {/* Command Card 3: Recording Sales */}
-            <GuideCard 
-              icon={<DollarSign size={24} />}
-              title="3. Recording Sales"
-              color="purple"
-              description="Record sales immediately as they happen. The bot calculates totals and profit."
-              commands={[
-                { cmd: "Sold 2 bags of Rice", desc: "Records a cash sale" },
-                { cmd: "Sold 5 Coke for 1000", desc: "Records sale with a specific total amount" },
-                { cmd: "Sold 1 Rice on credit to Mama Chinedu", desc: "Records a debt/credit sale" }
-              ]}
-            />
-
-            {/* Command Card 4: Reports */}
-            <GuideCard 
-              icon={<FileText size={24} />}
-              title="4. Checking Reports"
-              color="orange"
-              description="Ask the bot for your business performance at any time."
-              commands={[
-                { cmd: "How much did I make today?", desc: "Shows today's total sales and profit" },
-                { cmd: "Show me my stock", desc: "Lists all items currently in inventory" },
-                { cmd: "Generate receipt for John", desc: "Creates a PDF receipt for the last sale" }
-              ]}
-            />
-
-            {/* Command Card 5: Staff (Tycoon Only) */}
-            <GuideCard 
-              icon={<Users size={24} />}
-              title="5. Managing Staff (Tycoon Plan)"
-              color="red"
-              description="Owners on the Tycoon plan can let staff sell from their own WhatsApp."
-              commands={[
-                { cmd: "Add staff 08012345678", desc: "Links a staff member's phone number to your shop" },
-                { cmd: "Remove staff 08012345678", desc: "Revokes access for a staff member" }
-              ]}
-            />
-
-          </div>
-        </div>
-
-        {/* --- FAQ SECTION --- */}
-        <div>
-          <div className="flex items-center gap-3 mb-8">
-            <div className="h-8 w-1 bg-slate-900 rounded-full"></div>
-            <h2 className="text-2xl font-heading font-bold text-slate-900">Frequently Asked Questions</h2>
-          </div>
-
-          <div className="space-y-4">
-            <FAQItem 
-              question="Is Tallypadi free to use?" 
-              answer="We offer a free trial for 7 days (Oga Boss Plan). After that, you can choose to subscribe to the Oga Boss plan for basic features or the Tycoon Plan for advanced features like Staff Management and PDF Reports." 
-            />
-            <FAQItem 
-              question="Do I need to download an app?" 
-              answer="No! Tallypadi works entirely inside WhatsApp. You only need the website dashboard if you want to see detailed charts or export your data to Excel." 
-            />
-            <FAQItem 
-              question="What happens if I don't renew my subscription?" 
-              answer="Your data is safe, but the bot will stop responding to new commands. You will have 'Read Only' access via the web dashboard until you renew." 
-            />
-            <FAQItem 
-              question="Can I use Tallypadi for multiple shops?" 
-              answer="Currently, one phone number is linked to one shop inventory. To manage multiple shops, you would need to register different phone numbers for each shop." 
-            />
-            <FAQItem 
-              question="How is my data secured?" 
-              answer="We use bank-level encryption for all your data. Your sales records are private and can only be accessed by you and the staff you explicitly authorize." 
-            />
-          </div>
-        </div>
-
-      </div>
-
-      {/* Footer */}
-      <footer className="bg-slate-900 text-slate-400 py-12 mt-12">
-        <div className="max-w-4xl mx-auto px-4 text-center">
-          <p className="font-medium">&copy; 2026 TallyPadi. All rights reserved.</p>
-          <div className="flex justify-center gap-4 mt-4 text-sm">
-             <Link href="/" className="hover:text-white transition">Home</Link>
-             <span>•</span>
-             <Link href="/login" className="hover:text-white transition">Login</Link>
-             <span>•</span>
-             <Link href="/policy" className="hover:text-white transition">Privacy</Link>
-          </div>
-        </div>
-      </footer>
+      </main>
+      <MarketingFooter />
     </div>
   );
 }
-
-// --- HELPER COMPONENTS ---
-
-const GuideCard = ({ icon, title, steps, commands, color, description }: any) => {
-  const colorClasses: any = {
-    blue: "bg-blue-50 text-blue-600 border-blue-100",
-    green: "bg-green-50 text-green-600 border-green-100",
-    purple: "bg-purple-50 text-purple-600 border-purple-100",
-    orange: "bg-orange-50 text-orange-600 border-orange-100",
-    red: "bg-red-50 text-red-600 border-red-100",
-  };
-
-  return (
-    <div className={`p-6 md:p-8 rounded-3xl border ${colorClasses[color]} bg-opacity-50`}>
-      <div className="flex items-center gap-4 mb-4">
-        <div className={`p-3 rounded-xl bg-white shadow-sm ${colorClasses[color].split(' ')[1]}`}>
-          {icon}
-        </div>
-        <h3 className="text-xl font-bold text-slate-900">{title}</h3>
-      </div>
-
-      {description && <p className="text-slate-600 mb-4">{description}</p>}
-
-      {steps && (
-        <ol className="list-decimal list-inside space-y-2 text-slate-700 font-medium">
-          {steps.map((step: string, i: number) => (
-            <li key={i}>{step}</li>
-          ))}
-        </ol>
-      )}
-
-      {commands && (
-        <div className="bg-white rounded-xl overflow-hidden border border-slate-100 shadow-sm mt-4">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 text-slate-500 border-b border-slate-100">
-              <tr>
-                <th className="px-4 py-2 font-medium">Command to type</th>
-                <th className="px-4 py-2 font-medium">What it does</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {commands.map((item: any, i: number) => (
-                <tr key={i}>
-                  <td className="px-4 py-3 font-mono text-slate-800 font-bold bg-slate-50/50">"{item.cmd}"</td>
-                  <td className="px-4 py-3 text-slate-600">{item.desc}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
-};
-
-// Remove "use client" from FAQPage to keep SEO, make FAQItem it's own client component inline
-const FAQItem = ({ question, answer }: { question: string, answer: string }) => {
-  return <FAQItemClient question={question} answer={answer}/>;
-};

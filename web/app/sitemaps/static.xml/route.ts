@@ -3,7 +3,7 @@ import { SITE_URL, urlSetXml, xmlResponse, type SitemapEntry } from '../../../li
 export const revalidate = 86400;
 
 const paths = [
-  '/', '/help', '/marketplace', '/about', '/contact', '/blog', '/partners', '/faq',
+  '/ai-bookkeeping-nigeria', '/', '/help', '/marketplace', '/about', '/contact', '/blog', '/partners', '/faq',
   '/privacy-policy', '/terms-of-service', '/policy', '/whatsapp-receipt-generator',
   '/free-invoice-generator', '/sales-tracking-ledger', '/inventory-stock-management',
   '/product-catalog-shop-link-generator', '/accounts-receivable-debtors-tracking',

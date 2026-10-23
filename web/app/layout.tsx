@@ -23,20 +23,23 @@ const poppins = Poppins({
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
 };
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://tallypadi.com"),
   title: {
     default:
-      "TallyPadi — WhatsApp POS & Business Management Software for African SMEs",
+      "TallyPadi — AI Bookkeeping & Business Management for African SMEs",
     template: "%s | TallyPadi",
   },
   description: "Run sales, receipts, inventory, debtors, staff, online storefronts, product boosts, and business reports from WhatsApp, web, phones, and compatible POS machines. Built for Nigerian and African SMEs, retailers, wholesalers, and service businesses.",
   applicationName: "TallyPadi",
   keywords: [
+    "AI bookkeeping Nigeria",
+    "AI bookkeeping Africa",
+    "small business bookkeeping Nigeria",
+    "daily sales recording app",
+    "business expense tracker Africa",
     "WhatsApp POS Africa",
     "WhatsApp POS Nigeria",
     "POS machine software Nigeria",
