@@ -1,6 +1,7 @@
 // src/controllers/whatsapp.controller.ts
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
+import { generateWelcomeMessage, generateGuidanceMessage, WHATSAPP_HELP_TEXT } from '../services/whatsapp.messages';
 import axios from 'axios';
 
 import { env } from '../config/env';
@@ -1121,8 +1122,9 @@ export const handleMessageLogic = async (
 
     // ✅ Save Message History
     if (actor) {
-        const historyEntry = rawText; 
-        const currentHist = actor.messageHistory || [];
+        const isRegistration = actor.role === 'OWNER' && actor.registrationStage !== 'COMPLETED';
+        const historyEntry = isRegistration ? '[Registration step]' : rawText;
+        const currentHist = isRegistration ? [] : actor.messageHistory || [];
         currentHist.push(historyEntry);
         
         if (currentHist.length > MAX_HISTORY) {
@@ -1151,7 +1153,7 @@ export const handleMessageLogic = async (
         trialEndsAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
 
         planType: 'TYCOON',
-        messageHistory: [rawText],
+        messageHistory: ['[Registration started]'],
         lastSeen: new Date(),
         settings: {
           dailySummaryEnabled: false,
@@ -1245,7 +1247,6 @@ export const handleMessageLogic = async (
         user.registrationStage = 'COMPLETED';
         await user.save();
 
-        const { generateWelcomeMessage } = await import('../services/gemini.service');
         const welcomeMsg = await generateWelcomeMessage(user.settings?.language || 'English');
 
         const trialMsg = 
@@ -1391,6 +1392,7 @@ What's included in Oga Boss Plan:
 
               // Save Email & Password
               actor.email = emailInput;
+              actor.interactionState = null;
               const salt = await bcrypt.genSalt(10);
               actor.password = await bcrypt.hash(password, salt);
               
@@ -1416,11 +1418,17 @@ What's included in Oga Boss Plan:
           }
       }
 
+      if (['help', 'menu', 'hi', 'hello', 'hi padi'].includes(rawText.toLowerCase()) && actor.registrationStage !== 'PASSWORD' && !actor.interactionState) {
+          await queueOutboundMessage(from, WHATSAPP_HELP_TEXT + '\n\nTo finish signup, follow the registration prompts or reply Yes to open registration.');
+          return;
+      }
+
       // 2. Allow bypass for Help/Settings/Support
       const isSafeCmd = 
           btn?.id === 'CMD_HELP' || 
           btn?.id === 'CMD_SHOW_SETTINGS' || 
-          btn?.id === 'CMD_SUPPORT';
+          btn?.id === 'CMD_SUPPORT' ||
+          btn?.id === 'CMD_FAQ';
 
       if (!isSafeCmd) {
           if (actor.registrationStage === 'EMAIL') {
@@ -1450,14 +1458,14 @@ What's included in Oga Boss Plan:
             return;
           }
 
-          if (actor.registrationStage === 'PASSWORD') {
+          if (actor.registrationStage === 'PASSWORD' && (actor.interactionState as any)?.type !== 'WAITING_FOR_PASSWORD_CONFIRM') {
             if (rawText.length < 1) {
                return;
             }
-            // Store the raw password temporarily in interaction state, ask for confirmation
+            // Store only a password hash while waiting for confirmation
             actor.interactionState = {
                 type: 'WAITING_FOR_PASSWORD_CONFIRM',
-                data: { tempPassword: rawText }
+                data: { passwordHash: await bcrypt.hash(rawText, 10) }
             };
             await actor.save();
             await queueOutboundMessage(from, "Please re-enter your password to confirm.");
@@ -1465,8 +1473,12 @@ What's included in Oga Boss Plan:
           }
 
           if ((actor.interactionState as any)?.type === 'WAITING_FOR_PASSWORD_CONFIRM') {
-            const tempPassword = (actor.interactionState as any).data?.tempPassword;
-            if (rawText !== tempPassword) {
+            const passwordData = (actor.interactionState as any).data;
+            // Accept confirmations already in progress before this change.
+            const matches = passwordData?.passwordHash
+                ? await bcrypt.compare(rawText, passwordData.passwordHash)
+                : typeof passwordData?.tempPassword === 'string' && rawText === passwordData.tempPassword;
+            if (!matches) {
                 // Passwords don't match — clear state and ask them to re-enter
                 actor.interactionState = null;
                 await actor.save();
@@ -1476,8 +1488,7 @@ What's included in Oga Boss Plan:
                 return;
             }
             // Passwords match — hash and save
-            const salt = await bcrypt.genSalt(10);
-            actor.password = await bcrypt.hash(tempPassword, salt);
+            actor.password = passwordData.passwordHash || await bcrypt.hash(rawText, 10);
             actor.interactionState = null;
             actor.registrationStage = 'SHOP_NAME_SELECTION';
             await actor.save();
@@ -1528,6 +1539,8 @@ What's included in Oga Boss Plan:
               await finishRegistration(actor, from);
               return;
           }
+          await queueOutboundMessage(from, 'Please complete your registration before recording sales. Reply Yes to open registration, or finish your signup at https://tallypadi.com/register.');
+          return;
       }
     }
 
@@ -2475,11 +2488,12 @@ What's included in Oga Boss Plan:
 
     let parsed: any;
 
-    if (btn && btn.id.startsWith('CMD_')) {
+    if (!mediaId && ['help', 'menu'].includes(rawText.toLowerCase())) {
+        parsed = { intent: 'HELP', reply_text: WHATSAPP_HELP_TEXT };
+    } else if (btn && btn.id.startsWith('CMD_')) {
         // ... (Help, Settings, Support, FAQ handling remains same)
         if (btn.id === 'CMD_HELP') {
-            const { parseMessageWithGemini } = await import('../services/gemini.service');
-            parsed = await parseMessageWithGemini('help', currentLang);
+            parsed = { intent: 'HELP', reply_text: WHATSAPP_HELP_TEXT };
         }
         else if (btn.id === 'CMD_SHOW_SETTINGS') parsed = { intent: 'SHOW_SETTINGS' };
         else if (btn.id === 'CMD_SUPPORT') parsed = { intent: 'SUPPORT' };
@@ -2491,9 +2505,8 @@ What's included in Oga Boss Plan:
         else if (btn.id === 'CMD_SET_DAILY_ON') parsed = { intent: 'SETTINGS', settings_update: { key: 'dailySummaryEnabled', value: true }, reply_text: '🔔 Daily summary enabled.' };
         else if (btn.id === 'CMD_SET_DAILY_OFF') parsed = { intent: 'SETTINGS', settings_update: { key: 'dailySummaryEnabled', value: false }, reply_text: '🔕 Daily summary disabled.' };
 
-        // ✅ Main Menu Commands (Gemini Powered)
+        // ✅ Main Menu Commands (local guidance; no AI call)
         else {
-            const { generateGuidanceMessage } = await import('../services/gemini.service');
 
             if (btn.id === 'CMD_RECORD_INVENTORY') {
                 const msg = await generateGuidanceMessage('RECORD_INVENTORY', currentLang);
